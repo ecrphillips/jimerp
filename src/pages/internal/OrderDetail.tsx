@@ -1,14 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ArrowLeft } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
 
   const { data: order, isLoading, error } = useQuery({
     queryKey: ['order', id],
@@ -20,6 +24,8 @@ export default function OrderDetail() {
           order_number,
           status,
           requested_ship_date,
+          delivery_method,
+          client_po,
           client_notes,
           internal_ops_notes,
           client:clients(name)
@@ -55,6 +61,54 @@ export default function OrderDetail() {
     enabled: !!id,
   });
 
+  const [opsNotes, setOpsNotes] = useState('');
+  const [opsNotesLoaded, setOpsNotesLoaded] = useState(false);
+
+  // Initialize ops notes when order loads
+  React.useEffect(() => {
+    if (order && !opsNotesLoaded) {
+      setOpsNotes(order.internal_ops_notes ?? '');
+      setOpsNotesLoaded(true);
+    }
+  }, [order, opsNotesLoaded]);
+
+  const confirmMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: 'CONFIRMED' })
+        .eq('id', id!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Order confirmed');
+      queryClient.invalidateQueries({ queryKey: ['order', id] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to confirm order');
+    },
+  });
+
+  const saveNotesMutation = useMutation({
+    mutationFn: async (notes: string) => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ internal_ops_notes: notes })
+        .eq('id', id!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Notes saved');
+      queryClient.invalidateQueries({ queryKey: ['order', id] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to save notes');
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="page-container">
@@ -84,15 +138,27 @@ export default function OrderDetail() {
     );
   }
 
+  const lineTotal = lineItems?.reduce((sum, li) => sum + li.quantity_units * li.unit_price_locked, 0) ?? 0;
+
   return (
     <div className="page-container">
-      <div className="page-header flex items-center gap-4">
-        <Link to="/orders">
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-5 w-5" />
+      <div className="page-header flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link to="/orders">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <h1 className="page-title">{order.order_number}</h1>
+          <span className={`rounded px-2 py-1 text-xs font-medium ${order.status === 'SUBMITTED' ? 'bg-amber-100 text-amber-800' : order.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' : 'bg-muted text-muted-foreground'}`}>
+            {order.status}
+          </span>
+        </div>
+        {order.status === 'SUBMITTED' && (
+          <Button onClick={() => confirmMutation.mutate()} disabled={confirmMutation.isPending}>
+            {confirmMutation.isPending ? 'Confirming…' : 'Confirm Order'}
           </Button>
-        </Link>
-        <h1 className="page-title">{order.order_number}</h1>
+        )}
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -101,6 +167,8 @@ export default function OrderDetail() {
           <CardContent className="space-y-2 text-sm">
             <div><strong>Client:</strong> {order.client?.name ?? 'Unknown'}</div>
             <div><strong>Status:</strong> {order.status}</div>
+            <div><strong>Delivery:</strong> {order.delivery_method}</div>
+            <div><strong>Client PO:</strong> {order.client_po || '—'}</div>
             <div>
               <strong>Requested Ship Date:</strong>{' '}
               {order.requested_ship_date
@@ -112,14 +180,29 @@ export default function OrderDetail() {
 
         <Card>
           <CardHeader><CardTitle>Notes</CardTitle></CardHeader>
-          <CardContent className="space-y-2 text-sm">
+          <CardContent className="space-y-4 text-sm">
             <div>
               <strong>Client Notes:</strong>
               <p className="text-muted-foreground">{order.client_notes || '—'}</p>
             </div>
             <div>
-              <strong>Internal Ops Notes:</strong>
-              <p className="text-muted-foreground">{order.internal_ops_notes || '—'}</p>
+              <Label htmlFor="opsNotes"><strong>Internal Ops Notes:</strong></Label>
+              <Textarea
+                id="opsNotes"
+                value={opsNotes}
+                onChange={(e) => setOpsNotes(e.target.value)}
+                rows={3}
+                className="mt-1"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2"
+                onClick={() => saveNotesMutation.mutate(opsNotes)}
+                disabled={saveNotesMutation.isPending}
+              >
+                {saveNotesMutation.isPending ? 'Saving…' : 'Save Notes'}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -131,26 +214,36 @@ export default function OrderDetail() {
           {!lineItems || lineItems.length === 0 ? (
             <p className="text-muted-foreground">No line items.</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left">
-                  <th className="pb-2">Product</th>
-                  <th className="pb-2">Qty</th>
-                  <th className="pb-2">Grind</th>
-                  <th className="pb-2">Unit Price</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lineItems.map((li) => (
-                  <tr key={li.id} className="border-b last:border-0">
-                    <td className="py-2">{li.product?.product_name ?? 'Unknown'}</td>
-                    <td className="py-2">{li.quantity_units}</td>
-                    <td className="py-2">{li.grind ?? '—'}</td>
-                    <td className="py-2">${li.unit_price_locked.toFixed(2)}</td>
+            <>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="pb-2">Product</th>
+                    <th className="pb-2">Qty</th>
+                    <th className="pb-2">Grind</th>
+                    <th className="pb-2">Unit Price</th>
+                    <th className="pb-2 text-right">Subtotal</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {lineItems.map((li) => (
+                    <tr key={li.id} className="border-b last:border-0">
+                      <td className="py-2">{li.product?.product_name ?? 'Unknown'}</td>
+                      <td className="py-2">{li.quantity_units}</td>
+                      <td className="py-2">{li.grind ?? '—'}</td>
+                      <td className="py-2">${li.unit_price_locked.toFixed(2)}</td>
+                      <td className="py-2 text-right">${(li.quantity_units * li.unit_price_locked).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={4} className="pt-4 text-right font-medium">Total:</td>
+                    <td className="pt-4 text-right font-medium">${lineTotal.toFixed(2)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </>
           )}
         </CardContent>
       </Card>
