@@ -1,10 +1,13 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 
 export default function Orders() {
+  const navigate = useNavigate();
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['orders'],
     queryFn: async () => {
@@ -43,7 +46,11 @@ export default function Orders() {
           ) : (
             <ul className="space-y-3">
               {sortedOrders.map((o) => (
-                <li key={o.id} className="flex items-center justify-between border-b pb-2 last:border-0">
+                <li
+                  key={o.id}
+                  onClick={() => navigate(`/orders/${o.id}`)}
+                  className="flex cursor-pointer items-center justify-between rounded border-b pb-2 last:border-0 hover:bg-muted/50"
+                >
                   <div>
                     <span className="font-medium">{o.order_number}</span>
                     <span className="ml-2 text-sm text-muted-foreground">
