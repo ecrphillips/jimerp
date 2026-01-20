@@ -9,7 +9,7 @@ export default function Clients() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('clients')
-        .select('id, name, is_active')
+        .select('id, name, billing_email, is_active')
         .order('name', { ascending: true });
 
       if (error) throw error;
@@ -28,17 +28,22 @@ export default function Clients() {
           {isLoading ? (
             <p className="text-muted-foreground">Loading…</p>
           ) : error ? (
-            <p className="text-muted-foreground">
-              Failed to load clients: {error instanceof Error ? error.message : String(error)}
-            </p>
+            <p className="text-destructive">Failed to load: {error instanceof Error ? error.message : String(error)}</p>
           ) : data.length === 0 ? (
             <p className="text-muted-foreground">No clients found.</p>
           ) : (
-            <ul className="space-y-2">
-              {data.slice(0, 3).map((c) => (
-                <li key={c.id} className="flex items-center justify-between">
-                  <span className="font-medium">{c.name}</span>
-                  <span className="text-sm text-muted-foreground">{c.is_active ? 'Active' : 'Inactive'}</span>
+            <ul className="space-y-3">
+              {data.map((c) => (
+                <li key={c.id} className="flex items-center justify-between border-b pb-2 last:border-0">
+                  <div>
+                    <span className="font-medium">{c.name}</span>
+                    {c.billing_email && (
+                      <span className="ml-2 text-sm text-muted-foreground">{c.billing_email}</span>
+                    )}
+                  </div>
+                  <span className={`text-sm ${c.is_active ? 'text-green-600' : 'text-muted-foreground'}`}>
+                    {c.is_active ? 'Active' : 'Inactive'}
+                  </span>
                 </li>
               ))}
             </ul>
