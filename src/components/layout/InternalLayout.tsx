@@ -13,7 +13,9 @@ import {
   LogOut,
   Coffee,
   Menu,
-  X
+  X,
+  Clipboard,
+  Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -27,8 +29,11 @@ const navItems = [
   { to: '/clients', label: 'Clients', icon: Users },
   { to: '/products', label: 'Products', icon: Package },
   { to: '/pricing', label: 'Pricing', icon: DollarSign },
-  { to: '/production', label: 'Production Plan', icon: Calendar },
+  { to: '/production', label: 'Run Sheet', icon: Calendar },
+  { to: '/production/matchstick', label: 'Matchstick', icon: Clipboard },
+  { to: '/production/funk', label: 'Funk', icon: Clipboard },
   { to: '/green-coffee', label: 'Green Coffee', icon: Leaf },
+  { to: '/boards', label: 'Board Mgmt', icon: Settings },
 ];
 
 export function InternalLayout({ children }: InternalLayoutProps) {

@@ -18,6 +18,9 @@ import Products from "@/pages/internal/Products";
 import Pricing from "@/pages/internal/Pricing";
 import Production from "@/pages/internal/Production";
 import GreenCoffee from "@/pages/internal/GreenCoffee";
+import MatchstickBoard from "@/pages/internal/MatchstickBoard";
+import FunkBoard from "@/pages/internal/FunkBoard";
+import BoardManagement from "@/pages/internal/BoardManagement";
 import NewOrder from "@/pages/client/NewOrder";
 import OrderHistory from "@/pages/client/OrderHistory";
 import Account from "@/pages/client/Account";
@@ -73,9 +76,24 @@ const App = () => (
                 <InternalLayout><Production /></InternalLayout>
               </ProtectedRoute>
             } />
+            <Route path="/production/matchstick" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><MatchstickBoard /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/production/funk" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><FunkBoard /></InternalLayout>
+              </ProtectedRoute>
+            } />
             <Route path="/green-coffee" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><GreenCoffee /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/boards" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><BoardManagement /></InternalLayout>
               </ProtectedRoute>
             } />
 

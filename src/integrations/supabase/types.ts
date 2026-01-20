@@ -50,6 +50,47 @@ export type Database = {
         }
         Relationships: []
       }
+      external_demand: {
+        Row: {
+          created_at: string
+          id: string
+          product_id: string
+          quantity_units: number
+          source: Database["public"]["Enums"]["board_source"]
+          target_date: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          product_id: string
+          quantity_units?: number
+          source: Database["public"]["Enums"]["board_source"]
+          target_date: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          product_id?: string
+          quantity_units?: number
+          source?: Database["public"]["Enums"]["board_source"]
+          target_date?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_demand_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       green_coffee_lots: {
         Row: {
           created_at: string
@@ -225,6 +266,53 @@ export type Database = {
           },
         ]
       }
+      production_checkmarks: {
+        Row: {
+          bag_size_g: number
+          created_at: string
+          id: string
+          pack_complete: boolean
+          product_id: string
+          roast_complete: boolean
+          ship_complete: boolean
+          target_date: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          bag_size_g: number
+          created_at?: string
+          id?: string
+          pack_complete?: boolean
+          product_id: string
+          roast_complete?: boolean
+          ship_complete?: boolean
+          target_date: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          bag_size_g?: number
+          created_at?: string
+          id?: string
+          pack_complete?: boolean
+          product_id?: string
+          roast_complete?: boolean
+          ship_complete?: boolean
+          target_date?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_checkmarks_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       production_plan_items: {
         Row: {
           client_id: string
@@ -366,6 +454,44 @@ export type Database = {
         }
         Relationships: []
       }
+      source_board_products: {
+        Row: {
+          created_at: string
+          display_order: number
+          id: string
+          is_active: boolean
+          product_id: string
+          source: Database["public"]["Enums"]["board_source"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          product_id: string
+          source: Database["public"]["Enums"]["board_source"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          product_id?: string
+          source?: Database["public"]["Enums"]["board_source"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "source_board_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           client_id: string | null
@@ -415,6 +541,7 @@ export type Database = {
     }
     Enums: {
       app_role: "ADMIN" | "OPS" | "CLIENT"
+      board_source: "MATCHSTICK" | "FUNK"
       delivery_method: "PICKUP" | "DELIVERY" | "COURIER"
       grind_option: "WHOLE_BEAN" | "ESPRESSO" | "FILTER"
       order_status:
@@ -560,6 +687,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["ADMIN", "OPS", "CLIENT"],
+      board_source: ["MATCHSTICK", "FUNK"],
       delivery_method: ["PICKUP", "DELIVERY", "COURIER"],
       grind_option: ["WHOLE_BEAN", "ESPRESSO", "FILTER"],
       order_status: [
