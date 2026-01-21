@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Plus, Minus, Trash2 } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
-import { UnusualOrderModal } from '@/components/client/UnusualOrderModal';
+import { UnusualOrderModal, type FlaggedItem } from '@/components/client/UnusualOrderModal';
 import type { GrindOption, DeliveryMethod } from '@/types/database';
 
 interface LineItem {
@@ -51,15 +51,12 @@ export default function NewOrder() {
 
   // Unusual order modal state
   const [showUnusualModal, setShowUnusualModal] = useState(false);
-  const [flaggedItems, setFlaggedItems] = useState<
-    { productName: string; lastQty: number; currentQty: number; multiplier: number }[]
-  >([]);
+  const [flaggedItems, setFlaggedItems] = useState<FlaggedItem[]>([]);
   const [totalFlag, setTotalFlag] = useState<{
     lastTotal: number;
     currentTotal: number;
     multiplier: number;
   } | null>(null);
-
   // Fetch products for this client (RLS filters automatically)
   const { data: products, isLoading: productsLoading } = useQuery({
     queryKey: ['client-products'],
@@ -162,7 +159,7 @@ export default function NewOrder() {
     return lineItems.reduce((sum, li) => sum + (li.price ?? 0) * li.quantity, 0);
   }, [lineItems]);
 
-  // Check for unusual order size against last order
+  // Check for unusual order size against last order + packaging baseline
   const checkUnusualOrderSize = async (): Promise<boolean> => {
     if (!authUser?.clientId) return false;
 
@@ -177,33 +174,99 @@ export default function NewOrder() {
         .limit(1)
         .maybeSingle();
 
-      if (!lastOrder || !lastOrder.order_line_items) {
-        // No prior order, no warning needed
-        return false;
+      // Fetch recent orders (last 5) for packaging baseline
+      const { data: recentOrders } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('client_id', authUser.clientId)
+        .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'])
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      // Fetch line items from recent orders with product packaging info
+      let packagingBaselines: Record<string, number[]> = {};
+      if (recentOrders && recentOrders.length > 0) {
+        const orderIds = recentOrders.map((o) => o.id);
+        const { data: recentLineItems } = await supabase
+          .from('order_line_items')
+          .select('product_id, quantity_units, products(packaging_variant)')
+          .in('order_id', orderIds);
+
+        // Group quantities by packaging_variant
+        for (const li of recentLineItems ?? []) {
+          const variant = (li.products as { packaging_variant: string } | null)?.packaging_variant;
+          if (variant) {
+            if (!packagingBaselines[variant]) packagingBaselines[variant] = [];
+            packagingBaselines[variant].push(li.quantity_units);
+          }
+        }
       }
+
+      // Helper to compute median
+      const median = (arr: number[]): number => {
+        if (arr.length === 0) return 0;
+        const sorted = [...arr].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+      };
 
       // Build map of product_id -> last quantity
       const lastQtyMap: Record<string, number> = {};
       let lastTotalUnits = 0;
-      for (const li of lastOrder.order_line_items) {
-        lastQtyMap[li.product_id] = (lastQtyMap[li.product_id] || 0) + li.quantity_units;
-        lastTotalUnits += li.quantity_units;
+      if (lastOrder?.order_line_items) {
+        for (const li of lastOrder.order_line_items) {
+          lastQtyMap[li.product_id] = (lastQtyMap[li.product_id] || 0) + li.quantity_units;
+          lastTotalUnits += li.quantity_units;
+        }
       }
 
       // Calculate current totals
       const currentTotalUnits = lineItems.reduce((sum, li) => sum + li.quantity, 0);
 
-      // Check per-product threshold: draft_qty >= 10 × last_qty AND draft_qty >= 10 AND last_qty > 0
-      const flagged: { productName: string; lastQty: number; currentQty: number; multiplier: number }[] = [];
+      // Check per-product thresholds
+      const flagged: FlaggedItem[] = [];
       for (const li of lineItems) {
         const lastQty = lastQtyMap[li.productId] || 0;
+
+        // Rule A: If last_qty > 0: flag if draft_qty >= 10 × last_qty AND draft_qty >= 10
         if (lastQty > 0 && li.quantity >= 10 && li.quantity >= lastQty * 10) {
           flagged.push({
             productName: li.productName,
+            packagingVariant: li.packagingVariant,
             lastQty,
             currentQty: li.quantity,
             multiplier: li.quantity / lastQty,
+            baselineLabel: 'last order',
           });
+        }
+        // Rule B: If last_qty is 0 or missing
+        else if (lastQty === 0) {
+          const variant = li.packagingVariant;
+          const baselineQtys = variant ? packagingBaselines[variant] : undefined;
+          const baselineQty = baselineQtys ? median(baselineQtys) : 0;
+
+          // B1: If packaging baseline exists: flag if draft_qty >= 3 × baseline AND draft_qty >= 10
+          if (baselineQty > 0 && li.quantity >= 10 && li.quantity >= baselineQty * 3) {
+            flagged.push({
+              productName: li.productName,
+              packagingVariant: li.packagingVariant,
+              lastQty: Math.round(baselineQty),
+              currentQty: li.quantity,
+              multiplier: li.quantity / baselineQty,
+              baselineLabel: `typical for ${variant?.replace('_', ' ')}`,
+            });
+          }
+          // B2: No baseline - absolute guardrail: flag if draft_qty >= 50
+          else if (baselineQty === 0 && li.quantity >= 50) {
+            flagged.push({
+              productName: li.productName,
+              packagingVariant: li.packagingVariant,
+              lastQty: 0,
+              currentQty: li.quantity,
+              multiplier: li.quantity,
+              baselineLabel: 'large absolute quantity',
+            });
+          }
         }
       }
 
@@ -308,6 +371,39 @@ export default function NewOrder() {
     await submitOrder();
   };
 
+  // Handle quantity input change (typing)
+  const handleQuantityInputChange = (productId: string, value: string) => {
+    // Remove non-numeric characters
+    const numericValue = value.replace(/[^0-9]/g, '');
+    const qty = numericValue === '' ? 0 : parseInt(numericValue, 10);
+
+    if (qty <= 0) {
+      removeLine(productId);
+    } else {
+      // If product not in line items yet, add it first
+      const existing = getLineItem(productId);
+      if (!existing) {
+        const product = products?.find((p) => p.id === productId);
+        if (!product) return;
+        const grindOpts = (product.grind_options ?? []) as GrindOption[];
+        setLineItems([
+          ...lineItems,
+          {
+            productId: product.id,
+            productName: product.product_name,
+            quantity: qty,
+            grind: grindOpts.length > 0 ? grindOpts[0] : null,
+            grindOptions: grindOpts,
+            price: prices?.[product.id] ?? null,
+            packagingVariant: product.packaging_variant,
+          },
+        ]);
+      } else {
+        updateQuantity(productId, qty);
+      }
+    }
+  };
+
   const renderProductRow = (p: Product) => {
     const lineItem = getLineItem(p.id);
     const hasPrice = prices && p.id in prices;
@@ -324,32 +420,32 @@ export default function NewOrder() {
             <span className="text-xs text-destructive">No price</span>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {lineItem ? (
-            <div className="flex items-center gap-1">
-              <Button
-                size="icon"
-                variant="outline"
-                className="h-7 w-7"
-                onClick={() => updateQuantity(p.id, lineItem.quantity - 1)}
-              >
-                <Minus className="h-3 w-3" />
-              </Button>
-              <span className="w-8 text-center text-sm font-medium">{lineItem.quantity}</span>
-              <Button
-                size="icon"
-                variant="outline"
-                className="h-7 w-7"
-                onClick={() => updateQuantity(p.id, lineItem.quantity + 1)}
-              >
-                <Plus className="h-3 w-3" />
-              </Button>
-            </div>
-          ) : (
-            <Button size="sm" variant="outline" onClick={() => addOrIncrementProduct(p.id)}>
-              Add
-            </Button>
-          )}
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-7 w-7"
+            onClick={() => updateQuantity(p.id, (lineItem?.quantity ?? 0) - 1)}
+            disabled={!lineItem}
+          >
+            <Minus className="h-3 w-3" />
+          </Button>
+          <Input
+            type="text"
+            inputMode="numeric"
+            className="w-14 h-7 text-center text-sm px-1"
+            value={lineItem?.quantity ?? ''}
+            placeholder="0"
+            onChange={(e) => handleQuantityInputChange(p.id, e.target.value)}
+          />
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-7 w-7"
+            onClick={() => addOrIncrementProduct(p.id)}
+          >
+            <Plus className="h-3 w-3" />
+          </Button>
         </div>
       </li>
     );
@@ -410,14 +506,38 @@ export default function NewOrder() {
               ) : (
                 <ul className="space-y-3">
                   {lineItems.map((li) => (
-                    <li key={li.productId} className="flex items-start justify-between gap-2 text-sm">
+                    <li key={li.productId} className="flex items-start justify-between gap-2 text-sm border-b pb-3 last:border-0">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-medium truncate">{li.productName}</span>
                           <PackagingBadge variant={li.packagingVariant} />
                         </div>
-                        <div className="flex items-center gap-2 mt-1 text-muted-foreground">
-                          <span>Qty: {li.quantity}</span>
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              className="h-6 w-6"
+                              onClick={() => updateQuantity(li.productId, li.quantity - 1)}
+                            >
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              className="w-12 h-6 text-center text-xs px-1"
+                              value={li.quantity}
+                              onChange={(e) => handleQuantityInputChange(li.productId, e.target.value)}
+                            />
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              className="h-6 w-6"
+                              onClick={() => updateQuantity(li.productId, li.quantity + 1)}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
                           {li.grindOptions.length > 0 && (
                             <Select
                               value={li.grind ?? ''}
@@ -435,7 +555,7 @@ export default function NewOrder() {
                               </SelectContent>
                             </Select>
                           )}
-                          <span>
+                          <span className="text-muted-foreground">
                             {li.price !== null
                               ? `$${(li.price * li.quantity).toFixed(2)}`
                               : 'No price'}
