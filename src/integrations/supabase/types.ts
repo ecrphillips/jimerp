@@ -275,6 +275,7 @@ export type Database = {
           product_id: string
           roast_complete: boolean
           ship_complete: boolean
+          ship_priority: Database["public"]["Enums"]["ship_priority"]
           target_date: string
           updated_at: string
           updated_by: string | null
@@ -287,6 +288,7 @@ export type Database = {
           product_id: string
           roast_complete?: boolean
           ship_complete?: boolean
+          ship_priority?: Database["public"]["Enums"]["ship_priority"]
           target_date: string
           updated_at?: string
           updated_by?: string | null
@@ -299,6 +301,7 @@ export type Database = {
           product_id?: string
           roast_complete?: boolean
           ship_complete?: boolean
+          ship_priority?: Database["public"]["Enums"]["ship_priority"]
           target_date?: string
           updated_at?: string
           updated_by?: string | null
@@ -559,6 +562,7 @@ export type Database = {
         | "PACKED"
         | "STAGED"
         | "COMPLETE"
+      ship_priority: "NORMAL" | "TIME_SENSITIVE"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -701,6 +705,7 @@ export const Constants = {
       ],
       product_format: ["WHOLE_BEAN", "ESPRESSO", "FILTER", "OTHER"],
       production_status: ["PLANNED", "ROASTED", "PACKED", "STAGED", "COMPLETE"],
+      ship_priority: ["NORMAL", "TIME_SENSITIVE"],
     },
   },
 } as const
