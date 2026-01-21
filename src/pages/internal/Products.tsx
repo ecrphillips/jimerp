@@ -20,6 +20,7 @@ interface Product {
   bag_size_g: number;
   grind_options: GrindOption[];
   is_active: boolean;
+  is_perennial: boolean;
   client_id: string;
   packaging_variant: PackagingVariant | null;
   client: { name: string } | null;
@@ -54,13 +55,14 @@ export default function Products() {
   const [isActive, setIsActive] = useState(true);
   const [packagingVariant, setPackagingVariant] = useState<PackagingVariant | null>(null);
   const [priceInput, setPriceInput] = useState<string>('');
+  const [isPerennial, setIsPerennial] = useState(false);
 
   const { data: products, isLoading } = useQuery({
     queryKey: ['all-products'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, client_id, packaging_variant, client:clients(name)')
+        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, client_id, packaging_variant, client:clients(name)')
         .order('client_id')
         .order('product_name');
 
@@ -124,6 +126,7 @@ export default function Products() {
         grind_options: grindOptions,
         client_id: clientId,
         is_active: isActive,
+        is_perennial: isPerennial,
         packaging_variant: packagingVariant,
       };
 
@@ -217,6 +220,7 @@ export default function Products() {
     setGrindOptions([]);
     setClientId(clients?.[0]?.id ?? '');
     setIsActive(true);
+    setIsPerennial(false);
     setPackagingVariant(null);
     setPriceInput('');
     setDialogOpen(true);
@@ -231,6 +235,7 @@ export default function Products() {
     setGrindOptions(p.grind_options ?? []);
     setClientId(p.client_id);
     setIsActive(p.is_active);
+    setIsPerennial(p.is_perennial);
     setPackagingVariant(p.packaging_variant);
     setPriceInput(''); // Start blank - user can optionally set a new price
     setDialogOpen(true);
@@ -443,13 +448,23 @@ export default function Products() {
                   : 'Leave blank to set later. $0.00 is allowed.'}
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="active"
-                checked={isActive}
-                onCheckedChange={(c) => setIsActive(!!c)}
-              />
-              <Label htmlFor="active">Active</Label>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="active"
+                  checked={isActive}
+                  onCheckedChange={(c) => setIsActive(!!c)}
+                />
+                <Label htmlFor="active">Active</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="perennial"
+                  checked={isPerennial}
+                  onCheckedChange={(c) => setIsPerennial(!!c)}
+                />
+                <Label htmlFor="perennial">Perennial</Label>
+              </div>
             </div>
             <div className="flex justify-end gap-2 pt-4">
               <Button variant="outline" onClick={closeDialog}>Cancel</Button>
