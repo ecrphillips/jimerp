@@ -184,12 +184,17 @@ export type Database = {
           client_notes: string | null
           client_po: string | null
           created_at: string
+          created_by_admin: boolean
           created_by_user_id: string | null
           delivery_method: Database["public"]["Enums"]["delivery_method"]
           id: string
           internal_ops_notes: string | null
+          invoiced: boolean
           order_number: string
+          packed: boolean
           requested_ship_date: string | null
+          roasted: boolean
+          shipped_or_ready: boolean
           status: Database["public"]["Enums"]["order_status"]
           updated_at: string
         }
@@ -198,12 +203,17 @@ export type Database = {
           client_notes?: string | null
           client_po?: string | null
           created_at?: string
+          created_by_admin?: boolean
           created_by_user_id?: string | null
           delivery_method?: Database["public"]["Enums"]["delivery_method"]
           id?: string
           internal_ops_notes?: string | null
+          invoiced?: boolean
           order_number: string
+          packed?: boolean
           requested_ship_date?: string | null
+          roasted?: boolean
+          shipped_or_ready?: boolean
           status?: Database["public"]["Enums"]["order_status"]
           updated_at?: string
         }
@@ -212,12 +222,17 @@ export type Database = {
           client_notes?: string | null
           client_po?: string | null
           created_at?: string
+          created_by_admin?: boolean
           created_by_user_id?: string | null
           delivery_method?: Database["public"]["Enums"]["delivery_method"]
           id?: string
           internal_ops_notes?: string | null
+          invoiced?: boolean
           order_number?: string
+          packed?: boolean
           requested_ship_date?: string | null
+          roasted?: boolean
+          shipped_or_ready?: boolean
           status?: Database["public"]["Enums"]["order_status"]
           updated_at?: string
         }

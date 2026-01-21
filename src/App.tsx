@@ -13,6 +13,7 @@ import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/internal/Dashboard";
 import Orders from "@/pages/internal/Orders";
 import OrderDetail from "@/pages/internal/OrderDetail";
+import CreateOrderForClient from "@/pages/internal/CreateOrderForClient";
 import Clients from "@/pages/internal/Clients";
 import Products from "@/pages/internal/Products";
 import Pricing from "@/pages/internal/Pricing";
@@ -50,6 +51,11 @@ const App = () => (
             <Route path="/orders" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><Orders /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/orders/new" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><CreateOrderForClient /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/orders/:id" element={
