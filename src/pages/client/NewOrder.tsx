@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Plus, Minus, Trash2 } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
+import { UnusualOrderModal } from '@/components/client/UnusualOrderModal';
 import type { GrindOption, DeliveryMethod } from '@/types/database';
 
 interface LineItem {
@@ -47,6 +48,17 @@ export default function NewOrder() {
   const [clientPo, setClientPo] = useState('');
   const [clientNotes, setClientNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Unusual order modal state
+  const [showUnusualModal, setShowUnusualModal] = useState(false);
+  const [flaggedItems, setFlaggedItems] = useState<
+    { productName: string; lastQty: number; currentQty: number; multiplier: number }[]
+  >([]);
+  const [totalFlag, setTotalFlag] = useState<{
+    lastTotal: number;
+    currentTotal: number;
+    multiplier: number;
+  } | null>(null);
 
   // Fetch products for this client (RLS filters automatically)
   const { data: products, isLoading: productsLoading } = useQuery({
@@ -150,7 +162,75 @@ export default function NewOrder() {
     return lineItems.reduce((sum, li) => sum + (li.price ?? 0) * li.quantity, 0);
   }, [lineItems]);
 
-  const submitOrder = async () => {
+  // Check for unusual order size against last order
+  const checkUnusualOrderSize = async (): Promise<boolean> => {
+    if (!authUser?.clientId) return false;
+
+    try {
+      // Fetch most recent prior order (not CANCELLED or DRAFT)
+      const { data: lastOrder } = await supabase
+        .from('orders')
+        .select('id, order_line_items(product_id, quantity_units)')
+        .eq('client_id', authUser.clientId)
+        .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!lastOrder || !lastOrder.order_line_items) {
+        // No prior order, no warning needed
+        return false;
+      }
+
+      // Build map of product_id -> last quantity
+      const lastQtyMap: Record<string, number> = {};
+      let lastTotalUnits = 0;
+      for (const li of lastOrder.order_line_items) {
+        lastQtyMap[li.product_id] = (lastQtyMap[li.product_id] || 0) + li.quantity_units;
+        lastTotalUnits += li.quantity_units;
+      }
+
+      // Calculate current totals
+      const currentTotalUnits = lineItems.reduce((sum, li) => sum + li.quantity, 0);
+
+      // Check per-product threshold: draft_qty >= 10 × last_qty AND draft_qty >= 10 AND last_qty > 0
+      const flagged: { productName: string; lastQty: number; currentQty: number; multiplier: number }[] = [];
+      for (const li of lineItems) {
+        const lastQty = lastQtyMap[li.productId] || 0;
+        if (lastQty > 0 && li.quantity >= 10 && li.quantity >= lastQty * 10) {
+          flagged.push({
+            productName: li.productName,
+            lastQty,
+            currentQty: li.quantity,
+            multiplier: li.quantity / lastQty,
+          });
+        }
+      }
+
+      // Check total threshold: total draft >= 5 × last total AND total draft >= 50 AND last total > 0
+      let totalFlagData: { lastTotal: number; currentTotal: number; multiplier: number } | null = null;
+      if (lastTotalUnits > 0 && currentTotalUnits >= 50 && currentTotalUnits >= lastTotalUnits * 5) {
+        totalFlagData = {
+          lastTotal: lastTotalUnits,
+          currentTotal: currentTotalUnits,
+          multiplier: currentTotalUnits / lastTotalUnits,
+        };
+      }
+
+      if (flagged.length > 0 || totalFlagData) {
+        setFlaggedItems(flagged);
+        setTotalFlag(totalFlagData);
+        return true;
+      }
+
+      return false;
+    } catch (err) {
+      console.error('Error checking order size:', err);
+      return false;
+    }
+  };
+
+  const handleSubmitClick = async () => {
     if (!authUser?.clientId) {
       toast.error('No client linked to your account');
       return;
@@ -166,6 +246,19 @@ export default function NewOrder() {
       toast.error(`"${missingPrice.productName}" has no price set. Ask ops to set a price.`);
       return;
     }
+
+    // Check for unusual order size
+    const isUnusual = await checkUnusualOrderSize();
+    if (isUnusual) {
+      setShowUnusualModal(true);
+      return;
+    }
+
+    await submitOrder();
+  };
+
+  const submitOrder = async () => {
+    if (!authUser?.clientId) return;
 
     setSubmitting(true);
     try {
@@ -208,6 +301,11 @@ export default function NewOrder() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleUnusualConfirm = async () => {
+    setShowUnusualModal(false);
+    await submitOrder();
   };
 
   const renderProductRow = (p: Product) => {
@@ -402,7 +500,7 @@ export default function NewOrder() {
               </div>
               <Button
                 className="w-full"
-                onClick={submitOrder}
+                onClick={handleSubmitClick}
                 disabled={submitting || lineItems.length === 0}
               >
                 {submitting ? 'Submitting…' : 'Submit Order'}
@@ -411,6 +509,14 @@ export default function NewOrder() {
           </Card>
         </div>
       </div>
+
+      <UnusualOrderModal
+        open={showUnusualModal}
+        onClose={() => setShowUnusualModal(false)}
+        onConfirm={handleUnusualConfirm}
+        flaggedItems={flaggedItems}
+        totalFlag={totalFlag}
+      />
     </div>
   );
 }
