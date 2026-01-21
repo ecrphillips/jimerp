@@ -387,6 +387,7 @@ export type Database = {
           id: string
           internal_packaging_notes: string | null
           is_active: boolean
+          is_perennial: boolean
           packaging_variant:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
@@ -403,6 +404,7 @@ export type Database = {
           id?: string
           internal_packaging_notes?: string | null
           is_active?: boolean
+          is_perennial?: boolean
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
@@ -419,6 +421,7 @@ export type Database = {
           id?: string
           internal_packaging_notes?: string | null
           is_active?: boolean
+          is_perennial?: boolean
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
             | null

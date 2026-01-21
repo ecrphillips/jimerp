@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,9 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { Plus, Minus, Trash2 } from 'lucide-react';
+import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import type { GrindOption, DeliveryMethod } from '@/types/database';
 
 interface LineItem {
@@ -19,6 +22,18 @@ interface LineItem {
   grind: GrindOption | null;
   grindOptions: GrindOption[];
   price: number | null;
+  packagingVariant: PackagingVariant | null;
+}
+
+interface Product {
+  id: string;
+  product_name: string;
+  sku: string | null;
+  bag_size_g: number;
+  format: string;
+  grind_options: GrindOption[];
+  is_perennial: boolean;
+  packaging_variant: PackagingVariant | null;
 }
 
 export default function NewOrder() {
@@ -39,12 +54,12 @@ export default function NewOrder() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, bag_size_g, format, grind_options')
+        .select('id, product_name, sku, bag_size_g, format, grind_options, is_perennial, packaging_variant')
         .eq('is_active', true)
         .order('product_name', { ascending: true });
 
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as Product[];
     },
   });
 
@@ -70,13 +85,31 @@ export default function NewOrder() {
     },
   });
 
-  const addProduct = (productId: string) => {
-    const product = products?.find((p) => p.id === productId);
-    if (!product) return;
-    if (lineItems.some((li) => li.productId === productId)) {
-      toast.error('Product already added');
+  // Group products by perennial status
+  const { perennialProducts, seasonalProducts } = useMemo(() => {
+    const perennial: Product[] = [];
+    const seasonal: Product[] = [];
+    for (const p of products ?? []) {
+      if (p.is_perennial) {
+        perennial.push(p);
+      } else {
+        seasonal.push(p);
+      }
+    }
+    return { perennialProducts: perennial, seasonalProducts: seasonal };
+  }, [products]);
+
+  const getLineItem = (productId: string) => lineItems.find((li) => li.productId === productId);
+
+  const addOrIncrementProduct = (productId: string) => {
+    const existing = getLineItem(productId);
+    if (existing) {
+      updateQuantity(productId, existing.quantity + 1);
       return;
     }
+
+    const product = products?.find((p) => p.id === productId);
+    if (!product) return;
 
     const grindOpts = (product.grind_options ?? []) as GrindOption[];
     setLineItems([
@@ -88,13 +121,18 @@ export default function NewOrder() {
         grind: grindOpts.length > 0 ? grindOpts[0] : null,
         grindOptions: grindOpts,
         price: prices?.[product.id] ?? null,
+        packagingVariant: product.packaging_variant,
       },
     ]);
   };
 
   const updateQuantity = (productId: string, qty: number) => {
+    if (qty <= 0) {
+      removeLine(productId);
+      return;
+    }
     setLineItems((prev) =>
-      prev.map((li) => (li.productId === productId ? { ...li, quantity: Math.max(1, qty) } : li))
+      prev.map((li) => (li.productId === productId ? { ...li, quantity: qty } : li))
     );
   };
 
@@ -107,6 +145,10 @@ export default function NewOrder() {
   const removeLine = (productId: string) => {
     setLineItems((prev) => prev.filter((li) => li.productId !== productId));
   };
+
+  const orderTotal = useMemo(() => {
+    return lineItems.reduce((sum, li) => sum + (li.price ?? 0) * li.quantity, 0);
+  }, [lineItems]);
 
   const submitOrder = async () => {
     if (!authUser?.clientId) {
@@ -168,7 +210,52 @@ export default function NewOrder() {
     }
   };
 
-  const availableProducts = products?.filter((p) => !lineItems.some((li) => li.productId === p.id)) ?? [];
+  const renderProductRow = (p: Product) => {
+    const lineItem = getLineItem(p.id);
+    const hasPrice = prices && p.id in prices;
+    const price = prices?.[p.id];
+
+    return (
+      <li key={p.id} className="flex items-center justify-between py-2 border-b last:border-0">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="font-medium truncate">{p.product_name}</span>
+          <PackagingBadge variant={p.packaging_variant} />
+          {hasPrice ? (
+            <span className="text-sm text-muted-foreground">${price!.toFixed(2)}</span>
+          ) : (
+            <span className="text-xs text-destructive">No price</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {lineItem ? (
+            <div className="flex items-center gap-1">
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-7 w-7"
+                onClick={() => updateQuantity(p.id, lineItem.quantity - 1)}
+              >
+                <Minus className="h-3 w-3" />
+              </Button>
+              <span className="w-8 text-center text-sm font-medium">{lineItem.quantity}</span>
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-7 w-7"
+                onClick={() => updateQuantity(p.id, lineItem.quantity + 1)}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => addOrIncrementProduct(p.id)}>
+              Add
+            </Button>
+          )}
+        </div>
+      </li>
+    );
+  };
 
   return (
     <div>
@@ -176,139 +263,154 @@ export default function NewOrder() {
         <h1 className="page-title">New Order</h1>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Product Selection */}
+      <div className="grid gap-6 lg:grid-cols-[1fr,400px]">
+        {/* Left: Product List */}
         <Card>
-          <CardHeader><CardTitle>Add Products</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Products</CardTitle>
+          </CardHeader>
           <CardContent>
             {productsLoading ? (
               <p className="text-muted-foreground">Loading…</p>
-            ) : availableProducts.length === 0 ? (
-              <p className="text-muted-foreground">All products added or none available.</p>
+            ) : !products || products.length === 0 ? (
+              <p className="text-muted-foreground">No products available.</p>
             ) : (
-              <ul className="space-y-2">
-                {availableProducts.map((p) => (
-                  <li key={p.id} className="flex items-center justify-between border-b pb-2 last:border-0">
-                    <div>
-                      <span className="font-medium">{p.product_name}</span>
-                      <span className="ml-2 text-xs text-muted-foreground">{p.bag_size_g}g</span>
-                      {prices?.[p.id] ? (
-                        <span className="ml-2 text-sm text-muted-foreground">${prices[p.id].toFixed(2)}</span>
-                      ) : (
-                        <span className="ml-2 text-xs text-destructive">No price</span>
-                      )}
-                    </div>
-                    <Button size="sm" variant="outline" onClick={() => addProduct(p.id)}>Add</Button>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-4">
+                {perennialProducts.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                      Perennial
+                    </p>
+                    <ul>{perennialProducts.map(renderProductRow)}</ul>
+                  </div>
+                )}
+                {perennialProducts.length > 0 && seasonalProducts.length > 0 && (
+                  <Separator />
+                )}
+                {seasonalProducts.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                      Seasonal
+                    </p>
+                    <ul>{seasonalProducts.map(renderProductRow)}</ul>
+                  </div>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Order Details */}
-        <Card>
-          <CardHeader><CardTitle>Order Details</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="shipDate">Requested Ship Date</Label>
-              <Input
-                id="shipDate"
-                type="date"
-                value={requestedShipDate}
-                onChange={(e) => setRequestedShipDate(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="delivery">Delivery Method</Label>
-              <Select value={deliveryMethod} onValueChange={(v) => setDeliveryMethod(v as DeliveryMethod)}>
-                <SelectTrigger id="delivery">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PICKUP">Pickup</SelectItem>
-                  <SelectItem value="DELIVERY">Delivery</SelectItem>
-                  <SelectItem value="COURIER">Courier</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="po">PO Number (optional)</Label>
-              <Input id="po" value={clientPo} onChange={(e) => setClientPo(e.target.value)} />
-            </div>
-            <div>
-              <Label htmlFor="notes">Notes (optional)</Label>
-              <Textarea id="notes" value={clientNotes} onChange={(e) => setClientNotes(e.target.value)} rows={3} />
-            </div>
-          </CardContent>
-        </Card>
+        {/* Right: Order Summary (sticky) */}
+        <div className="lg:sticky lg:top-4 lg:self-start space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Order Summary ({lineItems.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {lineItems.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No products added yet.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {lineItems.map((li) => (
+                    <li key={li.productId} className="flex items-start justify-between gap-2 text-sm">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium truncate">{li.productName}</span>
+                          <PackagingBadge variant={li.packagingVariant} />
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 text-muted-foreground">
+                          <span>Qty: {li.quantity}</span>
+                          {li.grindOptions.length > 0 && (
+                            <Select
+                              value={li.grind ?? ''}
+                              onValueChange={(v) => updateGrind(li.productId, v as GrindOption)}
+                            >
+                              <SelectTrigger className="h-6 w-24 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {li.grindOptions.map((g) => (
+                                  <SelectItem key={g} value={g}>
+                                    {g}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                          <span>
+                            {li.price !== null
+                              ? `$${(li.price * li.quantity).toFixed(2)}`
+                              : 'No price'}
+                          </span>
+                        </div>
+                      </div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={() => removeLine(li.productId)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {lineItems.length > 0 && (
+                <div className="mt-4 pt-4 border-t flex justify-between font-medium">
+                  <span>Total</span>
+                  <span>${orderTotal.toFixed(2)}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Order Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="shipDate">Requested Ship Date</Label>
+                <Input
+                  id="shipDate"
+                  type="date"
+                  value={requestedShipDate}
+                  onChange={(e) => setRequestedShipDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="delivery">Delivery Method</Label>
+                <Select value={deliveryMethod} onValueChange={(v) => setDeliveryMethod(v as DeliveryMethod)}>
+                  <SelectTrigger id="delivery">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PICKUP">Pickup</SelectItem>
+                    <SelectItem value="DELIVERY">Delivery</SelectItem>
+                    <SelectItem value="COURIER">Courier</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="po">PO Number (optional)</Label>
+                <Input id="po" value={clientPo} onChange={(e) => setClientPo(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="notes">Notes (optional)</Label>
+                <Textarea id="notes" value={clientNotes} onChange={(e) => setClientNotes(e.target.value)} rows={2} />
+              </div>
+              <Button
+                className="w-full"
+                onClick={submitOrder}
+                disabled={submitting || lineItems.length === 0}
+              >
+                {submitting ? 'Submitting…' : 'Submit Order'}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-
-      {/* Line Items */}
-      <Card className="mt-6">
-        <CardHeader><CardTitle>Line Items ({lineItems.length})</CardTitle></CardHeader>
-        <CardContent>
-          {lineItems.length === 0 ? (
-            <p className="text-muted-foreground">No products selected yet.</p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left">
-                  <th className="pb-2">Product</th>
-                  <th className="pb-2">Qty</th>
-                  <th className="pb-2">Grind</th>
-                  <th className="pb-2">Price</th>
-                  <th className="pb-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {lineItems.map((li) => (
-                  <tr key={li.productId} className="border-b last:border-0">
-                    <td className="py-2">{li.productName}</td>
-                    <td className="py-2">
-                      <Input
-                        type="number"
-                        min={1}
-                        className="w-20"
-                        value={li.quantity}
-                        onChange={(e) => updateQuantity(li.productId, parseInt(e.target.value) || 1)}
-                      />
-                    </td>
-                    <td className="py-2">
-                      {li.grindOptions.length > 0 ? (
-                        <Select value={li.grind ?? ''} onValueChange={(v) => updateGrind(li.productId, v as GrindOption)}>
-                          <SelectTrigger className="w-32">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {li.grindOptions.map((g) => (
-                              <SelectItem key={g} value={g}>{g}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="py-2">
-                      {li.price !== null ? `$${li.price.toFixed(2)}` : <span className="text-destructive">No price</span>}
-                    </td>
-                    <td className="py-2">
-                      <Button size="sm" variant="ghost" onClick={() => removeLine(li.productId)}>Remove</Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          <div className="mt-6 flex justify-end">
-            <Button onClick={submitOrder} disabled={submitting || lineItems.length === 0}>
-              {submitting ? 'Submitting…' : 'Submit Order'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
