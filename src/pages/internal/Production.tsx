@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format, addDays, parseISO } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
-import { ChevronDown, ChevronRight, Clock } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clock, Printer } from 'lucide-react';
 
 type ShipPriority = 'NORMAL' | 'TIME_SENSITIVE';
 
@@ -92,6 +92,11 @@ export default function Production() {
   const [dateFilter, setDateFilter] = useState<string[]>([today, tomorrow]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [showShippableOnly, setShowShippableOnly] = useState(false);
+  const [printWithBreakdown, setPrintWithBreakdown] = useState(false);
+
+  const handlePrint = () => {
+    window.print();
+  };
 
   // Fetch order line items for orders with relevant statuses and ship dates
   const { data: orderLineItems, isLoading: ordersLoading } = useQuery({
@@ -328,8 +333,16 @@ export default function Production() {
   };
 
   return (
-    <div className="page-container">
-      <div className="page-header">
+    <div className={`page-container ${printWithBreakdown ? 'print-with-breakdown' : ''}`}>
+      {/* Print-only header */}
+      <div className="hidden print:block print:mb-4">
+        <h1 className="text-xl font-bold">Production Run Sheet</h1>
+        <p className="text-sm">
+          {dateFilter.map((d) => format(parseISO(d), 'EEEE, MMMM d, yyyy')).join(' – ')}
+        </p>
+      </div>
+
+      <div className="page-header print:hidden">
         <div>
           <h1 className="page-title">Production Run Sheet</h1>
           <p className="text-sm text-muted-foreground">
@@ -337,6 +350,20 @@ export default function Production() {
           </p>
         </div>
         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="breakdown-toggle"
+              checked={printWithBreakdown}
+              onCheckedChange={setPrintWithBreakdown}
+            />
+            <Label htmlFor="breakdown-toggle" className="text-sm font-medium cursor-pointer">
+              Print with breakdown
+            </Label>
+          </div>
+          <Button variant="outline" size="sm" onClick={handlePrint}>
+            <Printer className="h-4 w-4 mr-2" />
+            Print
+          </Button>
           <div className="flex items-center gap-2">
             <Switch
               id="shippable-filter"
@@ -366,8 +393,8 @@ export default function Production() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
+      <Card className="print:shadow-none print:border-none">
+        <CardHeader className="print:hidden">
           <CardTitle>
             {showShippableOnly ? 'Shippable Now' : 'Aggregated Production'}
             <span className="ml-4 text-xs font-normal text-muted-foreground">
@@ -375,29 +402,29 @@ export default function Production() {
             </span>
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="print:p-0">
           {ordersLoading ? (
-            <p className="text-muted-foreground">Loading…</p>
+            <p className="text-muted-foreground print:hidden">Loading…</p>
           ) : displayedRows.length === 0 ? (
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground print:hidden">
               {showShippableOnly 
                 ? 'No items ready to ship. Items appear here when Pack ✓ is checked but Ship ✓ is not.'
                 : 'No production items for selected dates.'}
             </p>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full text-sm print:text-xs">
               <thead>
                 <tr className="border-b text-left">
-                  <th className="pb-2 w-8"></th>
-                  <th className="pb-2">Product</th>
-                  <th className="pb-2">SKU</th>
-                  <th className="pb-2">Bag Size</th>
-                  <th className="pb-2 text-right">Units</th>
-                  <th className="pb-2 text-right">Total KG</th>
-                  <th className="pb-2 text-center">Priority</th>
-                  <th className="pb-2 text-center">Roast ✓</th>
-                  <th className="pb-2 text-center">Pack ✓</th>
-                  <th className="pb-2 text-center">Ship ✓</th>
+                  <th className="pb-2 w-8 print:hidden"></th>
+                  <th className="pb-2 print:py-1">Product</th>
+                  <th className="pb-2 print:py-1 print:hidden">SKU</th>
+                  <th className="pb-2 print:py-1">Bag Size</th>
+                  <th className="pb-2 text-right print:py-1">Units</th>
+                  <th className="pb-2 text-right print:py-1">Total KG</th>
+                  <th className="pb-2 text-center print:py-1">Priority</th>
+                  <th className="pb-2 text-center print:py-1">Roast</th>
+                  <th className="pb-2 text-center print:py-1">Pack</th>
+                  <th className="pb-2 text-center print:py-1">Ship</th>
                 </tr>
               </thead>
               <tbody>
@@ -406,8 +433,8 @@ export default function Production() {
                   
                   return (
                     <React.Fragment key={row.key}>
-                      <tr className={`border-b last:border-0 hover:bg-muted/50 ${isTimeSensitive ? 'bg-destructive/5' : ''}`}>
-                        <td className="py-2">
+                      <tr className={`border-b last:border-0 hover:bg-muted/50 print:hover:bg-transparent ${isTimeSensitive ? 'bg-destructive/5 print:bg-transparent' : ''}`}>
+                        <td className="py-2 print:hidden">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -421,72 +448,86 @@ export default function Production() {
                             )}
                           </Button>
                         </td>
-                        <td className="py-2 font-medium">
+                        <td className="py-2 font-medium print:py-1">
                           {row.productName}
                           {isTimeSensitive && (
-                            <Badge variant="destructive" className="ml-2 text-xs">
-                              <Clock className="h-3 w-3 mr-1" />
-                              Urgent
-                            </Badge>
+                            <>
+                              <Badge variant="destructive" className="ml-2 text-xs print:hidden">
+                                <Clock className="h-3 w-3 mr-1" />
+                                Urgent
+                              </Badge>
+                              <span className="hidden print:inline ml-1 font-bold">*</span>
+                            </>
                           )}
                         </td>
-                        <td className="py-2">{row.sku || '—'}</td>
-                        <td className="py-2">{row.bagSize}g</td>
-                        <td className="py-2 text-right font-medium">{row.totalUnits}</td>
-                        <td className="py-2 text-right">{(row.totalGrams / 1000).toFixed(2)}</td>
-                        <td className="py-2 text-center">
+                        <td className="py-2 print:hidden">{row.sku || '—'}</td>
+                        <td className="py-2 print:py-1">{row.bagSize}g</td>
+                        <td className="py-2 text-right font-medium print:py-1">{row.totalUnits}</td>
+                        <td className="py-2 text-right print:py-1">{(row.totalGrams / 1000).toFixed(2)}</td>
+                        <td className="py-2 text-center print:py-1">
                           <Button
                             variant={isTimeSensitive ? 'destructive' : 'outline'}
                             size="sm"
-                            className="h-7 text-xs"
+                            className="h-7 text-xs print:hidden"
                             onClick={() => togglePriority(row)}
                           >
                             {isTimeSensitive ? 'Urgent' : 'Normal'}
                           </Button>
+                          <span className="hidden print:inline">{isTimeSensitive ? 'URGENT' : '—'}</span>
                         </td>
-                        <td className="py-2 text-center">
-                          <Checkbox
-                            checked={row.checkmark?.roast_complete ?? false}
-                            onCheckedChange={(checked) =>
-                              checkmarkMutation.mutate({
-                                productId: row.productId,
-                                bagSize: row.bagSize,
-                                field: 'roast_complete',
-                                value: !!checked,
-                              })
-                            }
-                          />
+                        <td className="py-2 text-center print:py-1">
+                          <span className="print:hidden">
+                            <Checkbox
+                              checked={row.checkmark?.roast_complete ?? false}
+                              onCheckedChange={(checked) =>
+                                checkmarkMutation.mutate({
+                                  productId: row.productId,
+                                  bagSize: row.bagSize,
+                                  field: 'roast_complete',
+                                  value: !!checked,
+                                })
+                              }
+                            />
+                          </span>
+                          <span className="hidden print:inline">{row.checkmark?.roast_complete ? '☑' : '☐'}</span>
                         </td>
-                        <td className="py-2 text-center">
-                          <Checkbox
-                            checked={row.checkmark?.pack_complete ?? false}
-                            onCheckedChange={(checked) =>
-                              checkmarkMutation.mutate({
-                                productId: row.productId,
-                                bagSize: row.bagSize,
-                                field: 'pack_complete',
-                                value: !!checked,
-                              })
-                            }
-                          />
+                        <td className="py-2 text-center print:py-1">
+                          <span className="print:hidden">
+                            <Checkbox
+                              checked={row.checkmark?.pack_complete ?? false}
+                              onCheckedChange={(checked) =>
+                                checkmarkMutation.mutate({
+                                  productId: row.productId,
+                                  bagSize: row.bagSize,
+                                  field: 'pack_complete',
+                                  value: !!checked,
+                                })
+                              }
+                            />
+                          </span>
+                          <span className="hidden print:inline">{row.checkmark?.pack_complete ? '☑' : '☐'}</span>
                         </td>
-                        <td className="py-2 text-center">
-                          <Checkbox
-                            checked={row.checkmark?.ship_complete ?? false}
-                            onCheckedChange={(checked) =>
-                              checkmarkMutation.mutate({
-                                productId: row.productId,
-                                bagSize: row.bagSize,
-                                field: 'ship_complete',
-                                value: !!checked,
-                              })
-                            }
-                          />
+                        <td className="py-2 text-center print:py-1">
+                          <span className="print:hidden">
+                            <Checkbox
+                              checked={row.checkmark?.ship_complete ?? false}
+                              onCheckedChange={(checked) =>
+                                checkmarkMutation.mutate({
+                                  productId: row.productId,
+                                  bagSize: row.bagSize,
+                                  field: 'ship_complete',
+                                  value: !!checked,
+                                })
+                              }
+                            />
+                          </span>
+                          <span className="hidden print:inline">{row.checkmark?.ship_complete ? '☑' : '☐'}</span>
                         </td>
                       </tr>
-                      {expandedRows.has(row.key) && (
-                        <tr>
-                          <td colSpan={10} className="bg-muted/30 px-8 py-2">
+                      {/* Breakdown row - shown on screen when expanded, or in print when toggle is on */}
+                      {(expandedRows.has(row.key) || (row.orders.length > 0 || row.externalDemand.length > 0)) && (
+                        <tr className={`${expandedRows.has(row.key) ? '' : 'hidden'} print:${printWithBreakdown ? 'table-row' : 'hidden'}`}>
+                          <td colSpan={10} className="bg-muted/30 px-8 py-2 print:bg-transparent print:py-1 print:pl-4 print:border-l-2 print:border-border">
                             <div className="space-y-1 text-xs">
                               {row.orders.map((o, i) => (
                                 <div key={i} className="flex justify-between">
@@ -495,7 +536,7 @@ export default function Production() {
                                 </div>
                               ))}
                               {row.externalDemand.map((ed, i) => (
-                                <div key={`ext-${i}`} className="flex justify-between text-info">
+                                <div key={`ext-${i}`} className="flex justify-between text-info print:text-inherit">
                                   <span>{ed.source} (External)</span>
                                   <span>{ed.units} units</span>
                                 </div>
