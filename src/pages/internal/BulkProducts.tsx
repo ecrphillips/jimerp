@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -19,7 +20,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Plus, Trash2, Save, ClipboardPaste } from 'lucide-react';
+import { Plus, Trash2, Save, Upload, AlertCircle } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 
 type PackagingVariant = Database['public']['Enums']['packaging_variant'];
@@ -68,6 +69,7 @@ interface BulkRow {
   isActive: boolean;
   initialPrice: string;
   addToBoard: 'NONE' | BoardSource;
+  error?: string;
 }
 
 const createEmptyRow = (): BulkRow => ({
@@ -79,13 +81,18 @@ const createEmptyRow = (): BulkRow => ({
   isActive: true,
   initialPrice: '0.00',
   addToBoard: 'NONE',
+  error: undefined,
 });
+
+const PASTE_PLACEHOLDER = `client_name\tproduct_name\tsku\tpackaging_variant\tis_active\tprice\tboard
+Matchstick\tDark Roast Blend\tMS-001\tRETAIL_340G\ttrue\t15.00\tMATCHSTICK`;
 
 export default function BulkProducts() {
   const queryClient = useQueryClient();
   const [rows, setRows] = useState<BulkRow[]>(() => 
-    Array.from({ length: 10 }, createEmptyRow)
+    Array.from({ length: 5 }, createEmptyRow)
   );
+  const [pasteText, setPasteText] = useState('');
 
   // Fetch clients
   const { data: clients = [] } = useQuery({
@@ -210,32 +217,60 @@ export default function BulkProducts() {
     setRows(prev => prev.filter(row => row.id !== id));
   };
 
-  // Handle paste from clipboard
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    const text = e.clipboardData.getData('text');
-    if (!text) return;
+  // Parse pasted text and load into rows
+  const handleLoadRows = useCallback(() => {
+    if (!pasteText.trim()) {
+      toast.error('Paste some data first');
+      return;
+    }
 
-    const lines = text.split('\n').filter(line => line.trim());
+    const lines = pasteText.split('\n').filter(line => line.trim());
     if (lines.length === 0) return;
 
-    e.preventDefault();
+    // Skip header row if it looks like a header
+    const firstLine = lines[0].toLowerCase();
+    const startsWithHeader = firstLine.includes('client') || firstLine.includes('product_name');
+    const dataLines = startsWithHeader ? lines.slice(1) : lines;
 
-    // Parse pasted data - expects: client_name, product_name, sku, packaging_variant, is_active, price, board
+    if (dataLines.length === 0) {
+      toast.error('No data rows found (only header detected)');
+      return;
+    }
+
     const newRows: BulkRow[] = [];
     
-    for (const line of lines) {
-      const cols = line.split('\t').map(c => c.trim());
+    for (const line of dataLines) {
+      // Support both tab and comma separators
+      const cols = line.includes('\t') 
+        ? line.split('\t').map(c => c.trim())
+        : line.split(',').map(c => c.trim());
+      
       if (cols.length < 2) continue;
 
+      const errors: string[] = [];
+
+      // Validate client
       const clientName = cols[0] || '';
       const client = clients.find(c => 
         c.name.toLowerCase() === clientName.toLowerCase()
       );
+      if (clientName && !client) {
+        errors.push(`Unknown client: "${clientName}"`);
+      }
 
+      // Validate packaging
       const packagingInput = (cols[3] || '').toUpperCase().replace(/[^A-Z0-9]/g, '_');
       const packagingVariant = PACKAGING_OPTIONS.find(p => 
         p.value === packagingInput || p.value.includes(packagingInput)
       )?.value || '';
+      if (cols[3] && !packagingVariant) {
+        errors.push(`Invalid packaging: "${cols[3]}"`);
+      }
+
+      // Validate required fields
+      if (!cols[1]?.trim()) {
+        errors.push('Missing product name');
+      }
 
       const isActiveInput = (cols[4] || 'true').toLowerCase();
       const isActive = isActiveInput !== 'false' && isActiveInput !== '0' && isActiveInput !== 'no';
@@ -254,21 +289,28 @@ export default function BulkProducts() {
         isActive,
         initialPrice: cols[5] || '0.00',
         addToBoard,
+        error: errors.length > 0 ? errors.join('; ') : undefined,
       });
     }
 
     if (newRows.length > 0) {
       setRows(prev => {
-        // Replace empty rows with pasted data
-        const emptyCount = prev.filter(r => !r.productName && !r.clientId).length;
+        // Replace empty rows with loaded data
         const nonEmpty = prev.filter(r => r.productName || r.clientId);
         const combined = [...nonEmpty, ...newRows];
-        // Ensure we don't exceed 50
         return combined.slice(0, 50);
       });
-      toast.success(`Pasted ${newRows.length} row(s)`);
+      const errorCount = newRows.filter(r => r.error).length;
+      if (errorCount > 0) {
+        toast.warning(`Loaded ${newRows.length} row(s), ${errorCount} with errors`);
+      } else {
+        toast.success(`Loaded ${newRows.length} row(s)`);
+      }
+      setPasteText('');
+    } else {
+      toast.error('No valid rows found');
     }
-  }, [clients]);
+  }, [pasteText, clients]);
 
   const handleSave = () => {
     // Validate rows
@@ -307,23 +349,29 @@ export default function BulkProducts() {
         </div>
       </div>
 
-      {/* Paste hint */}
-      <div className="bg-muted/50 border rounded-lg p-4 text-sm">
-        <div className="flex items-center gap-2 mb-2">
-          <ClipboardPaste className="h-4 w-4" />
-          <span className="font-medium">Paste Format (tab-separated):</span>
+      {/* Paste textarea */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium">Paste rows from Excel (tab-separated)</label>
+          <Button onClick={handleLoadRows} disabled={!pasteText.trim()}>
+            <Upload className="h-4 w-4 mr-2" />
+            Load Rows
+          </Button>
         </div>
-        <code className="text-xs bg-background px-2 py-1 rounded">
-          client_name	product_name	sku	packaging_variant	is_active	price	board
-        </code>
-        <p className="mt-2 text-muted-foreground text-xs">
-          Example: <code>Matchstick	Dark Roast	MS-001	RETAIL_340G	true	15.00	MATCHSTICK</code>
+        <Textarea
+          value={pasteText}
+          onChange={(e) => setPasteText(e.target.value)}
+          placeholder={PASTE_PLACEHOLDER}
+          className="font-mono text-xs min-h-[120px]"
+        />
+        <p className="text-xs text-muted-foreground">
+          Columns: client_name, product_name, sku, packaging_variant, is_active, price, board. 
+          Supports tab or comma separators. Header row is auto-skipped.
         </p>
       </div>
 
-      <div 
+      <div
         className="border rounded-lg overflow-auto max-h-[600px]"
-        onPaste={handlePaste}
       >
         <Table>
           <TableHeader className="sticky top-0 bg-background z-10">
@@ -341,8 +389,17 @@ export default function BulkProducts() {
           </TableHeader>
           <TableBody>
             {rows.map((row, idx) => (
-              <TableRow key={row.id}>
-                <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+              <TableRow key={row.id} className={row.error ? 'bg-destructive/10' : undefined}>
+                <TableCell className="text-muted-foreground">
+                  <div className="flex items-center gap-1">
+                    {idx + 1}
+                    {row.error && (
+                      <span title={row.error}>
+                        <AlertCircle className="h-3 w-3 text-destructive" />
+                      </span>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>
                   <Select
                     value={row.clientId}
