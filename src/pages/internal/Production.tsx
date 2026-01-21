@@ -260,7 +260,7 @@ export default function Production() {
   });
 
   const priorityMutation = useMutation({
-    mutationFn: async ({ productId, bagSize, priority }: { productId: string; bagSize: number; priority: ShipPriority }) => {
+    mutationFn: async ({ productId, bagSize, priority, existingCheckmark }: { productId: string; bagSize: number; priority: ShipPriority; existingCheckmark: Checkmark | null }) => {
       const targetDate = today;
       
       const { error } = await supabase
@@ -270,6 +270,9 @@ export default function Production() {
           product_id: productId,
           bag_size_g: bagSize,
           ship_priority: priority,
+          roast_complete: existingCheckmark?.roast_complete ?? false,
+          pack_complete: existingCheckmark?.pack_complete ?? false,
+          ship_complete: existingCheckmark?.ship_complete ?? false,
           updated_by: user?.id,
         }, {
           onConflict: 'target_date,product_id,bag_size_g',
@@ -310,7 +313,7 @@ export default function Production() {
   const togglePriority = (row: AggregatedRow) => {
     const currentPriority = row.checkmark?.ship_priority ?? 'NORMAL';
     const newPriority: ShipPriority = currentPriority === 'NORMAL' ? 'TIME_SENSITIVE' : 'NORMAL';
-    priorityMutation.mutate({ productId: row.productId, bagSize: row.bagSize, priority: newPriority });
+    priorityMutation.mutate({ productId: row.productId, bagSize: row.bagSize, priority: newPriority, existingCheckmark: row.checkmark });
   };
 
   return (
