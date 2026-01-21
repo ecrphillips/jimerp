@@ -9,12 +9,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 
-interface FlaggedItem {
+export interface FlaggedItem {
   productName: string;
+  packagingVariant: PackagingVariant | null;
   lastQty: number;
   currentQty: number;
   multiplier: number;
+  baselineLabel: string; // "last order", "typical for RETAIL_250G", "large absolute quantity"
 }
 
 interface UnusualOrderModalProps {
@@ -44,20 +47,26 @@ export function UnusualOrderModal({
           <AlertDialogDescription asChild>
             <div className="space-y-3">
               <p>
-                This order is significantly larger than your last order. Please confirm this is
+                This order is significantly larger than expected. Please confirm this is
                 intentional.
               </p>
 
               {flaggedItems.length > 0 && (
                 <div className="space-y-1">
                   <p className="font-medium text-foreground text-sm">Flagged items:</p>
-                  <ul className="text-sm space-y-1">
+                  <ul className="text-sm space-y-2">
                     {flaggedItems.map((item, i) => (
-                      <li key={i} className="flex justify-between border-b pb-1">
-                        <span className="truncate">{item.productName}</span>
-                        <span className="text-muted-foreground shrink-0 ml-2">
-                          {item.lastQty} → {item.currentQty} ({item.multiplier.toFixed(1)}×)
-                        </span>
+                      <li key={i} className="border-b pb-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <PackagingBadge variant={item.packagingVariant} />
+                          <span className="font-medium truncate">{item.productName}</span>
+                        </div>
+                        <div className="flex justify-between text-muted-foreground">
+                          <span className="text-xs italic">{item.baselineLabel}</span>
+                          <span>
+                            {item.lastQty} → {item.currentQty} ({item.multiplier.toFixed(1)}×)
+                          </span>
+                        </div>
                       </li>
                     ))}
                   </ul>
