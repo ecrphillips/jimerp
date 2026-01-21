@@ -42,6 +42,7 @@ export default function Products() {
   const [clientId, setClientId] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [packagingVariant, setPackagingVariant] = useState<PackagingVariant | null>(null);
+  const [initialPrice, setInitialPrice] = useState<string>('');
 
   const { data: products, isLoading } = useQuery({
     queryKey: ['all-products'],
@@ -91,13 +92,47 @@ export default function Products() {
           .eq('id', editingProduct.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('products').insert(payload);
+        // Create product and get the new ID
+        const { data: newProduct, error } = await supabase
+          .from('products')
+          .insert(payload)
+          .select('id')
+          .single();
         if (error) throw error;
+
+        // If initial price is set (including 0), create a price_list entry
+        const priceValue = parseFloat(initialPrice);
+        if (!isNaN(priceValue) && initialPrice.trim() !== '') {
+          // Get today in America/Vancouver timezone
+          const now = new Date();
+          const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Vancouver',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          });
+          const todayVancouver = formatter.format(now); // YYYY-MM-DD
+
+          const { error: priceError } = await supabase
+            .from('price_list')
+            .insert({
+              product_id: newProduct.id,
+              unit_price: priceValue,
+              currency: 'CAD',
+              effective_date: todayVancouver,
+            });
+          if (priceError) {
+            console.error('Failed to create initial price:', priceError);
+            toast.error('Product created but failed to set initial price');
+            return;
+          }
+        }
       }
     },
     onSuccess: () => {
       toast.success(editingProduct ? 'Product updated' : 'Product created');
       queryClient.invalidateQueries({ queryKey: ['all-products'] });
+      queryClient.invalidateQueries({ queryKey: ['all-prices'] });
       closeDialog();
     },
     onError: (err) => {
@@ -116,6 +151,7 @@ export default function Products() {
     setClientId(clients?.[0]?.id ?? '');
     setIsActive(true);
     setPackagingVariant(null);
+    setInitialPrice('');
     setDialogOpen(true);
   };
 
@@ -285,6 +321,23 @@ export default function Products() {
                 ))}
               </div>
             </div>
+            {!editingProduct && (
+              <div>
+                <Label htmlFor="initialPrice">Initial Unit Price (CAD)</Label>
+                <Input
+                  id="initialPrice"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="e.g. 12.50 or 0.00"
+                  value={initialPrice}
+                  onChange={(e) => setInitialPrice(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Leave blank to set later on Pricing page. $0.00 is allowed.
+                </p>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <Checkbox
                 id="active"

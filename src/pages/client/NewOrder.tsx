@@ -118,10 +118,10 @@ export default function NewOrder() {
       return;
     }
 
-    // Check all items have prices
+    // Check all items have prices (null means no price_list row; 0 is valid)
     const missingPrice = lineItems.find((li) => li.price === null);
     if (missingPrice) {
-      toast.error(`No price found for "${missingPrice.productName}". Contact support.`);
+      toast.error(`"${missingPrice.productName}" has no price set. Ask ops to set a price.`);
       return;
     }
 
