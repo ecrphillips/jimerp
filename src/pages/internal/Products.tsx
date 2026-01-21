@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { ProductFormat, GrindOption } from '@/types/database';
+import { PackagingBadge, PACKAGING_OPTIONS, type PackagingVariant } from '@/components/PackagingBadge';
 
 interface Product {
   id: string;
@@ -20,6 +21,7 @@ interface Product {
   grind_options: GrindOption[];
   is_active: boolean;
   client_id: string;
+  packaging_variant: PackagingVariant | null;
   client: { name: string } | null;
 }
 
@@ -39,13 +41,14 @@ export default function Products() {
   const [grindOptions, setGrindOptions] = useState<GrindOption[]>([]);
   const [clientId, setClientId] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const [packagingVariant, setPackagingVariant] = useState<PackagingVariant | null>(null);
 
   const { data: products, isLoading } = useQuery({
     queryKey: ['all-products'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, client_id, client:clients(name)')
+        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, client_id, packaging_variant, client:clients(name)')
         .order('client_id')
         .order('product_name');
 
@@ -78,6 +81,7 @@ export default function Products() {
         grind_options: grindOptions,
         client_id: clientId,
         is_active: isActive,
+        packaging_variant: packagingVariant,
       };
 
       if (editingProduct) {
@@ -111,6 +115,7 @@ export default function Products() {
     setGrindOptions([]);
     setClientId(clients?.[0]?.id ?? '');
     setIsActive(true);
+    setPackagingVariant(null);
     setDialogOpen(true);
   };
 
@@ -123,6 +128,7 @@ export default function Products() {
     setGrindOptions(p.grind_options ?? []);
     setClientId(p.client_id);
     setIsActive(p.is_active);
+    setPackagingVariant(p.packaging_variant);
     setDialogOpen(true);
   };
 
@@ -158,7 +164,7 @@ export default function Products() {
                   <th className="pb-2">Product</th>
                   <th className="pb-2">Client</th>
                   <th className="pb-2">SKU</th>
-                  <th className="pb-2">Size</th>
+                  <th className="pb-2">Packaging</th>
                   <th className="pb-2">Format</th>
                   <th className="pb-2">Grinds</th>
                   <th className="pb-2">Status</th>
@@ -171,7 +177,13 @@ export default function Products() {
                     <td className="py-2 font-medium">{p.product_name}</td>
                     <td className="py-2">{p.client?.name ?? '—'}</td>
                     <td className="py-2">{p.sku || '—'}</td>
-                    <td className="py-2">{p.bag_size_g}g</td>
+                    <td className="py-2">
+                      {p.packaging_variant ? (
+                        <PackagingBadge variant={p.packaging_variant} />
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
                     <td className="py-2">{p.format}</td>
                     <td className="py-2">{p.grind_options?.join(', ') || '—'}</td>
                     <td className="py-2">
@@ -240,6 +252,24 @@ export default function Products() {
                   onChange={(e) => setBagSize(parseInt(e.target.value) || 0)}
                 />
               </div>
+            </div>
+            <div>
+              <Label htmlFor="packaging">Packaging Variant</Label>
+              <Select
+                value={packagingVariant ?? ''}
+                onValueChange={(v) => setPackagingVariant(v as PackagingVariant)}
+              >
+                <SelectTrigger id="packaging">
+                  <SelectValue placeholder="Select packaging" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PACKAGING_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>Grind Options</Label>

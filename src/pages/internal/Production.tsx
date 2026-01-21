@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { format, addDays, parseISO } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { ChevronDown, ChevronRight, Clock, Printer } from 'lucide-react';
+import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 
 type ShipPriority = 'NORMAL' | 'TIME_SENSITIVE';
 
@@ -40,6 +41,7 @@ interface OrderLineItem {
     product_name: string;
     sku: string | null;
     bag_size_g: number;
+    packaging_variant: PackagingVariant | null;
   } | null;
 }
 
@@ -54,6 +56,7 @@ interface ExternalDemand {
     product_name: string;
     sku: string | null;
     bag_size_g: number;
+    packaging_variant: PackagingVariant | null;
   } | null;
 }
 
@@ -74,6 +77,7 @@ interface AggregatedRow {
   productName: string;
   sku: string | null;
   bagSize: number;
+  packagingVariant: PackagingVariant | null;
   totalUnits: number;
   totalGrams: number;
   orders: { clientName: string; orderNumber: string; units: number }[];
@@ -116,7 +120,7 @@ export default function Production() {
             status,
             client:clients(name)
           ),
-          product:products(id, product_name, sku, bag_size_g)
+          product:products(id, product_name, sku, bag_size_g, packaging_variant)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY'])
         .in('order.requested_ship_date', dateFilter);
@@ -132,7 +136,7 @@ export default function Production() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('external_demand')
-        .select('id, source, target_date, product_id, quantity_units, product:products(id, product_name, sku, bag_size_g)')
+        .select('id, source, target_date, product_id, quantity_units, product:products(id, product_name, sku, bag_size_g, packaging_variant)')
         .in('target_date', dateFilter)
         .gt('quantity_units', 0);
 
@@ -171,6 +175,7 @@ export default function Production() {
           productName: li.product.product_name,
           sku: li.product.sku,
           bagSize: li.product.bag_size_g,
+          packagingVariant: li.product.packaging_variant ?? null,
           totalUnits: 0,
           totalGrams: 0,
           orders: [],
@@ -200,6 +205,7 @@ export default function Production() {
           productName: ed.product.product_name,
           sku: ed.product.sku,
           bagSize: ed.product.bag_size_g,
+          packagingVariant: ed.product.packaging_variant ?? null,
           totalUnits: 0,
           totalGrams: 0,
           orders: [],
@@ -449,16 +455,19 @@ export default function Production() {
                           </Button>
                         </td>
                         <td className="py-2 font-medium print:py-1">
-                          {row.productName}
-                          {isTimeSensitive && (
-                            <>
-                              <Badge variant="destructive" className="ml-2 text-xs print:hidden">
-                                <Clock className="h-3 w-3 mr-1" />
-                                Urgent
-                              </Badge>
-                              <span className="hidden print:inline ml-1 font-bold">*</span>
-                            </>
-                          )}
+                          <span className="flex items-center gap-2 flex-wrap">
+                            <span>{row.productName}</span>
+                            <PackagingBadge variant={row.packagingVariant} />
+                            {isTimeSensitive && (
+                              <>
+                                <Badge variant="destructive" className="text-xs print:hidden">
+                                  <Clock className="h-3 w-3 mr-1" />
+                                  Urgent
+                                </Badge>
+                                <span className="hidden print:inline font-bold">*</span>
+                              </>
+                            )}
+                          </span>
                         </td>
                         <td className="py-2 print:hidden">{row.sku || '—'}</td>
                         <td className="py-2 print:py-1">{row.bagSize}g</td>
