@@ -387,6 +387,9 @@ export type Database = {
           id: string
           internal_packaging_notes: string | null
           is_active: boolean
+          packaging_variant:
+            | Database["public"]["Enums"]["packaging_variant"]
+            | null
           product_name: string
           sku: string | null
           updated_at: string
@@ -400,6 +403,9 @@ export type Database = {
           id?: string
           internal_packaging_notes?: string | null
           is_active?: boolean
+          packaging_variant?:
+            | Database["public"]["Enums"]["packaging_variant"]
+            | null
           product_name: string
           sku?: string | null
           updated_at?: string
@@ -413,6 +419,9 @@ export type Database = {
           id?: string
           internal_packaging_notes?: string | null
           is_active?: boolean
+          packaging_variant?:
+            | Database["public"]["Enums"]["packaging_variant"]
+            | null
           product_name?: string
           sku?: string | null
           updated_at?: string
@@ -555,6 +564,18 @@ export type Database = {
         | "READY"
         | "SHIPPED"
         | "CANCELLED"
+      packaging_variant:
+        | "RETAIL_250G"
+        | "RETAIL_300G"
+        | "RETAIL_340G"
+        | "RETAIL_454G"
+        | "CROWLER_200G"
+        | "CROWLER_250G"
+        | "CAN_125G"
+        | "BULK_2LB"
+        | "BULK_1KG"
+        | "BULK_5LB"
+        | "BULK_2KG"
       product_format: "WHOLE_BEAN" | "ESPRESSO" | "FILTER" | "OTHER"
       production_status:
         | "PLANNED"
@@ -702,6 +723,19 @@ export const Constants = {
         "READY",
         "SHIPPED",
         "CANCELLED",
+      ],
+      packaging_variant: [
+        "RETAIL_250G",
+        "RETAIL_300G",
+        "RETAIL_340G",
+        "RETAIL_454G",
+        "CROWLER_200G",
+        "CROWLER_250G",
+        "CAN_125G",
+        "BULK_2LB",
+        "BULK_1KG",
+        "BULK_5LB",
+        "BULK_2KG",
       ],
       product_format: ["WHOLE_BEAN", "ESPRESSO", "FILTER", "OTHER"],
       production_status: ["PLANNED", "ROASTED", "PACKED", "STAGED", "COMPLETE"],
