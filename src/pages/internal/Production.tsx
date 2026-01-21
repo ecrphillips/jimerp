@@ -10,9 +10,18 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format, addDays, parseISO } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 import { ChevronDown, ChevronRight, Clock } from 'lucide-react';
 
 type ShipPriority = 'NORMAL' | 'TIME_SENSITIVE';
+
+// Helper: get YYYY-MM-DD in America/Vancouver timezone
+function getVancouverDate(daysOffset = 0): string {
+  const nowUtc = new Date();
+  const vancouverNow = toZonedTime(nowUtc, 'America/Vancouver');
+  const target = addDays(vancouverNow, daysOffset);
+  return format(target, 'yyyy-MM-dd');
+}
 
 interface OrderLineItem {
   id: string;
@@ -75,8 +84,10 @@ interface AggregatedRow {
 export default function Production() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const today = format(new Date(), 'yyyy-MM-dd');
-  const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd');
+  
+  // Use America/Vancouver timezone for today/tomorrow
+  const today = getVancouverDate(0);
+  const tomorrow = getVancouverDate(1);
 
   const [dateFilter, setDateFilter] = useState<string[]>([today, tomorrow]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -360,7 +371,7 @@ export default function Production() {
           <CardTitle>
             {showShippableOnly ? 'Shippable Now' : 'Aggregated Production'}
             <span className="ml-4 text-xs font-normal text-muted-foreground">
-              ({orderLineItems?.length ?? 0} order lines, {externalDemand?.length ?? 0} external, {displayedRows.length} rows shown)
+              ({displayedRows.length} rows)
             </span>
           </CardTitle>
         </CardHeader>

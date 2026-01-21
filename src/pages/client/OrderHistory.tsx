@@ -60,11 +60,24 @@ export default function OrderHistory() {
 
   const cancelMutation = useMutation({
     mutationFn: async (orderId: string) => {
-      const { error } = await supabase
+      const { data, error, count } = await supabase
         .from('orders')
         .update({ status: 'CANCELLED' })
-        .eq('id', orderId);
-      if (error) throw error;
+        .eq('id', orderId)
+        .eq('status', 'SUBMITTED')
+        .select();
+      
+      if (error) {
+        console.error('Cancel error:', error.code, error.message, error.details);
+        throw new Error(`${error.code}: ${error.message}`);
+      }
+      
+      if (!data || data.length === 0) {
+        console.error('Cancel returned 0 rows - permission or status mismatch');
+        throw new Error('No rows updated — order may already be processed or you lack permission');
+      }
+      
+      return data;
     },
     onSuccess: () => {
       toast.success('Order cancelled');
@@ -72,8 +85,8 @@ export default function OrderHistory() {
       setSelectedOrderId(null);
     },
     onError: (err) => {
-      console.error(err);
-      toast.error('Failed to cancel order');
+      console.error('Cancel mutation error:', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to cancel order');
     },
   });
 
