@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,17 @@ interface Product {
 const FORMATS: ProductFormat[] = ['WHOLE_BEAN', 'ESPRESSO', 'FILTER', 'OTHER'];
 const GRINDS: GrindOption[] = ['WHOLE_BEAN', 'ESPRESSO', 'FILTER'];
 
+function getTodayVancouver(): string {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Vancouver',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return formatter.format(now); // YYYY-MM-DD
+}
+
 export default function Products() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -42,7 +53,7 @@ export default function Products() {
   const [clientId, setClientId] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [packagingVariant, setPackagingVariant] = useState<PackagingVariant | null>(null);
-  const [initialPrice, setInitialPrice] = useState<string>('');
+  const [priceInput, setPriceInput] = useState<string>('');
 
   const { data: products, isLoading } = useQuery({
     queryKey: ['all-products'],
@@ -72,6 +83,37 @@ export default function Products() {
     },
   });
 
+  // Fetch all prices to determine current price per product
+  const { data: allPrices } = useQuery({
+    queryKey: ['all-prices'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('price_list')
+        .select('product_id, unit_price, effective_date')
+        .order('effective_date', { ascending: false });
+
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Build map of product_id -> current price (most recent)
+  const currentPrices = useMemo(() => {
+    const priceMap: Record<string, number> = {};
+    for (const p of allPrices ?? []) {
+      if (!(p.product_id in priceMap)) {
+        priceMap[p.product_id] = p.unit_price;
+      }
+    }
+    return priceMap;
+  }, [allPrices]);
+
+  // Products with no price_list row
+  const productsWithoutPrice = useMemo(() => {
+    if (!products) return [];
+    return products.filter((p) => !(p.id in currentPrices));
+  }, [products, currentPrices]);
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload = {
@@ -85,12 +127,15 @@ export default function Products() {
         packaging_variant: packagingVariant,
       };
 
+      let productId: string;
+
       if (editingProduct) {
         const { error } = await supabase
           .from('products')
           .update(payload)
           .eq('id', editingProduct.id);
         if (error) throw error;
+        productId = editingProduct.id;
       } else {
         // Create product and get the new ID
         const { data: newProduct, error } = await supabase
@@ -99,33 +144,26 @@ export default function Products() {
           .select('id')
           .single();
         if (error) throw error;
+        productId = newProduct.id;
+      }
 
-        // If initial price is set (including 0), create a price_list entry
-        const priceValue = parseFloat(initialPrice);
-        if (!isNaN(priceValue) && initialPrice.trim() !== '') {
-          // Get today in America/Vancouver timezone
-          const now = new Date();
-          const formatter = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'America/Vancouver',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
+      // If price is set (including 0), create a price_list entry
+      const priceValue = parseFloat(priceInput);
+      if (!isNaN(priceValue) && priceInput.trim() !== '') {
+        const todayVancouver = getTodayVancouver();
+
+        const { error: priceError } = await supabase
+          .from('price_list')
+          .insert({
+            product_id: productId,
+            unit_price: priceValue,
+            currency: 'CAD',
+            effective_date: todayVancouver,
           });
-          const todayVancouver = formatter.format(now); // YYYY-MM-DD
-
-          const { error: priceError } = await supabase
-            .from('price_list')
-            .insert({
-              product_id: newProduct.id,
-              unit_price: priceValue,
-              currency: 'CAD',
-              effective_date: todayVancouver,
-            });
-          if (priceError) {
-            console.error('Failed to create initial price:', priceError);
-            toast.error('Product created but failed to set initial price');
-            return;
-          }
+        if (priceError) {
+          console.error('Failed to create price:', priceError);
+          toast.error(editingProduct ? 'Product updated but failed to set price' : 'Product created but failed to set initial price');
+          return;
         }
       }
     },
@@ -141,6 +179,35 @@ export default function Products() {
     },
   });
 
+  const backfillMutation = useMutation({
+    mutationFn: async () => {
+      if (productsWithoutPrice.length === 0) {
+        throw new Error('No products without price');
+      }
+
+      const todayVancouver = getTodayVancouver();
+      const priceRows = productsWithoutPrice.map((p) => ({
+        product_id: p.id,
+        unit_price: 0,
+        currency: 'CAD',
+        effective_date: todayVancouver,
+      }));
+
+      const { error } = await supabase.from('price_list').insert(priceRows);
+      if (error) throw error;
+
+      return productsWithoutPrice.length;
+    },
+    onSuccess: (count) => {
+      toast.success(`Set $0.00 price for ${count} product${count > 1 ? 's' : ''}`);
+      queryClient.invalidateQueries({ queryKey: ['all-prices'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to backfill prices');
+    },
+  });
+
   const openNew = () => {
     setEditingProduct(null);
     setProductName('');
@@ -151,7 +218,7 @@ export default function Products() {
     setClientId(clients?.[0]?.id ?? '');
     setIsActive(true);
     setPackagingVariant(null);
-    setInitialPrice('');
+    setPriceInput('');
     setDialogOpen(true);
   };
 
@@ -165,6 +232,7 @@ export default function Products() {
     setClientId(p.client_id);
     setIsActive(p.is_active);
     setPackagingVariant(p.packaging_variant);
+    setPriceInput(''); // Start blank - user can optionally set a new price
     setDialogOpen(true);
   };
 
@@ -183,7 +251,20 @@ export default function Products() {
     <div className="page-container">
       <div className="page-header">
         <h1 className="page-title">Products</h1>
-        <Button onClick={openNew}>Add Product</Button>
+        <div className="flex gap-2">
+          {productsWithoutPrice.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => backfillMutation.mutate()}
+              disabled={backfillMutation.isPending}
+            >
+              {backfillMutation.isPending
+                ? 'Setting…'
+                : `Set $0.00 for ${productsWithoutPrice.length} unpriced`}
+            </Button>
+          )}
+          <Button onClick={openNew}>Add Product</Button>
+        </div>
       </div>
 
       <Card>
@@ -201,6 +282,7 @@ export default function Products() {
                   <th className="pb-2">Client</th>
                   <th className="pb-2">SKU</th>
                   <th className="pb-2">Packaging</th>
+                  <th className="pb-2">Current Price</th>
                   <th className="pb-2">Format</th>
                   <th className="pb-2">Grinds</th>
                   <th className="pb-2">Status</th>
@@ -208,30 +290,41 @@ export default function Products() {
                 </tr>
               </thead>
               <tbody>
-                {products.map((p) => (
-                  <tr key={p.id} className="border-b last:border-0">
-                    <td className="py-2 font-medium">{p.product_name}</td>
-                    <td className="py-2">{p.client?.name ?? '—'}</td>
-                    <td className="py-2">{p.sku || '—'}</td>
-                    <td className="py-2">
-                      {p.packaging_variant ? (
-                        <PackagingBadge variant={p.packaging_variant} />
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="py-2">{p.format}</td>
-                    <td className="py-2">{p.grind_options?.join(', ') || '—'}</td>
-                    <td className="py-2">
-                      <span className={p.is_active ? 'text-green-600' : 'text-muted-foreground'}>
-                        {p.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="py-2">
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(p)}>Edit</Button>
-                    </td>
-                  </tr>
-                ))}
+                {products.map((p) => {
+                  const price = currentPrices[p.id];
+                  const hasPrice = p.id in currentPrices;
+                  return (
+                    <tr key={p.id} className="border-b last:border-0">
+                      <td className="py-2 font-medium">{p.product_name}</td>
+                      <td className="py-2">{p.client?.name ?? '—'}</td>
+                      <td className="py-2">{p.sku || '—'}</td>
+                      <td className="py-2">
+                        {p.packaging_variant ? (
+                          <PackagingBadge variant={p.packaging_variant} />
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="py-2">
+                        {hasPrice ? (
+                          <span>${price.toFixed(2)}</span>
+                        ) : (
+                          <span className="text-destructive font-medium">No price set</span>
+                        )}
+                      </td>
+                      <td className="py-2">{p.format}</td>
+                      <td className="py-2">{p.grind_options?.join(', ') || '—'}</td>
+                      <td className="py-2">
+                        <span className={p.is_active ? 'text-green-600' : 'text-muted-foreground'}>
+                          {p.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="py-2">
+                        <Button size="sm" variant="ghost" onClick={() => openEdit(p)}>Edit</Button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -321,23 +414,35 @@ export default function Products() {
                 ))}
               </div>
             </div>
-            {!editingProduct && (
-              <div>
-                <Label htmlFor="initialPrice">Initial Unit Price (CAD)</Label>
-                <Input
-                  id="initialPrice"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="e.g. 12.50 or 0.00"
-                  value={initialPrice}
-                  onChange={(e) => setInitialPrice(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Leave blank to set later on Pricing page. $0.00 is allowed.
+            <div>
+              <Label htmlFor="priceInput">
+                {editingProduct ? 'Set New Price (CAD)' : 'Initial Unit Price (CAD)'}
+              </Label>
+              {editingProduct && editingProduct.id in currentPrices && (
+                <p className="text-xs text-muted-foreground mb-1">
+                  Current: ${currentPrices[editingProduct.id].toFixed(2)}
                 </p>
-              </div>
-            )}
+              )}
+              {editingProduct && !(editingProduct.id in currentPrices) && (
+                <p className="text-xs text-destructive mb-1">
+                  No price set — product cannot be ordered
+                </p>
+              )}
+              <Input
+                id="priceInput"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="e.g. 12.50 or 0.00"
+                value={priceInput}
+                onChange={(e) => setPriceInput(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                {editingProduct
+                  ? 'Leave blank to keep current price. Enter a value to create a new price entry.'
+                  : 'Leave blank to set later. $0.00 is allowed.'}
+              </p>
+            </div>
             <div className="flex items-center gap-2">
               <Checkbox
                 id="active"
