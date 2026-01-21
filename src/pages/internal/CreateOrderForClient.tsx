@@ -13,7 +13,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Plus, Minus, Trash2, ArrowLeft } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
-import type { GrindOption, DeliveryMethod } from '@/types/database';
+import type { GrindOption } from '@/types/database';
+import type { Database } from '@/integrations/supabase/types';
+
+type DeliveryMethod = Database['public']['Enums']['delivery_method'];
 import { Link } from 'react-router-dom';
 
 interface LineItem {
@@ -249,6 +252,9 @@ export default function CreateOrderForClient() {
         .single();
 
       if (orderError) throw orderError;
+      if (!order) {
+        throw new Error('Order insert returned null — possible RLS policy or trigger issue');
+      }
 
       const lineItemsData = lineItems.map((li) => ({
         order_id: order.id,
@@ -264,9 +270,12 @@ export default function CreateOrderForClient() {
       toast.success(`Order ${order.order_number} created!`);
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       navigate('/orders');
-    } catch (err) {
-      console.error('Submit error:', err);
-      toast.error('Failed to create order');
+    } catch (err: unknown) {
+      console.error('Submit error (full object):', err);
+      const supaError = err as { code?: string; message?: string; details?: string };
+      const errorMsg = supaError?.message || 'Unknown error';
+      const errorCode = supaError?.code || '';
+      toast.error(`Failed to create order: ${errorCode ? `[${errorCode}] ` : ''}${errorMsg}`);
     } finally {
       setSubmitting(false);
     }
@@ -455,7 +464,7 @@ export default function CreateOrderForClient() {
                     <SelectContent>
                       <SelectItem value="PICKUP">Pickup</SelectItem>
                       <SelectItem value="DELIVERY">Delivery</SelectItem>
-                      <SelectItem value="SHIPPING">Shipping</SelectItem>
+                      <SelectItem value="COURIER">Courier</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
