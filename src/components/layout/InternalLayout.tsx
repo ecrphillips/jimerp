@@ -15,7 +15,8 @@ import {
   Menu,
   X,
   Clipboard,
-  Settings
+  Settings,
+  Upload
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -28,6 +29,7 @@ const navItems = [
   { to: '/orders', label: 'Orders', icon: ShoppingCart },
   { to: '/clients', label: 'Clients', icon: Users },
   { to: '/products', label: 'Products', icon: Package },
+  { to: '/bulk-products', label: 'Bulk Import', icon: Upload },
   { to: '/pricing', label: 'Pricing', icon: DollarSign },
   { to: '/production', label: 'Run Sheet', icon: Calendar },
   { to: '/production/matchstick', label: 'Matchstick', icon: Clipboard },
