@@ -5,9 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function OrderDetail() {
@@ -28,6 +29,11 @@ export default function OrderDetail() {
           client_po,
           client_notes,
           internal_ops_notes,
+          roasted,
+          packed,
+          shipped_or_ready,
+          invoiced,
+          created_by_admin,
           client:clients(name)
         `)
         .eq('id', id!)
@@ -109,6 +115,29 @@ export default function OrderDetail() {
     },
   });
 
+  const updateChecklistMutation = useMutation({
+    mutationFn: async (updates: { 
+      roasted?: boolean; 
+      packed?: boolean; 
+      shipped_or_ready?: boolean; 
+      invoiced?: boolean; 
+    }) => {
+      const { error } = await supabase
+        .from('orders')
+        .update(updates)
+        .eq('id', id!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', id] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to update checklist');
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="page-container">
@@ -153,6 +182,12 @@ export default function OrderDetail() {
           <span className={`rounded px-2 py-1 text-xs font-medium ${order.status === 'SUBMITTED' ? 'bg-amber-100 text-amber-800' : order.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' : 'bg-muted text-muted-foreground'}`}>
             {order.status}
           </span>
+          {order.created_by_admin && (
+            <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">
+              <UserPlus className="h-3 w-3" />
+              Admin Created
+            </span>
+          )}
         </div>
         {order.status === 'SUBMITTED' && (
           <Button onClick={() => confirmMutation.mutate()} disabled={confirmMutation.isPending}>
@@ -179,31 +214,69 @@ export default function OrderDetail() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Notes</CardTitle></CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <div>
-              <strong>Client Notes:</strong>
-              <p className="text-muted-foreground">{order.client_notes || '—'}</p>
-            </div>
-            <div>
-              <Label htmlFor="opsNotes"><strong>Internal Ops Notes:</strong></Label>
-              <Textarea
-                id="opsNotes"
-                value={opsNotes}
-                onChange={(e) => setOpsNotes(e.target.value)}
-                rows={3}
-                className="mt-1"
+          <CardHeader><CardTitle>Fulfillment Checklist</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="roasted" 
+                checked={order.roasted}
+                onCheckedChange={(checked) => updateChecklistMutation.mutate({ roasted: !!checked })}
               />
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-2"
-                onClick={() => saveNotesMutation.mutate(opsNotes)}
-                disabled={saveNotesMutation.isPending}
-              >
-                {saveNotesMutation.isPending ? 'Saving…' : 'Save Notes'}
-              </Button>
+              <Label htmlFor="roasted" className="cursor-pointer">Roasted</Label>
             </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="packed" 
+                checked={order.packed}
+                onCheckedChange={(checked) => updateChecklistMutation.mutate({ packed: !!checked })}
+              />
+              <Label htmlFor="packed" className="cursor-pointer">Packed</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="shipped_or_ready" 
+                checked={order.shipped_or_ready}
+                onCheckedChange={(checked) => updateChecklistMutation.mutate({ shipped_or_ready: !!checked })}
+              />
+              <Label htmlFor="shipped_or_ready" className="cursor-pointer">Shipped / Ready for Pickup</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="invoiced" 
+                checked={order.invoiced}
+                onCheckedChange={(checked) => updateChecklistMutation.mutate({ invoiced: !!checked })}
+              />
+              <Label htmlFor="invoiced" className="cursor-pointer">Invoiced</Label>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2 mt-6">
+        <Card>
+          <CardHeader><CardTitle>Client Notes</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">{order.client_notes || '—'}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Internal Ops Notes</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            <Textarea
+              id="opsNotes"
+              value={opsNotes}
+              onChange={(e) => setOpsNotes(e.target.value)}
+              rows={3}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => saveNotesMutation.mutate(opsNotes)}
+              disabled={saveNotesMutation.isPending}
+            >
+              {saveNotesMutation.isPending ? 'Saving…' : 'Save Notes'}
+            </Button>
           </CardContent>
         </Card>
       </div>
