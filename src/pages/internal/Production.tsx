@@ -284,7 +284,12 @@ export default function Production() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Aggregated Production</CardTitle>
+          <CardTitle>
+            Aggregated Production
+            <span className="ml-4 text-xs font-normal text-muted-foreground">
+              ({orderLineItems?.length ?? 0} order lines, {externalDemand?.length ?? 0} external, {aggregatedRows.length} total rows)
+            </span>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {ordersLoading ? (
