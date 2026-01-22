@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import {
@@ -7,8 +7,6 @@ import {
   ShoppingCart,
   Users,
   Package,
-  DollarSign,
-  Calendar,
   Leaf,
   LogOut,
   Coffee,
@@ -16,32 +14,56 @@ import {
   X,
   Clipboard,
   Settings,
-  Upload
+  ChevronDown,
+  ChevronRight,
+  Flame,
+  PackageCheck,
+  Truck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 interface InternalLayoutProps {
   children: React.ReactNode;
 }
 
+// Top-level nav items (reordered: Dashboard > Orders > Production > Products > Clients)
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/orders', label: 'Orders', icon: ShoppingCart },
-  { to: '/clients', label: 'Clients', icon: Users },
-  { to: '/products', label: 'Products', icon: Package },
-  { to: '/bulk-products', label: 'Bulk Import', icon: Upload },
-  { to: '/pricing', label: 'Pricing', icon: DollarSign },
-  { to: '/production', label: 'Run Sheet', icon: Calendar },
+];
+
+// Production is now a nested group
+const productionSubItems = [
+  { to: '/production', label: 'Run Sheet', icon: Flame, match: '/production' },
   { to: '/production/matchstick', label: 'Matchstick', icon: Clipboard },
   { to: '/production/funk', label: 'Funk', icon: Clipboard },
-  { to: '/green-coffee', label: 'Green Coffee', icon: Leaf },
   { to: '/boards', label: 'Board Mgmt', icon: Settings },
+];
+
+// Bottom nav items
+const bottomNavItems = [
+  { to: '/products', label: 'Products', icon: Package },
+  { to: '/clients', label: 'Clients', icon: Users },
+  { to: '/green-coffee', label: 'Green Coffee', icon: Leaf },
 ];
 
 export function InternalLayout({ children }: InternalLayoutProps) {
   const { authUser, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  
+  // Production section is open if we're on a production route
+  const isProductionRoute = location.pathname.startsWith('/production') || location.pathname === '/boards';
+  const [productionOpen, setProductionOpen] = React.useState(isProductionRoute);
+
+  // Keep production open when navigating within it
+  React.useEffect(() => {
+    if (isProductionRoute) {
+      setProductionOpen(true);
+    }
+  }, [isProductionRoute]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -73,7 +95,70 @@ export function InternalLayout({ children }: InternalLayoutProps) {
           {/* Navigation */}
           <nav className="flex-1 overflow-y-auto py-4">
             <ul className="space-y-1 px-3">
+              {/* Top items: Dashboard, Orders */}
               {navItems.map((item) => (
+                <li key={item.to}>
+                  <NavLink
+                    to={item.to}
+                    onClick={() => setSidebarOpen(false)}
+                    className={({ isActive }) => cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                      isActive 
+                        ? "bg-sidebar-accent text-sidebar-primary" 
+                        : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    )}
+                  >
+                    <item.icon className="h-5 w-5" />
+                    {item.label}
+                  </NavLink>
+                </li>
+              ))}
+
+              {/* Production - Collapsible group */}
+              <li>
+                <Collapsible open={productionOpen} onOpenChange={setProductionOpen}>
+                  <CollapsibleTrigger asChild>
+                    <button
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        isProductionRoute
+                          ? "bg-sidebar-accent text-sidebar-primary"
+                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                      )}
+                    >
+                      <Flame className="h-5 w-5" />
+                      Production
+                      {productionOpen ? (
+                        <ChevronDown className="ml-auto h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="ml-auto h-4 w-4" />
+                      )}
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-1 space-y-1 pl-4">
+                    {productionSubItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={item.to === '/production'}
+                        onClick={() => setSidebarOpen(false)}
+                        className={({ isActive }) => cn(
+                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                          isActive
+                            ? "bg-sidebar-accent text-sidebar-primary"
+                            : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                        )}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+              </li>
+
+              {/* Bottom items: Products, Clients, Green Coffee */}
+              {bottomNavItems.map((item) => (
                 <li key={item.to}>
                   <NavLink
                     to={item.to}
