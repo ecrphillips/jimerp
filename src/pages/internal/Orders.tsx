@@ -66,7 +66,7 @@ export default function Orders() {
     <div 
       className={cn(
         "h-5 w-5 rounded flex items-center justify-center",
-        checked ? "bg-green-100 text-green-600" : "bg-muted text-muted-foreground/40"
+        checked ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground/40"
       )}
       title={label}
     >
@@ -94,21 +94,25 @@ export default function Orders() {
             <p className="text-muted-foreground">No orders found.</p>
           ) : (
             <ul className="space-y-3">
-              {sortedOrders.map((o) => (
+              {sortedOrders.map((o) => {
+                const isShippedOrCancelled = o.status === 'SHIPPED' || o.status === 'CANCELLED';
+                return (
                 <li
                   key={o.id}
                   onClick={() => navigate(`/orders/${o.id}`)}
-                  className="flex cursor-pointer items-center justify-between rounded border-b pb-2 last:border-0 hover:bg-muted/50"
+                  className={`flex cursor-pointer items-center justify-between rounded border-b pb-2 last:border-0 hover:bg-muted/50 ${
+                    isShippedOrCancelled ? 'opacity-50' : ''
+                  }`}
                 >
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{o.order_number}</span>
                     {o.created_by_admin && (
-                      <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700" title="Created by Admin">
+                      <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary" title="Created by Admin">
                         <UserPlus className="h-3 w-3" />
                       </span>
                     )}
                     {o.internal_ops_notes && (
-                      <span className="inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700" title="Has ops notes">
+                      <span className="inline-flex items-center rounded bg-warning/15 px-1.5 py-0.5 text-xs font-medium text-warning" title="Has ops notes">
                         <MessageSquare className="h-3 w-3" />
                       </span>
                     )}
@@ -129,12 +133,17 @@ export default function Orders() {
                         Ship: {format(new Date(o.requested_ship_date), 'MMM d')}
                       </span>
                     )}
-                    <span className={`font-medium ${o.status === 'SUBMITTED' ? 'text-amber-600' : ''}`}>
+                    <span className={`font-medium ${
+                      o.status === 'SUBMITTED' ? 'text-warning' : 
+                      o.status === 'SHIPPED' ? 'text-muted-foreground' :
+                      o.status === 'CANCELLED' ? 'text-destructive' :
+                      ''
+                    }`}>
                       {o.status}
                     </span>
                   </div>
                 </li>
-              ))}
+              )})}
             </ul>
           )}
         </CardContent>
