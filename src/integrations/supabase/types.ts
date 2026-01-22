@@ -21,6 +21,7 @@ export type Database = {
           product_id: string
           target_date: string
           units_picked: number
+          units_supplied: number
           updated_at: string
           updated_by: string | null
         }
@@ -30,6 +31,7 @@ export type Database = {
           product_id: string
           target_date: string
           units_picked?: number
+          units_supplied?: number
           updated_at?: string
           updated_by?: string | null
         }
@@ -39,6 +41,7 @@ export type Database = {
           product_id?: string
           target_date?: string
           units_picked?: number
+          units_supplied?: number
           updated_at?: string
           updated_by?: string | null
         }
@@ -737,7 +740,7 @@ export type Database = {
     }
     Enums: {
       app_role: "ADMIN" | "OPS" | "CLIENT"
-      board_source: "MATCHSTICK" | "FUNK"
+      board_source: "MATCHSTICK" | "FUNK" | "NOSMOKE"
       default_roaster: "SAMIAC" | "LORING" | "EITHER"
       delivery_method: "PICKUP" | "DELIVERY" | "COURIER"
       grind_option: "WHOLE_BEAN" | "ESPRESSO" | "FILTER"
@@ -899,7 +902,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["ADMIN", "OPS", "CLIENT"],
-      board_source: ["MATCHSTICK", "FUNK"],
+      board_source: ["MATCHSTICK", "FUNK", "NOSMOKE"],
       default_roaster: ["SAMIAC", "LORING", "EITHER"],
       delivery_method: ["PICKUP", "DELIVERY", "COURIER"],
       grind_option: ["WHOLE_BEAN", "ESPRESSO", "FILTER"],
