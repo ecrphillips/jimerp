@@ -58,6 +58,7 @@ interface ShippableOrder {
   }[];
   allLineItemsPacked: boolean;
   priority: ShipPriority;
+  hasContention: boolean; // True if any SKU in the order is short overall
 }
 
 interface ShortListItem {
@@ -178,7 +179,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
 
   // Compute shippable orders using packing_runs
   // An order is shippable if for every line item: 
-  //   packing_runs.units_packed (for that product) >= total demanded units for that product
+  //   packing_runs.units_packed (for that product) >= that line item's quantity_units (per-order requirement)
   const shippableOrders = useMemo((): ShippableOrder[] => {
     if (!ordersForShipping) return [];
 
@@ -195,11 +196,17 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
       }));
 
       // Order is shippable if ALL its line items have sufficient packed units
-      // packed_units >= demanded_units (total demand for that product, not per-order allocation)
-      const allLineItemsPacked = lineItems.length > 0 && lineItems.every((li: { product_id: string }) => {
+      // packed_units >= line item's quantity_units (per-order requirement, NOT total demand)
+      const allLineItemsPacked = lineItems.length > 0 && lineItems.every((li: { product_id: string; quantity_units: number }) => {
+        const totalPacked = packingByProduct[li.product_id] ?? 0;
+        return totalPacked >= li.quantity_units;
+      });
+
+      // Check for contention: any SKU in this order where packed < total demand
+      const hasContention = lineItems.some((li: { product_id: string }) => {
         const totalDemanded = demandByProduct[li.product_id] ?? 0;
         const totalPacked = packingByProduct[li.product_id] ?? 0;
-        return totalPacked >= totalDemanded;
+        return totalPacked < totalDemanded;
       });
 
       // Priority from checkmarks
@@ -228,6 +235,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
         lineItems,
         allLineItemsPacked,
         priority,
+        hasContention,
       });
     }
 
@@ -440,13 +448,13 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
             </span>
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Orders where all line items have packed ≥ demanded units.
+            Orders where packed units ≥ this order's line item quantities.
           </p>
         </CardHeader>
         <CardContent>
           {shippableOrders.length === 0 ? (
             <p className="text-muted-foreground py-8 text-center">
-              No orders ready to ship. Orders appear here when all line items are packed.
+              No orders ready to ship. Orders appear here when packed ≥ order quantity for all items.
             </p>
           ) : (
             <div className="space-y-4">
@@ -469,6 +477,12 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
                             <Badge variant="destructive" className="text-xs">
                               <Clock className="h-3 w-3 mr-1" />
                               Urgent
+                            </Badge>
+                          )}
+                          {order.hasContention && (
+                            <Badge variant="outline" className="text-xs border-amber-400 text-amber-700 bg-amber-50">
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              Shared SKU short
                             </Badge>
                           )}
                         </div>
