@@ -537,6 +537,7 @@ export type Database = {
       roast_groups: {
         Row: {
           created_at: string
+          default_roaster: Database["public"]["Enums"]["default_roaster"]
           is_active: boolean
           notes: string | null
           roast_group: string
@@ -545,6 +546,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          default_roaster?: Database["public"]["Enums"]["default_roaster"]
           is_active?: boolean
           notes?: string | null
           roast_group: string
@@ -553,6 +555,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          default_roaster?: Database["public"]["Enums"]["default_roaster"]
           is_active?: boolean
           notes?: string | null
           roast_group?: string
@@ -564,6 +567,9 @@ export type Database = {
       roasted_batches: {
         Row: {
           actual_output_kg: number
+          assigned_roaster:
+            | Database["public"]["Enums"]["roaster_machine"]
+            | null
           created_at: string
           created_by: string | null
           id: string
@@ -576,6 +582,9 @@ export type Database = {
         }
         Insert: {
           actual_output_kg?: number
+          assigned_roaster?:
+            | Database["public"]["Enums"]["roaster_machine"]
+            | null
           created_at?: string
           created_by?: string | null
           id?: string
@@ -588,6 +597,9 @@ export type Database = {
         }
         Update: {
           actual_output_kg?: number
+          assigned_roaster?:
+            | Database["public"]["Enums"]["roaster_machine"]
+            | null
           created_at?: string
           created_by?: string | null
           id?: string
@@ -688,6 +700,7 @@ export type Database = {
     Enums: {
       app_role: "ADMIN" | "OPS" | "CLIENT"
       board_source: "MATCHSTICK" | "FUNK"
+      default_roaster: "SAMIAC" | "LORING" | "EITHER"
       delivery_method: "PICKUP" | "DELIVERY" | "COURIER"
       grind_option: "WHOLE_BEAN" | "ESPRESSO" | "FILTER"
       order_status:
@@ -718,6 +731,7 @@ export type Database = {
         | "STAGED"
         | "COMPLETE"
       roasted_batch_status: "PLANNED" | "ROASTED"
+      roaster_machine: "SAMIAC" | "LORING"
       ship_priority: "NORMAL" | "TIME_SENSITIVE"
     }
     CompositeTypes: {
@@ -848,6 +862,7 @@ export const Constants = {
     Enums: {
       app_role: ["ADMIN", "OPS", "CLIENT"],
       board_source: ["MATCHSTICK", "FUNK"],
+      default_roaster: ["SAMIAC", "LORING", "EITHER"],
       delivery_method: ["PICKUP", "DELIVERY", "COURIER"],
       grind_option: ["WHOLE_BEAN", "ESPRESSO", "FILTER"],
       order_status: [
@@ -875,6 +890,7 @@ export const Constants = {
       product_format: ["WHOLE_BEAN", "ESPRESSO", "FILTER", "OTHER"],
       production_status: ["PLANNED", "ROASTED", "PACKED", "STAGED", "COMPLETE"],
       roasted_batch_status: ["PLANNED", "ROASTED"],
+      roaster_machine: ["SAMIAC", "LORING"],
       ship_priority: ["NORMAL", "TIME_SENSITIVE"],
     },
   },

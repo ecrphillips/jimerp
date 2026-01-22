@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -16,6 +17,9 @@ interface RoastTabProps {
   today: string;
 }
 
+type RoasterMachine = 'SAMIAC' | 'LORING';
+type DefaultRoaster = 'SAMIAC' | 'LORING' | 'EITHER';
+
 interface RoastBatch {
   id: string;
   roast_group: string;
@@ -24,11 +28,13 @@ interface RoastBatch {
   actual_output_kg: number;
   status: 'PLANNED' | 'ROASTED';
   notes: string | null;
+  assigned_roaster: RoasterMachine | null;
 }
 
 interface RoastGroupConfig {
   roast_group: string;
   standard_batch_kg: number;
+  default_roaster: DefaultRoaster;
   is_active: boolean;
   notes: string | null;
 }
@@ -51,11 +57,13 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
   const [plannedKg, setPlannedKg] = useState<string>('');
   const [actualKg, setActualKg] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
+  const [assignedRoaster, setAssignedRoaster] = useState<RoasterMachine | ''>('');
   
   // Roast group config dialog
   const [showConfigDialog, setShowConfigDialog] = useState(false);
   const [configRoastGroup, setConfigRoastGroup] = useState<string>('');
   const [configStandardBatch, setConfigStandardBatch] = useState<string>('20');
+  const [configDefaultRoaster, setConfigDefaultRoaster] = useState<DefaultRoaster>('EITHER');
 
   // Fetch roast_groups config
   const { data: roastGroupsConfig } = useQuery({
@@ -70,11 +78,11 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     },
   });
 
-  // Map roast group to standard batch kg
-  const standardBatchByGroup = useMemo(() => {
-    const map: Record<string, number> = {};
+  // Map roast group to config
+  const configByGroup = useMemo(() => {
+    const map: Record<string, RoastGroupConfig> = {};
     for (const rg of roastGroupsConfig ?? []) {
-      map[rg.roast_group] = rg.standard_batch_kg;
+      map[rg.roast_group] = rg;
     }
     return map;
   }, [roastGroupsConfig]);
@@ -251,6 +259,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
           actual_output_kg: 0,
           status: 'PLANNED',
           notes: notes || null,
+          assigned_roaster: assignedRoaster || null,
           created_by: user?.id,
         });
       if (error) throw error;
@@ -266,15 +275,25 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     },
   });
 
-  // Create multiple suggested batches at once
+  // Create multiple suggested batches at once with default roaster
   const createSuggestedBatchesMutation = useMutation({
-    mutationFn: async ({ roastGroup, count, batchKg }: { roastGroup: string; count: number; batchKg: number }) => {
+    mutationFn: async ({ roastGroup, count, batchKg, defaultRoaster }: { roastGroup: string; count: number; batchKg: number; defaultRoaster: DefaultRoaster }) => {
+      // Determine assigned_roaster based on default_roaster
+      let roaster: RoasterMachine | null = null;
+      if (defaultRoaster === 'SAMIAC') {
+        roaster = 'SAMIAC';
+      } else if (defaultRoaster === 'LORING') {
+        roaster = 'LORING';
+      }
+      // If 'EITHER', leave as null
+      
       const batchesToInsert = Array.from({ length: count }, () => ({
         roast_group: roastGroup,
         target_date: today,
         planned_output_kg: batchKg,
         actual_output_kg: 0,
         status: 'PLANNED' as const,
+        assigned_roaster: roaster,
         created_by: user?.id,
       }));
       
@@ -294,10 +313,16 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
   });
 
   const updateBatchMutation = useMutation({
-    mutationFn: async ({ id, status, actual_output_kg, notes }: { id: string; status: 'PLANNED' | 'ROASTED'; actual_output_kg: number; notes: string | null }) => {
+    mutationFn: async ({ id, status, actual_output_kg, notes, assigned_roaster }: { 
+      id: string; 
+      status: 'PLANNED' | 'ROASTED'; 
+      actual_output_kg: number; 
+      notes: string | null;
+      assigned_roaster: RoasterMachine | null;
+    }) => {
       const { error } = await supabase
         .from('roasted_batches')
-        .update({ status, actual_output_kg, notes })
+        .update({ status, actual_output_kg, notes, assigned_roaster })
         .eq('id', id);
       if (error) throw error;
     },
@@ -312,14 +337,33 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     },
   });
 
+  // Quick update roaster inline
+  const quickUpdateRoasterMutation = useMutation({
+    mutationFn: async ({ id, assigned_roaster }: { id: string; assigned_roaster: RoasterMachine | null }) => {
+      const { error } = await supabase
+        .from('roasted_batches')
+        .update({ assigned_roaster })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to update roaster');
+    },
+  });
+
   // Upsert roast group config
   const upsertRoastGroupMutation = useMutation({
-    mutationFn: async ({ roastGroup, standardBatchKg }: { roastGroup: string; standardBatchKg: number }) => {
+    mutationFn: async ({ roastGroup, standardBatchKg, defaultRoaster }: { roastGroup: string; standardBatchKg: number; defaultRoaster: DefaultRoaster }) => {
       const { error } = await supabase
         .from('roast_groups')
         .upsert({
           roast_group: roastGroup,
           standard_batch_kg: standardBatchKg,
+          default_roaster: defaultRoaster,
           is_active: true,
         }, {
           onConflict: 'roast_group',
@@ -337,12 +381,20 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     },
   });
 
-  const openNewBatch = (roastGroup: string, suggestedKg?: number) => {
+  const openNewBatch = (roastGroup: string, suggestedKg?: number, defaultRoaster?: DefaultRoaster) => {
     setEditingBatch(null);
     setSelectedRoastGroup(roastGroup);
     setPlannedKg(suggestedKg?.toFixed(2) ?? '');
     setActualKg('');
     setNotes('');
+    // Set roaster based on default
+    if (defaultRoaster === 'SAMIAC') {
+      setAssignedRoaster('SAMIAC');
+    } else if (defaultRoaster === 'LORING') {
+      setAssignedRoaster('LORING');
+    } else {
+      setAssignedRoaster('');
+    }
     setShowBatchDialog(true);
   };
 
@@ -352,6 +404,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     setPlannedKg(batch.planned_output_kg?.toString() ?? '');
     setActualKg(batch.actual_output_kg.toString());
     setNotes(batch.notes ?? '');
+    setAssignedRoaster(batch.assigned_roaster ?? '');
     setShowBatchDialog(true);
   };
 
@@ -362,11 +415,14 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     setPlannedKg('');
     setActualKg('');
     setNotes('');
+    setAssignedRoaster('');
   };
 
   const openConfigDialog = (roastGroup: string) => {
+    const config = configByGroup[roastGroup];
     setConfigRoastGroup(roastGroup);
-    setConfigStandardBatch((standardBatchByGroup[roastGroup] ?? 20).toString());
+    setConfigStandardBatch((config?.standard_batch_kg ?? 20).toString());
+    setConfigDefaultRoaster(config?.default_roaster ?? 'EITHER');
     setShowConfigDialog(true);
   };
 
@@ -377,6 +433,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
         status: editingBatch.status,
         actual_output_kg: parseFloat(actualKg) || 0,
         notes: notes || null,
+        assigned_roaster: assignedRoaster || null,
       });
     } else {
       createBatchMutation.mutate();
@@ -390,11 +447,15 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
       status: 'ROASTED',
       actual_output_kg: parseFloat(actualKg) || 0,
       notes: notes || null,
+      assigned_roaster: assignedRoaster || null,
     });
   };
 
   const handleCreateSuggestedBatches = (roastGroup: string, demandKg: number) => {
-    const standardBatch = standardBatchByGroup[roastGroup] ?? 20;
+    const config = configByGroup[roastGroup];
+    const standardBatch = config?.standard_batch_kg ?? 20;
+    const defaultRoaster = config?.default_roaster ?? 'EITHER';
+    
     const existingPlannedKg = (batchesByGroup[roastGroup] ?? [])
       .filter(b => b.status === 'PLANNED')
       .reduce((sum, b) => sum + (b.planned_output_kg ?? 0), 0);
@@ -411,6 +472,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
       roastGroup,
       count: batchCount,
       batchKg: standardBatch,
+      defaultRoaster,
     });
   };
 
@@ -423,7 +485,14 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     upsertRoastGroupMutation.mutate({
       roastGroup: configRoastGroup,
       standardBatchKg: batchKg,
+      defaultRoaster: configDefaultRoaster,
     });
+  };
+
+  const getRoasterBadgeColor = (roaster: RoasterMachine | null) => {
+    if (roaster === 'SAMIAC') return 'bg-blue-100 text-blue-800 border-blue-300';
+    if (roaster === 'LORING') return 'bg-orange-100 text-orange-800 border-orange-300';
+    return 'bg-muted text-muted-foreground';
   };
 
   return (
@@ -435,7 +504,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
             Roast Plan
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Plan batches based on demand and standard batch sizes. Urgent orders shown first.
+            Plan batches based on demand and standard batch sizes. Assign roasters. Urgent orders shown first.
           </p>
         </CardHeader>
         <CardContent>
@@ -451,8 +520,10 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                 const plannedBatches = groupBatches.filter(b => b.status === 'PLANNED');
                 const plannedTotal = plannedBatches.reduce((sum, b) => sum + (b.planned_output_kg ?? 0), 0);
                 const roastedTotal = roastedInventory[group.roast_group] ?? 0;
-                const standardBatch = standardBatchByGroup[group.roast_group] ?? 20;
-                const hasConfig = group.roast_group in standardBatchByGroup;
+                const config = configByGroup[group.roast_group];
+                const standardBatch = config?.standard_batch_kg ?? 20;
+                const defaultRoaster = config?.default_roaster ?? 'EITHER';
+                const hasConfig = group.roast_group in configByGroup;
                 
                 // Calculate suggestion
                 const remainingNeed = Math.max(0, group.total_kg - roastedTotal - plannedTotal);
@@ -474,6 +545,11 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                               Urgent
                             </Badge>
                           )}
+                          {defaultRoaster !== 'EITHER' && (
+                            <Badge variant="outline" className={`text-xs ${getRoasterBadgeColor(defaultRoaster as RoasterMachine)}`}>
+                              {defaultRoaster}
+                            </Badge>
+                          )}
                           <Button 
                             variant="ghost" 
                             size="sm" 
@@ -485,7 +561,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                         </div>
                         {!hasConfig && (
                           <p className="text-xs text-amber-600">
-                            No config set. Click ⚙ to set standard batch size.
+                            No config set. Click ⚙ to set standard batch size and roaster.
                           </p>
                         )}
                       </div>
@@ -527,6 +603,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                         >
                           <Plus className="h-4 w-4 mr-1" />
                           Create {suggestedBatches} planned batch{suggestedBatches > 1 ? 'es' : ''}
+                          {defaultRoaster !== 'EITHER' && ` (${defaultRoaster})`}
                         </Button>
                       )}
                     </div>
@@ -568,9 +645,30 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                                 )}
                               </div>
                             </div>
-                            <Button size="sm" variant="ghost" onClick={() => openEditBatch(batch)}>
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              {/* Inline roaster selector */}
+                              <Select
+                                value={batch.assigned_roaster ?? ''}
+                                onValueChange={(val) => {
+                                  quickUpdateRoasterMutation.mutate({
+                                    id: batch.id,
+                                    assigned_roaster: val === '' ? null : val as RoasterMachine,
+                                  });
+                                }}
+                              >
+                                <SelectTrigger className={`h-7 w-24 text-xs ${getRoasterBadgeColor(batch.assigned_roaster)}`}>
+                                  <SelectValue placeholder="Roaster" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="">Unassigned</SelectItem>
+                                  <SelectItem value="SAMIAC">SAMIAC</SelectItem>
+                                  <SelectItem value="LORING">LORING</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Button size="sm" variant="ghost" onClick={() => openEditBatch(batch)}>
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -581,7 +679,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                       size="sm" 
                       variant="ghost" 
                       className="mt-2 text-muted-foreground"
-                      onClick={() => openNewBatch(group.roast_group, standardBatch)}
+                      onClick={() => openNewBatch(group.roast_group, standardBatch, defaultRoaster)}
                     >
                       <Plus className="h-4 w-4 mr-1" />
                       Add custom batch
@@ -597,12 +695,19 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                 .map((roastGroup) => {
                   const groupBatches = batchesByGroup[roastGroup] ?? [];
                   const roastedTotal = roastedInventory[roastGroup] ?? 0;
+                  const config = configByGroup[roastGroup];
+                  const defaultRoaster = config?.default_roaster ?? 'EITHER';
                   
                   return (
                     <div key={roastGroup} className="border rounded-lg p-4 opacity-70">
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <h3 className="font-semibold text-lg">{roastGroup}</h3>
+                          {defaultRoaster !== 'EITHER' && (
+                            <Badge variant="outline" className={`text-xs ${getRoasterBadgeColor(defaultRoaster as RoasterMachine)}`}>
+                              {defaultRoaster}
+                            </Badge>
+                          )}
                           <Button 
                             variant="ghost" 
                             size="sm" 
@@ -637,9 +742,29 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                                   }
                                 </span>
                               </div>
-                              <Button size="sm" variant="ghost" onClick={() => openEditBatch(batch)}>
-                                <Edit2 className="h-4 w-4" />
-                              </Button>
+                              <div className="flex items-center gap-2">
+                                <Select
+                                  value={batch.assigned_roaster ?? ''}
+                                  onValueChange={(val) => {
+                                    quickUpdateRoasterMutation.mutate({
+                                      id: batch.id,
+                                      assigned_roaster: val === '' ? null : val as RoasterMachine,
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger className={`h-7 w-24 text-xs ${getRoasterBadgeColor(batch.assigned_roaster)}`}>
+                                    <SelectValue placeholder="Roaster" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="">Unassigned</SelectItem>
+                                    <SelectItem value="SAMIAC">SAMIAC</SelectItem>
+                                    <SelectItem value="LORING">LORING</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Button size="sm" variant="ghost" onClick={() => openEditBatch(batch)}>
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -664,6 +789,22 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
             <div>
               <Label>Roast Group</Label>
               <p className="font-medium">{selectedRoastGroup}</p>
+            </div>
+            <div>
+              <Label htmlFor="assignedRoaster">Assigned Roaster</Label>
+              <Select
+                value={assignedRoaster}
+                onValueChange={(val) => setAssignedRoaster(val as RoasterMachine | '')}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select roaster" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Unassigned</SelectItem>
+                  <SelectItem value="SAMIAC">SAMIAC</SelectItem>
+                  <SelectItem value="LORING">LORING</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {!editingBatch && (
               <div>
@@ -762,6 +903,25 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Used to calculate suggested batch counts.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="defaultRoaster">Default Roaster</Label>
+              <Select
+                value={configDefaultRoaster}
+                onValueChange={(val) => setConfigDefaultRoaster(val as DefaultRoaster)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="EITHER">Either (no default)</SelectItem>
+                  <SelectItem value="SAMIAC">SAMIAC</SelectItem>
+                  <SelectItem value="LORING">LORING</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Pre-assigns roaster when creating planned batches.
               </p>
             </div>
             <div className="flex justify-end gap-2 pt-4">
