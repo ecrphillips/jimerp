@@ -6,11 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { ArrowLeft, UserPlus } from 'lucide-react';
+import { ArrowLeft, UserPlus, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { HistoricalEditWarningModal } from '@/components/internal/HistoricalEditWarningModal';
+import { IncompleteFulfillmentModal } from '@/components/internal/IncompleteFulfillmentModal';
+import { StatusChangeModal } from '@/components/internal/StatusChangeModal';
+import type { Database } from '@/integrations/supabase/types';
+
+type OrderStatus = Database['public']['Enums']['order_status'];
 
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -80,6 +86,14 @@ export default function OrderDetail() {
     invoiced?: boolean;
   } | null>(null);
 
+  // Incomplete fulfillment modal state
+  const [showIncompleteModal, setShowIncompleteModal] = useState(false);
+  const [incompleteSteps, setIncompleteSteps] = useState<string[]>([]);
+
+  // Status change modal state (for undoing shipped status)
+  const [showStatusChangeModal, setShowStatusChangeModal] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<OrderStatus | null>(null);
+
   // Check if order is in a "historical" state that requires confirmation
   const isHistoricalStatus = order?.status === 'SHIPPED' || order?.status === 'CANCELLED';
 
@@ -114,6 +128,42 @@ export default function OrderDetail() {
     }
     setShowHistoricalWarning(false);
   }, [pendingChecklistUpdate]);
+
+  // Handler to initiate "Mark as Shipped" with safety check
+  const handleMarkAsShipped = useCallback(() => {
+    if (!order) return;
+    
+    const missing: string[] = [];
+    if (!order.roasted) missing.push('Roasted');
+    if (!order.packed) missing.push('Packed');
+    if (!order.invoiced) missing.push('Invoiced');
+    
+    if (missing.length > 0) {
+      setIncompleteSteps(missing);
+      setShowIncompleteModal(true);
+    } else {
+      markAsShippedMutation.mutate();
+    }
+  }, [order]);
+
+  // Handler to request status change (for undo)
+  const handleStatusChange = useCallback((newStatus: OrderStatus) => {
+    if (isHistoricalStatus) {
+      setPendingStatusChange(newStatus);
+      setShowStatusChangeModal(true);
+    } else {
+      changeStatusMutation.mutate(newStatus);
+    }
+  }, [isHistoricalStatus]);
+
+  // Confirm the status change
+  const confirmStatusChange = useCallback(() => {
+    if (pendingStatusChange) {
+      changeStatusMutation.mutate(pendingStatusChange);
+      setPendingStatusChange(null);
+    }
+    setShowStatusChangeModal(false);
+  }, [pendingStatusChange]);
 
   const confirmMutation = useMutation({
     mutationFn: async () => {
@@ -175,6 +225,46 @@ export default function OrderDetail() {
     },
   });
 
+  // Mark order as shipped (sets status and shipped_or_ready flag)
+  const markAsShippedMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: 'SHIPPED', shipped_or_ready: true })
+        .eq('id', id!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Order marked as shipped');
+      queryClient.invalidateQueries({ queryKey: ['order', id] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to mark as shipped');
+    },
+  });
+
+  // Change order status (for undo/status changes)
+  const changeStatusMutation = useMutation({
+    mutationFn: async (newStatus: OrderStatus) => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: newStatus })
+        .eq('id', id!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Order status updated');
+      queryClient.invalidateQueries({ queryKey: ['order', id] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to update status');
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="page-container">
@@ -216,7 +306,13 @@ export default function OrderDetail() {
             </Button>
           </Link>
           <h1 className="page-title">{order.order_number}</h1>
-          <span className={`rounded px-2 py-1 text-xs font-medium ${order.status === 'SUBMITTED' ? 'bg-amber-100 text-amber-800' : order.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' : 'bg-muted text-muted-foreground'}`}>
+          <span className={`rounded px-2 py-1 text-xs font-medium ${
+            order.status === 'SUBMITTED' ? 'bg-warning/15 text-warning' : 
+            order.status === 'CONFIRMED' ? 'bg-primary/15 text-primary' : 
+            order.status === 'SHIPPED' ? 'bg-muted text-muted-foreground' :
+            order.status === 'CANCELLED' ? 'bg-destructive/15 text-destructive' :
+            'bg-muted text-muted-foreground'
+          }`}>
             {order.status}
           </span>
           {order.created_by_admin && (
@@ -226,11 +322,39 @@ export default function OrderDetail() {
             </span>
           )}
         </div>
-        {order.status === 'SUBMITTED' && (
-          <Button onClick={() => confirmMutation.mutate()} disabled={confirmMutation.isPending}>
-            {confirmMutation.isPending ? 'Confirming…' : 'Confirm Order'}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Confirm button for SUBMITTED orders */}
+          {order.status === 'SUBMITTED' && (
+            <Button onClick={() => confirmMutation.mutate()} disabled={confirmMutation.isPending}>
+              {confirmMutation.isPending ? 'Confirming…' : 'Confirm Order'}
+            </Button>
+          )}
+          
+          {/* Mark as Shipped button for non-shipped, non-cancelled orders */}
+          {order.status !== 'SHIPPED' && order.status !== 'CANCELLED' && order.status !== 'DRAFT' && (
+            <Button 
+              onClick={handleMarkAsShipped} 
+              disabled={markAsShippedMutation.isPending}
+              className="gap-2"
+            >
+              <Truck className="h-4 w-4" />
+              {markAsShippedMutation.isPending ? 'Processing…' : 'Mark as Shipped'}
+            </Button>
+          )}
+          
+          {/* Status change dropdown for SHIPPED orders (undo) */}
+          {order.status === 'SHIPPED' && (
+            <Select onValueChange={(value) => handleStatusChange(value as OrderStatus)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Change Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="CONFIRMED">Revert to Confirmed</SelectItem>
+                <SelectItem value="READY">Revert to Ready</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -374,6 +498,29 @@ export default function OrderDetail() {
         }}
         orderStatus={order.status}
         onConfirm={confirmHistoricalEdit}
+      />
+
+      {/* Incomplete fulfillment warning modal */}
+      <IncompleteFulfillmentModal
+        open={showIncompleteModal}
+        onOpenChange={setShowIncompleteModal}
+        incompleteSteps={incompleteSteps}
+        onConfirm={() => {
+          setShowIncompleteModal(false);
+          markAsShippedMutation.mutate();
+        }}
+      />
+
+      {/* Status change confirmation modal */}
+      <StatusChangeModal
+        open={showStatusChangeModal}
+        onOpenChange={(open) => {
+          setShowStatusChangeModal(open);
+          if (!open) setPendingStatusChange(null);
+        }}
+        currentStatus={order.status}
+        newStatus={pendingStatusChange ?? ''}
+        onConfirm={confirmStatusChange}
       />
     </div>
   );
