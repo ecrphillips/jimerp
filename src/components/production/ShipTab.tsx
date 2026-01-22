@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -80,6 +81,8 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
   const [showIncompleteModal, setShowIncompleteModal] = useState(false);
   const [incompleteSteps, setIncompleteSteps] = useState<string[]>([]);
   const [pendingShipOrderId, setPendingShipOrderId] = useState<string | null>(null);
+  const [showDecrementModal, setShowDecrementModal] = useState(false);
+  const [pendingShipOrder, setPendingShipOrder] = useState<ShippableOrder | null>(null);
 
   // Fetch checkmarks for priority tracking
   const { data: checkmarks } = useQuery({
@@ -328,10 +331,52 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
       toast.success('Order marked as shipped');
       queryClient.invalidateQueries({ queryKey: ['shippable-orders'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['packing-runs'] });
     },
     onError: (err) => {
       console.error(err);
       toast.error('Failed to mark order as shipped');
+    },
+  });
+
+  // Mutation to decrement packing runs when shipping
+  const decrementPackingMutation = useMutation({
+    mutationFn: async ({ order }: { order: ShippableOrder }) => {
+      const clampedSkus: string[] = [];
+      
+      for (const li of order.lineItems) {
+        // Find existing packing run for this product + today
+        const existingRun = packingRuns?.find(
+          (pr) => pr.product_id === li.product_id
+        );
+        
+        if (existingRun) {
+          const currentPacked = existingRun.units_packed;
+          const newPacked = Math.max(currentPacked - li.quantity_units, 0);
+          
+          if (currentPacked < li.quantity_units) {
+            clampedSkus.push(li.product_name);
+          }
+          
+          const { error } = await supabase
+            .from('packing_runs')
+            .update({ units_packed: newPacked, updated_by: user?.id })
+            .eq('id', existingRun.id);
+          if (error) throw error;
+        }
+      }
+      
+      return clampedSkus;
+    },
+    onSuccess: (clampedSkus) => {
+      if (clampedSkus.length > 0) {
+        toast.warning(`Packed units for ${clampedSkus.join(', ')} was less than shipped quantity; clamped to 0.`);
+      }
+      queryClient.invalidateQueries({ queryKey: ['packing-runs'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to decrement packed inventory');
     },
   });
 
@@ -376,18 +421,48 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
     if (missing.length > 0) {
       setIncompleteSteps(missing);
       setPendingShipOrderId(order.id);
+      setPendingShipOrder(order);
       setShowIncompleteModal(true);
     } else {
-      markOrderShippedMutation.mutate(order.id);
+      // Show decrement modal
+      setPendingShipOrder(order);
+      setShowDecrementModal(true);
     }
   };
 
   const confirmShipOrder = () => {
-    if (pendingShipOrderId) {
-      markOrderShippedMutation.mutate(pendingShipOrderId);
-      setPendingShipOrderId(null);
+    if (pendingShipOrderId && pendingShipOrder) {
+      // After incomplete modal, show decrement modal
+      setShowIncompleteModal(false);
+      setShowDecrementModal(true);
+    } else {
+      setShowIncompleteModal(false);
     }
-    setShowIncompleteModal(false);
+  };
+
+  const shipWithDecrement = async () => {
+    if (!pendingShipOrder) return;
+    
+    try {
+      await decrementPackingMutation.mutateAsync({ order: pendingShipOrder });
+      await markOrderShippedMutation.mutateAsync(pendingShipOrder.id);
+    } catch (err) {
+      // Errors handled in mutation callbacks
+    }
+    
+    setShowDecrementModal(false);
+    setPendingShipOrder(null);
+    setPendingShipOrderId(null);
+  };
+
+  const shipWithoutDecrement = async () => {
+    if (!pendingShipOrder) return;
+    
+    await markOrderShippedMutation.mutateAsync(pendingShipOrder.id);
+    
+    setShowDecrementModal(false);
+    setPendingShipOrder(null);
+    setPendingShipOrderId(null);
   };
 
   return (
@@ -398,6 +473,45 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
         incompleteSteps={incompleteSteps}
         onConfirm={confirmShipOrder}
       />
+
+      {/* Decrement Inventory Modal */}
+      <Dialog open={showDecrementModal} onOpenChange={setShowDecrementModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Decrement Packed Inventory?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Do you want to decrement packed inventory for this order's items?
+            </p>
+            {pendingShipOrder && (
+              <div className="border rounded p-3 bg-muted/30 text-sm space-y-1">
+                <p className="font-medium">{pendingShipOrder.order_number} - {pendingShipOrder.client_name}</p>
+                {pendingShipOrder.lineItems.map((li) => (
+                  <p key={li.id} className="text-muted-foreground">
+                    {li.product_name}: {li.quantity_units} units
+                  </p>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button 
+                variant="outline" 
+                onClick={shipWithoutDecrement}
+                disabled={decrementPackingMutation.isPending || markOrderShippedMutation.isPending}
+              >
+                Ship without decrement
+              </Button>
+              <Button 
+                onClick={shipWithDecrement}
+                disabled={decrementPackingMutation.isPending || markOrderShippedMutation.isPending}
+              >
+                {decrementPackingMutation.isPending ? 'Processing...' : 'Yes, decrement'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Short List */}
       {shortList.length > 0 && (
