@@ -4,11 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Package, Check, AlertTriangle } from 'lucide-react';
+import { Package, Check, AlertTriangle, Clock, ShoppingCart } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
+
+type SortOption = 'urgent' | 'shortage' | 'alpha';
 
 interface PackTabProps {
   dateFilter: string[];
@@ -33,6 +36,10 @@ interface ProductDemand {
   roast_group: string | null;
   demanded_units: number;
   demanded_kg: number;
+  hasTimeSensitive: boolean;
+  earliestShipDate: string | null;
+  shortage: number;
+  unblocksOrders: number;
 }
 
 export function PackTab({ dateFilter, today }: PackTabProps) {
@@ -42,6 +49,7 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [unitsPacked, setUnitsPacked] = useState<string>('');
   const [kgConsumed, setKgConsumed] = useState<string>('');
+  const [sortBy, setSortBy] = useState<SortOption>('urgent');
 
   // Fetch products
   const { data: products } = useQuery({
@@ -55,7 +63,7 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
     },
   });
 
-  // Fetch order line items for demand
+  // Fetch order line items for demand with ship_priority from production_checkmarks
   const { data: orderLineItems } = useQuery({
     queryKey: ['pack-demand', dateFilter],
     queryFn: async () => {
@@ -65,11 +73,25 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
           id,
           product_id,
           quantity_units,
-          order:orders!inner(status, requested_ship_date),
+          order_id,
+          order:orders!inner(id, status, requested_ship_date),
           product:products(id, product_name, sku, bag_size_g, packaging_variant, roast_group)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY'])
         .in('order.requested_ship_date', dateFilter);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Fetch production checkmarks for TIME_SENSITIVE priority
+  const { data: checkmarks } = useQuery({
+    queryKey: ['production-checkmarks', dateFilter],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('production_checkmarks')
+        .select('*')
+        .in('target_date', dateFilter);
       if (error) throw error;
       return data ?? [];
     },
@@ -140,9 +162,18 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
     return inventory;
   }, [roastedBatches, packingRuns, productRoastGroupMap]);
 
-  // Aggregate demand by product
+  // Map packing by product for unblocks calculation
+  const packingByProductUnits = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const pr of packingRuns ?? []) {
+      map[pr.product_id] = (map[pr.product_id] ?? 0) + pr.units_packed;
+    }
+    return map;
+  }, [packingRuns]);
+
+  // Aggregate demand by product with urgency info
   const demandByProduct = useMemo((): ProductDemand[] => {
-    const productMap: Record<string, ProductDemand> = {};
+    const productMap: Record<string, ProductDemand & { orderIds: Set<string>; shipDates: string[] }> = {};
 
     for (const li of orderLineItems ?? []) {
       if (!li.product) continue;
@@ -157,14 +188,88 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
           roast_group: li.product.roast_group,
           demanded_units: 0,
           demanded_kg: 0,
+          hasTimeSensitive: false,
+          earliestShipDate: null,
+          shortage: 0,
+          unblocksOrders: 0,
+          orderIds: new Set(),
+          shipDates: [],
         };
       }
       productMap[li.product_id].demanded_units += li.quantity_units;
       productMap[li.product_id].demanded_kg += (li.quantity_units * li.product.bag_size_g) / 1000;
+      productMap[li.product_id].orderIds.add(li.order_id);
+      
+      // Track ship dates
+      const shipDate = li.order?.requested_ship_date;
+      if (shipDate) {
+        productMap[li.product_id].shipDates.push(shipDate);
+      }
+      
+      // Check for TIME_SENSITIVE from checkmarks
+      const cm = checkmarks?.find(
+        (c) => c.product_id === li.product_id && c.bag_size_g === li.product?.bag_size_g
+      );
+      if (cm?.ship_priority === 'TIME_SENSITIVE') {
+        productMap[li.product_id].hasTimeSensitive = true;
+      }
     }
 
-    return Object.values(productMap).sort((a, b) => a.product_name.localeCompare(b.product_name));
-  }, [orderLineItems]);
+    // Calculate shortage, earliest ship date, and unblocks orders
+    for (const product of Object.values(productMap)) {
+      const packed = packingByProductUnits[product.product_id] ?? 0;
+      product.shortage = Math.max(0, product.demanded_units - packed);
+      
+      // Get earliest ship date
+      if (product.shipDates.length > 0) {
+        product.earliestShipDate = product.shipDates.sort()[0];
+      }
+      
+      // Calculate how many orders this SKU unblocks if packed
+      // An order is "blocked" if this SKU is short AND the order's quantity > packed
+      let unblocksCount = 0;
+      for (const li of orderLineItems ?? []) {
+        if (li.product_id !== product.product_id) continue;
+        const packedForProduct = packingByProductUnits[product.product_id] ?? 0;
+        if (packedForProduct < li.quantity_units) {
+          unblocksCount++;
+        }
+      }
+      product.unblocksOrders = unblocksCount;
+    }
+
+    return Object.values(productMap).map(({ orderIds, shipDates, ...rest }) => rest);
+  }, [orderLineItems, checkmarks, packingByProductUnits]);
+
+  // Sort products based on selected sort option
+  const sortedProducts = useMemo(() => {
+    const sorted = [...demandByProduct];
+    
+    switch (sortBy) {
+      case 'urgent':
+        // TIME_SENSITIVE first, then earliest ship date, then highest shortage
+        sorted.sort((a, b) => {
+          if (a.hasTimeSensitive !== b.hasTimeSensitive) {
+            return a.hasTimeSensitive ? -1 : 1;
+          }
+          if (a.earliestShipDate !== b.earliestShipDate) {
+            if (!a.earliestShipDate) return 1;
+            if (!b.earliestShipDate) return -1;
+            return a.earliestShipDate.localeCompare(b.earliestShipDate);
+          }
+          return b.shortage - a.shortage;
+        });
+        break;
+      case 'shortage':
+        sorted.sort((a, b) => b.shortage - a.shortage);
+        break;
+      case 'alpha':
+        sorted.sort((a, b) => a.product_name.localeCompare(b.product_name));
+        break;
+    }
+    
+    return sorted;
+  }, [demandByProduct, sortBy]);
 
   // Map packing runs by product_id
   const packingByProduct = useMemo(() => {
@@ -271,16 +376,30 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
       {/* Packing Progress */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5" />
-            Pack SKUs
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Track packing progress per SKU. Partial packing is allowed.
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5" />
+                Pack SKUs
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Track packing progress per SKU. Partial packing is allowed.
+              </p>
+            </div>
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Sort by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="urgent">Most urgent first</SelectItem>
+                <SelectItem value="shortage">Largest shortage first</SelectItem>
+                <SelectItem value="alpha">Alphabetical</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
-          {demandByProduct.length === 0 ? (
+          {sortedProducts.length === 0 ? (
             <p className="text-muted-foreground py-4">No products demanded for selected dates.</p>
           ) : (
             <table className="w-full text-sm">
@@ -295,18 +414,33 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                 </tr>
               </thead>
               <tbody>
-                {demandByProduct.map((product) => {
+                {sortedProducts.map((product) => {
                   const packing = packingByProduct[product.product_id];
                   const packed = packing?.units_packed ?? 0;
                   const isComplete = packed >= product.demanded_units;
                   const isEditing = editingProductId === product.product_id;
                   
                   return (
-                    <tr key={product.product_id} className="border-b last:border-0">
+                    <tr 
+                      key={product.product_id} 
+                      className={`border-b last:border-0 ${product.hasTimeSensitive ? 'bg-destructive/5' : ''}`}
+                    >
                       <td className="py-3">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium">{product.product_name}</span>
                           <PackagingBadge variant={product.packaging_variant} />
+                          {product.hasTimeSensitive && (
+                            <Badge variant="destructive" className="text-xs">
+                              <Clock className="h-3 w-3 mr-1" />
+                              Urgent
+                            </Badge>
+                          )}
+                          {product.unblocksOrders > 0 && product.shortage > 0 && (
+                            <Badge variant="outline" className="text-xs border-blue-400 text-blue-700 bg-blue-50">
+                              <ShoppingCart className="h-3 w-3 mr-1" />
+                              Unblocks: {product.unblocksOrders} order{product.unblocksOrders !== 1 ? 's' : ''}
+                            </Badge>
+                          )}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {product.bag_size_g}g • {product.sku || 'No SKU'}
