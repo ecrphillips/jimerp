@@ -75,20 +75,21 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
     },
   });
 
-  // Fetch roasted batches for inventory display
+  // Fetch roasted batches for inventory display (all ROASTED batches in date window)
   const { data: roastedBatches } = useQuery({
     queryKey: ['roasted-batches-for-pack', dateFilter],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roasted_batches')
         .select('*')
-        .eq('status', 'ROASTED');
+        .eq('status', 'ROASTED')
+        .in('target_date', dateFilter);
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  // Fetch packing runs
+  // Fetch packing runs for the date window
   const { data: packingRuns } = useQuery({
     queryKey: ['packing-runs', dateFilter],
     queryFn: async () => {
@@ -101,14 +102,43 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
     },
   });
 
-  // Calculate roasted inventory by roast_group
+  // Map products to roast_group for consumption calculation
+  const productRoastGroupMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of products ?? []) {
+      if (p.roast_group) {
+        map[p.id] = p.roast_group;
+      }
+    }
+    return map;
+  }, [products]);
+
+  // Calculate roasted inventory by roast_group:
+  // sum(roasted_batches.actual_output_kg) - sum(packing_runs.kg_consumed)
   const roastedInventory = useMemo(() => {
-    const inventory: Record<string, number> = {};
+    // Sum roasted output
+    const roastedOutput: Record<string, number> = {};
     for (const b of roastedBatches ?? []) {
-      inventory[b.roast_group] = (inventory[b.roast_group] ?? 0) + b.actual_output_kg;
+      roastedOutput[b.roast_group] = (roastedOutput[b.roast_group] ?? 0) + b.actual_output_kg;
+    }
+
+    // Sum kg consumed from packing runs by roast_group
+    const consumed: Record<string, number> = {};
+    for (const pr of packingRuns ?? []) {
+      const roastGroup = productRoastGroupMap[pr.product_id];
+      if (roastGroup) {
+        consumed[roastGroup] = (consumed[roastGroup] ?? 0) + pr.kg_consumed;
+      }
+    }
+
+    // Net inventory = roasted - consumed
+    const inventory: Record<string, number> = {};
+    const allGroups = new Set([...Object.keys(roastedOutput), ...Object.keys(consumed)]);
+    for (const group of allGroups) {
+      inventory[group] = (roastedOutput[group] ?? 0) - (consumed[group] ?? 0);
     }
     return inventory;
-  }, [roastedBatches]);
+  }, [roastedBatches, packingRuns, productRoastGroupMap]);
 
   // Aggregate demand by product
   const demandByProduct = useMemo((): ProductDemand[] => {
@@ -220,7 +250,7 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
             Roasted Inventory On Hand
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Total roasted kg by roast group (from all ROASTED batches).
+            Net roasted kg by roast group (roasted output − kg consumed by packing).
           </p>
         </CardHeader>
         <CardContent>

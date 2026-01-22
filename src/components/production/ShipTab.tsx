@@ -22,15 +22,19 @@ interface ShipTabProps {
   today: string;
 }
 
-interface Checkmark {
-  id: string;
+interface PackingRun {
+  product_id: string;
   target_date: string;
+  units_packed: number;
+}
+
+interface Checkmark {
   product_id: string;
   bag_size_g: number;
+  ship_priority: ShipPriority;
   roast_complete: boolean;
   pack_complete: boolean;
   ship_complete: boolean;
-  ship_priority: ShipPriority;
 }
 
 interface ShippableOrder {
@@ -76,7 +80,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
   const [incompleteSteps, setIncompleteSteps] = useState<string[]>([]);
   const [pendingShipOrderId, setPendingShipOrderId] = useState<string | null>(null);
 
-  // Fetch checkmarks
+  // Fetch checkmarks for priority tracking
   const { data: checkmarks } = useQuery({
     queryKey: ['production-checkmarks', dateFilter],
     queryFn: async () => {
@@ -85,7 +89,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
         .select('*')
         .in('target_date', dateFilter);
       if (error) throw error;
-      return (data ?? []) as Checkmark[];
+      return data ?? [];
     },
   });
 
@@ -154,15 +158,29 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
     },
   });
 
-  // Compute shippable orders
-  const shippableOrders = useMemo((): ShippableOrder[] => {
-    if (!ordersForShipping || !checkmarks) return [];
-
-    const checkmarkMap = new Map<string, Checkmark>();
-    for (const cm of checkmarks) {
-      const key = `${cm.product_id}-${cm.bag_size_g}`;
-      checkmarkMap.set(key, cm);
+  // Map packing runs by product_id (aggregate units_packed per product across all dates in window)
+  const packingByProduct = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const pr of packingRuns ?? []) {
+      map[pr.product_id] = (map[pr.product_id] ?? 0) + pr.units_packed;
     }
+    return map;
+  }, [packingRuns]);
+
+  // Aggregate demand by product (total units demanded per product across orders)
+  const demandByProduct = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const li of orderLineItems ?? []) {
+      map[li.product_id] = (map[li.product_id] ?? 0) + li.quantity_units;
+    }
+    return map;
+  }, [orderLineItems]);
+
+  // Compute shippable orders using packing_runs
+  // An order is shippable if for every line item: 
+  //   packing_runs.units_packed (for that product) >= total demanded units for that product
+  const shippableOrders = useMemo((): ShippableOrder[] => {
+    if (!ordersForShipping) return [];
 
     const orders: ShippableOrder[] = [];
     
@@ -176,16 +194,20 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
         product_id: li.product_id,
       }));
 
-      const allLineItemsPacked = lineItems.length > 0 && lineItems.every((li: { product_id: string; bag_size_g: number }) => {
-        const key = `${li.product_id}-${li.bag_size_g}`;
-        const cm = checkmarkMap.get(key);
-        return cm?.pack_complete === true;
+      // Order is shippable if ALL its line items have sufficient packed units
+      // packed_units >= demanded_units (total demand for that product, not per-order allocation)
+      const allLineItemsPacked = lineItems.length > 0 && lineItems.every((li: { product_id: string }) => {
+        const totalDemanded = demandByProduct[li.product_id] ?? 0;
+        const totalPacked = packingByProduct[li.product_id] ?? 0;
+        return totalPacked >= totalDemanded;
       });
 
+      // Priority from checkmarks
       let priority: ShipPriority = 'NORMAL';
       for (const li of lineItems) {
-        const key = `${li.product_id}-${li.bag_size_g}`;
-        const cm = checkmarkMap.get(key);
+        const cm = checkmarks?.find(
+          (c) => c.product_id === li.product_id && c.bag_size_g === li.bag_size_g
+        );
         if (cm?.ship_priority === 'TIME_SENSITIVE') {
           priority = 'TIME_SENSITIVE';
           break;
@@ -219,9 +241,9 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
         if (dateA !== dateB) return dateA - dateB;
         return a.order_number.localeCompare(b.order_number);
       });
-  }, [ordersForShipping, checkmarks]);
+  }, [ordersForShipping, checkmarks, packingByProduct, demandByProduct]);
 
-  // Calculate short list (SKUs where packed < demanded)
+  // Short list calculation now uses the same packingByProduct and demandByProduct
   const shortList = useMemo((): ShortListItem[] => {
     const demandMap: Record<string, { product_name: string; bag_size_g: number; packaging_variant: PackagingVariant | null; demanded: number }> = {};
     
@@ -239,14 +261,9 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
       demandMap[key].demanded += li.quantity_units;
     }
 
-    const packingMap: Record<string, number> = {};
-    for (const pr of packingRuns ?? []) {
-      packingMap[pr.product_id] = pr.units_packed;
-    }
-
     const shortItems: ShortListItem[] = [];
     for (const [productId, data] of Object.entries(demandMap)) {
-      const packed = packingMap[productId] ?? 0;
+      const packed = packingByProduct[productId] ?? 0;
       if (packed < data.demanded) {
         shortItems.push({
           product_id: productId,
@@ -261,7 +278,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
     }
 
     return shortItems.sort((a, b) => b.shortage - a.shortage);
-  }, [orderLineItems, packingRuns]);
+  }, [orderLineItems, packingByProduct]);
 
   const priorityMutation = useMutation({
     mutationFn: async ({ productId, bagSize, priority, existingCheckmark }: { productId: string; bagSize: number; priority: ShipPriority; existingCheckmark: Checkmark | null }) => {
@@ -423,7 +440,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
             </span>
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Orders where ALL line items have Pack ✓ checked.
+            Orders where all line items have packed ≥ demanded units.
           </p>
         </CardHeader>
         <CardContent>
