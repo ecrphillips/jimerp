@@ -246,11 +246,19 @@ export default function OrderDetail() {
   });
 
   // Change order status (for undo/status changes)
+  // When reverting from SHIPPED, also clear shipped_or_ready to keep checklist consistent
   const changeStatusMutation = useMutation({
     mutationFn: async (newStatus: OrderStatus) => {
+      const updates: { status: OrderStatus; shipped_or_ready?: boolean } = { status: newStatus };
+      
+      // If reverting from SHIPPED, also clear the shipped_or_ready checkbox
+      if (order?.status === 'SHIPPED' && newStatus !== 'SHIPPED') {
+        updates.shipped_or_ready = false;
+      }
+      
       const { error } = await supabase
         .from('orders')
-        .update({ status: newStatus })
+        .update(updates)
         .eq('id', id!);
       if (error) throw error;
     },
