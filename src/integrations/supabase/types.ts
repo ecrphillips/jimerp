@@ -246,6 +246,50 @@ export type Database = {
           },
         ]
       }
+      packing_runs: {
+        Row: {
+          created_at: string
+          id: string
+          kg_consumed: number
+          notes: string | null
+          product_id: string
+          target_date: string
+          units_packed: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kg_consumed?: number
+          notes?: string | null
+          product_id: string
+          target_date: string
+          units_packed?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kg_consumed?: number
+          notes?: string | null
+          product_id?: string
+          target_date?: string
+          units_packed?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "packing_runs_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       price_list: {
         Row: {
           created_at: string
@@ -407,6 +451,7 @@ export type Database = {
             | Database["public"]["Enums"]["packaging_variant"]
             | null
           product_name: string
+          roast_group: string | null
           sku: string | null
           updated_at: string
         }
@@ -424,6 +469,7 @@ export type Database = {
             | Database["public"]["Enums"]["packaging_variant"]
             | null
           product_name: string
+          roast_group?: string | null
           sku?: string | null
           updated_at?: string
         }
@@ -441,6 +487,7 @@ export type Database = {
             | Database["public"]["Enums"]["packaging_variant"]
             | null
           product_name?: string
+          roast_group?: string | null
           sku?: string | null
           updated_at?: string
         }
@@ -481,6 +528,45 @@ export type Database = {
           name?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      roasted_batches: {
+        Row: {
+          actual_output_kg: number
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          planned_output_kg: number | null
+          roast_group: string
+          status: Database["public"]["Enums"]["roasted_batch_status"]
+          target_date: string
+          updated_at: string
+        }
+        Insert: {
+          actual_output_kg?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          planned_output_kg?: number | null
+          roast_group: string
+          status?: Database["public"]["Enums"]["roasted_batch_status"]
+          target_date: string
+          updated_at?: string
+        }
+        Update: {
+          actual_output_kg?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          planned_output_kg?: number | null
+          roast_group?: string
+          status?: Database["public"]["Enums"]["roasted_batch_status"]
+          target_date?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -601,6 +687,7 @@ export type Database = {
         | "PACKED"
         | "STAGED"
         | "COMPLETE"
+      roasted_batch_status: "PLANNED" | "ROASTED"
       ship_priority: "NORMAL" | "TIME_SENSITIVE"
     }
     CompositeTypes: {
@@ -757,6 +844,7 @@ export const Constants = {
       ],
       product_format: ["WHOLE_BEAN", "ESPRESSO", "FILTER", "OTHER"],
       production_status: ["PLANNED", "ROASTED", "PACKED", "STAGED", "COMPLETE"],
+      roasted_batch_status: ["PLANNED", "ROASTED"],
       ship_priority: ["NORMAL", "TIME_SENSITIVE"],
     },
   },

@@ -23,6 +23,7 @@ interface Product {
   is_perennial: boolean;
   client_id: string;
   packaging_variant: PackagingVariant | null;
+  roast_group: string | null;
   client: { name: string } | null;
 }
 
@@ -56,13 +57,14 @@ export default function Products() {
   const [packagingVariant, setPackagingVariant] = useState<PackagingVariant | null>(null);
   const [priceInput, setPriceInput] = useState<string>('');
   const [isPerennial, setIsPerennial] = useState(false);
+  const [roastGroup, setRoastGroup] = useState<string>('');
 
   const { data: products, isLoading } = useQuery({
     queryKey: ['all-products'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, client_id, packaging_variant, client:clients(name)')
+        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, client_id, packaging_variant, roast_group, client:clients(name)')
         .order('client_id')
         .order('product_name');
 
@@ -128,6 +130,7 @@ export default function Products() {
         is_active: isActive,
         is_perennial: isPerennial,
         packaging_variant: packagingVariant,
+        roast_group: roastGroup || null,
       };
 
       let productId: string;
@@ -223,6 +226,7 @@ export default function Products() {
     setIsPerennial(false);
     setPackagingVariant(null);
     setPriceInput('');
+    setRoastGroup('');
     setDialogOpen(true);
   };
 
@@ -237,7 +241,8 @@ export default function Products() {
     setIsActive(p.is_active);
     setIsPerennial(p.is_perennial);
     setPackagingVariant(p.packaging_variant);
-    setPriceInput(''); // Start blank - user can optionally set a new price
+    setPriceInput('');
+    setRoastGroup(p.roast_group ?? '');
     setDialogOpen(true);
   };
 
@@ -404,6 +409,18 @@ export default function Products() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label htmlFor="roastGroup">Roast Group (optional)</Label>
+              <Input
+                id="roastGroup"
+                value={roastGroup}
+                onChange={(e) => setRoastGroup(e.target.value)}
+                placeholder="e.g. Matchstick Blend, Single Origin A"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Products sharing the same roast group are roasted together.
+              </p>
             </div>
             <div>
               <Label>Grind Options</Label>
