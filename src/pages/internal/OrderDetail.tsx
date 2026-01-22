@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,10 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { ArrowLeft, UserPlus, Truck } from 'lucide-react';
+import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import { HistoricalEditWarningModal } from '@/components/internal/HistoricalEditWarningModal';
 import { IncompleteFulfillmentModal } from '@/components/internal/IncompleteFulfillmentModal';
@@ -17,6 +18,20 @@ import { StatusChangeModal } from '@/components/internal/StatusChangeModal';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
+
+interface PackingRun {
+  product_id: string;
+  target_date: string;
+  units_packed: number;
+  kg_consumed: number;
+}
+
+interface RoastedBatch {
+  roast_group: string;
+  target_date: string;
+  actual_output_kg: number;
+  status: string;
+}
 
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -52,6 +67,7 @@ export default function OrderDetail() {
     enabled: !!id,
   });
 
+  // Fetch line items with product details including roast_group
   const { data: lineItems } = useQuery({
     queryKey: ['order-line-items', id],
     queryFn: async () => {
@@ -59,11 +75,12 @@ export default function OrderDetail() {
         .from('order_line_items')
         .select(`
           id,
+          product_id,
           quantity_units,
           grind,
           unit_price_locked,
           line_notes,
-          product:products(product_name)
+          product:products(id, product_name, roast_group, bag_size_g)
         `)
         .eq('order_id', id!)
         .order('created_at', { ascending: true });
@@ -73,6 +90,105 @@ export default function OrderDetail() {
     },
     enabled: !!id,
   });
+
+  // Fetch packing runs for the order's requested_ship_date
+  const { data: packingRuns } = useQuery({
+    queryKey: ['packing-runs-for-order', order?.requested_ship_date],
+    queryFn: async () => {
+      if (!order?.requested_ship_date) return [];
+      const { data, error } = await supabase
+        .from('packing_runs')
+        .select('product_id, target_date, units_packed, kg_consumed')
+        .eq('target_date', order.requested_ship_date);
+      if (error) throw error;
+      return (data ?? []) as PackingRun[];
+    },
+    enabled: !!order?.requested_ship_date,
+  });
+
+  // Fetch roasted batches for the order's requested_ship_date
+  const { data: roastedBatches } = useQuery({
+    queryKey: ['roasted-batches-for-order', order?.requested_ship_date],
+    queryFn: async () => {
+      if (!order?.requested_ship_date) return [];
+      const { data, error } = await supabase
+        .from('roasted_batches')
+        .select('roast_group, target_date, actual_output_kg, status')
+        .eq('target_date', order.requested_ship_date)
+        .eq('status', 'ROASTED');
+      if (error) throw error;
+      return (data ?? []) as RoastedBatch[];
+    },
+    enabled: !!order?.requested_ship_date,
+  });
+
+  // Map packing runs by product_id
+  const packingByProduct = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const pr of packingRuns ?? []) {
+      map[pr.product_id] = (map[pr.product_id] ?? 0) + pr.units_packed;
+    }
+    return map;
+  }, [packingRuns]);
+
+  // Compute per-line item packed status
+  const lineItemsWithPackedStatus = useMemo(() => {
+    return (lineItems ?? []).map((li) => {
+      const packedUnits = packingByProduct[li.product_id] ?? 0;
+      const isPackedComplete = packedUnits >= li.quantity_units;
+      return {
+        ...li,
+        packedUnits,
+        isPackedComplete,
+      };
+    });
+  }, [lineItems, packingByProduct]);
+
+  // Derived pack complete for order: all line items have packed >= demanded
+  const isDerivedPackComplete = useMemo(() => {
+    if (lineItemsWithPackedStatus.length === 0) return false;
+    return lineItemsWithPackedStatus.every((li) => li.isPackedComplete);
+  }, [lineItemsWithPackedStatus]);
+
+  // Compute roasted inventory on hand by roast_group
+  const roastedInventoryByGroup = useMemo(() => {
+    // Sum roasted output by group
+    const roastedOutput: Record<string, number> = {};
+    for (const b of roastedBatches ?? []) {
+      roastedOutput[b.roast_group] = (roastedOutput[b.roast_group] ?? 0) + b.actual_output_kg;
+    }
+
+    // Sum kg consumed by roast_group
+    const consumed: Record<string, number> = {};
+    for (const li of lineItems ?? []) {
+      const roastGroup = li.product?.roast_group;
+      if (!roastGroup) continue;
+      
+      const pr = packingRuns?.find((p) => p.product_id === li.product_id);
+      if (pr) {
+        consumed[roastGroup] = (consumed[roastGroup] ?? 0) + pr.kg_consumed;
+      }
+    }
+
+    // Net inventory
+    const inventory: Record<string, number> = {};
+    const allGroups = new Set([...Object.keys(roastedOutput), ...Object.keys(consumed)]);
+    for (const group of allGroups) {
+      inventory[group] = (roastedOutput[group] ?? 0) - (consumed[group] ?? 0);
+    }
+    return inventory;
+  }, [roastedBatches, lineItems, packingRuns]);
+
+  // Get unique roast groups from this order's line items
+  const orderRoastGroups = useMemo(() => {
+    const groups = new Set<string>();
+    for (const li of lineItems ?? []) {
+      if (li.product?.roast_group) {
+        groups.add(li.product.roast_group);
+      }
+    }
+    return Array.from(groups);
+  }, [lineItems]);
 
   const [opsNotes, setOpsNotes] = useState('');
   const [opsNotesLoaded, setOpsNotesLoaded] = useState(false);
@@ -130,12 +246,13 @@ export default function OrderDetail() {
   }, [pendingChecklistUpdate]);
 
   // Handler to initiate "Mark as Shipped" with safety check
+  // Uses derived pack complete status instead of manual order.packed
   const handleMarkAsShipped = useCallback(() => {
     if (!order) return;
     
     const missing: string[] = [];
-    if (!order.roasted) missing.push('Roasted');
-    if (!order.packed) missing.push('Packed');
+    // Use derived pack status from packing_runs
+    if (!isDerivedPackComplete) missing.push('Packed (per run sheet)');
     if (!order.invoiced) missing.push('Invoiced');
     
     if (missing.length > 0) {
@@ -144,7 +261,7 @@ export default function OrderDetail() {
     } else {
       markAsShippedMutation.mutate();
     }
-  }, [order]);
+  }, [order, isDerivedPackComplete]);
 
   // Handler to request status change (for undo)
   const handleStatusChange = useCallback((newStatus: OrderStatus) => {
@@ -302,7 +419,7 @@ export default function OrderDetail() {
     );
   }
 
-  const lineTotal = lineItems?.reduce((sum, li) => sum + li.quantity_units * li.unit_price_locked, 0) ?? 0;
+  const lineTotal = lineItemsWithPackedStatus.reduce((sum, li) => sum + li.quantity_units * li.unit_price_locked, 0);
 
   return (
     <div className="page-container">
@@ -385,29 +502,52 @@ export default function OrderDetail() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              Fulfillment Checklist
+              Fulfillment Status
               {isHistoricalStatus && (
                 <span className="text-xs font-normal text-muted-foreground">(edits require confirmation)</span>
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="roasted" 
-                checked={order.roasted}
-                onCheckedChange={(checked) => handleChecklistChange({ roasted: !!checked })}
-              />
-              <Label htmlFor="roasted" className="cursor-pointer">Roasted</Label>
+          <CardContent className="space-y-4">
+            {/* Roast Availability - Derived from roasted_batches */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Flame className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm font-medium">Roasted Inventory (kg)</Label>
+                <span className="text-xs text-muted-foreground">(read-only)</span>
+              </div>
+              {orderRoastGroups.length > 0 ? (
+                <div className="flex flex-wrap gap-2 ml-6">
+                  {orderRoastGroups.map((group) => (
+                    <Badge key={group} variant="outline" className="text-xs">
+                      {group}: {(roastedInventoryByGroup[group] ?? 0).toFixed(2)} kg
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground ml-6">No roast groups assigned</p>
+              )}
             </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="packed" 
-                checked={order.packed}
-                onCheckedChange={(checked) => handleChecklistChange({ packed: !!checked })}
-              />
-              <Label htmlFor="packed" className="cursor-pointer">Packed</Label>
+
+            {/* Pack Status - Derived from packing_runs */}
+            <div className="flex items-center gap-2">
+              <Package className="h-4 w-4 text-muted-foreground" />
+              <Label className="text-sm font-medium">Pack Status</Label>
+              {isDerivedPackComplete ? (
+                <Badge className="bg-green-600 text-xs">
+                  <Check className="h-3 w-3 mr-1" />
+                  Complete
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="text-xs">
+                  <AlertTriangle className="h-3 w-3 mr-1" />
+                  Incomplete
+                </Badge>
+              )}
+              <span className="text-xs text-muted-foreground">(from run sheet)</span>
             </div>
+
+            {/* Shipped / Ready - Manual checkbox */}
             <div className="flex items-center space-x-2">
               <Checkbox 
                 id="shipped_or_ready" 
@@ -416,6 +556,8 @@ export default function OrderDetail() {
               />
               <Label htmlFor="shipped_or_ready" className="cursor-pointer">Shipped / Ready for Pickup</Label>
             </div>
+
+            {/* Invoiced - Manual checkbox */}
             <div className="flex items-center space-x-2">
               <Checkbox 
                 id="invoiced" 
@@ -424,6 +566,19 @@ export default function OrderDetail() {
               />
               <Label htmlFor="invoiced" className="cursor-pointer">Invoiced</Label>
             </div>
+
+            {/* Link to Production */}
+            {order.requested_ship_date && (
+              <div className="pt-2 border-t">
+                <Link 
+                  to={`/production`}
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  View in Production Run Sheet
+                </Link>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -460,7 +615,7 @@ export default function OrderDetail() {
       <Card className="mt-6">
         <CardHeader><CardTitle>Line Items</CardTitle></CardHeader>
         <CardContent>
-          {!lineItems || lineItems.length === 0 ? (
+          {lineItemsWithPackedStatus.length === 0 ? (
             <p className="text-muted-foreground">No line items.</p>
           ) : (
             <>
@@ -468,17 +623,32 @@ export default function OrderDetail() {
                 <thead>
                   <tr className="border-b text-left">
                     <th className="pb-2">Product</th>
-                    <th className="pb-2">Qty</th>
+                    <th className="pb-2">Demanded</th>
+                    <th className="pb-2">Packed</th>
+                    <th className="pb-2">Status</th>
                     <th className="pb-2">Grind</th>
                     <th className="pb-2">Unit Price</th>
                     <th className="pb-2 text-right">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {lineItems.map((li) => (
+                  {lineItemsWithPackedStatus.map((li) => (
                     <tr key={li.id} className="border-b last:border-0">
                       <td className="py-2">{li.product?.product_name ?? 'Unknown'}</td>
                       <td className="py-2">{li.quantity_units}</td>
+                      <td className="py-2">{li.packedUnits}</td>
+                      <td className="py-2">
+                        {li.isPackedComplete ? (
+                          <Badge className="bg-green-600 text-xs">
+                            <Check className="h-3 w-3 mr-1" />
+                            Ready
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs">
+                            {li.packedUnits}/{li.quantity_units}
+                          </Badge>
+                        )}
+                      </td>
                       <td className="py-2">{li.grind ?? '—'}</td>
                       <td className="py-2">${li.unit_price_locked.toFixed(2)}</td>
                       <td className="py-2 text-right">${(li.quantity_units * li.unit_price_locked).toFixed(2)}</td>
@@ -487,7 +657,7 @@ export default function OrderDetail() {
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={4} className="pt-4 text-right font-medium">Total:</td>
+                    <td colSpan={6} className="pt-4 text-right font-medium">Total:</td>
                     <td className="pt-4 text-right font-medium">${lineTotal.toFixed(2)}</td>
                   </tr>
                 </tfoot>
