@@ -534,6 +534,33 @@ export type Database = {
         }
         Relationships: []
       }
+      roast_groups: {
+        Row: {
+          created_at: string
+          is_active: boolean
+          notes: string | null
+          roast_group: string
+          standard_batch_kg: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          is_active?: boolean
+          notes?: string | null
+          roast_group: string
+          standard_batch_kg?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          is_active?: boolean
+          notes?: string | null
+          roast_group?: string
+          standard_batch_kg?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       roasted_batches: {
         Row: {
           actual_output_kg: number
