@@ -575,6 +575,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
               {shippableOrders.map((order) => {
                 const isTimeSensitive = order.priority === 'TIME_SENSITIVE';
                 const hasNotes = order.client_notes || order.internal_ops_notes;
+                const hasOpsNotes = !!order.internal_ops_notes;
                 
                 return (
                   <div
@@ -599,6 +600,19 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
                               Shared SKU short
                             </Badge>
                           )}
+                          {/* Notes indicators */}
+                          {hasOpsNotes && (
+                            <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-800 border-orange-300">
+                              <MessageSquare className="h-3 w-3 mr-1" />
+                              Ops note
+                            </Badge>
+                          )}
+                          {hasNotes && !hasOpsNotes && (
+                            <Badge variant="outline" className="text-xs">
+                              <MessageSquare className="h-3 w-3 mr-1" />
+                              Notes
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
                           <span>
@@ -613,10 +627,11 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
                       <div className="flex items-center gap-2">
                         <Button
                           size="sm"
-                          variant="ghost"
+                          variant="outline"
                           onClick={() => navigate(`/orders/${order.id}`)}
                         >
-                          <ExternalLink className="h-4 w-4" />
+                          <ExternalLink className="h-4 w-4 mr-1" />
+                          Open Order
                         </Button>
                         <Button
                           size="sm"
@@ -637,19 +652,19 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
                       </div>
                     </div>
 
-                    {/* Notes */}
+                    {/* Notes - always show if present */}
                     {hasNotes && (
-                      <Collapsible>
+                      <Collapsible defaultOpen={hasOpsNotes}>
                         <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground mt-2 hover:text-foreground">
                           <MessageSquare className="h-3 w-3" />
-                          View notes
+                          {hasOpsNotes ? 'View notes (has ops note)' : 'View notes'}
                         </CollapsibleTrigger>
                         <CollapsibleContent className="mt-2 p-2 bg-muted/50 rounded text-sm">
+                          {order.internal_ops_notes && (
+                            <p className="mb-1"><strong className="text-orange-700">Ops:</strong> {order.internal_ops_notes}</p>
+                          )}
                           {order.client_notes && (
                             <p><strong>Client:</strong> {order.client_notes}</p>
-                          )}
-                          {order.internal_ops_notes && (
-                            <p><strong>Internal:</strong> {order.internal_ops_notes}</p>
                           )}
                         </CollapsibleContent>
                       </Collapsible>
