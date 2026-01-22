@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           billing_contact_name: string | null
           billing_email: string | null
+          client_code: string
           created_at: string
           id: string
           is_active: boolean
@@ -29,6 +30,7 @@ export type Database = {
         Insert: {
           billing_contact_name?: string | null
           billing_email?: string | null
+          client_code: string
           created_at?: string
           id?: string
           is_active?: boolean
@@ -40,6 +42,7 @@ export type Database = {
         Update: {
           billing_contact_name?: string | null
           billing_email?: string | null
+          client_code?: string
           created_at?: string
           id?: string
           is_active?: boolean
