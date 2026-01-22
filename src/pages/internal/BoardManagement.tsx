@@ -33,7 +33,7 @@ interface Product {
   client: { name: string } | null;
 }
 
-const SOURCES = ['MATCHSTICK', 'FUNK'] as const;
+const SOURCES = ['MATCHSTICK', 'FUNK', 'NOSMOKE'] as const;
 
 export default function BoardManagement() {
   const queryClient = useQueryClient();
@@ -177,6 +177,7 @@ export default function BoardManagement() {
         <TabsList>
           <TabsTrigger value="MATCHSTICK">Matchstick</TabsTrigger>
           <TabsTrigger value="FUNK">Funk</TabsTrigger>
+          <TabsTrigger value="NOSMOKE">No Smoke</TabsTrigger>
         </TabsList>
 
         {SOURCES.map((source) => (
