@@ -10,7 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
-import { Truck, Clock, ChevronDown, ChevronRight, MessageSquare, AlertTriangle, ExternalLink, Package } from 'lucide-react';
+import { Truck, Clock, ChevronDown, ChevronRight, MessageSquare, AlertTriangle, ExternalLink, Package, CheckCircle2, Layers } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { IncompleteFulfillmentModal } from '@/components/internal/IncompleteFulfillmentModal';
 import type { Database } from '@/integrations/supabase/types';
@@ -60,6 +60,11 @@ interface ShippableOrder {
   allLineItemsPacked: boolean;
   priority: ShipPriority;
   hasContention: boolean; // True if any SKU in the order is short overall
+  // Complexity metrics
+  skuCount: number;
+  totalUnits: number;
+  missingSkuCount: number;
+  missingUnitsTotal: number;
 }
 
 interface ShortListItem {
@@ -180,10 +185,8 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
     return map;
   }, [orderLineItems]);
 
-  // Compute shippable orders using packing_runs
-  // An order is shippable if for every line item: 
-  //   packing_runs.units_packed (for that product) >= that line item's quantity_units (per-order requirement)
-  const shippableOrders = useMemo((): ShippableOrder[] => {
+  // Compute ALL orders with complexity metrics (shippable and not-yet-shippable)
+  const allOrdersWithMetrics = useMemo((): ShippableOrder[] => {
     if (!ordersForShipping) return [];
 
     const orders: ShippableOrder[] = [];
@@ -198,12 +201,23 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
         product_id: li.product_id,
       }));
 
+      // Complexity metrics
+      const skuCount = lineItems.length;
+      const totalUnits = lineItems.reduce((sum, li) => sum + li.quantity_units, 0);
+      
+      // Calculate missing SKUs and units
+      let missingSkuCount = 0;
+      let missingUnitsTotal = 0;
+      for (const li of lineItems) {
+        const packed = packingByProduct[li.product_id] ?? 0;
+        if (packed < li.quantity_units) {
+          missingSkuCount++;
+          missingUnitsTotal += Math.max(0, li.quantity_units - packed);
+        }
+      }
+
       // Order is shippable if ALL its line items have sufficient packed units
-      // packed_units >= line item's quantity_units (per-order requirement, NOT total demand)
-      const allLineItemsPacked = lineItems.length > 0 && lineItems.every((li: { product_id: string; quantity_units: number }) => {
-        const totalPacked = packingByProduct[li.product_id] ?? 0;
-        return totalPacked >= li.quantity_units;
-      });
+      const allLineItemsPacked = lineItems.length > 0 && missingSkuCount === 0;
 
       // Check for contention: any SKU in this order where packed < total demand
       const hasContention = lineItems.some((li: { product_id: string }) => {
@@ -239,20 +253,52 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
         allLineItemsPacked,
         priority,
         hasContention,
+        skuCount,
+        totalUnits,
+        missingSkuCount,
+        missingUnitsTotal,
       });
     }
 
-    return orders
-      .filter((o) => o.allLineItemsPacked)
-      .sort((a, b) => {
-        if (a.priority === 'TIME_SENSITIVE' && b.priority !== 'TIME_SENSITIVE') return -1;
-        if (b.priority === 'TIME_SENSITIVE' && a.priority !== 'TIME_SENSITIVE') return 1;
+    // Sort: Shippable first, then not-yet-shippable
+    return orders.sort((a, b) => {
+      // Shippable orders come first
+      if (a.allLineItemsPacked !== b.allLineItemsPacked) {
+        return a.allLineItemsPacked ? -1 : 1;
+      }
+
+      if (a.allLineItemsPacked && b.allLineItemsPacked) {
+        // Both shippable: TIME_SENSITIVE first, then fewer SKUs, then fewer units, then order number
+        if (a.priority !== b.priority) {
+          return a.priority === 'TIME_SENSITIVE' ? -1 : 1;
+        }
+        if (a.skuCount !== b.skuCount) return a.skuCount - b.skuCount;
+        if (a.totalUnits !== b.totalUnits) return a.totalUnits - b.totalUnits;
+        return a.order_number.localeCompare(b.order_number);
+      } else {
+        // Both not-yet-shippable: sort by closeness
+        // TIME_SENSITIVE first
+        if (a.priority !== b.priority) {
+          return a.priority === 'TIME_SENSITIVE' ? -1 : 1;
+        }
+        // Fewer missing SKUs first
+        if (a.missingSkuCount !== b.missingSkuCount) return a.missingSkuCount - b.missingSkuCount;
+        // Fewer missing units first
+        if (a.missingUnitsTotal !== b.missingUnitsTotal) return a.missingUnitsTotal - b.missingUnitsTotal;
+        // Fewer total SKUs first
+        if (a.skuCount !== b.skuCount) return a.skuCount - b.skuCount;
+        // Earlier ship date first
         const dateA = a.requested_ship_date ? new Date(a.requested_ship_date).getTime() : Infinity;
         const dateB = b.requested_ship_date ? new Date(b.requested_ship_date).getTime() : Infinity;
         if (dateA !== dateB) return dateA - dateB;
         return a.order_number.localeCompare(b.order_number);
-      });
+      }
+    });
   }, [ordersForShipping, checkmarks, packingByProduct, demandByProduct]);
+
+  // Separate shippable and not-yet-shippable for display counts
+  const shippableOrders = useMemo(() => allOrdersWithMetrics.filter(o => o.allLineItemsPacked), [allOrdersWithMetrics]);
+  const notYetShippableOrders = useMemo(() => allOrdersWithMetrics.filter(o => !o.allLineItemsPacked), [allOrdersWithMetrics]);
 
   // Short list calculation now uses the same packingByProduct and demandByProduct
   const shortList = useMemo((): ShortListItem[] => {
@@ -551,36 +597,43 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
         </Card>
       )}
 
-      {/* Shippable Orders */}
+      {/* All Orders - Unified List */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Truck className="h-5 w-5" />
-            Shippable Orders
+            Orders
             <span className="ml-2 text-xs font-normal text-muted-foreground">
-              ({shippableOrders.length} orders ready)
+              ({shippableOrders.length} ready • {notYetShippableOrders.length} pending)
             </span>
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Orders where packed units ≥ this order's line item quantities.
+            Sorted by shippability, then by complexity (easy wins first).
           </p>
         </CardHeader>
         <CardContent>
-          {shippableOrders.length === 0 ? (
+          {allOrdersWithMetrics.length === 0 ? (
             <p className="text-muted-foreground py-8 text-center">
-              No orders ready to ship. Orders appear here when packed ≥ order quantity for all items.
+              No orders for the selected date window.
             </p>
           ) : (
-            <div className="space-y-4">
-              {shippableOrders.map((order) => {
+            <div className="space-y-3">
+              {allOrdersWithMetrics.map((order) => {
                 const isTimeSensitive = order.priority === 'TIME_SENSITIVE';
                 const hasNotes = order.client_notes || order.internal_ops_notes;
                 const hasOpsNotes = !!order.internal_ops_notes;
+                const isShippable = order.allLineItemsPacked;
                 
                 return (
                   <div
                     key={order.id}
-                    className={`border rounded-lg p-4 ${isTimeSensitive ? 'border-destructive bg-destructive/5' : ''}`}
+                    className={`border rounded-lg p-4 transition-colors ${
+                      isShippable 
+                        ? 'border-green-400 bg-green-50/50' 
+                        : isTimeSensitive 
+                          ? 'border-destructive/30 bg-destructive/5' 
+                          : 'border-border'
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
@@ -588,18 +641,29 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
                           <span className="font-semibold text-lg">{order.order_number}</span>
                           <span className="text-muted-foreground">•</span>
                           <span className="font-medium">{order.client_name}</span>
+                          
+                          {/* Shippable badge */}
+                          {isShippable && (
+                            <Badge className="text-xs bg-green-600 hover:bg-green-700">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Ready
+                            </Badge>
+                          )}
+                          
                           {isTimeSensitive && (
                             <Badge variant="destructive" className="text-xs">
                               <Clock className="h-3 w-3 mr-1" />
                               Urgent
                             </Badge>
                           )}
+                          
                           {order.hasContention && (
                             <Badge variant="outline" className="text-xs border-amber-400 text-amber-700 bg-amber-50">
                               <AlertTriangle className="h-3 w-3 mr-1" />
                               Shared SKU short
                             </Badge>
                           )}
+                          
                           {/* Notes indicators */}
                           {hasOpsNotes && (
                             <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-800 border-orange-300">
@@ -614,7 +678,9 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
                             </Badge>
                           )}
                         </div>
-                        <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                        
+                        {/* Metrics row */}
+                        <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground flex-wrap">
                           <span>
                             Ship: {order.requested_ship_date 
                               ? format(parseISO(order.requested_ship_date), 'MMM d, yyyy')
@@ -622,8 +688,24 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
                           </span>
                           <span>•</span>
                           <span>{order.delivery_method}</span>
+                          <span>•</span>
+                          <span className="flex items-center gap-1">
+                            <Layers className="h-3 w-3" />
+                            {order.skuCount} SKU{order.skuCount !== 1 ? 's' : ''}, {order.totalUnits} units
+                          </span>
+                          
+                          {/* Missing metrics for non-shippable orders */}
+                          {!isShippable && (
+                            <>
+                              <span>•</span>
+                              <span className="text-amber-600 font-medium">
+                                Missing: {order.missingSkuCount} SKU{order.missingSkuCount !== 1 ? 's' : ''}, {order.missingUnitsTotal} unit{order.missingUnitsTotal !== 1 ? 's' : ''}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
+                      
                       <div className="flex items-center gap-2">
                         <Button
                           size="sm"
@@ -641,14 +723,17 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
                           <Clock className="h-4 w-4 mr-1" />
                           {isTimeSensitive ? 'Urgent' : 'Normal'}
                         </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => handleMarkOrderShipped(order)}
-                          disabled={markOrderShippedMutation.isPending}
-                        >
-                          <Truck className="h-4 w-4 mr-1" />
-                          Mark Shipped
-                        </Button>
+                        {isShippable && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleMarkOrderShipped(order)}
+                            disabled={markOrderShippedMutation.isPending}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            <Truck className="h-4 w-4 mr-1" />
+                            Mark Shipped
+                          </Button>
+                        )}
                       </div>
                     </div>
 
@@ -682,14 +767,29 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
                       </CollapsibleTrigger>
                       <CollapsibleContent className="mt-2">
                         <div className="space-y-1">
-                          {order.lineItems.map((li) => (
-                            <div key={li.id} className="flex items-center gap-2 text-sm p-2 bg-muted/30 rounded">
-                              <span className="font-medium">{li.product_name}</span>
-                              <PackagingBadge variant={li.packaging_variant} />
-                              <span className="text-muted-foreground">{li.bag_size_g}g</span>
-                              <span className="ml-auto font-medium">× {li.quantity_units}</span>
-                            </div>
-                          ))}
+                          {order.lineItems.map((li) => {
+                            const packed = packingByProduct[li.product_id] ?? 0;
+                            const isMissing = packed < li.quantity_units;
+                            
+                            return (
+                              <div 
+                                key={li.id} 
+                                className={`flex items-center gap-2 text-sm p-2 rounded ${
+                                  isMissing ? 'bg-amber-50 border border-amber-200' : 'bg-muted/30'
+                                }`}
+                              >
+                                <span className="font-medium">{li.product_name}</span>
+                                <PackagingBadge variant={li.packaging_variant} />
+                                <span className="text-muted-foreground">{li.bag_size_g}g</span>
+                                <span className="ml-auto font-medium">× {li.quantity_units}</span>
+                                {isMissing && (
+                                  <span className="text-amber-600 text-xs">
+                                    (packed: {packed})
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </CollapsibleContent>
                     </Collapsible>
