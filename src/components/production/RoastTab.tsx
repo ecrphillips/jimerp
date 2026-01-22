@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -19,6 +20,7 @@ interface RoastTabProps {
 
 type RoasterMachine = 'SAMIAC' | 'LORING';
 type DefaultRoaster = 'SAMIAC' | 'LORING' | 'EITHER';
+type RoasterFilter = 'ALL' | 'SAMIAC' | 'LORING' | 'UNASSIGNED';
 
 interface RoastBatch {
   id: string;
@@ -58,6 +60,9 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
   const [actualKg, setActualKg] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [assignedRoaster, setAssignedRoaster] = useState<RoasterMachine | ''>('');
+  
+  // Roaster filter
+  const [roasterFilter, setRoasterFilter] = useState<RoasterFilter>('ALL');
   
   // Roast group config dialog
   const [showConfigDialog, setShowConfigDialog] = useState(false);
@@ -247,6 +252,42 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     }
     return grouped;
   }, [batches]);
+
+  // Helper to check if a roast group matches the roaster filter
+  const groupMatchesRoasterFilter = (roastGroup: string): boolean => {
+    if (roasterFilter === 'ALL') return true;
+    
+    const config = configByGroup[roastGroup];
+    const defaultRoaster = config?.default_roaster ?? 'EITHER';
+    const groupBatches = batchesByGroup[roastGroup] ?? [];
+    
+    if (roasterFilter === 'UNASSIGNED') {
+      // Show if default_roaster is EITHER or any batch is unassigned
+      if (defaultRoaster === 'EITHER') return true;
+      return groupBatches.some(b => b.assigned_roaster === null);
+    }
+    
+    // SAMIAC or LORING filter
+    if (defaultRoaster === roasterFilter) return true;
+    return groupBatches.some(b => b.assigned_roaster === roasterFilter);
+  };
+
+  // Filter batches within a group based on roaster filter
+  const filterBatchesByRoaster = (groupBatches: RoastBatch[]): RoastBatch[] => {
+    if (roasterFilter === 'ALL') return groupBatches;
+    
+    if (roasterFilter === 'UNASSIGNED') {
+      return groupBatches.filter(b => b.assigned_roaster === null);
+    }
+    
+    // SAMIAC or LORING - show assigned to that roaster OR unassigned (they might use it)
+    return groupBatches.filter(b => b.assigned_roaster === roasterFilter || b.assigned_roaster === null);
+  };
+
+  // Filtered demand groups
+  const filteredDemandByRoastGroup = useMemo(() => {
+    return demandByRoastGroup.filter(group => groupMatchesRoasterFilter(group.roast_group));
+  }, [demandByRoastGroup, roasterFilter, configByGroup, batchesByGroup]);
 
   const createBatchMutation = useMutation({
     mutationFn: async () => {
@@ -499,24 +540,55 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Flame className="h-5 w-5" />
-            Roast Plan
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Plan batches based on demand and standard batch sizes. Assign roasters. Urgent orders shown first.
-          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Flame className="h-5 w-5" />
+                Roast Plan
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Plan batches based on demand and standard batch sizes. Assign roasters. Urgent orders shown first.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Filter:</span>
+              <ToggleGroup 
+                type="single" 
+                value={roasterFilter} 
+                onValueChange={(val) => val && setRoasterFilter(val as RoasterFilter)}
+                className="border rounded-md"
+              >
+                <ToggleGroupItem value="ALL" aria-label="All roasters" className="text-xs px-3">
+                  All
+                </ToggleGroupItem>
+                <ToggleGroupItem value="SAMIAC" aria-label="Samiac only" className="text-xs px-3 data-[state=on]:bg-blue-100 data-[state=on]:text-blue-800">
+                  Samiac
+                </ToggleGroupItem>
+                <ToggleGroupItem value="LORING" aria-label="Loring only" className="text-xs px-3 data-[state=on]:bg-orange-100 data-[state=on]:text-orange-800">
+                  Loring
+                </ToggleGroupItem>
+                <ToggleGroupItem value="UNASSIGNED" aria-label="Unassigned" className="text-xs px-3">
+                  Unassigned
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          {demandByRoastGroup.length === 0 && allRoastGroups.length === 0 ? (
+          {filteredDemandByRoastGroup.length === 0 && allRoastGroups.length === 0 ? (
             <p className="text-muted-foreground py-4">
               No products have roast_group assigned. Edit products to set roast groups.
+            </p>
+          ) : filteredDemandByRoastGroup.length === 0 && roasterFilter !== 'ALL' ? (
+            <p className="text-muted-foreground py-4">
+              No roast groups match the "{roasterFilter}" filter. Try selecting "All".
             </p>
           ) : (
             <div className="space-y-6">
               {/* Roast groups with demand */}
-              {demandByRoastGroup.map((group) => {
+              {filteredDemandByRoastGroup.map((group) => {
                 const groupBatches = batchesByGroup[group.roast_group] ?? [];
+                const filteredBatches = filterBatchesByRoaster(groupBatches);
                 const plannedBatches = groupBatches.filter(b => b.status === 'PLANNED');
                 const plannedTotal = plannedBatches.reduce((sum, b) => sum + (b.planned_output_kg ?? 0), 0);
                 const roastedTotal = roastedInventory[group.roast_group] ?? 0;
@@ -618,9 +690,9 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                     </div>
 
                     {/* Batches */}
-                    {groupBatches.length > 0 && (
+                    {filteredBatches.length > 0 && (
                       <div className="space-y-2">
-                        {groupBatches.map((batch) => (
+                        {filteredBatches.map((batch) => (
                           <div
                             key={batch.id}
                             className={`flex items-center justify-between p-2 rounded border ${
@@ -692,11 +764,15 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
               {allRoastGroups
                 .filter((g) => !demandByRoastGroup.find((d) => d.roast_group === g))
                 .filter((g) => batchesByGroup[g]?.length > 0)
+                .filter((g) => groupMatchesRoasterFilter(g))
                 .map((roastGroup) => {
                   const groupBatches = batchesByGroup[roastGroup] ?? [];
+                  const filteredBatches = filterBatchesByRoaster(groupBatches);
                   const roastedTotal = roastedInventory[roastGroup] ?? 0;
                   const config = configByGroup[roastGroup];
                   const defaultRoaster = config?.default_roaster ?? 'EITHER';
+                  
+                  if (filteredBatches.length === 0 && roasterFilter !== 'ALL') return null;
                   
                   return (
                     <div key={roastGroup} className="border rounded-lg p-4 opacity-70">
@@ -720,9 +796,9 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                         <Badge variant="outline">{roastedTotal.toFixed(1)} kg on hand</Badge>
                       </div>
                       <p className="text-sm text-muted-foreground mb-3">No demand for selected dates</p>
-                      {groupBatches.length > 0 && (
+                      {filteredBatches.length > 0 && (
                         <div className="space-y-2">
-                          {groupBatches.map((batch) => (
+                          {filteredBatches.map((batch) => (
                             <div
                               key={batch.id}
                               className={`flex items-center justify-between p-2 rounded border ${
