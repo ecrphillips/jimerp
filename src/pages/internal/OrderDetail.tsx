@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ArrowLeft, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
+import { HistoricalEditWarningModal } from '@/components/internal/HistoricalEditWarningModal';
 
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -69,6 +70,18 @@ export default function OrderDetail() {
 
   const [opsNotes, setOpsNotes] = useState('');
   const [opsNotesLoaded, setOpsNotesLoaded] = useState(false);
+  
+  // Historical edit warning modal state
+  const [showHistoricalWarning, setShowHistoricalWarning] = useState(false);
+  const [pendingChecklistUpdate, setPendingChecklistUpdate] = useState<{
+    roasted?: boolean;
+    packed?: boolean;
+    shipped_or_ready?: boolean;
+    invoiced?: boolean;
+  } | null>(null);
+
+  // Check if order is in a "historical" state that requires confirmation
+  const isHistoricalStatus = order?.status === 'SHIPPED' || order?.status === 'CANCELLED';
 
   // Initialize ops notes when order loads
   React.useEffect(() => {
@@ -77,6 +90,30 @@ export default function OrderDetail() {
       setOpsNotesLoaded(true);
     }
   }, [order, opsNotesLoaded]);
+
+  // Handler for checklist changes - shows warning for historical orders
+  const handleChecklistChange = useCallback((updates: {
+    roasted?: boolean;
+    packed?: boolean;
+    shipped_or_ready?: boolean;
+    invoiced?: boolean;
+  }) => {
+    if (isHistoricalStatus) {
+      setPendingChecklistUpdate(updates);
+      setShowHistoricalWarning(true);
+    } else {
+      updateChecklistMutation.mutate(updates);
+    }
+  }, [isHistoricalStatus]);
+
+  // Confirm the historical edit
+  const confirmHistoricalEdit = useCallback(() => {
+    if (pendingChecklistUpdate) {
+      updateChecklistMutation.mutate(pendingChecklistUpdate);
+      setPendingChecklistUpdate(null);
+    }
+    setShowHistoricalWarning(false);
+  }, [pendingChecklistUpdate]);
 
   const confirmMutation = useMutation({
     mutationFn: async () => {
@@ -183,7 +220,7 @@ export default function OrderDetail() {
             {order.status}
           </span>
           {order.created_by_admin && (
-            <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">
+            <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
               <UserPlus className="h-3 w-3" />
               Admin Created
             </span>
@@ -214,13 +251,20 @@ export default function OrderDetail() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Fulfillment Checklist</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Fulfillment Checklist
+              {isHistoricalStatus && (
+                <span className="text-xs font-normal text-muted-foreground">(edits require confirmation)</span>
+              )}
+            </CardTitle>
+          </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center space-x-2">
               <Checkbox 
                 id="roasted" 
                 checked={order.roasted}
-                onCheckedChange={(checked) => updateChecklistMutation.mutate({ roasted: !!checked })}
+                onCheckedChange={(checked) => handleChecklistChange({ roasted: !!checked })}
               />
               <Label htmlFor="roasted" className="cursor-pointer">Roasted</Label>
             </div>
@@ -228,7 +272,7 @@ export default function OrderDetail() {
               <Checkbox 
                 id="packed" 
                 checked={order.packed}
-                onCheckedChange={(checked) => updateChecklistMutation.mutate({ packed: !!checked })}
+                onCheckedChange={(checked) => handleChecklistChange({ packed: !!checked })}
               />
               <Label htmlFor="packed" className="cursor-pointer">Packed</Label>
             </div>
@@ -236,7 +280,7 @@ export default function OrderDetail() {
               <Checkbox 
                 id="shipped_or_ready" 
                 checked={order.shipped_or_ready}
-                onCheckedChange={(checked) => updateChecklistMutation.mutate({ shipped_or_ready: !!checked })}
+                onCheckedChange={(checked) => handleChecklistChange({ shipped_or_ready: !!checked })}
               />
               <Label htmlFor="shipped_or_ready" className="cursor-pointer">Shipped / Ready for Pickup</Label>
             </div>
@@ -244,7 +288,7 @@ export default function OrderDetail() {
               <Checkbox 
                 id="invoiced" 
                 checked={order.invoiced}
-                onCheckedChange={(checked) => updateChecklistMutation.mutate({ invoiced: !!checked })}
+                onCheckedChange={(checked) => handleChecklistChange({ invoiced: !!checked })}
               />
               <Label htmlFor="invoiced" className="cursor-pointer">Invoiced</Label>
             </div>
@@ -320,6 +364,17 @@ export default function OrderDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* Historical edit warning modal */}
+      <HistoricalEditWarningModal
+        open={showHistoricalWarning}
+        onOpenChange={(open) => {
+          setShowHistoricalWarning(open);
+          if (!open) setPendingChecklistUpdate(null);
+        }}
+        orderStatus={order.status}
+        onConfirm={confirmHistoricalEdit}
+      />
     </div>
   );
 }
