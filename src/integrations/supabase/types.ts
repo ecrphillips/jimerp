@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      andon_picks: {
+        Row: {
+          board: string
+          id: string
+          product_id: string
+          target_date: string
+          units_picked: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          board: string
+          id?: string
+          product_id: string
+          target_date: string
+          units_picked?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          board?: string
+          id?: string
+          product_id?: string
+          target_date?: string
+          units_picked?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "andon_picks_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           billing_contact_name: string | null
