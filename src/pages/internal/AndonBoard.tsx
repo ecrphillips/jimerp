@@ -35,10 +35,13 @@ interface PickEntry {
   id: string;
   product_id: string;
   units_picked: number;
+  units_supplied: number;
 }
 
+type BoardSource = 'MATCHSTICK' | 'FUNK' | 'NOSMOKE';
+
 interface AndonBoardProps {
-  source: 'MATCHSTICK' | 'FUNK';
+  source: BoardSource;
   title: string;
 }
 
@@ -49,14 +52,14 @@ export default function AndonBoard({ source, title }: AndonBoardProps) {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [isDirty, setIsDirty] = useState(false);
 
-  // Fetch products configured for this board
+  // Fetch products configured for this board (cast source for NOSMOKE support)
   const { data: boardProducts, isLoading: productsLoading } = useQuery({
     queryKey: ['board-products', source],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('source_board_products')
         .select('id, product_id, display_order, is_active, product:products(id, product_name, sku, bag_size_g)')
-        .eq('source', source)
+        .eq('source', source as 'MATCHSTICK' | 'FUNK')
         .eq('is_active', true)
         .order('display_order');
 
@@ -72,7 +75,7 @@ export default function AndonBoard({ source, title }: AndonBoardProps) {
       const { data, error } = await supabase
         .from('external_demand')
         .select('id, product_id, quantity_units')
-        .eq('source', source)
+        .eq('source', source as 'MATCHSTICK' | 'FUNK')
         .eq('target_date', targetDate);
 
       if (error) throw error;
@@ -86,7 +89,7 @@ export default function AndonBoard({ source, title }: AndonBoardProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('andon_picks')
-        .select('id, product_id, units_picked')
+        .select('id, product_id, units_picked, units_supplied')
         .eq('board', source)
         .eq('target_date', targetDate);
 
@@ -112,20 +115,20 @@ export default function AndonBoard({ source, title }: AndonBoardProps) {
     setIsDirty(false);
   }, [targetDate]);
 
-  // Build picks map
+  // Build picks map (picked and supplied)
   const picksMap = React.useMemo(() => {
-    const map: Record<string, number> = {};
+    const map: Record<string, { picked: number; supplied: number }> = {};
     for (const p of existingPicks ?? []) {
-      map[p.product_id] = p.units_picked;
+      map[p.product_id] = { picked: p.units_picked, supplied: p.units_supplied };
     }
     return map;
   }, [existingPicks]);
 
   const saveDemandMutation = useMutation({
     mutationFn: async () => {
-      // Upsert all quantities
+      // Upsert all quantities (cast source for type compatibility)
       const upserts = Object.entries(quantities).map(([productId, qty]) => ({
-        source,
+        source: source as 'MATCHSTICK' | 'FUNK',
         target_date: targetDate,
         product_id: productId,
         quantity_units: qty,
@@ -152,9 +155,9 @@ export default function AndonBoard({ source, title }: AndonBoardProps) {
     },
   });
 
-  // Mutation for updating picks
+  // Mutation for updating picks (and supplied)
   const updatePickMutation = useMutation({
-    mutationFn: async ({ productId, units }: { productId: string; units: number }) => {
+    mutationFn: async ({ productId, picked, supplied }: { productId: string; picked: number; supplied: number }) => {
       const { error } = await supabase
         .from('andon_picks')
         .upsert(
@@ -162,7 +165,8 @@ export default function AndonBoard({ source, title }: AndonBoardProps) {
             board: source,
             target_date: targetDate,
             product_id: productId,
-            units_picked: units,
+            units_picked: picked,
+            units_supplied: supplied,
             updated_by: user?.id,
           },
           { onConflict: 'board,product_id,target_date' }
@@ -174,7 +178,7 @@ export default function AndonBoard({ source, title }: AndonBoardProps) {
     },
     onError: (err) => {
       console.error(err);
-      toast.error('Failed to update pick');
+      toast.error('Failed to update');
     },
   });
 
@@ -183,10 +187,23 @@ export default function AndonBoard({ source, title }: AndonBoardProps) {
     setIsDirty(true);
   };
 
-  const handlePickChange = (productId: string, newValue: number, required: number) => {
-    // Clamp between 0 and required
-    const clamped = Math.max(0, Math.min(newValue, required));
-    updatePickMutation.mutate({ productId, units: clamped });
+  const handleSuppliedChange = (productId: string, newSupplied: number, required: number) => {
+    const current = picksMap[productId] ?? { picked: 0, supplied: 0 };
+    const clampedSupplied = Math.max(0, newSupplied);
+    // If supplied decreases below picked, clamp picked down
+    let newPicked = current.picked;
+    if (clampedSupplied < current.picked) {
+      newPicked = clampedSupplied;
+      toast.warning(`Picked clamped to ${clampedSupplied} (cannot exceed Supplied)`);
+    }
+    updatePickMutation.mutate({ productId, picked: newPicked, supplied: clampedSupplied });
+  };
+
+  const handlePickChange = (productId: string, newValue: number, supplied: number) => {
+    // Clamp between 0 and supplied
+    const clamped = Math.max(0, Math.min(newValue, supplied));
+    const currentSupplied = picksMap[productId]?.supplied ?? supplied;
+    updatePickMutation.mutate({ productId, picked: clamped, supplied: currentSupplied });
   };
 
   const isLoading = productsLoading || demandLoading || picksLoading;
@@ -235,19 +252,23 @@ export default function AndonBoard({ source, title }: AndonBoardProps) {
                 <tr className="border-b text-left">
                   <th className="pb-2">Product</th>
                   <th className="pb-2">SKU</th>
-                  <th className="pb-2">Bag Size</th>
                   <th className="pb-2 w-28 text-center">Required</th>
+                  <th className="pb-2 w-28 text-center">Supplied</th>
                   <th className="pb-2 w-40 text-center">Picked</th>
-                  <th className="pb-2 w-28 text-center">Remaining</th>
+                  <th className="pb-2 w-32 text-center">Remaining</th>
                 </tr>
               </thead>
               <tbody>
                 {boardProducts.map((bp) => {
                   const required = quantities[bp.product_id] ?? 0;
-                  const picked = picksMap[bp.product_id] ?? 0;
-                  const remaining = Math.max(required - picked, 0);
-                  const isComplete = required > 0 && remaining === 0;
+                  const pickData = picksMap[bp.product_id] ?? { picked: 0, supplied: 0 };
+                  // Default supplied to required if not yet set
+                  const supplied = pickData.supplied > 0 ? pickData.supplied : required;
+                  const picked = pickData.picked;
+                  const remaining = Math.max(supplied - picked, 0);
+                  const isComplete = supplied > 0 && remaining === 0;
                   const isPartial = picked > 0 && remaining > 0;
+                  const surplus = supplied - required;
 
                   return (
                     <tr
@@ -269,7 +290,6 @@ export default function AndonBoard({ source, title }: AndonBoardProps) {
                         </div>
                       </td>
                       <td className="py-3">{bp.product?.sku || '—'}</td>
-                      <td className="py-3">{bp.product?.bag_size_g ?? 0}g</td>
                       <td className="py-3 text-center">
                         <Input
                           type="number"
@@ -280,12 +300,33 @@ export default function AndonBoard({ source, title }: AndonBoardProps) {
                         />
                       </td>
                       <td className="py-3">
+                        <div className="flex flex-col items-center gap-1">
+                          <Input
+                            type="number"
+                            min={0}
+                            className="w-20 text-center"
+                            value={supplied}
+                            onChange={(e) => handleSuppliedChange(bp.product_id, parseInt(e.target.value) || 0, required)}
+                          />
+                          {surplus > 0 && (
+                            <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700">
+                              Surplus +{surplus}
+                            </Badge>
+                          )}
+                          {surplus < 0 && (
+                            <Badge variant="destructive" className="text-xs">
+                              Short {Math.abs(surplus)}
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3">
                         <div className="flex items-center justify-center gap-1">
                           <Button
                             variant="outline"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={() => handlePickChange(bp.product_id, picked - 1, required)}
+                            onClick={() => handlePickChange(bp.product_id, picked - 1, supplied)}
                             disabled={picked <= 0 || updatePickMutation.isPending}
                           >
                             <Minus className="h-3 w-3" />
@@ -293,24 +334,24 @@ export default function AndonBoard({ source, title }: AndonBoardProps) {
                           <Input
                             type="number"
                             min={0}
-                            max={required}
+                            max={supplied}
                             className="w-16 text-center"
                             value={picked}
-                            onChange={(e) => handlePickChange(bp.product_id, parseInt(e.target.value) || 0, required)}
+                            onChange={(e) => handlePickChange(bp.product_id, parseInt(e.target.value) || 0, supplied)}
                           />
                           <Button
                             variant="outline"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={() => handlePickChange(bp.product_id, picked + 1, required)}
-                            disabled={picked >= required || updatePickMutation.isPending}
+                            onClick={() => handlePickChange(bp.product_id, picked + 1, supplied)}
+                            disabled={picked >= supplied || updatePickMutation.isPending}
                           >
                             <Plus className="h-3 w-3" />
                           </Button>
                         </div>
                       </td>
                       <td className="py-3 text-center">
-                        {required === 0 ? (
+                        {supplied === 0 ? (
                           <span className="text-muted-foreground">—</span>
                         ) : isComplete ? (
                           <span className="text-primary font-medium">0</span>

@@ -38,6 +38,7 @@ const productionSubItems = [
   { to: '/production', label: 'Run Sheet', icon: Flame, match: '/production' },
   { to: '/production/matchstick', label: 'Matchstick', icon: Clipboard },
   { to: '/production/funk', label: 'Funk', icon: Clipboard },
+  { to: '/production/nosmoke', label: 'No Smoke', icon: Clipboard },
   { to: '/boards', label: 'Board Mgmt', icon: Settings },
 ];
 
