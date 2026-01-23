@@ -11,7 +11,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Flame, Plus, Check, Edit2, Zap, Clock, Settings } from 'lucide-react';
+import { Flame, Plus, Check, Edit2, Zap, Clock, Settings, Trash2 } from 'lucide-react';
 
 interface RoastTabProps {
   dateFilter: string[];
@@ -397,7 +397,25 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     },
   });
 
-  // Upsert roast group config
+  // Delete a PLANNED batch
+  const deleteBatchMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('roasted_batches')
+        .delete()
+        .eq('id', id)
+        .eq('status', 'PLANNED'); // Only allow deleting PLANNED batches
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Batch deleted');
+      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to delete batch');
+    },
+  });
   const upsertRoastGroupMutation = useMutation({
     mutationFn: async ({ roastGroup, standardBatchKg, defaultRoaster }: { roastGroup: string; standardBatchKg: number; defaultRoaster: DefaultRoaster }) => {
       const { error } = await supabase
@@ -741,6 +759,16 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                               <Button size="sm" variant="ghost" onClick={() => openEditBatch(batch)}>
                                 <Edit2 className="h-4 w-4" />
                               </Button>
+                              {batch.status === 'PLANNED' && (
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => deleteBatchMutation.mutate(batch.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -841,6 +869,16 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                                 <Button size="sm" variant="ghost" onClick={() => openEditBatch(batch)}>
                                   <Edit2 className="h-4 w-4" />
                                 </Button>
+                                {batch.status === 'PLANNED' && (
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={() => deleteBatchMutation.mutate(batch.id)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
                               </div>
                             </div>
                           ))}
