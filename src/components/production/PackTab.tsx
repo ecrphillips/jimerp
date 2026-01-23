@@ -51,13 +51,14 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
   const [kgConsumed, setKgConsumed] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortOption>('urgent');
 
-  // Fetch products
+  // Fetch products (only active)
   const { data: products } = useQuery({
     queryKey: ['all-products-for-pack'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, bag_size_g, packaging_variant, roast_group');
+        .select('id, product_name, sku, bag_size_g, packaging_variant, roast_group')
+        .eq('is_active', true);
       if (error) throw error;
       return data ?? [];
     },
@@ -383,7 +384,7 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                 Pack SKUs
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Track packing progress per SKU. Partial packing is allowed.
+                Track packing progress per SKU. This is the source of truth for shipped quantity checks.
               </p>
             </div>
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
