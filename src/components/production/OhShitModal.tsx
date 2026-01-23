@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -633,69 +633,74 @@ export function OhShitModal({
     switch (step) {
       case 'choose':
         return (
-          <div className="space-y-4">
-            <div className="text-center space-y-2">
-              <AlertTriangle className="h-12 w-12 text-destructive mx-auto" />
-              <h3 className="text-lg font-semibold">Don't panic.</h3>
-              <p className="text-muted-foreground">What happened?</p>
-            </div>
-            <div className="space-y-2">
-              {/* Option 1: Most common - Two batches blended */}
-              <Button
-                variant="outline"
-                className="w-full justify-start text-left h-auto py-3 px-4 border-2 border-primary/50 bg-primary/5 hover:bg-primary/10"
-                onClick={() => handleOptionClick('blend')}
+          <div className="flex flex-col gap-2">
+            {/* Option 1: Most common - Two batches blended (highlighted) */}
+            <button
+              type="button"
+              className="w-full text-left rounded-md border border-primary/40 bg-accent/30 p-3 transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+              onClick={() => handleOptionClick('blend')}
+            >
+              <div className="font-medium text-sm leading-tight">
+                Two batches got blended in the destoner
+              </div>
+              <div 
+                className="mt-0.5 text-xs text-muted-foreground line-clamp-2"
+                title="I started releasing a batch and realized the previous batch was still in the destoner."
               >
-                <div className="space-y-0.5">
-                  <div className="font-medium">Two batches got blended in the destoner</div>
-                  <div className="text-xs text-muted-foreground">
-                    I started releasing a batch and realized the previous batch was still in the destoner.
-                  </div>
-                </div>
-              </Button>
+                I started releasing a batch and realized the previous batch was still in the destoner.
+              </div>
+            </button>
 
-              {/* Option 2: Spill */}
-              <Button
-                variant="outline"
-                className="w-full justify-start text-left h-auto py-3 px-4"
-                onClick={() => handleOptionClick('spill')}
+            {/* Option 2: Spill */}
+            <button
+              type="button"
+              className="w-full text-left rounded-md border border-border bg-background p-3 transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+              onClick={() => handleOptionClick('spill')}
+            >
+              <div className="font-medium text-sm leading-tight">
+                Some or all of the batch spilled on the floor
+              </div>
+              <div 
+                className="mt-0.5 text-xs text-muted-foreground line-clamp-2"
+                title="I lost coffee during release/handling."
               >
-                <div className="space-y-0.5">
-                  <div className="font-medium">Some or all of the batch spilled on the floor</div>
-                  <div className="text-xs text-muted-foreground">
-                    I lost coffee during release/handling.
-                  </div>
-                </div>
-              </Button>
+                I lost coffee during release/handling.
+              </div>
+            </button>
 
-              {/* Option 3: Contamination (different coffee dumped onto previous) */}
-              <Button
-                variant="outline"
-                className="w-full justify-start text-left h-auto py-3 px-4"
-                onClick={() => handleOptionClick('contamination')}
+            {/* Option 3: Contamination */}
+            <button
+              type="button"
+              className="w-full text-left rounded-md border border-border bg-background p-3 transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+              onClick={() => handleOptionClick('contamination')}
+            >
+              <div className="font-medium text-sm leading-tight">
+                Contamination: I dumped some onto a previous batch
+              </div>
+              <div 
+                className="mt-0.5 text-xs text-muted-foreground line-clamp-2"
+                title="Two coffees mixed, but not necessarily fully blended in the destoner."
               >
-                <div className="space-y-0.5">
-                  <div className="font-medium">Contamination: I dumped some of this batch onto the previous batch</div>
-                  <div className="text-xs text-muted-foreground">
-                    Two coffees mixed, but not necessarily fully blended in the destoner.
-                  </div>
-                </div>
-              </Button>
+                Two coffees mixed, but not necessarily fully blended in the destoner.
+              </div>
+            </button>
 
-              {/* Option 4: Something else */}
-              <Button
-                variant="outline"
-                className="w-full justify-start text-left h-auto py-3 px-4"
-                onClick={() => handleOptionClick('other')}
+            {/* Option 4: Something else */}
+            <button
+              type="button"
+              className="w-full text-left rounded-md border border-border bg-background p-3 transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+              onClick={() => handleOptionClick('other')}
+            >
+              <div className="font-medium text-sm leading-tight">
+                Something else happened
+              </div>
+              <div 
+                className="mt-0.5 text-xs text-muted-foreground line-clamp-2"
+                title="I'm not sure which option fits."
               >
-                <div className="space-y-0.5">
-                  <div className="font-medium">Something else happened</div>
-                  <div className="text-xs text-muted-foreground">
-                    I'm not sure which option fits.
-                  </div>
-                </div>
-              </Button>
-            </div>
+                I'm not sure which option fits.
+              </div>
+            </button>
           </div>
         );
 
@@ -1308,40 +1313,47 @@ export function OhShitModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[80vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-destructive" />
+      <DialogContent className="max-w-md max-h-[80vh] flex flex-col p-0 gap-0 overflow-hidden">
+        {/* Header */}
+        <div className="shrink-0 px-5 pt-5 pb-3 border-b">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
             Issue with batch
           </DialogTitle>
-          {step !== 'choose' && step !== 'confirm' && (
-            <DialogDescription>
+          {step === 'choose' ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Don't panic. What happened?
+            </p>
+          ) : step !== 'confirm' ? (
+            <DialogDescription className="mt-1 text-sm">
               {batch.roast_group} — {batch.target_date}
             </DialogDescription>
-          )}
-        </DialogHeader>
+          ) : null}
+        </div>
         
-        <ScrollArea className="flex-1 px-6 overflow-y-auto">
-          <div className="pb-4">
+        {/* Scrollable body */}
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="px-5 py-4">
             {renderStep()}
           </div>
         </ScrollArea>
         
         {/* Sticky footer */}
-        <div className="shrink-0 border-t bg-background px-6 py-4 flex flex-row gap-2 justify-end">
+        <div className="shrink-0 border-t bg-background px-5 py-3 flex flex-row gap-2 justify-end">
           {step === 'choose' ? (
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
           ) : (
             <>
-              <Button variant="outline" onClick={goBack}>
+              <Button variant="outline" size="sm" onClick={goBack}>
                 <ArrowLeft className="h-4 w-4 mr-1" />
                 Back
               </Button>
               
               {step !== 'confirm' && step !== 'blend-check' && (
                 <Button
+                  size="sm"
                   onClick={() => setStep('confirm')}
                   disabled={!canProceedToConfirm()}
                 >
@@ -1352,6 +1364,7 @@ export function OhShitModal({
               
               {step === 'confirm' && (
                 <Button
+                  size="sm"
                   onClick={() => applyChangesMutation.mutate()}
                   disabled={applyChangesMutation.isPending}
                 >
