@@ -1,8 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useMemo, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Package, Check, AlertTriangle, Clock, ShoppingCart } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
+import { InlinePackingControl } from './InlinePackingControl';
 
 type SortOption = 'urgent' | 'shortage' | 'alpha';
 
@@ -46,9 +45,6 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   
-  const [editingProductId, setEditingProductId] = useState<string | null>(null);
-  const [unitsPacked, setUnitsPacked] = useState<string>('');
-  const [kgConsumed, setKgConsumed] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortOption>('urgent');
 
   // Fetch products (only active)
@@ -281,52 +277,31 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
     return map;
   }, [packingRuns]);
 
-  const packingMutation = useMutation({
-    mutationFn: async ({ productId, units, kg }: { productId: string; units: number; kg: number }) => {
-      const { error } = await supabase
-        .from('packing_runs')
-        .upsert({
-          product_id: productId,
-          target_date: today,
-          units_packed: units,
-          kg_consumed: kg,
-          updated_by: user?.id,
-        }, {
-          onConflict: 'product_id,target_date',
-        });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success('Packing progress saved');
-      queryClient.invalidateQueries({ queryKey: ['packing-runs'] });
-      setEditingProductId(null);
-    },
-    onError: (err) => {
-      console.error(err);
-      toast.error('Failed to save packing progress');
-    },
-  });
-
-  const startEditing = (productId: string) => {
+  // Inline update for packing - returns a promise for the InlinePackingControl
+  const updatePackingUnits = useCallback(async (productId: string, newUnits: number) => {
     const existing = packingByProduct[productId];
-    setEditingProductId(productId);
-    setUnitsPacked(existing?.units_packed?.toString() ?? '0');
-    setKgConsumed(existing?.kg_consumed?.toString() ?? '0');
-  };
-
-  const savePacking = (productId: string) => {
-    packingMutation.mutate({
-      productId,
-      units: parseInt(unitsPacked) || 0,
-      kg: parseFloat(kgConsumed) || 0,
-    });
-  };
-
-  const cancelEditing = () => {
-    setEditingProductId(null);
-    setUnitsPacked('');
-    setKgConsumed('');
-  };
+    const kgConsumed = existing?.kg_consumed ?? 0;
+    
+    const { error } = await supabase
+      .from('packing_runs')
+      .upsert({
+        product_id: productId,
+        target_date: today,
+        units_packed: newUnits,
+        kg_consumed: kgConsumed,
+        updated_by: user?.id,
+      }, {
+        onConflict: 'product_id,target_date',
+      });
+    
+    if (error) {
+      toast.error('Failed to save packing progress');
+      throw error;
+    }
+    
+    // Silently invalidate - no success toast for inline edits
+    queryClient.invalidateQueries({ queryKey: ['packing-runs'] });
+  }, [packingByProduct, today, user?.id, queryClient]);
 
   // Group by roast_group for inventory display
   const roastGroupSummary = useMemo(() => {
@@ -411,7 +386,6 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                   <th className="pb-2 text-right">Demanded</th>
                   <th className="pb-2 text-right">Packed</th>
                   <th className="pb-2 text-right">Status</th>
-                  <th className="pb-2"></th>
                 </tr>
               </thead>
               <tbody>
@@ -419,7 +393,6 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                   const packing = packingByProduct[product.product_id];
                   const packed = packing?.units_packed ?? 0;
                   const isComplete = packed >= product.demanded_units;
-                  const isEditing = editingProductId === product.product_id;
                   
                   return (
                     <tr 
@@ -437,7 +410,7 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                             </Badge>
                           )}
                           {product.unblocksOrders > 0 && product.shortage > 0 && (
-                            <Badge variant="outline" className="text-xs border-blue-400 text-blue-700 bg-blue-50">
+                            <Badge variant="outline" className="text-xs">
                               <ShoppingCart className="h-3 w-3 mr-1" />
                               Unblocks: {product.unblocksOrders} order{product.unblocksOrders !== 1 ? 's' : ''}
                             </Badge>
@@ -458,25 +431,16 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                         <span className="font-medium">{product.demanded_units}</span>
                         <span className="text-muted-foreground text-xs ml-1">units</span>
                       </td>
-                      <td className="py-3 text-right">
-                        {isEditing ? (
-                          <div className="flex items-center gap-2 justify-end">
-                            <Input
-                              type="number"
-                              className="w-20 text-right"
-                              value={unitsPacked}
-                              onChange={(e) => setUnitsPacked(e.target.value)}
-                            />
-                          </div>
-                        ) : (
-                          <span className={isComplete ? 'text-green-600 font-medium' : ''}>
-                            {packed}
-                          </span>
-                        )}
+                      <td className="py-3">
+                        <InlinePackingControl
+                          value={packed}
+                          onCommit={(newValue) => updatePackingUnits(product.product_id, newValue)}
+                          isComplete={isComplete}
+                        />
                       </td>
                       <td className="py-3 text-right">
                         {isComplete ? (
-                          <Badge className="bg-green-600">
+                          <Badge variant="default" className="bg-primary text-primary-foreground">
                             <Check className="h-3 w-3 mr-1" />
                             Complete
                           </Badge>
@@ -489,30 +453,6 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                             <AlertTriangle className="h-3 w-3 mr-1" />
                             Pending
                           </Badge>
-                        )}
-                      </td>
-                      <td className="py-3 text-right">
-                        {isEditing ? (
-                          <div className="flex gap-1 justify-end">
-                            <Button size="sm" variant="outline" onClick={cancelEditing}>
-                              Cancel
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              onClick={() => savePacking(product.product_id)}
-                              disabled={packingMutation.isPending}
-                            >
-                              Save
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button 
-                            size="sm" 
-                            variant="ghost" 
-                            onClick={() => startEditing(product.product_id)}
-                          >
-                            Edit
-                          </Button>
                         )}
                       </td>
                     </tr>
