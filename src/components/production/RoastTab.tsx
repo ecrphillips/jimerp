@@ -508,6 +508,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                         config={config}
                         roastedTotal={roastedTotal}
                         today={today}
+                        allRoastGroups={allRoastGroups}
                         onOpenConfig={openConfigDialog}
                         onEditingChange={(isEditing) => handleEditingChange(group.roast_group, isEditing)}
                       />
@@ -635,6 +636,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                         config={config}
                         roastedTotal={roastedTotal}
                         today={today}
+                        allRoastGroups={allRoastGroups}
                         onOpenConfig={openConfigDialog}
                         onEditingChange={(isEditing) => handleEditingChange(roastGroup, isEditing)}
                       />
