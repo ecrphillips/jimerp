@@ -6,6 +6,7 @@ import { Minus, Plus, Loader2 } from 'lucide-react';
 interface InlinePackingControlProps {
   value: number;
   onCommit: (newValue: number) => Promise<void>;
+  onEditingChange?: (isEditing: boolean) => void;
   disabled?: boolean;
   isComplete?: boolean;
 }
@@ -13,22 +14,41 @@ interface InlinePackingControlProps {
 export function InlinePackingControl({ 
   value, 
   onCommit, 
+  onEditingChange,
   disabled = false,
   isComplete = false 
 }: InlinePackingControlProps) {
   const [localValue, setLocalValue] = useState<string>(value.toString());
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedValue, setLastSavedValue] = useState(value);
+  const [isFocused, setIsFocused] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const isCommittingRef = useRef(false);
+  const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sync local value when external value changes (e.g., after refetch)
   useEffect(() => {
-    if (!isCommittingRef.current) {
+    if (!isCommittingRef.current && !isFocused) {
       setLocalValue(value.toString());
       setLastSavedValue(value);
     }
-  }, [value]);
+  }, [value, isFocused]);
+
+  // Notify parent of editing state changes
+  const notifyEditingChange = useCallback((editing: boolean) => {
+    onEditingChange?.(editing);
+  }, [onEditingChange]);
+
+  // Reset idle timeout - allows re-sort after 1200ms of inactivity
+  const resetIdleTimeout = useCallback(() => {
+    if (idleTimeoutRef.current) {
+      clearTimeout(idleTimeoutRef.current);
+    }
+    idleTimeoutRef.current = setTimeout(() => {
+      // After idle period, allow re-sort even if still focused
+      notifyEditingChange(false);
+    }, 1200);
+  }, [notifyEditingChange]);
 
   const commitValue = useCallback(async (newValue: number) => {
     if (newValue === lastSavedValue) return;
@@ -60,6 +80,9 @@ export function InlinePackingControl({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputValue = e.target.value;
     
+    // Reset idle timeout on any change
+    resetIdleTimeout();
+    
     // Allow empty string while typing
     if (inputValue === '') {
       setLocalValue('');
@@ -73,7 +96,21 @@ export function InlinePackingControl({
     }
   };
 
+  const handleFocus = () => {
+    setIsFocused(true);
+    notifyEditingChange(true);
+    resetIdleTimeout();
+  };
+
   const handleBlur = () => {
+    setIsFocused(false);
+    
+    // Clear idle timeout
+    if (idleTimeoutRef.current) {
+      clearTimeout(idleTimeoutRef.current);
+      idleTimeoutRef.current = null;
+    }
+    
     // Clear any pending debounce
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
@@ -84,6 +121,9 @@ export function InlinePackingControl({
     const finalValue = localValue === '' ? 0 : parseInt(localValue, 10) || 0;
     setLocalValue(finalValue.toString());
     commitValue(finalValue);
+    
+    // Notify editing ended
+    notifyEditingChange(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -92,23 +132,14 @@ export function InlinePackingControl({
     }
   };
 
-  const increment = () => {
+  const handleButtonClick = (delta: number) => {
     const current = parseInt(localValue, 10) || 0;
-    const newValue = current + 1;
+    const newValue = Math.max(0, current + delta);
     setLocalValue(newValue.toString());
     
-    // Clear debounce and commit immediately for button clicks
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-    commitValue(newValue);
-  };
-
-  const decrement = () => {
-    const current = parseInt(localValue, 10) || 0;
-    const newValue = Math.max(0, current - 1);
-    setLocalValue(newValue.toString());
+    // Notify editing started, reset idle
+    notifyEditingChange(true);
+    resetIdleTimeout();
     
     // Clear debounce and commit immediately for button clicks
     if (debounceRef.current) {
@@ -124,6 +155,9 @@ export function InlinePackingControl({
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }
+      if (idleTimeoutRef.current) {
+        clearTimeout(idleTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -131,13 +165,16 @@ export function InlinePackingControl({
   const displayValue = localValue;
 
   return (
-    <div className="flex items-center gap-1 justify-end">
+    <div 
+      className="flex items-center gap-1 justify-end"
+      onClick={(e) => e.stopPropagation()}
+    >
       <Button
         type="button"
         variant="outline"
         size="icon"
         className="h-7 w-7"
-        onClick={decrement}
+        onClick={() => handleButtonClick(-1)}
         disabled={isDisabled || parseInt(localValue, 10) <= 0}
       >
         <Minus className="h-3 w-3" />
@@ -150,6 +187,7 @@ export function InlinePackingControl({
           className={`w-16 h-7 text-center text-sm px-1 ${isComplete ? 'font-medium' : ''}`}
           value={displayValue}
           onChange={handleInputChange}
+          onFocus={handleFocus}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           disabled={isDisabled}
@@ -166,7 +204,7 @@ export function InlinePackingControl({
         variant="outline"
         size="icon"
         className="h-7 w-7"
-        onClick={increment}
+        onClick={() => handleButtonClick(1)}
         disabled={isDisabled}
       >
         <Plus className="h-3 w-3" />
