@@ -441,7 +441,12 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                   return (
                     <React.Fragment key={product.product_id}>
                       <tr 
-                        className={`border-b last:border-0 cursor-pointer hover:bg-muted/50 transition-colors ${product.hasTimeSensitive ? 'bg-destructive/5' : ''} ${isExpanded ? 'bg-muted/30' : ''}`}
+                        className={`border-b last:border-0 cursor-pointer transition-colors 
+                          ${product.hasTimeSensitive ? 'bg-destructive/5' : ''} 
+                          ${isExpanded 
+                            ? 'bg-accent/40 border-l-2 border-l-primary' 
+                            : 'hover:bg-muted/50'
+                          }`}
                         onClick={toggleExpand}
                       >
                         <td className="py-3 w-8">

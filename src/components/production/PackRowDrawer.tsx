@@ -39,8 +39,8 @@ export function PackRowDrawer({
   };
 
   return (
-    <tr className="bg-muted/30">
-      <td colSpan={6} className="py-3 px-4">
+    <tr className="bg-accent/30 border-l-2 border-l-primary">
+      <td colSpan={6} className="py-3 px-4 pl-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
             <span className="text-muted-foreground text-xs block mb-1">SKU</span>
