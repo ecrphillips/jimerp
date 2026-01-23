@@ -22,6 +22,7 @@ interface BoardProduct {
     id: string;
     product_name: string;
     sku: string | null;
+    is_active: boolean;
     client: { name: string } | null;
   } | null;
 }
@@ -47,7 +48,7 @@ export default function BoardManagement() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('source_board_products')
-        .select('id, source, product_id, display_order, is_active, product:products(id, product_name, sku, client:clients(name))')
+        .select('id, source, product_id, display_order, is_active, product:products(id, product_name, sku, is_active, client:clients(name))')
         .eq('source', activeTab as 'MATCHSTICK' | 'FUNK')
         .order('display_order');
 
@@ -231,7 +232,12 @@ export default function BoardManagement() {
                               </Button>
                             </div>
                           </td>
-                          <td className="py-2 font-medium">{bp.product?.product_name ?? 'Unknown'}</td>
+                          <td className="py-2 font-medium">
+                            {bp.product?.product_name ?? 'Unknown'}
+                            {bp.product && !bp.product.is_active && (
+                              <span className="ml-2 text-xs text-muted-foreground">(inactive product)</span>
+                            )}
+                          </td>
                           <td className="py-2">{bp.product?.sku || '—'}</td>
                           <td className="py-2">{bp.product?.client?.name ?? '—'}</td>
                           <td className="py-2 text-center">

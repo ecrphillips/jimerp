@@ -63,6 +63,7 @@ export default function Clients() {
   const queryClient = useQueryClient();
   const [showDialog, setShowDialog] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
   
   // Form state
   const [formName, setFormName] = useState('');
@@ -86,6 +87,16 @@ export default function Clients() {
       return (data ?? []) as Client[];
     },
   });
+
+  // Filter clients based on showInactive toggle
+  const displayedClients = useMemo(() => {
+    if (!clients) return [];
+    return showInactive ? clients : clients.filter(c => c.is_active);
+  }, [clients, showInactive]);
+
+  const inactiveCount = useMemo(() => {
+    return clients?.filter(c => !c.is_active).length ?? 0;
+  }, [clients]);
 
   // Get all existing client codes for uniqueness check
   const existingCodes = useMemo(() => {
@@ -290,18 +301,29 @@ export default function Clients() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle>All Clients</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>All Clients</CardTitle>
+          {inactiveCount > 0 && (
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox
+                checked={showInactive}
+                onCheckedChange={(checked) => setShowInactive(!!checked)}
+              />
+              Show inactive ({inactiveCount})
+            </label>
+          )}
+        </CardHeader>
         <CardContent>
           {isLoading ? (
             <p className="text-muted-foreground">Loading…</p>
           ) : error ? (
             <p className="text-destructive">Failed to load: {error instanceof Error ? error.message : String(error)}</p>
-          ) : (clients ?? []).length === 0 ? (
-            <p className="text-muted-foreground">No clients found.</p>
+          ) : displayedClients.length === 0 ? (
+            <p className="text-muted-foreground">No clients to display.</p>
           ) : (
             <ul className="space-y-3">
-              {(clients ?? []).map((c) => (
-                <li key={c.id} className="flex items-center justify-between border-b pb-2 last:border-0">
+              {displayedClients.map((c) => (
+                <li key={c.id} className={`flex items-center justify-between border-b pb-2 last:border-0 ${!c.is_active ? 'opacity-60' : ''}`}>
                   <div className="flex items-center gap-3">
                     <Badge variant="outline" className="font-mono text-xs">
                       {c.client_code}

@@ -22,6 +22,7 @@ interface BoardProduct {
     product_name: string;
     sku: string | null;
     bag_size_g: number;
+    is_active: boolean;
   } | null;
 }
 
@@ -53,14 +54,16 @@ export default function AndonBoard({ source, title }: AndonBoardProps) {
   const [isDirty, setIsDirty] = useState(false);
 
   // Fetch products configured for this board (cast source for NOSMOKE support)
+  // Only show active board products with active underlying products
   const { data: boardProducts, isLoading: productsLoading } = useQuery({
     queryKey: ['board-products', source],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('source_board_products')
-        .select('id, product_id, display_order, is_active, product:products(id, product_name, sku, bag_size_g)')
+        .select('id, product_id, display_order, is_active, product:products!inner(id, product_name, sku, bag_size_g, is_active)')
         .eq('source', source as 'MATCHSTICK' | 'FUNK')
         .eq('is_active', true)
+        .eq('product.is_active', true)
         .order('display_order');
 
       if (error) throw error;

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { format, addDays } from 'date-fns';
@@ -19,11 +20,23 @@ function getVancouverDate(daysOffset = 0): string {
 }
 
 export default function Production() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const today = getVancouverDate(0);
   const tomorrow = getVancouverDate(1);
 
   const [dateFilter, setDateFilter] = useState<string[]>([today, tomorrow]);
-  const [stationView, setStationView] = useState<StationView>('roast');
+  
+  // Read initial tab from URL param, default to 'roast'
+  const tabFromUrl = searchParams.get('tab') as StationView | null;
+  const [stationView, setStationView] = useState<StationView>(
+    tabFromUrl && ['roast', 'pack', 'ship'].includes(tabFromUrl) ? tabFromUrl : 'roast'
+  );
+
+  // Update URL when tab changes
+  const handleTabChange = (tab: StationView) => {
+    setStationView(tab);
+    setSearchParams({ tab });
+  };
 
   const toggleDateFilter = (date: string) => {
     setDateFilter((prev) => {
@@ -64,7 +77,7 @@ export default function Production() {
       </div>
 
       {/* Station Tabs */}
-      <Tabs value={stationView} onValueChange={(v) => setStationView(v as StationView)} className="mb-4">
+      <Tabs value={stationView} onValueChange={(v) => handleTabChange(v as StationView)} className="mb-4">
         <TabsList className="grid w-full grid-cols-3 max-w-md">
           <TabsTrigger value="roast" className="flex items-center gap-2">
             <Flame className="h-4 w-4" />
