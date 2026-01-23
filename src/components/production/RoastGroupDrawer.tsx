@@ -17,7 +17,8 @@ import {
   Undo2,
   Settings,
   Clock,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -29,6 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { OhShitModal } from './OhShitModal';
 
 type RoasterMachine = 'SAMIAC' | 'LORING';
 type DefaultRoaster = 'SAMIAC' | 'LORING' | 'EITHER';
@@ -63,6 +65,7 @@ interface RoastGroupDrawerProps {
   config: RoastGroupConfig | undefined;
   roastedTotal: number;
   today: string;
+  allRoastGroups: string[];
   onOpenConfig: (roastGroup: string) => void;
   onEditingChange: (isEditing: boolean) => void;
 }
@@ -75,6 +78,7 @@ export function RoastGroupDrawer({
   config,
   roastedTotal,
   today,
+  allRoastGroups,
   onOpenConfig,
   onEditingChange,
 }: RoastGroupDrawerProps) {
@@ -84,6 +88,7 @@ export function RoastGroupDrawer({
   const [isExpanded, setIsExpanded] = useState(false);
   const [undoConfirmBatchId, setUndoConfirmBatchId] = useState<string | null>(null);
   const [deleteConfirmBatchId, setDeleteConfirmBatchId] = useState<string | null>(null);
+  const [ohShitBatch, setOhShitBatch] = useState<RoastBatch | null>(null);
   
   // Edit mode tracking for sort-freeze
   const [isEditingAny, setIsEditingAny] = useState(false);
@@ -179,8 +184,14 @@ export function RoastGroupDrawer({
   });
 
   const markRoastedMutation = useMutation({
-    mutationFn: async ({ id, actual_output_kg }: { id: string; actual_output_kg: number }) => {
-      const { error } = await supabase
+    mutationFn: async ({ id, actual_output_kg, roast_group, target_date }: { 
+      id: string; 
+      actual_output_kg: number;
+      roast_group: string;
+      target_date: string;
+    }) => {
+      // Update batch status
+      const { error: batchError } = await supabase
         .from('roasted_batches')
         .update({ 
           status: 'ROASTED',
@@ -188,11 +199,26 @@ export function RoastGroupDrawer({
         })
         .eq('id', id)
         .eq('status', 'PLANNED');
-      if (error) throw error;
+      if (batchError) throw batchError;
+      
+      // Create WIP ledger entry for roast output
+      const { error: ledgerError } = await supabase
+        .from('wip_ledger')
+        .insert({
+          target_date,
+          roast_group,
+          entry_type: 'ROAST_OUTPUT',
+          delta_kg: actual_output_kg,
+          related_batch_id: id,
+          created_by: user?.id,
+          notes: '',
+        });
+      if (ledgerError) throw ledgerError;
     },
     onSuccess: () => {
       toast.success('Batch marked as roasted');
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['wip-ledger'] });
     },
     onError: (err) => {
       console.error(err);
@@ -201,17 +227,38 @@ export function RoastGroupDrawer({
   });
 
   const revertToPlannedMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
+    mutationFn: async ({ id, actual_output_kg, roast_group, target_date }: { 
+      id: string;
+      actual_output_kg: number;
+      roast_group: string;
+      target_date: string;
+    }) => {
+      // Revert batch status
+      const { error: batchError } = await supabase
         .from('roasted_batches')
         .update({ status: 'PLANNED' })
         .eq('id', id)
         .eq('status', 'ROASTED');
-      if (error) throw error;
+      if (batchError) throw batchError;
+      
+      // Create reversing WIP ledger entry (negative of original output)
+      const { error: ledgerError } = await supabase
+        .from('wip_ledger')
+        .insert({
+          target_date,
+          roast_group,
+          entry_type: 'ADJUSTMENT',
+          delta_kg: -actual_output_kg,
+          related_batch_id: id,
+          created_by: user?.id,
+          notes: 'Reverted batch to planned',
+        });
+      if (ledgerError) throw ledgerError;
     },
     onSuccess: () => {
       toast.success('Batch reverted to planned');
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['wip-ledger'] });
       setUndoConfirmBatchId(null);
     },
     onError: (err) => {
@@ -274,6 +321,18 @@ export function RoastGroupDrawer({
     if (roaster === 'SAMIAC') return 'bg-blue-100 text-blue-800 border-blue-300';
     if (roaster === 'LORING') return 'bg-orange-100 text-orange-800 border-orange-300';
     return 'bg-muted text-muted-foreground';
+  };
+
+  const handleUndoConfirm = () => {
+    const batch = batches.find(b => b.id === undoConfirmBatchId);
+    if (batch) {
+      revertToPlannedMutation.mutate({
+        id: batch.id,
+        actual_output_kg: batch.actual_output_kg,
+        roast_group: batch.roast_group,
+        target_date: batch.target_date,
+      });
+    }
   };
 
   return (
@@ -383,9 +442,15 @@ export function RoastGroupDrawer({
                     <BatchRow
                       key={batch.id}
                       batch={batch}
-                      onMarkRoasted={(id, actual) => markRoastedMutation.mutate({ id, actual_output_kg: actual })}
+                      onMarkRoasted={(id, actual) => markRoastedMutation.mutate({ 
+                        id, 
+                        actual_output_kg: actual,
+                        roast_group: batch.roast_group,
+                        target_date: batch.target_date,
+                      })}
                       onUndo={(id) => setUndoConfirmBatchId(id)}
                       onDelete={(id) => setDeleteConfirmBatchId(id)}
+                      onOhShit={(batch) => setOhShitBatch(batch)}
                       onUpdate={(data) => updateBatchMutation.mutate(data)}
                       onInputFocus={handleInputFocus}
                       onInputBlur={handleInputBlur}
@@ -408,13 +473,13 @@ export function RoastGroupDrawer({
             <AlertDialogTitle>Revert to Planned?</AlertDialogTitle>
             <AlertDialogDescription>
               This will revert the batch to PLANNED status. This may affect inventory and packing availability. 
-              Your actual output kg, cropster ID, and notes will be preserved.
+              Your output kg, cropster ID, and notes will be preserved.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => undoConfirmBatchId && revertToPlannedMutation.mutate(undoConfirmBatchId)}
+              onClick={handleUndoConfirm}
               disabled={revertToPlannedMutation.isPending}
             >
               {revertToPlannedMutation.isPending ? 'Reverting…' : 'Revert to Planned'}
@@ -444,6 +509,18 @@ export function RoastGroupDrawer({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Oh Shit Modal */}
+      {ohShitBatch && (
+        <OhShitModal
+          open={!!ohShitBatch}
+          onOpenChange={(open) => !open && setOhShitBatch(null)}
+          batch={ohShitBatch}
+          allBatches={batches}
+          allRoastGroups={allRoastGroups}
+          today={today}
+        />
+      )}
     </>
   );
 }
@@ -454,6 +531,7 @@ interface BatchRowProps {
   onMarkRoasted: (id: string, actualKg: number) => void;
   onUndo: (id: string) => void;
   onDelete: (id: string) => void;
+  onOhShit: (batch: RoastBatch) => void;
   onUpdate: (data: { id: string; [key: string]: unknown }) => void;
   onInputFocus: () => void;
   onInputBlur: () => void;
@@ -462,11 +540,26 @@ interface BatchRowProps {
   getRoasterBadgeColor: (roaster: RoasterMachine | null) => string;
 }
 
+interface RoastBatch {
+  id: string;
+  roast_group: string;
+  target_date: string;
+  planned_output_kg: number | null;
+  actual_output_kg: number;
+  status: 'PLANNED' | 'ROASTED';
+  notes: string | null;
+  assigned_roaster: RoasterMachine | null;
+  cropster_batch_id: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 function BatchRow({
   batch,
   onMarkRoasted,
   onUndo,
   onDelete,
+  onOhShit,
   onUpdate,
   onInputFocus,
   onInputBlur,
@@ -569,9 +662,9 @@ function BatchRow({
         )}
       </div>
 
-      {/* Planned kg */}
+      {/* Inbound (green) kg - renamed from "planned" */}
       <div className="flex items-center gap-1">
-        <span className="text-xs text-muted-foreground">Plan:</span>
+        <span className="text-xs text-muted-foreground">Inbound:</span>
         <Input
           type="number"
           step="0.1"
@@ -585,9 +678,9 @@ function BatchRow({
         <span className="text-xs text-muted-foreground">kg</span>
       </div>
 
-      {/* Actual output kg */}
+      {/* Output (roasted) kg - renamed from "actual" */}
       <div className="flex items-center gap-1">
-        <span className="text-xs text-muted-foreground">Actual:</span>
+        <span className="text-xs text-muted-foreground">Output:</span>
         <Input
           type="number"
           step="0.1"
@@ -652,6 +745,17 @@ function BatchRow({
 
       {/* Actions */}
       <div className="flex items-center gap-1 ml-auto">
+        {/* Oh Shit Button - always visible */}
+        <Button 
+          size="sm" 
+          variant="ghost"
+          className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+          onClick={() => onOhShit(batch)}
+          title="Unexpected issue? Tap here."
+        >
+          <AlertTriangle className="h-4 w-4" />
+        </Button>
+        
         {isPlanned && (
           <>
             <Button 

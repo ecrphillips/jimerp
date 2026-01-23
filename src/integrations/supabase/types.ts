@@ -575,6 +575,56 @@ export type Database = {
         }
         Relationships: []
       }
+      roast_exception_events: {
+        Row: {
+          batch_id: string | null
+          created_at: string
+          created_by: string | null
+          delta_output_kg: number
+          delta_wip_kg: number
+          event_type: Database["public"]["Enums"]["exception_event_type"]
+          id: string
+          metadata: Json
+          notes: string
+          roast_group: string
+          target_date: string
+        }
+        Insert: {
+          batch_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          delta_output_kg?: number
+          delta_wip_kg?: number
+          event_type: Database["public"]["Enums"]["exception_event_type"]
+          id?: string
+          metadata?: Json
+          notes?: string
+          roast_group: string
+          target_date: string
+        }
+        Update: {
+          batch_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          delta_output_kg?: number
+          delta_wip_kg?: number
+          event_type?: Database["public"]["Enums"]["exception_event_type"]
+          id?: string
+          metadata?: Json
+          notes?: string
+          roast_group?: string
+          target_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roast_exception_events_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "roasted_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       roast_groups: {
         Row: {
           created_at: string
@@ -723,6 +773,63 @@ export type Database = {
           },
         ]
       }
+      wip_ledger: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          delta_kg: number
+          entry_type: Database["public"]["Enums"]["wip_entry_type"]
+          id: string
+          metadata: Json
+          notes: string
+          related_batch_id: string | null
+          related_product_id: string | null
+          roast_group: string
+          target_date: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          delta_kg: number
+          entry_type: Database["public"]["Enums"]["wip_entry_type"]
+          id?: string
+          metadata?: Json
+          notes?: string
+          related_batch_id?: string | null
+          related_product_id?: string | null
+          roast_group: string
+          target_date: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          delta_kg?: number
+          entry_type?: Database["public"]["Enums"]["wip_entry_type"]
+          id?: string
+          metadata?: Json
+          notes?: string
+          related_batch_id?: string | null
+          related_product_id?: string | null
+          roast_group?: string
+          target_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wip_ledger_related_batch_id_fkey"
+            columns: ["related_batch_id"]
+            isOneToOne: false
+            referencedRelation: "roasted_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wip_ledger_related_product_id_fkey"
+            columns: ["related_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -746,6 +853,13 @@ export type Database = {
       board_source: "MATCHSTICK" | "FUNK" | "NOSMOKE"
       default_roaster: "SAMIAC" | "LORING" | "EITHER"
       delivery_method: "PICKUP" | "DELIVERY" | "COURIER"
+      exception_event_type:
+        | "DESTONER_SPILL"
+        | "BIN_MIX_SAME"
+        | "BIN_MIX_DIFFERENT"
+        | "WIP_ADJUSTMENT"
+        | "DECONSTRUCT"
+        | "OTHER"
       grind_option: "WHOLE_BEAN" | "ESPRESSO" | "FILTER"
       order_status:
         | "DRAFT"
@@ -777,6 +891,15 @@ export type Database = {
       roasted_batch_status: "PLANNED" | "ROASTED"
       roaster_machine: "SAMIAC" | "LORING"
       ship_priority: "NORMAL" | "TIME_SENSITIVE"
+      wip_entry_type:
+        | "ROAST_OUTPUT"
+        | "PACK_CONSUME"
+        | "LOSS"
+        | "ADJUSTMENT"
+        | "REALLOCATE_IN"
+        | "REALLOCATE_OUT"
+        | "DECONSTRUCT_IN"
+        | "DECONSTRUCT_OUT"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -908,6 +1031,14 @@ export const Constants = {
       board_source: ["MATCHSTICK", "FUNK", "NOSMOKE"],
       default_roaster: ["SAMIAC", "LORING", "EITHER"],
       delivery_method: ["PICKUP", "DELIVERY", "COURIER"],
+      exception_event_type: [
+        "DESTONER_SPILL",
+        "BIN_MIX_SAME",
+        "BIN_MIX_DIFFERENT",
+        "WIP_ADJUSTMENT",
+        "DECONSTRUCT",
+        "OTHER",
+      ],
       grind_option: ["WHOLE_BEAN", "ESPRESSO", "FILTER"],
       order_status: [
         "DRAFT",
@@ -936,6 +1067,16 @@ export const Constants = {
       roasted_batch_status: ["PLANNED", "ROASTED"],
       roaster_machine: ["SAMIAC", "LORING"],
       ship_priority: ["NORMAL", "TIME_SENSITIVE"],
+      wip_entry_type: [
+        "ROAST_OUTPUT",
+        "PACK_CONSUME",
+        "LOSS",
+        "ADJUSTMENT",
+        "REALLOCATE_IN",
+        "REALLOCATE_OUT",
+        "DECONSTRUCT_IN",
+        "DECONSTRUCT_OUT",
+      ],
     },
   },
 } as const
