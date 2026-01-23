@@ -426,8 +426,14 @@ export default function OrderDetail() {
       <div className="page-header flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link to="/orders">
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" title="Back to Orders">
               <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <Link to="/production?tab=ship">
+            <Button variant="outline" size="sm" className="gap-1">
+              <Truck className="h-4 w-4" />
+              Back to Production
             </Button>
           </Link>
           <h1 className="page-title">{order.order_number}</h1>
@@ -530,21 +536,25 @@ export default function OrderDetail() {
             </div>
 
             {/* Pack Status - Derived from packing_runs */}
-            <div className="flex items-center gap-2">
-              <Package className="h-4 w-4 text-muted-foreground" />
-              <Label className="text-sm font-medium">Pack Status</Label>
-              {isDerivedPackComplete ? (
-                <Badge className="bg-green-600 text-xs">
-                  <Check className="h-3 w-3 mr-1" />
-                  Complete
-                </Badge>
-              ) : (
-                <Badge variant="secondary" className="text-xs">
-                  <AlertTriangle className="h-3 w-3 mr-1" />
-                  Incomplete
-                </Badge>
-              )}
-              <span className="text-xs text-muted-foreground">(from run sheet)</span>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm font-medium">Pack Status</Label>
+                {isDerivedPackComplete ? (
+                  <Badge className="bg-green-600 text-xs">
+                    <Check className="h-3 w-3 mr-1" />
+                    Complete
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-xs">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    Incomplete
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground ml-6">
+                Pack completion is derived from Pack tab (packing_runs). This is read-only.
+              </p>
             </div>
 
             {/* Shipped / Ready - Manual checkbox */}

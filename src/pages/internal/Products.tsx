@@ -45,6 +45,7 @@ export default function Products() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
 
   // Form state
   const [productName, setProductName] = useState('');
@@ -72,6 +73,16 @@ export default function Products() {
       return (data ?? []) as Product[];
     },
   });
+
+  // Filter products based on showInactive toggle
+  const displayedProducts = useMemo(() => {
+    if (!products) return [];
+    return showInactive ? products : products.filter(p => p.is_active);
+  }, [products, showInactive]);
+
+  const inactiveCount = useMemo(() => {
+    return products?.filter(p => !p.is_active).length ?? 0;
+  }, [products]);
 
   const { data: clients } = useQuery({
     queryKey: ['all-clients'],
@@ -278,12 +289,23 @@ export default function Products() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle>All Products</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>All Products</CardTitle>
+          {inactiveCount > 0 && (
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox
+                checked={showInactive}
+                onCheckedChange={(checked) => setShowInactive(!!checked)}
+              />
+              Show inactive ({inactiveCount})
+            </label>
+          )}
+        </CardHeader>
         <CardContent>
           {isLoading ? (
             <p className="text-muted-foreground">Loading…</p>
-          ) : !products || products.length === 0 ? (
-            <p className="text-muted-foreground">No products yet.</p>
+          ) : displayedProducts.length === 0 ? (
+            <p className="text-muted-foreground">No products to display.</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
@@ -300,11 +322,11 @@ export default function Products() {
                 </tr>
               </thead>
               <tbody>
-                {products.map((p) => {
+                {displayedProducts.map((p) => {
                   const price = currentPrices[p.id];
                   const hasPrice = p.id in currentPrices;
                   return (
-                    <tr key={p.id} className="border-b last:border-0">
+                    <tr key={p.id} className={`border-b last:border-0 ${!p.is_active ? 'opacity-60' : ''}`}>
                       <td className="py-2 font-medium">{p.product_name}</td>
                       <td className="py-2">{p.client?.name ?? '—'}</td>
                       <td className="py-2">{p.sku || '—'}</td>
