@@ -721,11 +721,11 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                             <div className="flex items-center gap-2">
                               {/* Inline roaster selector */}
                               <Select
-                                value={batch.assigned_roaster ?? ''}
+                                value={batch.assigned_roaster ?? 'UNASSIGNED'}
                                 onValueChange={(val) => {
                                   quickUpdateRoasterMutation.mutate({
                                     id: batch.id,
-                                    assigned_roaster: val === '' ? null : val as RoasterMachine,
+                                    assigned_roaster: val === 'UNASSIGNED' ? null : val as RoasterMachine,
                                   });
                                 }}
                               >
@@ -733,7 +733,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                                   <SelectValue placeholder="Roaster" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="">Unassigned</SelectItem>
+                                  <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
                                   <SelectItem value="SAMIAC">SAMIAC</SelectItem>
                                   <SelectItem value="LORING">LORING</SelectItem>
                                 </SelectContent>
@@ -821,11 +821,11 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                               </div>
                               <div className="flex items-center gap-2">
                                 <Select
-                                  value={batch.assigned_roaster ?? ''}
+                                  value={batch.assigned_roaster ?? 'UNASSIGNED'}
                                   onValueChange={(val) => {
                                     quickUpdateRoasterMutation.mutate({
                                       id: batch.id,
-                                      assigned_roaster: val === '' ? null : val as RoasterMachine,
+                                      assigned_roaster: val === 'UNASSIGNED' ? null : val as RoasterMachine,
                                     });
                                   }}
                                 >
@@ -833,7 +833,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                                     <SelectValue placeholder="Roaster" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="">Unassigned</SelectItem>
+                                    <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
                                     <SelectItem value="SAMIAC">SAMIAC</SelectItem>
                                     <SelectItem value="LORING">LORING</SelectItem>
                                   </SelectContent>
@@ -870,14 +870,14 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
             <div>
               <Label htmlFor="assignedRoaster">Assigned Roaster</Label>
               <Select
-                value={assignedRoaster}
-                onValueChange={(val) => setAssignedRoaster(val as RoasterMachine | '')}
+                value={assignedRoaster || 'UNASSIGNED'}
+                onValueChange={(val) => setAssignedRoaster(val === 'UNASSIGNED' ? '' : val as RoasterMachine)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select roaster" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Unassigned</SelectItem>
+                  <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
                   <SelectItem value="SAMIAC">SAMIAC</SelectItem>
                   <SelectItem value="LORING">LORING</SelectItem>
                 </SelectContent>
