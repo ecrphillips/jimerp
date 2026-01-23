@@ -624,17 +624,17 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
                 const hasOpsNotes = !!order.internal_ops_notes;
                 const isShippable = order.allLineItemsPacked;
                 
-                return (
-                  <div
-                    key={order.id}
-                    className={`border rounded-lg p-4 transition-colors ${
-                      isShippable 
-                        ? 'border-green-400 bg-green-50/50' 
-                        : isTimeSensitive 
-                          ? 'border-destructive/30 bg-destructive/5' 
-                          : 'border-border'
-                    }`}
-                  >
+                  return (
+                    <div
+                      key={order.id}
+                      className={`border rounded-lg p-4 transition-colors ${
+                        isShippable 
+                          ? 'border-green-500 bg-green-50 ring-2 ring-green-200 shadow-sm' 
+                          : isTimeSensitive 
+                            ? 'border-destructive/30 bg-destructive/5' 
+                            : 'border-muted bg-muted/20 opacity-80'
+                      }`}
+                    >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 flex-wrap">
@@ -695,11 +695,19 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
                           </span>
                           
                           {/* Missing metrics for non-shippable orders */}
-                          {!isShippable && (
+                          {!isShippable && order.missingSkuCount === 1 && order.missingUnitsTotal <= 5 && (
                             <>
                               <span>•</span>
-                              <span className="text-amber-600 font-medium">
-                                Missing: {order.missingSkuCount} SKU{order.missingSkuCount !== 1 ? 's' : ''}, {order.missingUnitsTotal} unit{order.missingUnitsTotal !== 1 ? 's' : ''}
+                              <span className="text-blue-600 font-medium">
+                                Almost ready: 1 SKU, {order.missingUnitsTotal} unit{order.missingUnitsTotal !== 1 ? 's' : ''} short
+                              </span>
+                            </>
+                          )}
+                          {!isShippable && !(order.missingSkuCount === 1 && order.missingUnitsTotal <= 5) && (
+                            <>
+                              <span>•</span>
+                              <span className="text-muted-foreground">
+                                Needs: {order.missingSkuCount} SKU{order.missingSkuCount !== 1 ? 's' : ''}, {order.missingUnitsTotal} unit{order.missingUnitsTotal !== 1 ? 's' : ''}
                               </span>
                             </>
                           )}

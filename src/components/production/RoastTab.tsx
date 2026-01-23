@@ -92,13 +92,14 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     return map;
   }, [roastGroupsConfig]);
 
-  // Fetch products with roast_group
+  // Fetch products with roast_group (only active)
   const { data: products } = useQuery({
     queryKey: ['products-with-roast-group'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
         .select('id, product_name, roast_group, bag_size_g')
+        .eq('is_active', true)
         .not('roast_group', 'is', null);
       if (error) throw error;
       return data ?? [];
