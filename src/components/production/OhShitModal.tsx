@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -24,6 +25,7 @@ interface OhShitModalProps {
     planned_output_kg: number | null;
     actual_output_kg: number;
     status: 'PLANNED' | 'ROASTED';
+    cropster_batch_id?: string | null;
   };
   allBatches: {
     id: string;
@@ -31,36 +33,54 @@ interface OhShitModalProps {
     target_date: string;
     actual_output_kg: number;
     status: 'PLANNED' | 'ROASTED';
+    planned_output_kg?: number | null;
+    cropster_batch_id?: string | null;
   }[];
   allRoastGroups: string[];
   today: string;
 }
 
-type Step = 'choose' | 'destoner' | 'bin-same' | 'bin-different-select' | 'bin-different-action' | 'adjust' | 'deconstruct' | 'other' | 'confirm';
-type EventType = 'DESTONER_SPILL' | 'BIN_MIX_SAME' | 'BIN_MIX_DIFFERENT' | 'WIP_ADJUSTMENT' | 'DECONSTRUCT' | 'OTHER';
+type Step = 
+  | 'choose' 
+  | 'blend-check' 
+  | 'blend-same' 
+  | 'blend-different' 
+  | 'spill' 
+  | 'contamination' 
+  | 'adjust' 
+  | 'other' 
+  | 'confirm';
+
+type EventType = 'BIN_MIX_SAME' | 'BIN_MIX_DIFFERENT' | 'DESTONER_SPILL' | 'WIP_ADJUSTMENT' | 'OTHER';
 
 interface FlowData {
   eventType: EventType | null;
-  // Destoner flow
-  outputKg: string;
-  // Bin mix same
-  prevBatchKg: string;
-  newBatchKg: string;
-  // Bin mix different
-  contaminatedBatchId: string | null;
-  contaminatedKg: string;
-  binMixAction: 'writeoff' | 'reclassify' | '';
-  destinationRoastGroup: string;
+  // Blend same coffee
+  batch1OutputKg: string;
+  batch1CropsterId: string;
+  batch1Notes: string;
+  batch2OutputKg: string;
+  batch2CropsterId: string;
+  batch2Notes: string;
+  affectedBatchId: string | null;
+  // Blend different coffee
+  blendedOutputKg: string;
+  salvageRoastGroup: string;
+  blendCropsterId: string;
+  // Spill
+  recoveredKg: string;
+  estimatedLossKg: string;
   // Adjust WIP
   adjustRoastGroup: string;
   adjustKg: string;
   adjustReason: 'end_of_bin' | 'packing_loss' | 'scale_correction' | '';
-  // Deconstruct
-  deconstructProductId: string;
-  deconstructUnits: string;
+  // Other
+  otherOutputKg: string;
   // Common
   notes: string;
 }
+
+const SALVAGE_ROAST_GROUP = 'SALVAGE_BLEND';
 
 export function OhShitModal({
   open,
@@ -76,53 +96,23 @@ export function OhShitModal({
   const [step, setStep] = useState<Step>('choose');
   const [flowData, setFlowData] = useState<FlowData>({
     eventType: null,
-    outputKg: '',
-    prevBatchKg: '',
-    newBatchKg: '',
-    contaminatedBatchId: null,
-    contaminatedKg: '',
-    binMixAction: '',
-    destinationRoastGroup: '',
+    batch1OutputKg: '',
+    batch1CropsterId: '',
+    batch1Notes: '',
+    batch2OutputKg: '',
+    batch2CropsterId: '',
+    batch2Notes: '',
+    affectedBatchId: null,
+    blendedOutputKg: '',
+    salvageRoastGroup: SALVAGE_ROAST_GROUP,
+    blendCropsterId: '',
+    recoveredKg: '',
+    estimatedLossKg: '',
     adjustRoastGroup: batch.roast_group,
     adjustKg: '',
     adjustReason: '',
-    deconstructProductId: '',
-    deconstructUnits: '',
+    otherOutputKg: '',
     notes: '',
-  });
-
-  // Fetch products with packing runs for deconstruct
-  const { data: productsWithPacking } = useQuery({
-    queryKey: ['products-with-packing-for-deconstruct', today],
-    queryFn: async () => {
-      const { data: packingRuns, error: packingError } = await supabase
-        .from('packing_runs')
-        .select('product_id, units_packed, kg_consumed')
-        .eq('target_date', today)
-        .gt('units_packed', 0);
-      
-      if (packingError) throw packingError;
-      if (!packingRuns?.length) return [];
-      
-      const productIds = packingRuns.map(pr => pr.product_id);
-      const { data: products, error: productError } = await supabase
-        .from('products')
-        .select('id, product_name, bag_size_g, roast_group')
-        .in('id', productIds);
-      
-      if (productError) throw productError;
-      
-      return packingRuns.map(pr => {
-        const product = products?.find(p => p.id === pr.product_id);
-        return {
-          ...pr,
-          product_name: product?.product_name ?? 'Unknown',
-          bag_size_g: product?.bag_size_g ?? 0,
-          roast_group: product?.roast_group ?? null,
-        };
-      });
-    },
-    enabled: open,
   });
 
   // Reset state when modal opens
@@ -131,44 +121,45 @@ export function OhShitModal({
       setStep('choose');
       setFlowData({
         eventType: null,
-        outputKg: batch.actual_output_kg > 0 ? batch.actual_output_kg.toString() : '',
-        prevBatchKg: '',
-        newBatchKg: '',
-        contaminatedBatchId: null,
-        contaminatedKg: '',
-        binMixAction: '',
-        destinationRoastGroup: '',
+        batch1OutputKg: '',
+        batch1CropsterId: batch.cropster_batch_id ?? '',
+        batch1Notes: '',
+        batch2OutputKg: '',
+        batch2CropsterId: '',
+        batch2Notes: '',
+        affectedBatchId: null,
+        blendedOutputKg: '',
+        salvageRoastGroup: SALVAGE_ROAST_GROUP,
+        blendCropsterId: '',
+        recoveredKg: batch.actual_output_kg > 0 ? batch.actual_output_kg.toString() : '',
+        estimatedLossKg: '',
         adjustRoastGroup: batch.roast_group,
         adjustKg: '',
         adjustReason: '',
-        deconstructProductId: '',
-        deconstructUnits: '',
+        otherOutputKg: '',
         notes: '',
       });
     }
   }, [open, batch]);
 
-  // Get recent ROASTED batches for bin mix selection (same day, same roaster typically)
+  // Get recent batches for blend selection (same day, excluding current)
   const recentBatches = useMemo(() => {
     return allBatches.filter(b => 
-      b.status === 'ROASTED' && 
       b.id !== batch.id &&
       b.target_date === batch.target_date
     );
   }, [allBatches, batch]);
 
-  // Calculate yield for destoner flow
-  const inboundKg = batch.planned_output_kg ?? 0;
-  const outputKg = parseFloat(flowData.outputKg) || 0;
-  const yieldPercent = inboundKg > 0 ? (outputKg / inboundKg) * 100 : 0;
-  const isNormalYield = yieldPercent >= 80 && yieldPercent <= 90;
-  const needsNotesForYield = !isNormalYield && flowData.notes.trim() === '';
+  // Get batches that could have been in the destoner (same roast group for "same coffee")
+  const sameCoffeeBatches = useMemo(() => {
+    return recentBatches.filter(b => b.roast_group === batch.roast_group);
+  }, [recentBatches, batch.roast_group]);
 
-  // Calculate deconstruct kg
-  const deconstructProduct = productsWithPacking?.find(p => p.product_id === flowData.deconstructProductId);
-  const deconstructKg = deconstructProduct 
-    ? (parseInt(flowData.deconstructUnits) || 0) * (deconstructProduct.bag_size_g / 1000)
-    : 0;
+  // Calculate yield for spill flow
+  const inboundKg = batch.planned_output_kg ?? 0;
+  const recoveredKg = parseFloat(flowData.recoveredKg) || 0;
+  const yieldPercent = inboundKg > 0 ? (recoveredKg / inboundKg) * 100 : 0;
+  const isNormalYield = yieldPercent >= 80 && yieldPercent <= 90;
 
   // Mutation for applying changes
   const applyChangesMutation = useMutation({
@@ -176,19 +167,232 @@ export function OhShitModal({
       const userId = user?.id;
       
       switch (flowData.eventType) {
+        case 'BIN_MIX_SAME': {
+          const batch1Kg = parseFloat(flowData.batch1OutputKg) || 0;
+          const batch2Kg = parseFloat(flowData.batch2OutputKg) || 0;
+          const affectedBatch = recentBatches.find(b => b.id === flowData.affectedBatchId);
+          
+          // Update current batch (batch 2 - the one just released)
+          const { error: batch2Error } = await supabase
+            .from('roasted_batches')
+            .update({ 
+              status: 'ROASTED',
+              actual_output_kg: batch2Kg,
+              cropster_batch_id: flowData.batch2CropsterId || null,
+              notes: flowData.batch2Notes || null,
+            })
+            .eq('id', batch.id);
+          if (batch2Error) throw batch2Error;
+
+          // Create WIP entry for batch 2 if it was PLANNED
+          if (batch.status === 'PLANNED') {
+            const { error: ledgerError } = await supabase
+              .from('wip_ledger')
+              .insert({
+                target_date: batch.target_date,
+                roast_group: batch.roast_group,
+                entry_type: 'ROAST_OUTPUT',
+                delta_kg: batch2Kg,
+                related_batch_id: batch.id,
+                created_by: userId,
+                notes: 'Batch output after destoner blend reconciliation',
+              });
+            if (ledgerError) throw ledgerError;
+          } else {
+            // Adjust WIP if already roasted
+            const deltaWip = batch2Kg - batch.actual_output_kg;
+            if (deltaWip !== 0) {
+              const { error: ledgerError } = await supabase
+                .from('wip_ledger')
+                .insert({
+                  target_date: batch.target_date,
+                  roast_group: batch.roast_group,
+                  entry_type: 'ADJUSTMENT',
+                  delta_kg: deltaWip,
+                  related_batch_id: batch.id,
+                  created_by: userId,
+                  notes: 'Blend reconciliation adjustment',
+                });
+              if (ledgerError) throw ledgerError;
+            }
+          }
+
+          // Update the affected batch (batch 1 - the previous one still in destoner)
+          if (affectedBatch) {
+            const previousOutput = affectedBatch.actual_output_kg;
+            const { error: batch1Error } = await supabase
+              .from('roasted_batches')
+              .update({ 
+                actual_output_kg: batch1Kg,
+                cropster_batch_id: flowData.batch1CropsterId || null,
+                notes: flowData.batch1Notes || null,
+              })
+              .eq('id', affectedBatch.id);
+            if (batch1Error) throw batch1Error;
+
+            // Adjust WIP for batch 1
+            const batch1Delta = batch1Kg - previousOutput;
+            if (batch1Delta !== 0) {
+              const { error: ledgerError } = await supabase
+                .from('wip_ledger')
+                .insert({
+                  target_date: batch.target_date,
+                  roast_group: affectedBatch.roast_group,
+                  entry_type: 'ADJUSTMENT',
+                  delta_kg: batch1Delta,
+                  related_batch_id: affectedBatch.id,
+                  created_by: userId,
+                  notes: 'Blend reconciliation adjustment',
+                });
+              if (ledgerError) throw ledgerError;
+            }
+          }
+          
+          // Create exception event
+          const { error: eventError } = await supabase
+            .from('roast_exception_events')
+            .insert({
+              target_date: batch.target_date,
+              roast_group: batch.roast_group,
+              batch_id: batch.id,
+              event_type: 'BIN_MIX_SAME',
+              delta_wip_kg: 0,
+              notes: flowData.notes || 'Two batches of same coffee blended in destoner',
+              created_by: userId,
+              metadata: {
+                batch1_id: flowData.affectedBatchId,
+                batch1_output_kg: batch1Kg,
+                batch2_id: batch.id,
+                batch2_output_kg: batch2Kg,
+              },
+            });
+          if (eventError) throw eventError;
+          break;
+        }
+        
+        case 'BIN_MIX_DIFFERENT': {
+          const blendedKg = parseFloat(flowData.blendedOutputKg) || 0;
+          const affectedBatch = recentBatches.find(b => b.id === flowData.affectedBatchId);
+          
+          // Void current batch output (set to 0)
+          const { error: voidCurrentError } = await supabase
+            .from('roasted_batches')
+            .update({ 
+              status: 'ROASTED',
+              actual_output_kg: 0,
+              notes: `[VOIDED - BLEND] Output moved to salvage: ${flowData.notes}`,
+            })
+            .eq('id', batch.id);
+          if (voidCurrentError) throw voidCurrentError;
+
+          // If batch was PLANNED, don't add any WIP (output is 0)
+          // If batch was already ROASTED, subtract its previous output
+          if (batch.status === 'ROASTED' && batch.actual_output_kg > 0) {
+            const { error: ledgerError } = await supabase
+              .from('wip_ledger')
+              .insert({
+                target_date: batch.target_date,
+                roast_group: batch.roast_group,
+                entry_type: 'REALLOCATE_OUT',
+                delta_kg: -batch.actual_output_kg,
+                related_batch_id: batch.id,
+                created_by: userId,
+                notes: 'Output moved to salvage blend',
+              });
+            if (ledgerError) throw ledgerError;
+          }
+
+          // Void affected batch output if selected
+          if (affectedBatch && affectedBatch.actual_output_kg > 0) {
+            const { error: voidAffectedError } = await supabase
+              .from('roasted_batches')
+              .update({ 
+                actual_output_kg: 0,
+                notes: `[VOIDED - BLEND] Output moved to salvage: ${flowData.notes}`,
+              })
+              .eq('id', affectedBatch.id);
+            if (voidAffectedError) throw voidAffectedError;
+
+            // Remove WIP from affected batch's roast group
+            const { error: ledgerError } = await supabase
+              .from('wip_ledger')
+              .insert({
+                target_date: batch.target_date,
+                roast_group: affectedBatch.roast_group,
+                entry_type: 'REALLOCATE_OUT',
+                delta_kg: -affectedBatch.actual_output_kg,
+                related_batch_id: affectedBatch.id,
+                created_by: userId,
+                notes: 'Output moved to salvage blend',
+              });
+            if (ledgerError) throw ledgerError;
+          }
+
+          // Create salvage batch
+          const { error: salvageError } = await supabase
+            .from('roasted_batches')
+            .insert({
+              target_date: batch.target_date,
+              roast_group: flowData.salvageRoastGroup,
+              status: 'ROASTED',
+              actual_output_kg: blendedKg,
+              planned_output_kg: blendedKg,
+              cropster_batch_id: flowData.blendCropsterId || null,
+              notes: `Salvage blend: ${flowData.notes}`,
+              created_by: userId,
+            });
+          if (salvageError) throw salvageError;
+
+          // Add WIP for salvage
+          const { error: salvageLedgerError } = await supabase
+            .from('wip_ledger')
+            .insert({
+              target_date: batch.target_date,
+              roast_group: flowData.salvageRoastGroup,
+              entry_type: 'REALLOCATE_IN',
+              delta_kg: blendedKg,
+              created_by: userId,
+              notes: `Salvage blend from contamination: ${flowData.notes}`,
+            });
+          if (salvageLedgerError) throw salvageLedgerError;
+          
+          // Create exception event
+          const { error: eventError } = await supabase
+            .from('roast_exception_events')
+            .insert({
+              target_date: batch.target_date,
+              roast_group: batch.roast_group,
+              batch_id: batch.id,
+              event_type: 'BIN_MIX_DIFFERENT',
+              delta_wip_kg: 0,
+              notes: flowData.notes,
+              created_by: userId,
+              metadata: {
+                current_batch_id: batch.id,
+                current_batch_roast_group: batch.roast_group,
+                affected_batch_id: flowData.affectedBatchId,
+                affected_batch_roast_group: affectedBatch?.roast_group,
+                blended_output_kg: blendedKg,
+                salvage_roast_group: flowData.salvageRoastGroup,
+              },
+            });
+          if (eventError) throw eventError;
+          break;
+        }
+        
         case 'DESTONER_SPILL': {
-          const newOutput = parseFloat(flowData.outputKg) || 0;
+          const recovered = parseFloat(flowData.recoveredKg) || 0;
           const previousOutput = batch.actual_output_kg;
-          const deltaWip = newOutput - previousOutput;
+          const deltaWip = recovered - previousOutput;
           
           // Update batch
           if (batch.status === 'PLANNED') {
-            // Mark as roasted with the output
             const { error: batchError } = await supabase
               .from('roasted_batches')
               .update({ 
                 status: 'ROASTED',
-                actual_output_kg: newOutput 
+                actual_output_kg: recovered,
+                notes: `[SPILL] ${flowData.notes}`,
               })
               .eq('id', batch.id);
             if (batchError) throw batchError;
@@ -200,17 +404,20 @@ export function OhShitModal({
                 target_date: batch.target_date,
                 roast_group: batch.roast_group,
                 entry_type: 'ROAST_OUTPUT',
-                delta_kg: newOutput,
+                delta_kg: recovered,
                 related_batch_id: batch.id,
                 created_by: userId,
-                notes: flowData.notes,
+                notes: `Spill recovery: ${flowData.notes}`,
               });
             if (ledgerError) throw ledgerError;
           } else {
             // Already roasted - update output and adjust WIP
             const { error: batchError } = await supabase
               .from('roasted_batches')
-              .update({ actual_output_kg: newOutput })
+              .update({ 
+                actual_output_kg: recovered,
+                notes: `[SPILL] ${flowData.notes}`,
+              })
               .eq('id', batch.id);
             if (batchError) throw batchError;
             
@@ -220,11 +427,11 @@ export function OhShitModal({
                 .insert({
                   target_date: batch.target_date,
                   roast_group: batch.roast_group,
-                  entry_type: 'ADJUSTMENT',
+                  entry_type: 'LOSS',
                   delta_kg: deltaWip,
                   related_batch_id: batch.id,
                   created_by: userId,
-                  notes: `Destoner spill adjustment: ${flowData.notes}`,
+                  notes: `Spill loss: ${flowData.notes}`,
                 });
               if (ledgerError) throw ledgerError;
             }
@@ -243,88 +450,9 @@ export function OhShitModal({
               created_by: userId,
               metadata: {
                 inbound_kg: inboundKg,
-                output_kg: newOutput,
+                recovered_kg: recovered,
+                estimated_loss_kg: parseFloat(flowData.estimatedLossKg) || null,
                 yield_percent: yieldPercent.toFixed(1),
-              },
-            });
-          if (eventError) throw eventError;
-          break;
-        }
-        
-        case 'BIN_MIX_SAME': {
-          const prevKg = parseFloat(flowData.prevBatchKg) || 0;
-          const newKg = parseFloat(flowData.newBatchKg) || 0;
-          
-          // Create exception event
-          const { error: eventError } = await supabase
-            .from('roast_exception_events')
-            .insert({
-              target_date: batch.target_date,
-              roast_group: batch.roast_group,
-              batch_id: batch.id,
-              event_type: 'BIN_MIX_SAME',
-              delta_wip_kg: 0, // No net change
-              notes: flowData.notes,
-              created_by: userId,
-              metadata: {
-                prev_batch_kg: prevKg,
-                new_batch_kg: newKg,
-              },
-            });
-          if (eventError) throw eventError;
-          break;
-        }
-        
-        case 'BIN_MIX_DIFFERENT': {
-          const contaminatedKg = parseFloat(flowData.contaminatedKg) || 0;
-          const sourceBatch = recentBatches.find(b => b.id === flowData.contaminatedBatchId);
-          const sourceGroup = sourceBatch?.roast_group ?? batch.roast_group;
-          
-          // Remove from source roast group
-          const { error: lossError } = await supabase
-            .from('wip_ledger')
-            .insert({
-              target_date: batch.target_date,
-              roast_group: sourceGroup,
-              entry_type: flowData.binMixAction === 'writeoff' ? 'LOSS' : 'REALLOCATE_OUT',
-              delta_kg: -contaminatedKg,
-              related_batch_id: flowData.contaminatedBatchId,
-              created_by: userId,
-              notes: flowData.notes,
-            });
-          if (lossError) throw lossError;
-          
-          // If reclassifying, add to destination
-          if (flowData.binMixAction === 'reclassify' && flowData.destinationRoastGroup) {
-            const { error: reallocError } = await supabase
-              .from('wip_ledger')
-              .insert({
-                target_date: batch.target_date,
-                roast_group: flowData.destinationRoastGroup,
-                entry_type: 'REALLOCATE_IN',
-                delta_kg: contaminatedKg,
-                created_by: userId,
-                notes: `Reclassified from ${sourceGroup}: ${flowData.notes}`,
-              });
-            if (reallocError) throw reallocError;
-          }
-          
-          // Create exception event
-          const { error: eventError } = await supabase
-            .from('roast_exception_events')
-            .insert({
-              target_date: batch.target_date,
-              roast_group: sourceGroup,
-              batch_id: flowData.contaminatedBatchId,
-              event_type: 'BIN_MIX_DIFFERENT',
-              delta_wip_kg: -contaminatedKg,
-              notes: flowData.notes,
-              created_by: userId,
-              metadata: {
-                source_roast_group: sourceGroup,
-                destination_roast_group: flowData.binMixAction === 'reclassify' ? flowData.destinationRoastGroup : null,
-                contaminated_kg: contaminatedKg,
-                action: flowData.binMixAction,
               },
             });
           if (eventError) throw eventError;
@@ -365,68 +493,8 @@ export function OhShitModal({
           break;
         }
         
-        case 'DECONSTRUCT': {
-          if (!deconstructProduct) throw new Error('No product selected');
-          
-          const units = parseInt(flowData.deconstructUnits) || 0;
-          const kgReturned = deconstructKg;
-          const roastGroup = deconstructProduct.roast_group;
-          
-          // Decrement packing_runs
-          const newUnits = Math.max(0, deconstructProduct.units_packed - units);
-          const kgPerUnit = deconstructProduct.bag_size_g / 1000;
-          const newKgConsumed = Math.max(0, deconstructProduct.kg_consumed - (units * kgPerUnit));
-          
-          const { error: packError } = await supabase
-            .from('packing_runs')
-            .update({
-              units_packed: newUnits,
-              kg_consumed: newKgConsumed,
-            })
-            .eq('product_id', flowData.deconstructProductId)
-            .eq('target_date', today);
-          if (packError) throw packError;
-          
-          // Add WIP back
-          if (roastGroup) {
-            const { error: ledgerError } = await supabase
-              .from('wip_ledger')
-              .insert({
-                target_date: today,
-                roast_group: roastGroup,
-                entry_type: 'DECONSTRUCT_IN',
-                delta_kg: kgReturned,
-                related_product_id: flowData.deconstructProductId,
-                created_by: userId,
-                notes: flowData.notes,
-              });
-            if (ledgerError) throw ledgerError;
-          }
-          
-          // Create exception event
-          const { error: eventError } = await supabase
-            .from('roast_exception_events')
-            .insert({
-              target_date: today,
-              roast_group: roastGroup ?? 'UNKNOWN',
-              batch_id: null,
-              event_type: 'DECONSTRUCT',
-              delta_wip_kg: kgReturned,
-              notes: flowData.notes,
-              created_by: userId,
-              metadata: {
-                product_id: flowData.deconstructProductId,
-                product_name: deconstructProduct.product_name,
-                units: units,
-                kg_returned: kgReturned,
-              },
-            });
-          if (eventError) throw eventError;
-          break;
-        }
-        
         case 'OTHER': {
-          const adjustKg = parseFloat(flowData.adjustKg) || 0;
+          const adjustKg = parseFloat(flowData.otherOutputKg) || 0;
           
           // Add WIP adjustment if provided
           if (adjustKg !== 0) {
@@ -466,7 +534,6 @@ export function OhShitModal({
       toast.success('Changes applied successfully');
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
       queryClient.invalidateQueries({ queryKey: ['wip-ledger'] });
-      queryClient.invalidateQueries({ queryKey: ['packing-runs'] });
       queryClient.invalidateQueries({ queryKey: ['roast-exception-events'] });
       onOpenChange(false);
     },
@@ -476,27 +543,44 @@ export function OhShitModal({
     },
   });
 
-  const handleChooseOption = (option: string) => {
+  const canProceedToConfirm = (): boolean => {
+    switch (step) {
+      case 'blend-same':
+        return flowData.batch1OutputKg.trim() !== '' && flowData.batch2OutputKg.trim() !== '';
+      case 'blend-different':
+        return flowData.blendedOutputKg.trim() !== '' && flowData.notes.trim() !== '';
+      case 'spill':
+        return flowData.recoveredKg.trim() !== '' && flowData.notes.trim() !== '';
+      case 'contamination':
+        return flowData.blendedOutputKg.trim() !== '' && flowData.notes.trim() !== '';
+      case 'adjust':
+        return flowData.adjustRoastGroup !== '' && 
+          flowData.adjustKg.trim() !== '' && 
+          flowData.adjustReason !== '' &&
+          (Math.abs(parseFloat(flowData.adjustKg) || 0) < 0.5 || flowData.notes.trim() !== '');
+      case 'other':
+        return flowData.notes.trim() !== '';
+      default:
+        return false;
+    }
+  };
+
+  const handleOptionClick = (option: string) => {
     switch (option) {
-      case 'destoner':
+      case 'blend':
+        setStep('blend-check');
+        break;
+      case 'spill':
         setFlowData(d => ({ ...d, eventType: 'DESTONER_SPILL' }));
-        setStep('destoner');
+        setStep('spill');
         break;
-      case 'bin-same':
-        setFlowData(d => ({ ...d, eventType: 'BIN_MIX_SAME' }));
-        setStep('bin-same');
-        break;
-      case 'bin-different':
+      case 'contamination':
         setFlowData(d => ({ ...d, eventType: 'BIN_MIX_DIFFERENT' }));
-        setStep('bin-different-select');
+        setStep('contamination');
         break;
       case 'adjust':
         setFlowData(d => ({ ...d, eventType: 'WIP_ADJUSTMENT' }));
         setStep('adjust');
-        break;
-      case 'deconstruct':
-        setFlowData(d => ({ ...d, eventType: 'DECONSTRUCT' }));
-        setStep('deconstruct');
         break;
       case 'other':
         setFlowData(d => ({ ...d, eventType: 'OTHER' }));
@@ -505,40 +589,43 @@ export function OhShitModal({
     }
   };
 
-  const canProceedToConfirm = (): boolean => {
-    switch (step) {
-      case 'destoner':
-        return flowData.outputKg.trim() !== '' && !needsNotesForYield;
-      case 'bin-same':
-        return flowData.prevBatchKg.trim() !== '' && flowData.newBatchKg.trim() !== '';
-      case 'bin-different-select':
-        return flowData.contaminatedBatchId !== null && flowData.contaminatedKg.trim() !== '';
-      case 'bin-different-action':
-        return flowData.binMixAction !== '' && 
-          (flowData.binMixAction === 'writeoff' || flowData.destinationRoastGroup !== '') &&
-          flowData.notes.trim() !== '';
-      case 'adjust':
-        return flowData.adjustRoastGroup !== '' && 
-          flowData.adjustKg.trim() !== '' && 
-          flowData.adjustReason !== '' &&
-          (Math.abs(parseFloat(flowData.adjustKg) || 0) < 0.5 || flowData.notes.trim() !== '');
-      case 'deconstruct':
-        return flowData.deconstructProductId !== '' && 
-          flowData.deconstructUnits.trim() !== '' &&
-          parseInt(flowData.deconstructUnits) > 0 &&
-          flowData.notes.trim() !== '';
-      case 'other':
-        return flowData.notes.trim() !== '';
-      default:
-        return false;
+  const handleBlendTypeChoice = (same: boolean) => {
+    if (same) {
+      setFlowData(d => ({ ...d, eventType: 'BIN_MIX_SAME' }));
+      setStep('blend-same');
+    } else {
+      setFlowData(d => ({ ...d, eventType: 'BIN_MIX_DIFFERENT' }));
+      setStep('blend-different');
     }
   };
 
-  const goToConfirm = () => {
-    if (step === 'bin-different-select') {
-      setStep('bin-different-action');
-    } else {
-      setStep('confirm');
+  const goBack = () => {
+    switch (step) {
+      case 'blend-check':
+      case 'spill':
+      case 'contamination':
+      case 'adjust':
+      case 'other':
+        setStep('choose');
+        break;
+      case 'blend-same':
+      case 'blend-different':
+        setStep('blend-check');
+        break;
+      case 'confirm':
+        switch (flowData.eventType) {
+          case 'BIN_MIX_SAME': setStep('blend-same'); break;
+          case 'BIN_MIX_DIFFERENT': 
+            if (step === 'confirm') setStep('blend-different');
+            break;
+          case 'DESTONER_SPILL': setStep('spill'); break;
+          case 'WIP_ADJUSTMENT': setStep('adjust'); break;
+          case 'OTHER': setStep('other'); break;
+          default: setStep('choose');
+        }
+        break;
+      default:
+        setStep('choose');
     }
   };
 
@@ -553,57 +640,325 @@ export function OhShitModal({
               <p className="text-muted-foreground">What happened?</p>
             </div>
             <div className="space-y-2">
+              {/* Option 1: Most common - Two batches blended */}
               <Button
                 variant="outline"
-                className="w-full justify-start text-left h-auto py-3"
-                onClick={() => handleChooseOption('destoner')}
+                className="w-full justify-start text-left h-auto py-3 px-4 border-2 border-primary/50 bg-primary/5 hover:bg-primary/10"
+                onClick={() => handleOptionClick('blend')}
               >
-                <span>Some of the batch was lost at the destoner (spill / no bin)</span>
+                <div className="space-y-0.5">
+                  <div className="font-medium">Two batches got blended in the destoner</div>
+                  <div className="text-xs text-muted-foreground">
+                    I started releasing a batch and realized the previous batch was still in the destoner.
+                  </div>
+                </div>
               </Button>
+
+              {/* Option 2: Spill */}
               <Button
                 variant="outline"
-                className="w-full justify-start text-left h-auto py-3"
-                onClick={() => handleChooseOption('bin-same')}
+                className="w-full justify-start text-left h-auto py-3 px-4"
+                onClick={() => handleOptionClick('spill')}
               >
-                <span>This bin already had coffee in it (same coffee)</span>
+                <div className="space-y-0.5">
+                  <div className="font-medium">Some or all of the batch spilled on the floor</div>
+                  <div className="text-xs text-muted-foreground">
+                    I lost coffee during release/handling.
+                  </div>
+                </div>
               </Button>
+
+              {/* Option 3: Contamination (different coffee dumped onto previous) */}
               <Button
                 variant="outline"
-                className="w-full justify-start text-left h-auto py-3"
-                onClick={() => handleChooseOption('bin-different')}
+                className="w-full justify-start text-left h-auto py-3 px-4"
+                onClick={() => handleOptionClick('contamination')}
               >
-                <span>This bin already had coffee in it (different coffee)</span>
+                <div className="space-y-0.5">
+                  <div className="font-medium">Contamination: I dumped some of this batch onto the previous batch</div>
+                  <div className="text-xs text-muted-foreground">
+                    Two coffees mixed, but not necessarily fully blended in the destoner.
+                  </div>
+                </div>
               </Button>
+
+              {/* Option 4: Something else */}
               <Button
                 variant="outline"
-                className="w-full justify-start text-left h-auto py-3"
-                onClick={() => handleChooseOption('adjust')}
+                className="w-full justify-start text-left h-auto py-3 px-4"
+                onClick={() => handleOptionClick('other')}
               >
-                <span>I need to adjust WIP inventory (end-of-bin / mismatch / packing loss)</span>
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full justify-start text-left h-auto py-3"
-                onClick={() => handleChooseOption('deconstruct')}
-              >
-                <span>I need to break packed bags to finish another order</span>
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full justify-start text-left h-auto py-3"
-                onClick={() => handleChooseOption('other')}
-              >
-                <span>Something else</span>
+                <div className="space-y-0.5">
+                  <div className="font-medium">Something else happened</div>
+                  <div className="text-xs text-muted-foreground">
+                    I'm not sure which option fits.
+                  </div>
+                </div>
               </Button>
             </div>
           </div>
         );
 
-      case 'destoner':
+      case 'blend-check':
         return (
           <div className="space-y-4">
             <div className="space-y-1">
-              <h3 className="font-semibold">Lost at destoner</h3>
+              <h3 className="font-semibold">Two batches blended in destoner</h3>
+              <p className="text-sm text-muted-foreground">
+                Are both batches the same coffee/roast group?
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                variant="outline"
+                className="h-auto py-4 flex flex-col gap-1"
+                onClick={() => handleBlendTypeChoice(true)}
+              >
+                <span className="font-medium">Same coffee</span>
+                <span className="text-xs text-muted-foreground">Easy fix</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="h-auto py-4 flex flex-col gap-1 border-destructive/50"
+                onClick={() => handleBlendTypeChoice(false)}
+              >
+                <span className="font-medium">Different coffees</span>
+                <span className="text-xs text-muted-foreground">Blended product</span>
+              </Button>
+            </div>
+          </div>
+        );
+
+      case 'blend-same':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <h3 className="font-semibold">Same coffee blended — Reconcile weights</h3>
+            </div>
+            
+            {/* SOP Guidance */}
+            <div className="p-3 bg-muted rounded-md text-sm space-y-2">
+              <div className="font-medium text-xs uppercase tracking-wide text-muted-foreground">SOP Steps</div>
+              <ol className="list-decimal list-inside space-y-1 text-sm">
+                <li>Get a second bin</li>
+                <li>Continue releasing until all coffee is out</li>
+                <li>Weigh both bins</li>
+                <li>Enter weights for the two affected batches below</li>
+              </ol>
+            </div>
+
+            {/* Select affected batch (the previous one) */}
+            {sameCoffeeBatches.length > 0 && (
+              <div className="space-y-2">
+                <Label>Previous batch in destoner</Label>
+                <Select
+                  value={flowData.affectedBatchId ?? ''}
+                  onValueChange={(val) => setFlowData(d => ({ ...d, affectedBatchId: val }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select the earlier batch..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sameCoffeeBatches.map(b => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.roast_group} — {b.actual_output_kg.toFixed(1)} kg (current output)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Batch 1 (previous batch) */}
+            <div className="p-3 border rounded-md space-y-3">
+              <div className="font-medium text-sm">Batch 1 (previous batch)</div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="batch1-kg" className="text-xs">Output weight (kg) *</Label>
+                  <Input
+                    id="batch1-kg"
+                    type="number"
+                    step="0.1"
+                    value={flowData.batch1OutputKg}
+                    onChange={(e) => setFlowData(d => ({ ...d, batch1OutputKg: e.target.value }))}
+                    placeholder="e.g. 18.0"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="batch1-cropster" className="text-xs">Cropster ID</Label>
+                  <Input
+                    id="batch1-cropster"
+                    value={flowData.batch1CropsterId}
+                    onChange={(e) => setFlowData(d => ({ ...d, batch1CropsterId: e.target.value }))}
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="batch1-notes" className="text-xs">Notes</Label>
+                <Textarea
+                  id="batch1-notes"
+                  value={flowData.batch1Notes}
+                  onChange={(e) => setFlowData(d => ({ ...d, batch1Notes: e.target.value }))}
+                  placeholder="Optional"
+                  className="max-h-20 resize-none"
+                  rows={1}
+                />
+              </div>
+            </div>
+
+            {/* Batch 2 (current batch) */}
+            <div className="p-3 border rounded-md space-y-3">
+              <div className="font-medium text-sm">Batch 2 (this batch: {batch.roast_group})</div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="batch2-kg" className="text-xs">Output weight (kg) *</Label>
+                  <Input
+                    id="batch2-kg"
+                    type="number"
+                    step="0.1"
+                    value={flowData.batch2OutputKg}
+                    onChange={(e) => setFlowData(d => ({ ...d, batch2OutputKg: e.target.value }))}
+                    placeholder="e.g. 17.5"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="batch2-cropster" className="text-xs">Cropster ID</Label>
+                  <Input
+                    id="batch2-cropster"
+                    value={flowData.batch2CropsterId}
+                    onChange={(e) => setFlowData(d => ({ ...d, batch2CropsterId: e.target.value }))}
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="batch2-notes" className="text-xs">Notes</Label>
+                <Textarea
+                  id="batch2-notes"
+                  value={flowData.batch2Notes}
+                  onChange={(e) => setFlowData(d => ({ ...d, batch2Notes: e.target.value }))}
+                  placeholder="Optional"
+                  className="max-h-20 resize-none"
+                  rows={1}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="blend-notes" className="text-xs">General notes</Label>
+              <Textarea
+                id="blend-notes"
+                value={flowData.notes}
+                onChange={(e) => setFlowData(d => ({ ...d, notes: e.target.value }))}
+                placeholder="Optional"
+                className="max-h-20 resize-none"
+                rows={1}
+              />
+            </div>
+          </div>
+        );
+
+      case 'blend-different':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <h3 className="font-semibold">Different coffees blended — Salvage</h3>
+            </div>
+            
+            {/* SOP Guidance */}
+            <div className="p-3 bg-muted rounded-md text-sm space-y-2">
+              <div className="font-medium text-xs uppercase tracking-wide text-muted-foreground">SOP Steps</div>
+              <ol className="list-decimal list-inside space-y-1 text-sm">
+                <li>Treat 100% of the output as a blended/contaminated batch</li>
+                <li>None of the output should count toward either planned product</li>
+                <li>Record as salvage blend below</li>
+              </ol>
+            </div>
+
+            {/* Select affected batch (optional) */}
+            {recentBatches.length > 0 && (
+              <div className="space-y-2">
+                <Label>Previous batch affected (optional)</Label>
+                <Select
+                  value={flowData.affectedBatchId ?? ''}
+                  onValueChange={(val) => setFlowData(d => ({ ...d, affectedBatchId: val || null }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select if known..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">None / Unknown</SelectItem>
+                    {recentBatches.map(b => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.roast_group} — {b.actual_output_kg.toFixed(1)} kg
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="blended-kg">Total blended output weight (kg) *</Label>
+              <Input
+                id="blended-kg"
+                type="number"
+                step="0.1"
+                value={flowData.blendedOutputKg}
+                onChange={(e) => setFlowData(d => ({ ...d, blendedOutputKg: e.target.value }))}
+                placeholder="e.g. 35.0"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Salvage roast group</Label>
+              <Select
+                value={flowData.salvageRoastGroup}
+                onValueChange={(val) => setFlowData(d => ({ ...d, salvageRoastGroup: val }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select or use default..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SALVAGE_ROAST_GROUP}>{SALVAGE_ROAST_GROUP}</SelectItem>
+                  {allRoastGroups.filter(g => g !== SALVAGE_ROAST_GROUP).map(g => (
+                    <SelectItem key={g} value={g}>{g}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="blend-cropster">Cropster batch ID(s)</Label>
+              <Input
+                id="blend-cropster"
+                value={flowData.blendCropsterId}
+                onChange={(e) => setFlowData(d => ({ ...d, blendCropsterId: e.target.value }))}
+                placeholder="Optional"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes *</Label>
+              <Textarea
+                id="notes"
+                value={flowData.notes}
+                onChange={(e) => setFlowData(d => ({ ...d, notes: e.target.value }))}
+                placeholder="Describe what happened and what coffees were mixed"
+                className="max-h-24 resize-none"
+                rows={2}
+              />
+            </div>
+          </div>
+        );
+
+      case 'spill':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <h3 className="font-semibold">Batch spilled — Record recovery</h3>
               <p className="text-sm text-muted-foreground">
                 Record the actual output weight after the spill.
               </p>
@@ -621,16 +976,16 @@ export function OhShitModal({
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="output-kg">Output (roasted) kg *</Label>
+              <Label htmlFor="recovered-kg">Output (roasted) kg actually recovered *</Label>
               <Input
-                id="output-kg"
+                id="recovered-kg"
                 type="number"
                 step="0.1"
-                value={flowData.outputKg}
-                onChange={(e) => setFlowData(d => ({ ...d, outputKg: e.target.value }))}
-                placeholder="e.g. 17.5"
+                value={flowData.recoveredKg}
+                onChange={(e) => setFlowData(d => ({ ...d, recoveredKg: e.target.value }))}
+                placeholder="e.g. 15.0"
               />
-              {flowData.outputKg && (
+              {flowData.recoveredKg && inboundKg > 0 && (
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">
                     Yield: {yieldPercent.toFixed(1)}%
@@ -643,171 +998,18 @@ export function OhShitModal({
                 </div>
               )}
             </div>
-            
-            {!isNormalYield && flowData.outputKg && (
-              <Alert variant="destructive">
-                <AlertDescription>
-                  This yield looks outside the normal 10–20% loss range. 
-                  Double-check inbound/output numbers or record a loss explanation.
-                </AlertDescription>
-              </Alert>
-            )}
-            
-            <div className="space-y-2">
-              <Label htmlFor="notes">
-                Notes {!isNormalYield && '*'}
-              </Label>
-              <Textarea
-                id="notes"
-                value={flowData.notes}
-                onChange={(e) => setFlowData(d => ({ ...d, notes: e.target.value }))}
-                placeholder="What happened?"
-                rows={2}
-              />
-            </div>
-          </div>
-        );
 
-      case 'bin-same':
-        return (
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <h3 className="font-semibold">Bin already had same coffee</h3>
-              <p className="text-sm text-muted-foreground">
-                Record the weights to reconcile batch outputs.
-              </p>
-            </div>
-            
             <div className="space-y-2">
-              <Label htmlFor="prev-kg">Previous batch output in bin (kg) *</Label>
+              <Label htmlFor="loss-kg">Estimated loss (kg)</Label>
               <Input
-                id="prev-kg"
+                id="loss-kg"
                 type="number"
                 step="0.1"
-                value={flowData.prevBatchKg}
-                onChange={(e) => setFlowData(d => ({ ...d, prevBatchKg: e.target.value }))}
-                placeholder="e.g. 18.0"
+                value={flowData.estimatedLossKg}
+                onChange={(e) => setFlowData(d => ({ ...d, estimatedLossKg: e.target.value }))}
+                placeholder="Optional"
               />
             </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="new-kg">New batch output now in bin (kg) *</Label>
-              <Input
-                id="new-kg"
-                type="number"
-                step="0.1"
-                value={flowData.newBatchKg}
-                onChange={(e) => setFlowData(d => ({ ...d, newBatchKg: e.target.value }))}
-                placeholder="e.g. 17.5"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                value={flowData.notes}
-                onChange={(e) => setFlowData(d => ({ ...d, notes: e.target.value }))}
-                placeholder="Optional notes"
-                rows={2}
-              />
-            </div>
-          </div>
-        );
-
-      case 'bin-different-select':
-        return (
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <h3 className="font-semibold">Bin had different coffee</h3>
-              <p className="text-sm text-muted-foreground">
-                Which batch was contaminated and how much?
-              </p>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Contaminated batch *</Label>
-              <Select
-                value={flowData.contaminatedBatchId ?? ''}
-                onValueChange={(val) => setFlowData(d => ({ ...d, contaminatedBatchId: val }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select batch..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {recentBatches.map(b => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.roast_group} - {b.actual_output_kg.toFixed(1)} kg
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="contaminated-kg">Estimated contaminated amount (kg) *</Label>
-              <Input
-                id="contaminated-kg"
-                type="number"
-                step="0.1"
-                value={flowData.contaminatedKg}
-                onChange={(e) => setFlowData(d => ({ ...d, contaminatedKg: e.target.value }))}
-                placeholder="e.g. 2.5"
-              />
-            </div>
-          </div>
-        );
-
-      case 'bin-different-action':
-        return (
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <h3 className="font-semibold">What do you want to do?</h3>
-              <p className="text-sm text-muted-foreground">
-                {parseFloat(flowData.contaminatedKg) || 0} kg contaminated
-              </p>
-            </div>
-            
-            <RadioGroup
-              value={flowData.binMixAction}
-              onValueChange={(val) => setFlowData(d => ({ 
-                ...d, 
-                binMixAction: val as 'writeoff' | 'reclassify' 
-              }))}
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="writeoff" id="writeoff" />
-                <Label htmlFor="writeoff">Write off (loss)</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="reclassify" id="reclassify" />
-                <Label htmlFor="reclassify">Reclassify into a special blend</Label>
-              </div>
-            </RadioGroup>
-            
-            {flowData.binMixAction === 'reclassify' && (
-              <div className="space-y-2">
-                <Label>Destination roast group *</Label>
-                <Select
-                  value={flowData.destinationRoastGroup}
-                  onValueChange={(val) => setFlowData(d => ({ ...d, destinationRoastGroup: val }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select or type..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {allRoastGroups.map(g => (
-                      <SelectItem key={g} value={g}>{g}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  placeholder="Or type new roast group name"
-                  value={flowData.destinationRoastGroup}
-                  onChange={(e) => setFlowData(d => ({ ...d, destinationRoastGroup: e.target.value }))}
-                />
-              </div>
-            )}
             
             <div className="space-y-2">
               <Label htmlFor="notes">Notes *</Label>
@@ -815,7 +1017,85 @@ export function OhShitModal({
                 id="notes"
                 value={flowData.notes}
                 onChange={(e) => setFlowData(d => ({ ...d, notes: e.target.value }))}
+                placeholder="What happened? Where did it spill?"
+                className="max-h-24 resize-none"
+                rows={2}
+              />
+            </div>
+          </div>
+        );
+
+      case 'contamination':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <h3 className="font-semibold">Contamination — Route to salvage</h3>
+              <p className="text-sm text-muted-foreground">
+                The contaminated output will be routed to a salvage product.
+              </p>
+            </div>
+            
+            {/* Select affected batch */}
+            {recentBatches.length > 0 && (
+              <div className="space-y-2">
+                <Label>Which batch was contaminated?</Label>
+                <Select
+                  value={flowData.affectedBatchId ?? ''}
+                  onValueChange={(val) => setFlowData(d => ({ ...d, affectedBatchId: val || null }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select if known..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">None / Unknown</SelectItem>
+                    {recentBatches.map(b => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.roast_group} — {b.actual_output_kg.toFixed(1)} kg
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="contaminated-kg">Contaminated output weight (kg) *</Label>
+              <Input
+                id="contaminated-kg"
+                type="number"
+                step="0.1"
+                value={flowData.blendedOutputKg}
+                onChange={(e) => setFlowData(d => ({ ...d, blendedOutputKg: e.target.value }))}
+                placeholder="e.g. 5.0"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Salvage roast group</Label>
+              <Select
+                value={flowData.salvageRoastGroup}
+                onValueChange={(val) => setFlowData(d => ({ ...d, salvageRoastGroup: val }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select or use default..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SALVAGE_ROAST_GROUP}>{SALVAGE_ROAST_GROUP}</SelectItem>
+                  {allRoastGroups.filter(g => g !== SALVAGE_ROAST_GROUP).map(g => (
+                    <SelectItem key={g} value={g}>{g}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes *</Label>
+              <Textarea
+                id="notes"
+                value={flowData.notes}
+                onChange={(e) => setFlowData(d => ({ ...d, notes: e.target.value }))}
                 placeholder="Describe what happened"
+                className="max-h-24 resize-none"
                 rows={2}
               />
             </div>
@@ -893,6 +1173,7 @@ export function OhShitModal({
                 value={flowData.notes}
                 onChange={(e) => setFlowData(d => ({ ...d, notes: e.target.value }))}
                 placeholder="Explain the adjustment"
+                className="max-h-24 resize-none"
                 rows={2}
               />
               {Math.abs(parseFloat(flowData.adjustKg) || 0) >= 0.5 && (
@@ -904,86 +1185,18 @@ export function OhShitModal({
           </div>
         );
 
-      case 'deconstruct':
-        return (
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <h3 className="font-semibold">Break packed bags</h3>
-              <p className="text-sm text-muted-foreground">
-                Return coffee to WIP by deconstructing packed units.
-              </p>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Product to break *</Label>
-              <Select
-                value={flowData.deconstructProductId}
-                onValueChange={(val) => setFlowData(d => ({ ...d, deconstructProductId: val }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select product..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {productsWithPacking?.map(p => (
-                    <SelectItem key={p.product_id} value={p.product_id}>
-                      {p.product_name} ({p.units_packed} packed)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {deconstructProduct && (
-              <div className="p-3 bg-muted rounded-md text-sm">
-                <div className="flex justify-between">
-                  <span>Available to break:</span>
-                  <span className="font-medium">{deconstructProduct.units_packed} units</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Bag size:</span>
-                  <span className="font-medium">{deconstructProduct.bag_size_g}g</span>
-                </div>
-              </div>
-            )}
-            
-            <div className="space-y-2">
-              <Label htmlFor="units">Units to break *</Label>
-              <Input
-                id="units"
-                type="number"
-                min="1"
-                max={deconstructProduct?.units_packed ?? 999}
-                value={flowData.deconstructUnits}
-                onChange={(e) => setFlowData(d => ({ ...d, deconstructUnits: e.target.value }))}
-                placeholder="e.g. 5"
-              />
-              {flowData.deconstructUnits && deconstructProduct && (
-                <p className="text-sm text-muted-foreground">
-                  Returns {deconstructKg.toFixed(2)} kg to WIP ({deconstructProduct.roast_group})
-                </p>
-              )}
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes *</Label>
-              <Textarea
-                id="notes"
-                value={flowData.notes}
-                onChange={(e) => setFlowData(d => ({ ...d, notes: e.target.value }))}
-                placeholder="Why are you breaking these bags?"
-                rows={2}
-              />
-            </div>
-          </div>
-        );
-
       case 'other':
         return (
           <div className="space-y-4">
             <div className="space-y-1">
-              <h3 className="font-semibold">Something else</h3>
-              <p className="text-sm text-muted-foreground">
-                Describe what happened. We'll log it for reference.
+              <h3 className="font-semibold">Something else happened</h3>
+            </div>
+            
+            {/* SOP Guidance */}
+            <div className="p-3 bg-muted rounded-md text-sm space-y-2">
+              <div className="font-medium text-xs uppercase tracking-wide text-muted-foreground">For now</div>
+              <p className="text-sm">
+                Reconcile inventory manually and leave detailed notes. We'll add a guided workflow later.
               </p>
             </div>
             
@@ -994,19 +1207,20 @@ export function OhShitModal({
                 value={flowData.notes}
                 onChange={(e) => setFlowData(d => ({ ...d, notes: e.target.value }))}
                 placeholder="What happened?"
+                className="max-h-28 resize-none"
                 rows={3}
               />
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="adjust-kg">WIP adjustment (kg, optional)</Label>
+              <Label htmlFor="other-kg">Output weight (kg) recovered</Label>
               <Input
-                id="adjust-kg"
+                id="other-kg"
                 type="number"
                 step="0.1"
-                value={flowData.adjustKg}
-                onChange={(e) => setFlowData(d => ({ ...d, adjustKg: e.target.value }))}
-                placeholder="Leave empty if no adjustment needed"
+                value={flowData.otherOutputKg}
+                onChange={(e) => setFlowData(d => ({ ...d, otherOutputKg: e.target.value }))}
+                placeholder="Optional"
               />
             </div>
           </div>
@@ -1025,18 +1239,48 @@ export function OhShitModal({
                 <span>Event type:</span>
                 <Badge variant="outline">{flowData.eventType}</Badge>
               </div>
-              {flowData.eventType === 'DESTONER_SPILL' && (
+              
+              {flowData.eventType === 'BIN_MIX_SAME' && (
                 <>
                   <div className="flex justify-between">
-                    <span>Output recorded:</span>
-                    <span className="font-medium">{flowData.outputKg} kg</span>
+                    <span>Batch 1 output:</span>
+                    <span className="font-medium">{flowData.batch1OutputKg} kg</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Yield:</span>
-                    <span className="font-medium">{yieldPercent.toFixed(1)}%</span>
+                    <span>Batch 2 output:</span>
+                    <span className="font-medium">{flowData.batch2OutputKg} kg</span>
                   </div>
                 </>
               )}
+              
+              {flowData.eventType === 'BIN_MIX_DIFFERENT' && (
+                <>
+                  <div className="flex justify-between">
+                    <span>Blended output:</span>
+                    <span className="font-medium">{flowData.blendedOutputKg} kg</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Salvage group:</span>
+                    <span className="font-medium">{flowData.salvageRoastGroup}</span>
+                  </div>
+                </>
+              )}
+              
+              {flowData.eventType === 'DESTONER_SPILL' && (
+                <>
+                  <div className="flex justify-between">
+                    <span>Output recovered:</span>
+                    <span className="font-medium">{flowData.recoveredKg} kg</span>
+                  </div>
+                  {inboundKg > 0 && (
+                    <div className="flex justify-between">
+                      <span>Yield:</span>
+                      <span className="font-medium">{yieldPercent.toFixed(1)}%</span>
+                    </div>
+                  )}
+                </>
+              )}
+              
               {flowData.eventType === 'WIP_ADJUSTMENT' && (
                 <>
                   <div className="flex justify-between">
@@ -1049,26 +1293,11 @@ export function OhShitModal({
                   </div>
                 </>
               )}
-              {flowData.eventType === 'DECONSTRUCT' && deconstructProduct && (
-                <>
-                  <div className="flex justify-between">
-                    <span>Product:</span>
-                    <span className="font-medium">{deconstructProduct.product_name}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Units to break:</span>
-                    <span className="font-medium">{flowData.deconstructUnits}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>KG returned to WIP:</span>
-                    <span className="font-medium">{deconstructKg.toFixed(2)} kg</span>
-                  </div>
-                </>
-              )}
+              
               {flowData.notes && (
                 <div className="pt-2 border-t">
                   <span className="text-muted-foreground">Notes:</span>
-                  <p className="mt-1">{flowData.notes}</p>
+                  <p className="mt-1 text-sm whitespace-pre-wrap">{flowData.notes}</p>
                 </div>
               )}
             </div>
@@ -1079,8 +1308,8 @@ export function OhShitModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
+      <DialogContent className="max-w-md max-h-[80vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-destructive" />
             Issue with batch
@@ -1092,65 +1321,56 @@ export function OhShitModal({
           )}
         </DialogHeader>
         
-        {renderStep()}
+        <ScrollArea className="flex-1 px-6 overflow-y-auto">
+          <div className="pb-4">
+            {renderStep()}
+          </div>
+        </ScrollArea>
         
-        <DialogFooter className="flex-row gap-2">
-          {step !== 'choose' && (
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (step === 'bin-different-action') {
-                  setStep('bin-different-select');
-                } else if (step === 'confirm') {
-                  // Go back to the previous flow step based on event type
-                  switch (flowData.eventType) {
-                    case 'DESTONER_SPILL': setStep('destoner'); break;
-                    case 'BIN_MIX_SAME': setStep('bin-same'); break;
-                    case 'BIN_MIX_DIFFERENT': setStep('bin-different-action'); break;
-                    case 'WIP_ADJUSTMENT': setStep('adjust'); break;
-                    case 'DECONSTRUCT': setStep('deconstruct'); break;
-                    case 'OTHER': setStep('other'); break;
-                    default: setStep('choose');
-                  }
-                } else {
-                  setStep('choose');
-                }
-              }}
-            >
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Back
+        {/* Sticky footer */}
+        <div className="shrink-0 border-t bg-background px-6 py-4 flex flex-row gap-2 justify-end">
+          {step === 'choose' ? (
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
             </Button>
-          )}
-          
-          {step !== 'choose' && step !== 'confirm' && (
-            <Button
-              onClick={goToConfirm}
-              disabled={!canProceedToConfirm()}
-            >
-              {step === 'bin-different-select' ? 'Next' : 'Review'}
-              <ArrowRight className="h-4 w-4 ml-1" />
-            </Button>
-          )}
-          
-          {step === 'confirm' && (
-            <Button
-              onClick={() => applyChangesMutation.mutate()}
-              disabled={applyChangesMutation.isPending}
-            >
-              {applyChangesMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                  Applying...
-                </>
-              ) : (
-                <>
-                  <Check className="h-4 w-4 mr-1" />
-                  Apply changes
-                </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={goBack}>
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+              
+              {step !== 'confirm' && step !== 'blend-check' && (
+                <Button
+                  onClick={() => setStep('confirm')}
+                  disabled={!canProceedToConfirm()}
+                >
+                  Review
+                  <ArrowRight className="h-4 w-4 ml-1" />
+                </Button>
               )}
-            </Button>
+              
+              {step === 'confirm' && (
+                <Button
+                  onClick={() => applyChangesMutation.mutate()}
+                  disabled={applyChangesMutation.isPending}
+                >
+                  {applyChangesMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      Applying...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4 mr-1" />
+                      Apply changes
+                    </>
+                  )}
+                </Button>
+              )}
+            </>
           )}
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
