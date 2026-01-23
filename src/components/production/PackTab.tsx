@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,9 +6,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Package, Check, AlertTriangle, Clock, ShoppingCart } from 'lucide-react';
+import { Package, Check, AlertTriangle, Clock, ShoppingCart, ChevronDown, ChevronRight } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { InlinePackingControl } from './InlinePackingControl';
+import { PackRowDrawer } from './PackRowDrawer';
 
 type SortOption = 'urgent' | 'shortage' | 'alpha';
 
@@ -46,6 +47,12 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
   const queryClient = useQueryClient();
   
   const [sortBy, setSortBy] = useState<SortOption>('urgent');
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+  
+  // Sort-freeze state: track which product is being edited
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [frozenOrder, setFrozenOrder] = useState<ProductDemand[] | null>(null);
+  const lastEditTimeRef = useRef<number>(0);
 
   // Fetch products (only active)
   const { data: products } = useQuery({
@@ -239,7 +246,7 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
   }, [orderLineItems, checkmarks, packingByProductUnits]);
 
   // Sort products based on selected sort option
-  const sortedProducts = useMemo(() => {
+  const computedSortedProducts = useMemo(() => {
     const sorted = [...demandByProduct];
     
     switch (sortBy) {
@@ -267,6 +274,37 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
     
     return sorted;
   }, [demandByProduct, sortBy]);
+
+  // Handle editing state changes from InlinePackingControl
+  const handleEditingChange = useCallback((productId: string, isEditing: boolean) => {
+    if (isEditing) {
+      // Freeze the current order when editing starts
+      if (!editingProductId) {
+        setFrozenOrder(computedSortedProducts);
+      }
+      setEditingProductId(productId);
+      lastEditTimeRef.current = Date.now();
+    } else {
+      // Only unfreeze if this is the product that was being edited
+      if (editingProductId === productId) {
+        setEditingProductId(null);
+        setFrozenOrder(null);
+      }
+    }
+  }, [editingProductId, computedSortedProducts]);
+
+  // Use frozen order while editing, otherwise use computed sorted products
+  const sortedProducts = useMemo(() => {
+    if (editingProductId && frozenOrder) {
+      // Return frozen order but with updated data (keep order, update values)
+      return frozenOrder.map(frozen => {
+        const updated = demandByProduct.find(p => p.product_id === frozen.product_id);
+        return updated ?? frozen;
+      }).filter(p => demandByProduct.some(d => d.product_id === p.product_id));
+    }
+    return computedSortedProducts;
+  }, [editingProductId, frozenOrder, computedSortedProducts, demandByProduct]);
+
 
   // Map packing runs by product_id
   const packingByProduct = useMemo(() => {
@@ -381,6 +419,7 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left">
+                  <th className="pb-2 w-8"></th>
                   <th className="pb-2">Product</th>
                   <th className="pb-2">Roast Group</th>
                   <th className="pb-2 text-right">Demanded</th>
@@ -393,69 +432,94 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                   const packing = packingByProduct[product.product_id];
                   const packed = packing?.units_packed ?? 0;
                   const isComplete = packed >= product.demanded_units;
+                  const isExpanded = expandedProductId === product.product_id;
+                  
+                  const toggleExpand = () => {
+                    setExpandedProductId(isExpanded ? null : product.product_id);
+                  };
                   
                   return (
-                    <tr 
-                      key={product.product_id} 
-                      className={`border-b last:border-0 ${product.hasTimeSensitive ? 'bg-destructive/5' : ''}`}
-                    >
-                      <td className="py-3">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium">{product.product_name}</span>
-                          <PackagingBadge variant={product.packaging_variant} />
-                          {product.hasTimeSensitive && (
-                            <Badge variant="destructive" className="text-xs">
-                              <Clock className="h-3 w-3 mr-1" />
-                              Urgent
+                    <React.Fragment key={product.product_id}>
+                      <tr 
+                        className={`border-b last:border-0 cursor-pointer hover:bg-muted/50 transition-colors ${product.hasTimeSensitive ? 'bg-destructive/5' : ''} ${isExpanded ? 'bg-muted/30' : ''}`}
+                        onClick={toggleExpand}
+                      >
+                        <td className="py-3 w-8">
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </td>
+                        <td className="py-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium">{product.product_name}</span>
+                            <PackagingBadge variant={product.packaging_variant} />
+                            {product.hasTimeSensitive && (
+                              <Badge variant="destructive" className="text-xs">
+                                <Clock className="h-3 w-3 mr-1" />
+                                Urgent
+                              </Badge>
+                            )}
+                            {product.unblocksOrders > 0 && product.shortage > 0 && (
+                              <Badge variant="outline" className="text-xs">
+                                <ShoppingCart className="h-3 w-3 mr-1" />
+                                Unblocks: {product.unblocksOrders} order{product.unblocksOrders !== 1 ? 's' : ''}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {product.bag_size_g}g • {product.sku || 'No SKU'}
+                          </div>
+                        </td>
+                        <td className="py-3">
+                          {product.roast_group ? (
+                            <Badge variant="secondary">{product.roast_group}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 text-right">
+                          <span className="font-medium">{product.demanded_units}</span>
+                          <span className="text-muted-foreground text-xs ml-1">units</span>
+                        </td>
+                        <td className="py-3" onClick={(e) => e.stopPropagation()}>
+                          <InlinePackingControl
+                            value={packed}
+                            onCommit={(newValue) => updatePackingUnits(product.product_id, newValue)}
+                            onEditingChange={(isEditing) => handleEditingChange(product.product_id, isEditing)}
+                            isComplete={isComplete}
+                          />
+                        </td>
+                        <td className="py-3 text-right">
+                          {isComplete ? (
+                            <Badge variant="default" className="bg-primary text-primary-foreground">
+                              <Check className="h-3 w-3 mr-1" />
+                              Complete
+                            </Badge>
+                          ) : packed > 0 ? (
+                            <Badge variant="secondary">
+                              {Math.round((packed / product.demanded_units) * 100)}%
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              Pending
                             </Badge>
                           )}
-                          {product.unblocksOrders > 0 && product.shortage > 0 && (
-                            <Badge variant="outline" className="text-xs">
-                              <ShoppingCart className="h-3 w-3 mr-1" />
-                              Unblocks: {product.unblocksOrders} order{product.unblocksOrders !== 1 ? 's' : ''}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {product.bag_size_g}g • {product.sku || 'No SKU'}
-                        </div>
-                      </td>
-                      <td className="py-3">
-                        {product.roast_group ? (
-                          <Badge variant="secondary">{product.roast_group}</Badge>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="py-3 text-right">
-                        <span className="font-medium">{product.demanded_units}</span>
-                        <span className="text-muted-foreground text-xs ml-1">units</span>
-                      </td>
-                      <td className="py-3">
-                        <InlinePackingControl
-                          value={packed}
-                          onCommit={(newValue) => updatePackingUnits(product.product_id, newValue)}
-                          isComplete={isComplete}
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <PackRowDrawer
+                          productId={product.product_id}
+                          productName={product.product_name}
+                          sku={product.sku}
+                          roastGroup={product.roast_group}
+                          packingRun={packing}
+                          unblocksOrders={product.unblocksOrders}
                         />
-                      </td>
-                      <td className="py-3 text-right">
-                        {isComplete ? (
-                          <Badge variant="default" className="bg-primary text-primary-foreground">
-                            <Check className="h-3 w-3 mr-1" />
-                            Complete
-                          </Badge>
-                        ) : packed > 0 ? (
-                          <Badge variant="secondary">
-                            {Math.round((packed / product.demanded_units) * 100)}%
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline">
-                            <AlertTriangle className="h-3 w-3 mr-1" />
-                            Pending
-                          </Badge>
-                        )}
-                      </td>
-                    </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
