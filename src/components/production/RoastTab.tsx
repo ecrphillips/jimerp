@@ -416,6 +416,30 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
       toast.error('Failed to delete batch');
     },
   });
+
+  // Quick inline mark as roasted
+  const markRoastedMutation = useMutation({
+    mutationFn: async ({ id, planned_output_kg }: { id: string; planned_output_kg: number | null }) => {
+      const { error } = await supabase
+        .from('roasted_batches')
+        .update({ 
+          status: 'ROASTED',
+          actual_output_kg: planned_output_kg ?? 0,
+        })
+        .eq('id', id)
+        .eq('status', 'PLANNED'); // Safety: only update if still PLANNED
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Batch marked as roasted');
+      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to mark batch as roasted');
+    },
+  });
+
   const upsertRoastGroupMutation = useMutation({
     mutationFn: async ({ roastGroup, standardBatchKg, defaultRoaster }: { roastGroup: string; standardBatchKg: number; defaultRoaster: DefaultRoaster }) => {
       const { error } = await supabase
@@ -756,6 +780,20 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                                   <SelectItem value="LORING">LORING</SelectItem>
                                 </SelectContent>
                               </Select>
+                              {batch.status === 'PLANNED' && (
+                                <Button 
+                                  size="sm" 
+                                  variant="default"
+                                  className="h-7 text-xs"
+                                  onClick={() => markRoastedMutation.mutate({ 
+                                    id: batch.id, 
+                                    planned_output_kg: batch.planned_output_kg 
+                                  })}
+                                >
+                                  <Check className="h-3 w-3 mr-1" />
+                                  Roasted
+                                </Button>
+                              )}
                               <Button size="sm" variant="ghost" onClick={() => openEditBatch(batch)}>
                                 <Edit2 className="h-4 w-4" />
                               </Button>
@@ -866,6 +904,20 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                                     <SelectItem value="LORING">LORING</SelectItem>
                                   </SelectContent>
                                 </Select>
+                                {batch.status === 'PLANNED' && (
+                                  <Button 
+                                    size="sm" 
+                                    variant="default"
+                                    className="h-7 text-xs"
+                                    onClick={() => markRoastedMutation.mutate({ 
+                                      id: batch.id, 
+                                      planned_output_kg: batch.planned_output_kg 
+                                    })}
+                                  >
+                                    <Check className="h-3 w-3 mr-1" />
+                                    Roasted
+                                  </Button>
+                                )}
                                 <Button size="sm" variant="ghost" onClick={() => openEditBatch(batch)}>
                                   <Edit2 className="h-4 w-4" />
                                 </Button>
