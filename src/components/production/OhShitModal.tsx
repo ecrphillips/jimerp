@@ -64,9 +64,11 @@ interface FlowData {
   batch2Notes: string;
   affectedBatchId: string | null;
   // Blend different coffee
+  batch1InboundKg: string;
+  batch2InboundKg: string;
   blendedOutputKg: string;
-  salvageRoastGroup: string;
-  blendCropsterId: string;
+  blendCropsterId1: string;
+  blendCropsterId2: string;
   // Spill
   recoveredKg: string;
   estimatedLossKg: string;
@@ -80,7 +82,7 @@ interface FlowData {
   notes: string;
 }
 
-const SALVAGE_ROAST_GROUP = 'SALVAGE_BLEND';
+const RECOVERY_ROAST_GROUP = 'RECOVERY_BLEND';
 
 export function OhShitModal({
   open,
@@ -103,9 +105,11 @@ export function OhShitModal({
     batch2CropsterId: '',
     batch2Notes: '',
     affectedBatchId: null,
+    batch1InboundKg: '',
+    batch2InboundKg: batch.planned_output_kg?.toString() ?? '',
     blendedOutputKg: '',
-    salvageRoastGroup: SALVAGE_ROAST_GROUP,
-    blendCropsterId: '',
+    blendCropsterId1: '',
+    blendCropsterId2: batch.cropster_batch_id ?? '',
     recoveredKg: '',
     estimatedLossKg: '',
     adjustRoastGroup: batch.roast_group,
@@ -122,15 +126,17 @@ export function OhShitModal({
       setFlowData({
         eventType: null,
         batch1OutputKg: '',
-        batch1CropsterId: batch.cropster_batch_id ?? '',
+        batch1CropsterId: '',
         batch1Notes: '',
         batch2OutputKg: '',
-        batch2CropsterId: '',
+        batch2CropsterId: batch.cropster_batch_id ?? '',
         batch2Notes: '',
         affectedBatchId: null,
+        batch1InboundKg: '',
+        batch2InboundKg: batch.planned_output_kg?.toString() ?? '',
         blendedOutputKg: '',
-        salvageRoastGroup: SALVAGE_ROAST_GROUP,
-        blendCropsterId: '',
+        blendCropsterId1: '',
+        blendCropsterId2: batch.cropster_batch_id ?? '',
         recoveredKg: batch.actual_output_kg > 0 ? batch.actual_output_kg.toString() : '',
         estimatedLossKg: '',
         adjustRoastGroup: batch.roast_group,
@@ -273,20 +279,30 @@ export function OhShitModal({
         case 'BIN_MIX_DIFFERENT': {
           const blendedKg = parseFloat(flowData.blendedOutputKg) || 0;
           const affectedBatch = recentBatches.find(b => b.id === flowData.affectedBatchId);
+          const batch1InboundKg = parseFloat(flowData.batch1InboundKg) || 0;
+          const batch2InboundKg = parseFloat(flowData.batch2InboundKg) || 0;
           
-          // Void current batch output (set to 0)
+          // Build provenance notes for recovery batch
+          const provenanceNotes = [
+            `[RECOVERY BLEND] Blended in destoner from two different coffees.`,
+            `Batch 1: ${affectedBatch?.roast_group ?? 'Unknown'} (inbound: ${batch1InboundKg} kg${flowData.blendCropsterId1 ? `, Cropster: ${flowData.blendCropsterId1}` : ''})`,
+            `Batch 2: ${batch.roast_group} (inbound: ${batch2InboundKg} kg${flowData.blendCropsterId2 ? `, Cropster: ${flowData.blendCropsterId2}` : ''})`,
+            `Combined output: ${blendedKg} kg`,
+            flowData.notes ? `Notes: ${flowData.notes}` : '',
+          ].filter(Boolean).join('\n');
+          
+          // Void current batch (batch 2) - set to ROASTED with 0 output
           const { error: voidCurrentError } = await supabase
             .from('roasted_batches')
             .update({ 
               status: 'ROASTED',
               actual_output_kg: 0,
-              notes: `[VOIDED - BLEND] Output moved to salvage: ${flowData.notes}`,
+              notes: `[VOIDED - BLEND] All output moved to RECOVERY_BLEND. See recovery batch for details.`,
             })
             .eq('id', batch.id);
           if (voidCurrentError) throw voidCurrentError;
 
-          // If batch was PLANNED, don't add any WIP (output is 0)
-          // If batch was already ROASTED, subtract its previous output
+          // If batch was already ROASTED with output, subtract its previous output from WIP
           if (batch.status === 'ROASTED' && batch.actual_output_kg > 0) {
             const { error: ledgerError } = await supabase
               .from('wip_ledger')
@@ -297,64 +313,70 @@ export function OhShitModal({
                 delta_kg: -batch.actual_output_kg,
                 related_batch_id: batch.id,
                 created_by: userId,
-                notes: 'Output moved to salvage blend',
+                notes: 'Output voided - moved to RECOVERY_BLEND',
               });
             if (ledgerError) throw ledgerError;
           }
 
-          // Void affected batch output if selected
-          if (affectedBatch && affectedBatch.actual_output_kg > 0) {
+          // Void affected batch (batch 1) if selected - set to ROASTED with 0 output
+          if (affectedBatch) {
             const { error: voidAffectedError } = await supabase
               .from('roasted_batches')
               .update({ 
+                status: 'ROASTED',
                 actual_output_kg: 0,
-                notes: `[VOIDED - BLEND] Output moved to salvage: ${flowData.notes}`,
+                notes: `[VOIDED - BLEND] All output moved to RECOVERY_BLEND. See recovery batch for details.`,
               })
               .eq('id', affectedBatch.id);
             if (voidAffectedError) throw voidAffectedError;
 
-            // Remove WIP from affected batch's roast group
-            const { error: ledgerError } = await supabase
-              .from('wip_ledger')
-              .insert({
-                target_date: batch.target_date,
-                roast_group: affectedBatch.roast_group,
-                entry_type: 'REALLOCATE_OUT',
-                delta_kg: -affectedBatch.actual_output_kg,
-                related_batch_id: affectedBatch.id,
-                created_by: userId,
-                notes: 'Output moved to salvage blend',
-              });
-            if (ledgerError) throw ledgerError;
+            // Remove WIP from affected batch's roast group if it had output
+            if (affectedBatch.actual_output_kg > 0) {
+              const { error: ledgerError } = await supabase
+                .from('wip_ledger')
+                .insert({
+                  target_date: batch.target_date,
+                  roast_group: affectedBatch.roast_group,
+                  entry_type: 'REALLOCATE_OUT',
+                  delta_kg: -affectedBatch.actual_output_kg,
+                  related_batch_id: affectedBatch.id,
+                  created_by: userId,
+                  notes: 'Output voided - moved to RECOVERY_BLEND',
+                });
+              if (ledgerError) throw ledgerError;
+            }
           }
 
-          // Create salvage batch
-          const { error: salvageError } = await supabase
+          // Create recovery batch with all the blended output
+          const { data: recoveryBatch, error: recoveryError } = await supabase
             .from('roasted_batches')
             .insert({
               target_date: batch.target_date,
-              roast_group: flowData.salvageRoastGroup,
+              roast_group: RECOVERY_ROAST_GROUP,
               status: 'ROASTED',
               actual_output_kg: blendedKg,
-              planned_output_kg: blendedKg,
-              cropster_batch_id: flowData.blendCropsterId || null,
-              notes: `Salvage blend: ${flowData.notes}`,
+              planned_output_kg: null,
+              cropster_batch_id: [flowData.blendCropsterId1, flowData.blendCropsterId2].filter(Boolean).join(', ') || null,
+              notes: provenanceNotes,
               created_by: userId,
-            });
-          if (salvageError) throw salvageError;
+            })
+            .select('id')
+            .single();
+          if (recoveryError) throw recoveryError;
 
-          // Add WIP for salvage
-          const { error: salvageLedgerError } = await supabase
+          // Add WIP for recovery blend
+          const { error: recoveryLedgerError } = await supabase
             .from('wip_ledger')
             .insert({
               target_date: batch.target_date,
-              roast_group: flowData.salvageRoastGroup,
-              entry_type: 'REALLOCATE_IN',
+              roast_group: RECOVERY_ROAST_GROUP,
+              entry_type: 'ROAST_OUTPUT',
               delta_kg: blendedKg,
+              related_batch_id: recoveryBatch?.id,
               created_by: userId,
-              notes: `Salvage blend from contamination: ${flowData.notes}`,
+              notes: `Recovery blend from destoner mix: ${batch.roast_group} + ${affectedBatch?.roast_group ?? 'unknown'}`,
             });
-          if (salvageLedgerError) throw salvageLedgerError;
+          if (recoveryLedgerError) throw recoveryLedgerError;
           
           // Create exception event
           const { error: eventError } = await supabase
@@ -368,12 +390,15 @@ export function OhShitModal({
               notes: flowData.notes,
               created_by: userId,
               metadata: {
-                current_batch_id: batch.id,
-                current_batch_roast_group: batch.roast_group,
-                affected_batch_id: flowData.affectedBatchId,
-                affected_batch_roast_group: affectedBatch?.roast_group,
-                blended_output_kg: blendedKg,
-                salvage_roast_group: flowData.salvageRoastGroup,
+                batch1_id: flowData.affectedBatchId,
+                batch1_roast_group: affectedBatch?.roast_group,
+                batch1_inbound_kg: batch1InboundKg,
+                batch2_id: batch.id,
+                batch2_roast_group: batch.roast_group,
+                batch2_inbound_kg: batch2InboundKg,
+                recovery_batch_id: recoveryBatch?.id,
+                recovery_roast_group: RECOVERY_ROAST_GROUP,
+                combined_output_kg: blendedKg,
               },
             });
           if (eventError) throw eventError;
@@ -869,35 +894,41 @@ export function OhShitModal({
         return (
           <div className="space-y-4">
             <div className="space-y-1">
-              <h3 className="font-semibold">Different coffees blended — Salvage</h3>
+              <h3 className="font-semibold">Different coffees blended — Recovery</h3>
             </div>
             
+            {/* Warning callout */}
+            <Alert variant="destructive" className="py-2">
+              <AlertDescription className="text-xs">
+                Because the coffees are different, 100% of the output will be parked in <strong>RECOVERY_BLEND</strong> (not usable for either planned product).
+              </AlertDescription>
+            </Alert>
+
             {/* SOP Guidance */}
             <div className="p-3 bg-muted rounded-md text-sm space-y-2">
               <div className="font-medium text-xs uppercase tracking-wide text-muted-foreground">SOP Steps</div>
               <ol className="list-decimal list-inside space-y-1 text-sm">
-                <li>Treat 100% of the output as a blended/contaminated batch</li>
-                <li>None of the output should count toward either planned product</li>
-                <li>Record as salvage blend below</li>
+                <li>Weigh the combined output from the destoner</li>
+                <li>Record the inbound weights for both batches</li>
+                <li>All output goes to RECOVERY_BLEND</li>
               </ol>
             </div>
 
-            {/* Select affected batch (optional) */}
+            {/* Select affected batch (the previous one) */}
             {recentBatches.length > 0 && (
               <div className="space-y-2">
-                <Label>Previous batch affected (optional)</Label>
+                <Label>Batch 1 (previous batch in destoner)</Label>
                 <Select
                   value={flowData.affectedBatchId ?? ''}
                   onValueChange={(val) => setFlowData(d => ({ ...d, affectedBatchId: val || null }))}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select if known..." />
+                    <SelectValue placeholder="Select the earlier batch..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None / Unknown</SelectItem>
                     {recentBatches.map(b => (
                       <SelectItem key={b.id} value={b.id}>
-                        {b.roast_group} — {b.actual_output_kg.toFixed(1)} kg
+                        {b.roast_group} — {b.actual_output_kg > 0 ? `${b.actual_output_kg.toFixed(1)} kg output` : 'PLANNED'}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -905,8 +936,34 @@ export function OhShitModal({
               </div>
             )}
 
+            {/* Inbound weights */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="batch1-inbound" className="text-xs">Batch 1 inbound (kg)</Label>
+                <Input
+                  id="batch1-inbound"
+                  type="number"
+                  step="0.1"
+                  value={flowData.batch1InboundKg}
+                  onChange={(e) => setFlowData(d => ({ ...d, batch1InboundKg: e.target.value }))}
+                  placeholder="e.g. 22.0"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="batch2-inbound" className="text-xs">Batch 2 inbound (kg)</Label>
+                <Input
+                  id="batch2-inbound"
+                  type="number"
+                  step="0.1"
+                  value={flowData.batch2InboundKg}
+                  onChange={(e) => setFlowData(d => ({ ...d, batch2InboundKg: e.target.value }))}
+                  placeholder="e.g. 22.0"
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
-              <Label htmlFor="blended-kg">Total blended output weight (kg) *</Label>
+              <Label htmlFor="blended-kg">Combined output weight (kg) *</Label>
               <Input
                 id="blended-kg"
                 type="number"
@@ -917,32 +974,26 @@ export function OhShitModal({
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Salvage roast group</Label>
-              <Select
-                value={flowData.salvageRoastGroup}
-                onValueChange={(val) => setFlowData(d => ({ ...d, salvageRoastGroup: val }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select or use default..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SALVAGE_ROAST_GROUP}>{SALVAGE_ROAST_GROUP}</SelectItem>
-                  {allRoastGroups.filter(g => g !== SALVAGE_ROAST_GROUP).map(g => (
-                    <SelectItem key={g} value={g}>{g}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="blend-cropster">Cropster batch ID(s)</Label>
-              <Input
-                id="blend-cropster"
-                value={flowData.blendCropsterId}
-                onChange={(e) => setFlowData(d => ({ ...d, blendCropsterId: e.target.value }))}
-                placeholder="Optional"
-              />
+            {/* Cropster IDs */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="cropster1" className="text-xs">Batch 1 Cropster ID</Label>
+                <Input
+                  id="cropster1"
+                  value={flowData.blendCropsterId1}
+                  onChange={(e) => setFlowData(d => ({ ...d, blendCropsterId1: e.target.value }))}
+                  placeholder="Optional"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="cropster2" className="text-xs">Batch 2 Cropster ID</Label>
+                <Input
+                  id="cropster2"
+                  value={flowData.blendCropsterId2}
+                  onChange={(e) => setFlowData(d => ({ ...d, blendCropsterId2: e.target.value }))}
+                  placeholder="Optional"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -1034,12 +1085,19 @@ export function OhShitModal({
         return (
           <div className="space-y-4">
             <div className="space-y-1">
-              <h3 className="font-semibold">Contamination — Route to salvage</h3>
+              <h3 className="font-semibold">Contamination — Route to Recovery</h3>
               <p className="text-sm text-muted-foreground">
-                The contaminated output will be routed to a salvage product.
+                The contaminated output will be routed to RECOVERY_BLEND.
               </p>
             </div>
             
+            {/* Warning callout */}
+            <Alert variant="destructive" className="py-2">
+              <AlertDescription className="text-xs">
+                100% of the contaminated output goes to <strong>RECOVERY_BLEND</strong> (not usable for either planned product).
+              </AlertDescription>
+            </Alert>
+
             {/* Select affected batch */}
             {recentBatches.length > 0 && (
               <div className="space-y-2">
@@ -1073,24 +1131,6 @@ export function OhShitModal({
                 onChange={(e) => setFlowData(d => ({ ...d, blendedOutputKg: e.target.value }))}
                 placeholder="e.g. 5.0"
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Salvage roast group</Label>
-              <Select
-                value={flowData.salvageRoastGroup}
-                onValueChange={(val) => setFlowData(d => ({ ...d, salvageRoastGroup: val }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select or use default..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SALVAGE_ROAST_GROUP}>{SALVAGE_ROAST_GROUP}</SelectItem>
-                  {allRoastGroups.filter(g => g !== SALVAGE_ROAST_GROUP).map(g => (
-                    <SelectItem key={g} value={g}>{g}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="space-y-2">
@@ -1261,12 +1301,15 @@ export function OhShitModal({
               {flowData.eventType === 'BIN_MIX_DIFFERENT' && (
                 <>
                   <div className="flex justify-between">
-                    <span>Blended output:</span>
+                    <span>Combined output:</span>
                     <span className="font-medium">{flowData.blendedOutputKg} kg</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Salvage group:</span>
-                    <span className="font-medium">{flowData.salvageRoastGroup}</span>
+                    <span>Recovery group:</span>
+                    <span className="font-medium">{RECOVERY_ROAST_GROUP}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Both original batches will be voided (0 kg output).
                   </div>
                 </>
               )}
