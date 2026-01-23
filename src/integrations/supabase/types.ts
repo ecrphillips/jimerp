@@ -613,6 +613,7 @@ export type Database = {
             | null
           created_at: string
           created_by: string | null
+          cropster_batch_id: string | null
           id: string
           notes: string | null
           planned_output_kg: number | null
@@ -628,6 +629,7 @@ export type Database = {
             | null
           created_at?: string
           created_by?: string | null
+          cropster_batch_id?: string | null
           id?: string
           notes?: string | null
           planned_output_kg?: number | null
@@ -643,6 +645,7 @@ export type Database = {
             | null
           created_at?: string
           created_by?: string | null
+          cropster_batch_id?: string | null
           id?: string
           notes?: string | null
           planned_output_kg?: number | null

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,8 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Flame, Plus, Check, Edit2, Zap, Clock, Settings, Trash2 } from 'lucide-react';
+import { Flame, Plus, Check, Zap, Clock, Settings } from 'lucide-react';
+import { RoastGroupDrawer } from './RoastGroupDrawer';
 
 interface RoastTabProps {
   dateFilter: string[];
@@ -31,6 +32,9 @@ interface RoastBatch {
   status: 'PLANNED' | 'ROASTED';
   notes: string | null;
   assigned_roaster: RoasterMachine | null;
+  cropster_batch_id: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface RoastGroupConfig {
@@ -53,14 +57,6 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   
-  const [showBatchDialog, setShowBatchDialog] = useState(false);
-  const [editingBatch, setEditingBatch] = useState<RoastBatch | null>(null);
-  const [selectedRoastGroup, setSelectedRoastGroup] = useState<string>('');
-  const [plannedKg, setPlannedKg] = useState<string>('');
-  const [actualKg, setActualKg] = useState<string>('');
-  const [notes, setNotes] = useState<string>('');
-  const [assignedRoaster, setAssignedRoaster] = useState<RoasterMachine | ''>('');
-  
   // Roaster filter
   const [roasterFilter, setRoasterFilter] = useState<RoasterFilter>('ALL');
   
@@ -69,6 +65,11 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
   const [configRoastGroup, setConfigRoastGroup] = useState<string>('');
   const [configStandardBatch, setConfigStandardBatch] = useState<string>('20');
   const [configDefaultRoaster, setConfigDefaultRoaster] = useState<DefaultRoaster>('EITHER');
+
+  // Sort-freeze state for drawer editing
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [frozenOrder, setFrozenOrder] = useState<DemandByRoastGroup[] | null>(null);
+  const lastEditTimeRef = useRef<number>(0);
 
   // Fetch roast_groups config
   const { data: roastGroupsConfig } = useQuery({
@@ -273,49 +274,40 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     return groupBatches.some(b => b.assigned_roaster === roasterFilter);
   };
 
-  // Filter batches within a group based on roaster filter
-  const filterBatchesByRoaster = (groupBatches: RoastBatch[]): RoastBatch[] => {
-    if (roasterFilter === 'ALL') return groupBatches;
-    
-    if (roasterFilter === 'UNASSIGNED') {
-      return groupBatches.filter(b => b.assigned_roaster === null);
-    }
-    
-    // SAMIAC or LORING - show assigned to that roaster OR unassigned (they might use it)
-    return groupBatches.filter(b => b.assigned_roaster === roasterFilter || b.assigned_roaster === null);
-  };
-
-  // Filtered demand groups
-  const filteredDemandByRoastGroup = useMemo(() => {
+  // Computed sorted groups (for freeze logic)
+  const computedSortedGroups = useMemo(() => {
     return demandByRoastGroup.filter(group => groupMatchesRoasterFilter(group.roast_group));
   }, [demandByRoastGroup, roasterFilter, configByGroup, batchesByGroup]);
 
-  const createBatchMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase
-        .from('roasted_batches')
-        .insert({
-          roast_group: selectedRoastGroup,
-          target_date: today,
-          planned_output_kg: plannedKg ? parseFloat(plannedKg) : null,
-          actual_output_kg: 0,
-          status: 'PLANNED',
-          notes: notes || null,
-          assigned_roaster: assignedRoaster || null,
-          created_by: user?.id,
-        });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success('Batch planned');
-      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
-      closeBatchDialog();
-    },
-    onError: (err) => {
-      console.error(err);
-      toast.error('Failed to create batch');
-    },
-  });
+  // Handle editing state changes from drawer
+  const handleEditingChange = useCallback((groupId: string, isEditing: boolean) => {
+    if (isEditing) {
+      // Freeze the current order when editing starts
+      if (!editingGroupId) {
+        setFrozenOrder(computedSortedGroups);
+      }
+      setEditingGroupId(groupId);
+      lastEditTimeRef.current = Date.now();
+    } else {
+      // Only unfreeze if this is the group that was being edited
+      if (editingGroupId === groupId) {
+        setEditingGroupId(null);
+        setFrozenOrder(null);
+      }
+    }
+  }, [editingGroupId, computedSortedGroups]);
+
+  // Use frozen order while editing, otherwise use computed sorted groups
+  const sortedGroups = useMemo(() => {
+    if (editingGroupId && frozenOrder) {
+      // Return frozen order but with updated data (keep order, update values)
+      return frozenOrder.map(frozen => {
+        const updated = demandByRoastGroup.find(g => g.roast_group === frozen.roast_group);
+        return updated ?? frozen;
+      }).filter(g => demandByRoastGroup.some(d => d.roast_group === g.roast_group));
+    }
+    return computedSortedGroups;
+  }, [editingGroupId, frozenOrder, computedSortedGroups, demandByRoastGroup]);
 
   // Create multiple suggested batches at once with default roaster
   const createSuggestedBatchesMutation = useMutation({
@@ -354,92 +346,6 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     },
   });
 
-  const updateBatchMutation = useMutation({
-    mutationFn: async ({ id, status, actual_output_kg, notes, assigned_roaster }: { 
-      id: string; 
-      status: 'PLANNED' | 'ROASTED'; 
-      actual_output_kg: number; 
-      notes: string | null;
-      assigned_roaster: RoasterMachine | null;
-    }) => {
-      const { error } = await supabase
-        .from('roasted_batches')
-        .update({ status, actual_output_kg, notes, assigned_roaster })
-        .eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success('Batch updated');
-      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
-      closeBatchDialog();
-    },
-    onError: (err) => {
-      console.error(err);
-      toast.error('Failed to update batch');
-    },
-  });
-
-  // Quick update roaster inline
-  const quickUpdateRoasterMutation = useMutation({
-    mutationFn: async ({ id, assigned_roaster }: { id: string; assigned_roaster: RoasterMachine | null }) => {
-      const { error } = await supabase
-        .from('roasted_batches')
-        .update({ assigned_roaster })
-        .eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
-    },
-    onError: (err) => {
-      console.error(err);
-      toast.error('Failed to update roaster');
-    },
-  });
-
-  // Delete a PLANNED batch
-  const deleteBatchMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('roasted_batches')
-        .delete()
-        .eq('id', id)
-        .eq('status', 'PLANNED'); // Only allow deleting PLANNED batches
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success('Batch deleted');
-      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
-    },
-    onError: (err) => {
-      console.error(err);
-      toast.error('Failed to delete batch');
-    },
-  });
-
-  // Quick inline mark as roasted
-  const markRoastedMutation = useMutation({
-    mutationFn: async ({ id, planned_output_kg }: { id: string; planned_output_kg: number | null }) => {
-      const { error } = await supabase
-        .from('roasted_batches')
-        .update({ 
-          status: 'ROASTED',
-          actual_output_kg: planned_output_kg ?? 0,
-        })
-        .eq('id', id)
-        .eq('status', 'PLANNED'); // Safety: only update if still PLANNED
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success('Batch marked as roasted');
-      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
-    },
-    onError: (err) => {
-      console.error(err);
-      toast.error('Failed to mark batch as roasted');
-    },
-  });
-
   const upsertRoastGroupMutation = useMutation({
     mutationFn: async ({ roastGroup, standardBatchKg, defaultRoaster }: { roastGroup: string; standardBatchKg: number; defaultRoaster: DefaultRoaster }) => {
       const { error } = await supabase
@@ -465,74 +371,12 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     },
   });
 
-  const openNewBatch = (roastGroup: string, suggestedKg?: number, defaultRoaster?: DefaultRoaster) => {
-    setEditingBatch(null);
-    setSelectedRoastGroup(roastGroup);
-    setPlannedKg(suggestedKg?.toFixed(2) ?? '');
-    setActualKg('');
-    setNotes('');
-    // Set roaster based on default
-    if (defaultRoaster === 'SAMIAC') {
-      setAssignedRoaster('SAMIAC');
-    } else if (defaultRoaster === 'LORING') {
-      setAssignedRoaster('LORING');
-    } else {
-      setAssignedRoaster('');
-    }
-    setShowBatchDialog(true);
-  };
-
-  const openEditBatch = (batch: RoastBatch) => {
-    setEditingBatch(batch);
-    setSelectedRoastGroup(batch.roast_group);
-    setPlannedKg(batch.planned_output_kg?.toString() ?? '');
-    setActualKg(batch.actual_output_kg.toString());
-    setNotes(batch.notes ?? '');
-    setAssignedRoaster(batch.assigned_roaster ?? '');
-    setShowBatchDialog(true);
-  };
-
-  const closeBatchDialog = () => {
-    setShowBatchDialog(false);
-    setEditingBatch(null);
-    setSelectedRoastGroup('');
-    setPlannedKg('');
-    setActualKg('');
-    setNotes('');
-    setAssignedRoaster('');
-  };
-
   const openConfigDialog = (roastGroup: string) => {
     const config = configByGroup[roastGroup];
     setConfigRoastGroup(roastGroup);
     setConfigStandardBatch((config?.standard_batch_kg ?? 20).toString());
     setConfigDefaultRoaster(config?.default_roaster ?? 'EITHER');
     setShowConfigDialog(true);
-  };
-
-  const handleSaveBatch = () => {
-    if (editingBatch) {
-      updateBatchMutation.mutate({
-        id: editingBatch.id,
-        status: editingBatch.status,
-        actual_output_kg: parseFloat(actualKg) || 0,
-        notes: notes || null,
-        assigned_roaster: assignedRoaster || null,
-      });
-    } else {
-      createBatchMutation.mutate();
-    }
-  };
-
-  const handleMarkRoasted = () => {
-    if (!editingBatch) return;
-    updateBatchMutation.mutate({
-      id: editingBatch.id,
-      status: 'ROASTED',
-      actual_output_kg: parseFloat(actualKg) || 0,
-      notes: notes || null,
-      assigned_roaster: assignedRoaster || null,
-    });
   };
 
   const handleCreateSuggestedBatches = (roastGroup: string, demandKg: number) => {
@@ -590,7 +434,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                 Roast Plan
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Plan batches based on demand and standard batch sizes. Assign roasters. Urgent orders shown first.
+                Click a roast group to expand batch queue. Urgent orders shown first.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -618,434 +462,189 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
           </div>
         </CardHeader>
         <CardContent>
-          {filteredDemandByRoastGroup.length === 0 && allRoastGroups.length === 0 ? (
+          {sortedGroups.length === 0 && allRoastGroups.length === 0 ? (
             <p className="text-muted-foreground py-4">
               No products have roast_group assigned. Edit products to set roast groups.
             </p>
-          ) : filteredDemandByRoastGroup.length === 0 && roasterFilter !== 'ALL' ? (
+          ) : sortedGroups.length === 0 && roasterFilter !== 'ALL' ? (
             <p className="text-muted-foreground py-4">
               No roast groups match the "{roasterFilter}" filter. Try selecting "All".
             </p>
           ) : (
-            <div className="space-y-6">
-              {/* Roast groups with demand */}
-              {filteredDemandByRoastGroup.map((group) => {
-                const groupBatches = batchesByGroup[group.roast_group] ?? [];
-                const filteredBatches = filterBatchesByRoaster(groupBatches);
-                const plannedBatches = groupBatches.filter(b => b.status === 'PLANNED');
-                const plannedTotal = plannedBatches.reduce((sum, b) => sum + (b.planned_output_kg ?? 0), 0);
-                const roastedTotal = roastedInventory[group.roast_group] ?? 0;
-                const config = configByGroup[group.roast_group];
-                const standardBatch = config?.standard_batch_kg ?? 20;
-                const defaultRoaster = config?.default_roaster ?? 'EITHER';
-                const hasConfig = group.roast_group in configByGroup;
-                
-                // Calculate suggestion
-                const remainingNeed = Math.max(0, group.total_kg - roastedTotal - plannedTotal);
-                const suggestedBatches = remainingNeed > 0 ? Math.ceil(remainingNeed / standardBatch) : 0;
-                const suggestedTotalKg = suggestedBatches * standardBatch;
-                
-                return (
-                  <div 
-                    key={group.roast_group} 
-                    className={`border rounded-lg p-4 ${group.hasTimeSensitive ? 'border-destructive bg-destructive/5' : ''}`}
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-lg">{group.roast_group}</h3>
-                          {group.hasTimeSensitive && (
-                            <Badge variant="destructive" className="text-xs">
-                              <Clock className="h-3 w-3 mr-1" />
-                              Urgent
-                            </Badge>
-                          )}
-                          {defaultRoaster !== 'EITHER' && (
-                            <Badge variant="outline" className={`text-xs ${getRoasterBadgeColor(defaultRoaster as RoasterMachine)}`}>
-                              {defaultRoaster}
-                            </Badge>
-                          )}
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-6 w-6 p-0"
-                            onClick={() => openConfigDialog(group.roast_group)}
-                          >
-                            <Settings className="h-3 w-3" />
-                          </Button>
-                        </div>
-                        {!hasConfig && (
-                          <p className="text-xs text-amber-600">
-                            No config set. Click ⚙ to set standard batch size and roaster.
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={roastedTotal >= group.total_kg ? 'default' : 'secondary'}>
-                          {roastedTotal.toFixed(1)} kg roasted
-                        </Badge>
-                      </div>
-                    </div>
-
-                    {/* Batch suggestion summary */}
-                    <div className="bg-muted/50 rounded p-3 mb-3 text-sm">
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <span>
-                          <strong>Demand:</strong> {group.total_kg.toFixed(1)} kg
-                        </span>
-                        <span>
-                          <strong>Std batch:</strong> {standardBatch} kg
-                        </span>
-                        {suggestedBatches > 0 ? (
-                          <span className="text-primary font-medium">
-                            <Zap className="h-4 w-4 inline mr-1" />
-                            Suggest: {suggestedBatches} batch{suggestedBatches > 1 ? 'es' : ''} ({suggestedTotalKg} kg)
-                          </span>
-                        ) : (
-                          <span className="text-green-600">
-                            <Check className="h-4 w-4 inline mr-1" />
-                            Covered
-                          </span>
-                        )}
-                      </div>
-                      {suggestedBatches > 0 && (
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          className="mt-2"
-                          onClick={() => handleCreateSuggestedBatches(group.roast_group, group.total_kg)}
-                          disabled={createSuggestedBatchesMutation.isPending}
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          Create {suggestedBatches} planned batch{suggestedBatches > 1 ? 'es' : ''}
-                          {defaultRoaster !== 'EITHER' && ` (${defaultRoaster})`}
-                        </Button>
-                      )}
-                    </div>
-
-                    {/* Products in this group */}
-                    <div className="text-xs text-muted-foreground mb-3">
-                      {group.products.map((p, i) => (
-                        <span key={p.name}>
-                          {p.name} ({p.kg.toFixed(1)} kg){i < group.products.length - 1 ? ', ' : ''}
-                        </span>
-                      ))}
-                    </div>
-
-                    {/* Batches */}
-                    {filteredBatches.length > 0 && (
-                      <div className="space-y-2">
-                        {filteredBatches.map((batch) => (
-                          <div
-                            key={batch.id}
-                            className={`flex items-center justify-between p-2 rounded border ${
-                              batch.status === 'ROASTED' ? 'bg-green-50 border-green-200' : 'bg-background'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              {batch.status === 'ROASTED' ? (
-                                <Check className="h-4 w-4 text-green-600" />
-                              ) : (
-                                <Flame className="h-4 w-4 text-muted-foreground" />
-                              )}
-                              <div>
-                                <span className="text-sm font-medium">
-                                  {batch.status === 'ROASTED' 
-                                    ? `${batch.actual_output_kg} kg roasted`
-                                    : `${batch.planned_output_kg ?? 0} kg planned`
-                                  }
-                                </span>
-                                {batch.notes && (
-                                  <p className="text-xs text-muted-foreground">{batch.notes}</p>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {/* Inline roaster selector */}
-                              <Select
-                                value={batch.assigned_roaster ?? 'UNASSIGNED'}
-                                onValueChange={(val) => {
-                                  quickUpdateRoasterMutation.mutate({
-                                    id: batch.id,
-                                    assigned_roaster: val === 'UNASSIGNED' ? null : val as RoasterMachine,
-                                  });
-                                }}
-                              >
-                                <SelectTrigger className={`h-7 w-24 text-xs ${getRoasterBadgeColor(batch.assigned_roaster)}`}>
-                                  <SelectValue placeholder="Roaster" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
-                                  <SelectItem value="SAMIAC">SAMIAC</SelectItem>
-                                  <SelectItem value="LORING">LORING</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              {batch.status === 'PLANNED' && (
-                                <Button 
-                                  size="sm" 
-                                  variant="default"
-                                  className="h-7 text-xs"
-                                  onClick={() => markRoastedMutation.mutate({ 
-                                    id: batch.id, 
-                                    planned_output_kg: batch.planned_output_kg 
-                                  })}
-                                >
-                                  <Check className="h-3 w-3 mr-1" />
-                                  Roasted
-                                </Button>
-                              )}
-                              <Button size="sm" variant="ghost" onClick={() => openEditBatch(batch)}>
-                                <Edit2 className="h-4 w-4" />
-                              </Button>
-                              {batch.status === 'PLANNED' && (
-                                <Button 
-                                  size="sm" 
-                                  variant="ghost" 
-                                  className="text-destructive hover:text-destructive"
-                                  onClick={() => deleteBatchMutation.mutate(batch.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Manual add batch button */}
-                    <Button 
-                      size="sm" 
-                      variant="ghost" 
-                      className="mt-2 text-muted-foreground"
-                      onClick={() => openNewBatch(group.roast_group, standardBatch, defaultRoaster)}
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add custom batch
-                    </Button>
-                  </div>
-                );
-              })}
-
-              {/* Roast groups without current demand but with batches */}
-              {allRoastGroups
-                .filter((g) => !demandByRoastGroup.find((d) => d.roast_group === g))
-                .filter((g) => batchesByGroup[g]?.length > 0)
-                .filter((g) => groupMatchesRoasterFilter(g))
-                .map((roastGroup) => {
-                  const groupBatches = batchesByGroup[roastGroup] ?? [];
-                  const filteredBatches = filterBatchesByRoaster(groupBatches);
-                  const roastedTotal = roastedInventory[roastGroup] ?? 0;
-                  const config = configByGroup[roastGroup];
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="pb-2 w-8"></th>
+                  <th className="pb-2">Roast Group</th>
+                  <th className="pb-2 text-right">Demand</th>
+                  <th className="pb-2 text-right">Planned</th>
+                  <th className="pb-2 text-right">Roasted</th>
+                  <th className="pb-2 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedGroups.map((group) => {
+                  const groupBatches = batchesByGroup[group.roast_group] ?? [];
+                  const config = configByGroup[group.roast_group];
+                  const roastedTotal = roastedInventory[group.roast_group] ?? 0;
+                  const standardBatch = config?.standard_batch_kg ?? 20;
                   const defaultRoaster = config?.default_roaster ?? 'EITHER';
+                  const hasConfig = group.roast_group in configByGroup;
                   
-                  if (filteredBatches.length === 0 && roasterFilter !== 'ALL') return null;
+                  // Calculate suggestion for quick-add
+                  const plannedTotal = groupBatches
+                    .filter(b => b.status === 'PLANNED')
+                    .reduce((sum, b) => sum + (b.planned_output_kg ?? 0), 0);
+                  const remainingNeed = Math.max(0, group.total_kg - roastedTotal - plannedTotal);
+                  const suggestedBatches = remainingNeed > 0 ? Math.ceil(remainingNeed / standardBatch) : 0;
                   
                   return (
-                    <div key={roastGroup} className="border rounded-lg p-4 opacity-70">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-lg">{roastGroup}</h3>
-                          {defaultRoaster !== 'EITHER' && (
-                            <Badge variant="outline" className={`text-xs ${getRoasterBadgeColor(defaultRoaster as RoasterMachine)}`}>
-                              {defaultRoaster}
-                            </Badge>
-                          )}
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-6 w-6 p-0"
-                            onClick={() => openConfigDialog(roastGroup)}
-                          >
-                            <Settings className="h-3 w-3" />
-                          </Button>
-                        </div>
-                        <Badge variant="outline">{roastedTotal.toFixed(1)} kg on hand</Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground mb-3">No demand for selected dates</p>
-                      {filteredBatches.length > 0 && (
-                        <div className="space-y-2">
-                          {filteredBatches.map((batch) => (
-                            <div
-                              key={batch.id}
-                              className={`flex items-center justify-between p-2 rounded border ${
-                                batch.status === 'ROASTED' ? 'bg-green-50 border-green-200' : 'bg-background'
-                              }`}
-                            >
-                              <div className="flex items-center gap-3">
-                                {batch.status === 'ROASTED' ? (
-                                  <Check className="h-4 w-4 text-green-600" />
-                                ) : (
-                                  <Flame className="h-4 w-4 text-muted-foreground" />
-                                )}
-                                <span className="text-sm">
-                                  {batch.status === 'ROASTED' 
-                                    ? `${batch.actual_output_kg} kg roasted`
-                                    : `${batch.planned_output_kg ?? 0} kg planned`
-                                  }
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Select
-                                  value={batch.assigned_roaster ?? 'UNASSIGNED'}
-                                  onValueChange={(val) => {
-                                    quickUpdateRoasterMutation.mutate({
-                                      id: batch.id,
-                                      assigned_roaster: val === 'UNASSIGNED' ? null : val as RoasterMachine,
-                                    });
-                                  }}
-                                >
-                                  <SelectTrigger className={`h-7 w-24 text-xs ${getRoasterBadgeColor(batch.assigned_roaster)}`}>
-                                    <SelectValue placeholder="Roaster" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
-                                    <SelectItem value="SAMIAC">SAMIAC</SelectItem>
-                                    <SelectItem value="LORING">LORING</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                {batch.status === 'PLANNED' && (
-                                  <Button 
-                                    size="sm" 
-                                    variant="default"
-                                    className="h-7 text-xs"
-                                    onClick={() => markRoastedMutation.mutate({ 
-                                      id: batch.id, 
-                                      planned_output_kg: batch.planned_output_kg 
-                                    })}
-                                  >
-                                    <Check className="h-3 w-3 mr-1" />
-                                    Roasted
-                                  </Button>
-                                )}
-                                <Button size="sm" variant="ghost" onClick={() => openEditBatch(batch)}>
-                                  <Edit2 className="h-4 w-4" />
-                                </Button>
-                                {batch.status === 'PLANNED' && (
-                                  <Button 
-                                    size="sm" 
-                                    variant="ghost" 
-                                    className="text-destructive hover:text-destructive"
-                                    onClick={() => deleteBatchMutation.mutate(batch.id)}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                )}
-                              </div>
+                    <React.Fragment key={group.roast_group}>
+                      <RoastGroupDrawer
+                        roastGroup={group.roast_group}
+                        demandKg={group.total_kg}
+                        hasTimeSensitive={group.hasTimeSensitive}
+                        batches={groupBatches}
+                        config={config}
+                        roastedTotal={roastedTotal}
+                        today={today}
+                        onOpenConfig={openConfigDialog}
+                        onEditingChange={(isEditing) => handleEditingChange(group.roast_group, isEditing)}
+                      />
+                      
+                      {/* Quick batch suggestion row (shown below collapsed row if there's demand and no batches visible) */}
+                      {suggestedBatches > 0 && !hasConfig && (
+                        <tr className="bg-muted/30">
+                          <td colSpan={6} className="py-2 px-4 pl-10 text-sm">
+                            <div className="flex items-center gap-3">
+                              <Badge variant="outline" className="text-xs">
+                                <Settings className="h-3 w-3 mr-1" />
+                                No config
+                              </Badge>
+                              <span className="text-muted-foreground">
+                                Set batch size to get suggestions
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 text-xs"
+                                onClick={() => openConfigDialog(group.roast_group)}
+                              >
+                                Configure
+                              </Button>
                             </div>
-                          ))}
-                        </div>
+                          </td>
+                        </tr>
                       )}
-                    </div>
+                    </React.Fragment>
                   );
                 })}
-            </div>
+                
+                {/* Quick-add batches section */}
+                {sortedGroups.some(g => {
+                  const config = configByGroup[g.roast_group];
+                  const groupBatches = batchesByGroup[g.roast_group] ?? [];
+                  const plannedTotal = groupBatches.filter(b => b.status === 'PLANNED').reduce((sum, b) => sum + (b.planned_output_kg ?? 0), 0);
+                  const roastedTotal = roastedInventory[g.roast_group] ?? 0;
+                  const remainingNeed = g.total_kg - roastedTotal - plannedTotal;
+                  return remainingNeed > 0 && config;
+                }) && (
+                  <tr className="border-t bg-muted/20">
+                    <td colSpan={6} className="py-3 px-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Zap className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-medium">Quick add suggested batches:</span>
+                        {sortedGroups.map(g => {
+                          const config = configByGroup[g.roast_group];
+                          if (!config) return null;
+                          
+                          const groupBatches = batchesByGroup[g.roast_group] ?? [];
+                          const plannedTotal = groupBatches.filter(b => b.status === 'PLANNED').reduce((sum, b) => sum + (b.planned_output_kg ?? 0), 0);
+                          const roastedTotal = roastedInventory[g.roast_group] ?? 0;
+                          const remainingNeed = g.total_kg - roastedTotal - plannedTotal;
+                          const suggestedBatches = remainingNeed > 0 ? Math.ceil(remainingNeed / config.standard_batch_kg) : 0;
+                          
+                          if (suggestedBatches <= 0) return null;
+                          
+                          return (
+                            <Button
+                              key={g.roast_group}
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => handleCreateSuggestedBatches(g.roast_group, g.total_kg)}
+                              disabled={createSuggestedBatchesMutation.isPending}
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              {g.roast_group} (+{suggestedBatches})
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           )}
         </CardContent>
       </Card>
 
-      {/* Batch Dialog */}
-      <Dialog open={showBatchDialog} onOpenChange={setShowBatchDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingBatch ? 'Edit Roast Batch' : 'Plan Roast Batch'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Roast Group</Label>
-              <p className="font-medium">{selectedRoastGroup}</p>
-            </div>
-            <div>
-              <Label htmlFor="assignedRoaster">Assigned Roaster</Label>
-              <Select
-                value={assignedRoaster || 'UNASSIGNED'}
-                onValueChange={(val) => setAssignedRoaster(val === 'UNASSIGNED' ? '' : val as RoasterMachine)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select roaster" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
-                  <SelectItem value="SAMIAC">SAMIAC</SelectItem>
-                  <SelectItem value="LORING">LORING</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {!editingBatch && (
-              <div>
-                <Label htmlFor="plannedKg">Planned Output (kg)</Label>
-                <Input
-                  id="plannedKg"
-                  type="number"
-                  step="0.01"
-                  value={plannedKg}
-                  onChange={(e) => setPlannedKg(e.target.value)}
-                  placeholder="e.g. 12.5"
-                />
-              </div>
-            )}
-            {editingBatch && (
-              <>
-                <div>
-                  <Label>Status</Label>
-                  <p className="font-medium">
-                    {editingBatch.status === 'ROASTED' ? (
-                      <Badge className="bg-green-600">Roasted</Badge>
-                    ) : (
-                      <Badge variant="secondary">Planned</Badge>
-                    )}
-                  </p>
-                </div>
-                <div>
-                  <Label htmlFor="actualKg">Actual Output (kg)</Label>
-                  <Input
-                    id="actualKg"
-                    type="number"
-                    step="0.01"
-                    value={actualKg}
-                    onChange={(e) => setActualKg(e.target.value)}
-                    placeholder="e.g. 11.8"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Editable at any time. Negative values allowed for adjustments.
-                  </p>
-                </div>
-              </>
-            )}
-            <div>
-              <Label htmlFor="notes">Notes (optional)</Label>
-              <Input
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. blend notes, batch number"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={closeBatchDialog}>Cancel</Button>
-              {editingBatch && editingBatch.status === 'PLANNED' && (
-                <Button 
-                  variant="default"
-                  onClick={handleMarkRoasted}
-                  disabled={updateBatchMutation.isPending}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  <Check className="h-4 w-4 mr-1" />
-                  Mark Roasted
-                </Button>
-              )}
-              <Button 
-                onClick={handleSaveBatch} 
-                disabled={createBatchMutation.isPending || updateBatchMutation.isPending || (!editingBatch && !selectedRoastGroup)}
-              >
-                {editingBatch ? 'Update' : 'Plan Batch'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Roast groups without current demand but with batches */}
+      {allRoastGroups
+        .filter((g) => !demandByRoastGroup.find((d) => d.roast_group === g))
+        .filter((g) => batchesByGroup[g]?.length > 0)
+        .filter((g) => groupMatchesRoasterFilter(g))
+        .length > 0 && (
+        <Card className="opacity-70">
+          <CardHeader>
+            <CardTitle className="text-base">Groups Without Demand</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              These roast groups have batches but no orders for the selected dates.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="pb-2 w-8"></th>
+                  <th className="pb-2">Roast Group</th>
+                  <th className="pb-2 text-right">Demand</th>
+                  <th className="pb-2 text-right">Planned</th>
+                  <th className="pb-2 text-right">Roasted</th>
+                  <th className="pb-2 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allRoastGroups
+                  .filter((g) => !demandByRoastGroup.find((d) => d.roast_group === g))
+                  .filter((g) => batchesByGroup[g]?.length > 0)
+                  .filter((g) => groupMatchesRoasterFilter(g))
+                  .map((roastGroup) => {
+                    const groupBatches = batchesByGroup[roastGroup] ?? [];
+                    const config = configByGroup[roastGroup];
+                    const roastedTotal = roastedInventory[roastGroup] ?? 0;
+                    
+                    return (
+                      <RoastGroupDrawer
+                        key={roastGroup}
+                        roastGroup={roastGroup}
+                        demandKg={0}
+                        hasTimeSensitive={false}
+                        batches={groupBatches}
+                        config={config}
+                        roastedTotal={roastedTotal}
+                        today={today}
+                        onOpenConfig={openConfigDialog}
+                        onEditingChange={(isEditing) => handleEditingChange(roastGroup, isEditing)}
+                      />
+                    );
+                  })}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Roast Group Config Dialog */}
       <Dialog open={showConfigDialog} onOpenChange={setShowConfigDialog}>
