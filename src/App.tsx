@@ -25,6 +25,7 @@ import NoSmokeBoard from "@/pages/internal/NoSmokeBoard";
 import BoardManagement from "@/pages/internal/BoardManagement";
 import BulkProducts from "@/pages/internal/BulkProducts";
 import Inventory from "@/pages/internal/Inventory";
+import AdminTools from "@/pages/internal/AdminTools";
 import NewOrder from "@/pages/client/NewOrder";
 import OrderHistory from "@/pages/client/OrderHistory";
 import Account from "@/pages/client/Account";
@@ -118,6 +119,11 @@ const App = () => (
             <Route path="/bulk-products" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><BulkProducts /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin-tools" element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <InternalLayout><AdminTools /></InternalLayout>
               </ProtectedRoute>
             } />
 

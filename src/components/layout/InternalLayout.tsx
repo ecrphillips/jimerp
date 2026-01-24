@@ -16,7 +16,8 @@ import {
   ChevronDown,
   ChevronRight,
   Flame,
-  Warehouse
+  Warehouse,
+  Wrench
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -156,7 +157,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 </Collapsible>
               </li>
 
-              {/* Bottom items: Products, Clients, Green Coffee */}
+              {/* Bottom items: Inventory, Products, Clients */}
               {bottomNavItems.map((item) => (
                 <li key={item.to}>
                   <NavLink
@@ -174,6 +175,25 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                   </NavLink>
                 </li>
               ))}
+
+              {/* Admin Tools - ADMIN only */}
+              {authUser?.role === 'ADMIN' && (
+                <li>
+                  <NavLink
+                    to="/admin-tools"
+                    onClick={() => setSidebarOpen(false)}
+                    className={({ isActive }) => cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                      isActive 
+                        ? "bg-sidebar-accent text-sidebar-primary" 
+                        : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    )}
+                  >
+                    <Wrench className="h-5 w-5" />
+                    Admin Tools
+                  </NavLink>
+                </li>
+              )}
             </ul>
           </nav>
 
