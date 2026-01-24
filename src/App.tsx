@@ -24,6 +24,7 @@ import FunkBoard from "@/pages/internal/FunkBoard";
 import NoSmokeBoard from "@/pages/internal/NoSmokeBoard";
 import BoardManagement from "@/pages/internal/BoardManagement";
 import BulkProducts from "@/pages/internal/BulkProducts";
+import Inventory from "@/pages/internal/Inventory";
 import NewOrder from "@/pages/client/NewOrder";
 import OrderHistory from "@/pages/client/OrderHistory";
 import Account from "@/pages/client/Account";
@@ -107,6 +108,11 @@ const App = () => (
             <Route path="/boards" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><BoardManagement /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/inventory" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><Inventory /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/bulk-products" element={

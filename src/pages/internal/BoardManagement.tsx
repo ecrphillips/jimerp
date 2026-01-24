@@ -34,11 +34,12 @@ interface Product {
   client: { name: string } | null;
 }
 
-const SOURCES = ['MATCHSTICK', 'FUNK', 'NOSMOKE'] as const;
+type BoardSourceType = 'MATCHSTICK' | 'FUNK' | 'NOSMOKE';
+const SOURCES: BoardSourceType[] = ['MATCHSTICK', 'FUNK', 'NOSMOKE'];
 
 export default function BoardManagement() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<string>('MATCHSTICK');
+  const [activeTab, setActiveTab] = useState<BoardSourceType>('MATCHSTICK');
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState('');
 
@@ -49,7 +50,7 @@ export default function BoardManagement() {
       const { data, error } = await supabase
         .from('source_board_products')
         .select('id, source, product_id, display_order, is_active, product:products(id, product_name, sku, is_active, client:clients(name))')
-        .eq('source', activeTab as 'MATCHSTICK' | 'FUNK')
+        .eq('source', activeTab)
         .order('display_order');
 
       if (error) throw error;
@@ -82,7 +83,7 @@ export default function BoardManagement() {
     mutationFn: async () => {
       const maxOrder = Math.max(0, ...(boardProducts?.map((bp) => bp.display_order) ?? [0]));
       const { error } = await supabase.from('source_board_products').insert({
-        source: activeTab as 'MATCHSTICK' | 'FUNK',
+        source: activeTab,
         product_id: selectedProductId,
         display_order: maxOrder + 1,
         is_active: true,
@@ -174,7 +175,7 @@ export default function BoardManagement() {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as BoardSourceType)}>
         <TabsList>
           <TabsTrigger value="MATCHSTICK">Matchstick</TabsTrigger>
           <TabsTrigger value="FUNK">Funk</TabsTrigger>

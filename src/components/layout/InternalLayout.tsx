@@ -7,7 +7,6 @@ import {
   ShoppingCart,
   Users,
   Package,
-  Leaf,
   LogOut,
   Coffee,
   Menu,
@@ -17,8 +16,7 @@ import {
   ChevronDown,
   ChevronRight,
   Flame,
-  PackageCheck,
-  Truck
+  Warehouse
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -27,7 +25,7 @@ interface InternalLayoutProps {
   children: React.ReactNode;
 }
 
-// Top-level nav items (reordered: Dashboard > Orders > Production > Products > Clients)
+// Top-level nav items (reordered: Dashboard > Orders > Production > Inventory > Products > Clients)
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/orders', label: 'Orders', icon: ShoppingCart },
@@ -42,11 +40,11 @@ const productionSubItems = [
   { to: '/boards', label: 'Board Mgmt', icon: Settings },
 ];
 
-// Bottom nav items
+// Bottom nav items (removed Green Coffee)
 const bottomNavItems = [
+  { to: '/inventory', label: 'Inventory', icon: Warehouse },
   { to: '/products', label: 'Products', icon: Package },
   { to: '/clients', label: 'Clients', icon: Users },
-  { to: '/green-coffee', label: 'Green Coffee', icon: Leaf },
 ];
 
 export function InternalLayout({ children }: InternalLayoutProps) {

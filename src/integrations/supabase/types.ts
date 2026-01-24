@@ -135,6 +135,79 @@ export type Database = {
           },
         ]
       }
+      fg_inventory: {
+        Row: {
+          id: string
+          notes: string | null
+          product_id: string
+          units_on_hand: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: string
+          notes?: string | null
+          product_id: string
+          units_on_hand?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          notes?: string | null
+          product_id?: string
+          units_on_hand?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fg_inventory_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: true
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fg_inventory_log: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          product_id: string
+          units_after: number
+          units_delta: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          product_id: string
+          units_after: number
+          units_delta: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          product_id?: string
+          units_after?: number
+          units_delta?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fg_inventory_log_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       green_coffee_lots: {
         Row: {
           created_at: string
@@ -776,6 +849,36 @@ export type Database = {
           },
         ]
       }
+      wip_adjustments: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          kg_delta: number
+          notes: string | null
+          reason: Database["public"]["Enums"]["wip_adjustment_reason"]
+          roast_group: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kg_delta: number
+          notes?: string | null
+          reason: Database["public"]["Enums"]["wip_adjustment_reason"]
+          roast_group: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kg_delta?: number
+          notes?: string | null
+          reason?: Database["public"]["Enums"]["wip_adjustment_reason"]
+          roast_group?: string
+        }
+        Relationships: []
+      }
       wip_ledger: {
         Row: {
           created_at: string
@@ -894,6 +997,11 @@ export type Database = {
       roasted_batch_status: "PLANNED" | "ROASTED"
       roaster_machine: "SAMIAC" | "LORING"
       ship_priority: "NORMAL" | "TIME_SENSITIVE"
+      wip_adjustment_reason:
+        | "LOSS"
+        | "COUNT_ADJUSTMENT"
+        | "CONTAMINATION"
+        | "OTHER"
       wip_entry_type:
         | "ROAST_OUTPUT"
         | "PACK_CONSUME"
@@ -1070,6 +1178,12 @@ export const Constants = {
       roasted_batch_status: ["PLANNED", "ROASTED"],
       roaster_machine: ["SAMIAC", "LORING"],
       ship_priority: ["NORMAL", "TIME_SENSITIVE"],
+      wip_adjustment_reason: [
+        "LOSS",
+        "COUNT_ADJUSTMENT",
+        "CONTAMINATION",
+        "OTHER",
+      ],
       wip_entry_type: [
         "ROAST_OUTPUT",
         "PACK_CONSUME",
