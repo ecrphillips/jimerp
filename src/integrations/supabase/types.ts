@@ -946,6 +946,7 @@ export type Database = {
         Returns: boolean
       }
       dev_test_reset: { Args: never; Returns: undefined }
+      dev_test_seed_minimal: { Args: never; Returns: undefined }
       get_user_client_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {

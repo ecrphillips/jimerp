@@ -6,21 +6,28 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertTriangle, Trash2 } from 'lucide-react';
+import { AlertTriangle, Trash2, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export default function AdminTools() {
   const navigate = useNavigate();
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [confirmText, setConfirmText] = useState('');
-  const [understood, setUnderstood] = useState(false);
+  
+  // Reset state
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetUnderstood, setResetUnderstood] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
 
-  const canConfirm = confirmText === 'RESET' && understood;
+  // Seed state
+  const [showSeedModal, setShowSeedModal] = useState(false);
+  const [seedUnderstood, setSeedUnderstood] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
+
+  const canConfirmReset = resetConfirmText === 'RESET' && resetUnderstood;
 
   const handleReset = async () => {
-    if (!canConfirm) return;
+    if (!canConfirmReset) return;
     
     setIsResetting(true);
     try {
@@ -28,9 +35,9 @@ export default function AdminTools() {
       if (error) throw error;
       
       toast.success('Test data reset complete');
-      setShowConfirmModal(false);
-      setConfirmText('');
-      setUnderstood(false);
+      setShowResetModal(false);
+      setResetConfirmText('');
+      setResetUnderstood(false);
       navigate('/orders');
     } catch (err: any) {
       console.error('Reset failed:', err);
@@ -40,10 +47,35 @@ export default function AdminTools() {
     }
   };
 
-  const openModal = () => {
-    setConfirmText('');
-    setUnderstood(false);
-    setShowConfirmModal(true);
+  const handleSeed = async () => {
+    if (!seedUnderstood) return;
+    
+    setIsSeeding(true);
+    try {
+      const { error } = await supabase.rpc('dev_test_seed_minimal');
+      if (error) throw error;
+      
+      toast.success('Seeded minimal test day');
+      setShowSeedModal(false);
+      setSeedUnderstood(false);
+      navigate('/production?tab=roast');
+    } catch (err: any) {
+      console.error('Seed failed:', err);
+      toast.error(err.message || 'Seed failed');
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  const openResetModal = () => {
+    setResetConfirmText('');
+    setResetUnderstood(false);
+    setShowResetModal(true);
+  };
+
+  const openSeedModal = () => {
+    setSeedUnderstood(false);
+    setShowSeedModal(true);
   };
 
   return (
@@ -55,6 +87,7 @@ export default function AdminTools() {
         </p>
       </div>
 
+      {/* Dev/Test Reset Card */}
       <Card className="border-destructive/50">
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -88,7 +121,7 @@ export default function AdminTools() {
             </div>
             <Button 
               variant="destructive" 
-              onClick={openModal}
+              onClick={openResetModal}
               className="gap-2"
             >
               <Trash2 className="h-4 w-4" />
@@ -98,8 +131,49 @@ export default function AdminTools() {
         </CardContent>
       </Card>
 
-      {/* Confirmation Modal */}
-      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+      {/* Seed Minimal Test Day Card */}
+      <Card className="border-primary/50">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Seed Minimal Test Day</CardTitle>
+          </div>
+          <CardDescription>
+            Creates sample clients/products/roast mapping and a few orders for today & tomorrow. Andon demand remains board-driven.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              <p className="font-medium mb-2">This will create:</p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>Clients: Mah, Nelson, Oldhand (+ ensures MAT/FUN/NSM exist)</li>
+                <li>Roast groups with realistic batch sizes</li>
+                <li>Products with 300g and 5lb variants</li>
+                <li>9 orders (3 per client) for today & tomorrow</li>
+                <li>Price list entries for all products</li>
+              </ul>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              <p className="font-medium mb-2">Andon boards (Matchstick/Funk/No Smoke):</p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>No orders created — demand via boards only</li>
+              </ul>
+            </div>
+            <Button 
+              variant="default" 
+              onClick={openSeedModal}
+              className="gap-2"
+            >
+              <Sparkles className="h-4 w-4" />
+              Seed Test Day
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Reset Confirmation Modal */}
+      <Dialog open={showResetModal} onOpenChange={setShowResetModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
@@ -118,8 +192,8 @@ export default function AdminTools() {
               </Label>
               <Input
                 id="confirm-text"
-                value={confirmText}
-                onChange={(e) => setConfirmText(e.target.value)}
+                value={resetConfirmText}
+                onChange={(e) => setResetConfirmText(e.target.value)}
                 placeholder="Type RESET"
                 className="font-mono"
               />
@@ -127,11 +201,11 @@ export default function AdminTools() {
             
             <div className="flex items-start gap-2">
               <Checkbox
-                id="understood"
-                checked={understood}
-                onCheckedChange={(checked) => setUnderstood(checked === true)}
+                id="reset-understood"
+                checked={resetUnderstood}
+                onCheckedChange={(checked) => setResetUnderstood(checked === true)}
               />
-              <Label htmlFor="understood" className="text-sm leading-relaxed cursor-pointer">
+              <Label htmlFor="reset-understood" className="text-sm leading-relaxed cursor-pointer">
                 I understand this deletes all test orders and production data
               </Label>
             </div>
@@ -140,7 +214,7 @@ export default function AdminTools() {
           <DialogFooter>
             <Button 
               variant="outline" 
-              onClick={() => setShowConfirmModal(false)}
+              onClick={() => setShowResetModal(false)}
               disabled={isResetting}
             >
               Cancel
@@ -148,9 +222,53 @@ export default function AdminTools() {
             <Button
               variant="destructive"
               onClick={handleReset}
-              disabled={!canConfirm || isResetting}
+              disabled={!canConfirmReset || isResetting}
             >
               {isResetting ? 'Resetting...' : 'Confirm Reset'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Seed Confirmation Modal (lighter) */}
+      <Dialog open={showSeedModal} onOpenChange={setShowSeedModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Seed Test Day
+            </DialogTitle>
+            <DialogDescription>
+              This will create demo clients, products, roast groups, and orders for testing.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="seed-understood"
+                checked={seedUnderstood}
+                onCheckedChange={(checked) => setSeedUnderstood(checked === true)}
+              />
+              <Label htmlFor="seed-understood" className="text-sm leading-relaxed cursor-pointer">
+                I understand this writes demo data
+              </Label>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowSeedModal(false)}
+              disabled={isSeeding}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSeed}
+              disabled={!seedUnderstood || isSeeding}
+            >
+              {isSeeding ? 'Seeding...' : 'Confirm Seed'}
             </Button>
           </DialogFooter>
         </DialogContent>
