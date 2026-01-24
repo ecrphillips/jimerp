@@ -276,9 +276,36 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     return groupBatches.some(b => b.assigned_roaster === roasterFilter);
   };
 
-  // Computed sorted groups (for freeze logic)
+  // Computed sorted groups (for freeze logic) - fully roasted groups move to bottom
   const computedSortedGroups = useMemo(() => {
-    return demandByRoastGroup.filter(group => groupMatchesRoasterFilter(group.roast_group));
+    const filtered = demandByRoastGroup.filter(group => groupMatchesRoasterFilter(group.roast_group));
+    
+    // Sort: groups with PLANNED batches first, fully roasted (no PLANNED) last
+    return [...filtered].sort((a, b) => {
+      const aBatches = batchesByGroup[a.roast_group] ?? [];
+      const bBatches = batchesByGroup[b.roast_group] ?? [];
+      const aHasPlanned = aBatches.some(batch => batch.status === 'PLANNED');
+      const bHasPlanned = bBatches.some(batch => batch.status === 'PLANNED');
+      const aFullyRoasted = !aHasPlanned && aBatches.some(batch => batch.status === 'ROASTED');
+      const bFullyRoasted = !bHasPlanned && bBatches.some(batch => batch.status === 'ROASTED');
+      
+      // Fully roasted groups go to the bottom
+      if (aFullyRoasted && !bFullyRoasted) return 1;
+      if (!aFullyRoasted && bFullyRoasted) return -1;
+      
+      // Then by TIME_SENSITIVE
+      if (a.hasTimeSensitive && !b.hasTimeSensitive) return -1;
+      if (!a.hasTimeSensitive && b.hasTimeSensitive) return 1;
+      
+      // Then by earliest ship date
+      if (a.earliestShipDate && b.earliestShipDate) {
+        if (a.earliestShipDate < b.earliestShipDate) return -1;
+        if (a.earliestShipDate > b.earliestShipDate) return 1;
+      }
+      
+      // Then by name
+      return a.roast_group.localeCompare(b.roast_group);
+    });
   }, [demandByRoastGroup, roasterFilter, configByGroup, batchesByGroup]);
 
   // Handle editing state changes from drawer

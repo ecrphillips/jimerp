@@ -94,6 +94,9 @@ export function RoastGroupDrawer({
   // Edit mode tracking for sort-freeze
   const [isEditingAny, setIsEditingAny] = useState(false);
   const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Frozen batches order - captured when drawer opens or when editing starts
+  const [frozenBatches, setFrozenBatches] = useState<RoastBatch[] | null>(null);
 
   // Calculate stats
   const plannedBatches = batches.filter(b => b.status === 'PLANNED');
@@ -101,6 +104,9 @@ export function RoastGroupDrawer({
   const standardBatch = config?.standard_batch_kg ?? 20;
   const defaultRoaster = config?.default_roaster ?? 'EITHER';
   const yieldLossPct = config?.expected_yield_loss_pct ?? 16;
+  
+  // Track if all batches are roasted (no PLANNED remaining)
+  const isFullyRoasted = plannedBatches.length === 0 && roastedBatches.length > 0;
   
   // Calculate expected output for PLANNED batches (apply yield loss to inbound green kg)
   const plannedExpectedOutput = plannedBatches.reduce((sum, b) => {
@@ -116,16 +122,35 @@ export function RoastGroupDrawer({
   const totalCoverage = plannedExpectedOutput + roastedTotal;
   const coverageDelta = totalCoverage - demandKg;
 
-  // Sort batches: PLANNED first (created_at asc), then ROASTED (updated_at desc)
-  const sortedBatches = [...batches].sort((a, b) => {
-    if (a.status !== b.status) {
-      return a.status === 'PLANNED' ? -1 : 1;
+  // Sort batches helper function
+  const sortBatches = (batchList: RoastBatch[]) => {
+    return [...batchList].sort((a, b) => {
+      if (a.status !== b.status) {
+        return a.status === 'PLANNED' ? -1 : 1;
+      }
+      if (a.status === 'PLANNED') {
+        return (a.created_at ?? '').localeCompare(b.created_at ?? '');
+      }
+      return (b.updated_at ?? '').localeCompare(a.updated_at ?? '');
+    });
+  };
+
+  // Freeze batches when drawer opens
+  useEffect(() => {
+    if (isExpanded && !frozenBatches) {
+      setFrozenBatches(sortBatches(batches));
+    } else if (!isExpanded) {
+      setFrozenBatches(null);
     }
-    if (a.status === 'PLANNED') {
-      return (a.created_at ?? '').localeCompare(b.created_at ?? '');
-    }
-    return (b.updated_at ?? '').localeCompare(a.updated_at ?? '');
-  });
+  }, [isExpanded, batches]);
+
+  // Use frozen order while drawer is open, but update batch data values
+  const sortedBatches = frozenBatches
+    ? frozenBatches.map(frozen => {
+        const updated = batches.find(b => b.id === frozen.id);
+        return updated ?? frozen;
+      }).filter(b => batches.some(batch => batch.id === b.id))
+    : sortBatches(batches);
 
   // Notify parent of editing state changes
   const notifyEditingChange = useCallback((editing: boolean) => {
@@ -239,11 +264,13 @@ export function RoastGroupDrawer({
   });
 
   const revertToPlannedMutation = useMutation({
-    mutationFn: async ({ id, actual_output_kg, roast_group, target_date }: { 
+    mutationFn: async ({ id, actual_output_kg, roast_group, target_date, planned_output_kg, cropster_batch_id }: { 
       id: string;
       actual_output_kg: number;
       roast_group: string;
       target_date: string;
+      planned_output_kg: number | null;
+      cropster_batch_id: string | null;
     }) => {
       // Revert batch status
       const { error: batchError } = await supabase
@@ -266,9 +293,20 @@ export function RoastGroupDrawer({
           notes: 'Reverted batch to planned',
         });
       if (ledgerError) throw ledgerError;
+      
+      return { planned_output_kg, cropster_batch_id };
     },
-    onSuccess: () => {
-      toast.success('Batch reverted to planned');
+    onSuccess: (data) => {
+      const batchDetails = [
+        data.planned_output_kg ? `${data.planned_output_kg} kg` : null,
+        data.cropster_batch_id ? `Cropster: ${data.cropster_batch_id}` : null,
+      ].filter(Boolean).join(' • ');
+      
+      toast.success(
+        batchDetails 
+          ? `Batch reverted to planned (${batchDetails})`
+          : 'Batch reverted to planned'
+      );
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
       queryClient.invalidateQueries({ queryKey: ['wip-ledger'] });
       setUndoConfirmBatchId(null);
@@ -343,6 +381,8 @@ export function RoastGroupDrawer({
         actual_output_kg: batch.actual_output_kg,
         roast_group: batch.roast_group,
         target_date: batch.target_date,
+        planned_output_kg: batch.planned_output_kg,
+        cropster_batch_id: batch.cropster_batch_id,
       });
     }
   };
@@ -352,7 +392,8 @@ export function RoastGroupDrawer({
       {/* Collapsed Row */}
       <tr 
         className={`border-b cursor-pointer transition-colors 
-          ${hasTimeSensitive ? 'bg-destructive/5' : ''} 
+          ${isFullyRoasted ? 'opacity-60' : ''}
+          ${hasTimeSensitive && !isFullyRoasted ? 'bg-destructive/5' : ''} 
           ${isExpanded ? 'bg-accent/40 border-l-2 border-l-primary' : 'hover:bg-muted/50'}`}
         onClick={() => setIsExpanded(!isExpanded)}
       >
