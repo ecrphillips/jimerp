@@ -53,6 +53,7 @@ interface RoastGroupConfig {
   roast_group: string;
   standard_batch_kg: number;
   default_roaster: DefaultRoaster;
+  expected_yield_loss_pct: number;
   is_active: boolean;
   notes: string | null;
 }
@@ -97,12 +98,23 @@ export function RoastGroupDrawer({
   // Calculate stats
   const plannedBatches = batches.filter(b => b.status === 'PLANNED');
   const roastedBatches = batches.filter(b => b.status === 'ROASTED');
-  const plannedTotal = plannedBatches.reduce((sum, b) => sum + (b.planned_output_kg ?? 0), 0);
-  const roastedTodayKg = roastedBatches.reduce((sum, b) => sum + b.actual_output_kg, 0);
   const standardBatch = config?.standard_batch_kg ?? 20;
   const defaultRoaster = config?.default_roaster ?? 'EITHER';
+  const yieldLossPct = config?.expected_yield_loss_pct ?? 16;
   
-  const isCovered = (roastedTotal + plannedTotal) >= demandKg;
+  // Calculate expected output for PLANNED batches (apply yield loss to inbound green kg)
+  const plannedExpectedOutput = plannedBatches.reduce((sum, b) => {
+    const inboundKg = b.planned_output_kg ?? 0;
+    const expectedOutput = inboundKg * (1 - yieldLossPct / 100);
+    return sum + expectedOutput;
+  }, 0);
+  
+  // ROASTED batches use actual output
+  const roastedTodayKg = roastedBatches.reduce((sum, b) => sum + b.actual_output_kg, 0);
+  
+  // Total coverage = expected from planned + actual from roasted
+  const totalCoverage = plannedExpectedOutput + roastedTotal;
+  const coverageDelta = totalCoverage - demandKg;
 
   // Sort batches: PLANNED first (created_at asc), then ROASTED (updated_at desc)
   const sortedBatches = [...batches].sort((a, b) => {
@@ -372,22 +384,24 @@ export function RoastGroupDrawer({
           <span className="text-muted-foreground text-xs ml-1">kg</span>
         </td>
         <td className="py-3 text-right">
-          <span className="font-medium">{plannedTotal.toFixed(1)}</span>
-          <span className="text-muted-foreground text-xs ml-1">kg</span>
+          <div className="flex flex-col items-end">
+            <span className="font-medium">{plannedExpectedOutput.toFixed(1)}</span>
+            <span className="text-muted-foreground text-xs">expected</span>
+          </div>
         </td>
         <td className="py-3 text-right">
           <span className="font-medium text-primary">{roastedTodayKg.toFixed(1)}</span>
           <span className="text-muted-foreground text-xs ml-1">kg</span>
         </td>
         <td className="py-3 text-right">
-          {isCovered ? (
+          {coverageDelta >= 0 ? (
             <Badge variant="default" className="bg-primary text-primary-foreground">
               <Check className="h-3 w-3 mr-1" />
-              Covered
+              {coverageDelta > 0 ? `+${coverageDelta.toFixed(1)} kg` : 'On target'}
             </Badge>
           ) : (
-            <Badge variant="secondary">
-              Short
+            <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300">
+              Short {Math.abs(coverageDelta).toFixed(1)} kg
             </Badge>
           )}
         </td>
@@ -401,7 +415,8 @@ export function RoastGroupDrawer({
               {/* Header with config button */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>Std batch: {standardBatch} kg</span>
+                  <span>Std batch: {standardBatch} kg inbound</span>
+                  <span className="text-xs">({yieldLossPct}% loss)</span>
                   <Button 
                     variant="ghost" 
                     size="sm" 
@@ -442,6 +457,7 @@ export function RoastGroupDrawer({
                     <BatchRow
                       key={batch.id}
                       batch={batch}
+                      expectedYieldLossPct={yieldLossPct}
                       onMarkRoasted={(id, actual) => markRoastedMutation.mutate({ 
                         id, 
                         actual_output_kg: actual,
@@ -528,6 +544,7 @@ export function RoastGroupDrawer({
 // Inner batch row component
 interface BatchRowProps {
   batch: RoastBatch;
+  expectedYieldLossPct: number;
   onMarkRoasted: (id: string, actualKg: number) => void;
   onUndo: (id: string) => void;
   onDelete: (id: string) => void;
@@ -556,6 +573,7 @@ interface RoastBatch {
 
 function BatchRow({
   batch,
+  expectedYieldLossPct,
   onMarkRoasted,
   onUndo,
   onDelete,
@@ -571,6 +589,8 @@ function BatchRow({
   const [actualKg, setActualKg] = useState(batch.actual_output_kg?.toString() ?? '0');
   const [cropsterId, setCropsterId] = useState(batch.cropster_batch_id ?? '');
   const [notes, setNotes] = useState(batch.notes ?? '');
+  const [showYieldWarning, setShowYieldWarning] = useState(false);
+  const [pendingMarkRoasted, setPendingMarkRoasted] = useState<{ id: string; actualKg: number } | null>(null);
   
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -639,156 +659,241 @@ function BatchRow({
     onUpdate({ id: batch.id, assigned_roaster: roaster });
   };
 
+  // Calculate expected output and implied loss
+  const inboundKg = parseFloat(plannedKg) || 0;
+  const outputKg = parseFloat(actualKg) || 0;
+  const expectedOutputKg = inboundKg * (1 - expectedYieldLossPct / 100);
+  const impliedLossPct = inboundKg > 0 && outputKg > 0 ? (1 - outputKg / inboundKg) * 100 : null;
+  const isImpliedLossUnusual = impliedLossPct !== null && (impliedLossPct < 10 || impliedLossPct > 20);
+
   const handleMarkRoasted = () => {
-    const actualValue = parseFloat(actualKg) || parseFloat(plannedKg) || 0;
-    onMarkRoasted(batch.id, actualValue);
+    const actualValue = outputKg || expectedOutputKg;
+    
+    // Calculate implied loss for sanity check
+    const checkInbound = inboundKg;
+    const checkOutput = actualValue;
+    const checkLoss = checkInbound > 0 ? (1 - checkOutput / checkInbound) * 100 : expectedYieldLossPct;
+    
+    // If implied loss is outside 10-20%, show warning
+    if (checkInbound > 0 && (checkLoss < 10 || checkLoss > 20)) {
+      setPendingMarkRoasted({ id: batch.id, actualKg: actualValue });
+      setShowYieldWarning(true);
+    } else {
+      onMarkRoasted(batch.id, actualValue);
+    }
+  };
+
+  const handleConfirmMarkRoasted = () => {
+    if (pendingMarkRoasted) {
+      onMarkRoasted(pendingMarkRoasted.id, pendingMarkRoasted.actualKg);
+    }
+    setShowYieldWarning(false);
+    setPendingMarkRoasted(null);
   };
 
   const isPlanned = batch.status === 'PLANNED';
   const isRoasted = batch.status === 'ROASTED';
 
   return (
-    <div
-      className={`flex flex-wrap items-center gap-2 p-2 rounded border text-sm
-        ${isRoasted ? 'bg-green-50 border-green-200' : 'bg-background'}`}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {/* Status indicator */}
-      <div className="flex items-center gap-1 min-w-[24px]">
-        {isRoasted ? (
-          <Check className="h-4 w-4 text-green-600" />
-        ) : (
-          <Flame className="h-4 w-4 text-muted-foreground" />
-        )}
-      </div>
-
-      {/* Inbound (green) kg - renamed from "planned" */}
-      <div className="flex items-center gap-1">
-        <span className="text-xs text-muted-foreground">Inbound:</span>
-        <Input
-          type="number"
-          step="0.1"
-          className="w-16 h-7 text-sm px-2"
-          value={plannedKg}
-          onChange={handlePlannedKgChange}
-          onFocus={onInputFocus}
-          onBlur={onInputBlur}
-          disabled={isUpdating}
-        />
-        <span className="text-xs text-muted-foreground">kg</span>
-      </div>
-
-      {/* Output (roasted) kg - renamed from "actual" */}
-      <div className="flex items-center gap-1">
-        <span className="text-xs text-muted-foreground">Output:</span>
-        <Input
-          type="number"
-          step="0.1"
-          className="w-16 h-7 text-sm px-2"
-          value={actualKg}
-          onChange={handleActualKgChange}
-          onFocus={onInputFocus}
-          onBlur={onInputBlur}
-          disabled={isUpdating}
-        />
-        <span className="text-xs text-muted-foreground">kg</span>
-      </div>
-
-      {/* Roaster */}
-      <Select
-        value={batch.assigned_roaster ?? 'UNASSIGNED'}
-        onValueChange={handleRoasterChange}
+    <>
+      <div
+        className={`flex flex-col gap-1 p-2 rounded border text-sm
+          ${isRoasted ? 'bg-green-50 border-green-200' : 'bg-background'}`}
+        onClick={(e) => e.stopPropagation()}
       >
-        <SelectTrigger 
-          className={`h-7 w-24 text-xs ${getRoasterBadgeColor(batch.assigned_roaster)}`}
-          onFocus={onInputFocus}
-          onBlur={onInputBlur}
-        >
-          <SelectValue placeholder="Roaster" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
-          <SelectItem value="SAMIAC">SAMIAC</SelectItem>
-          <SelectItem value="LORING">LORING</SelectItem>
-        </SelectContent>
-      </Select>
+        {/* Main row with inputs */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Status indicator */}
+          <div className="flex items-center gap-1 min-w-[24px]">
+            {isRoasted ? (
+              <Check className="h-4 w-4 text-green-600" />
+            ) : (
+              <Flame className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
 
-      {/* Cropster ID */}
-      <div className="flex items-center gap-1">
-        <span className="text-xs text-muted-foreground">Cropster:</span>
-        <Input
-          type="text"
-          className="w-20 h-7 text-sm px-2"
-          value={cropsterId}
-          onChange={handleCropsterIdChange}
-          onFocus={onInputFocus}
-          onBlur={onInputBlur}
-          placeholder="—"
-          disabled={isUpdating}
-        />
-      </div>
+          {/* Inbound (green) kg */}
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">Inbound:</span>
+            <Input
+              type="number"
+              step="0.1"
+              className="w-16 h-7 text-sm px-2"
+              value={plannedKg}
+              onChange={handlePlannedKgChange}
+              onFocus={onInputFocus}
+              onBlur={onInputBlur}
+              disabled={isUpdating}
+            />
+            <span className="text-xs text-muted-foreground">kg</span>
+          </div>
 
-      {/* Notes */}
-      <div className="flex items-center gap-1 flex-1 min-w-[100px]">
-        <span className="text-xs text-muted-foreground">Notes:</span>
-        <Input
-          type="text"
-          className="h-7 text-sm px-2 flex-1"
-          value={notes}
-          onChange={handleNotesChange}
-          onFocus={onInputFocus}
-          onBlur={onInputBlur}
-          placeholder="—"
-          disabled={isUpdating}
-        />
-      </div>
+          {/* Output (roasted) kg */}
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">Output:</span>
+            <Input
+              type="number"
+              step="0.1"
+              className="w-16 h-7 text-sm px-2"
+              value={actualKg}
+              onChange={handleActualKgChange}
+              onFocus={onInputFocus}
+              onBlur={onInputBlur}
+              disabled={isUpdating}
+            />
+            <span className="text-xs text-muted-foreground">kg</span>
+          </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-1 ml-auto">
-        {/* Oh Shit Button - always visible */}
-        <Button 
-          size="sm" 
-          variant="ghost"
-          className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-          onClick={() => onOhShit(batch)}
-          title="Unexpected issue? Tap here."
-        >
-          <AlertTriangle className="h-4 w-4" />
-        </Button>
-        
-        {isPlanned && (
-          <>
-            <Button 
-              size="sm" 
-              variant="default"
-              className="h-7 text-xs"
-              onClick={handleMarkRoasted}
-            >
-              <Flame className="h-3 w-3 mr-1" />
-              Mark Roasted
-            </Button>
-            <Button 
-              size="sm" 
-              variant="ghost" 
-              className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-              onClick={() => onDelete(batch.id)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </>
-        )}
-        {isRoasted && (
-          <Button 
-            size="sm" 
-            variant="ghost"
-            className="h-7 text-xs"
-            onClick={() => onUndo(batch.id)}
+          {/* Roaster */}
+          <Select
+            value={batch.assigned_roaster ?? 'UNASSIGNED'}
+            onValueChange={handleRoasterChange}
           >
-            <Undo2 className="h-3 w-3 mr-1" />
-            Undo
-          </Button>
-        )}
+            <SelectTrigger 
+              className={`h-7 w-24 text-xs ${getRoasterBadgeColor(batch.assigned_roaster)}`}
+              onFocus={onInputFocus}
+              onBlur={onInputBlur}
+            >
+              <SelectValue placeholder="Roaster" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
+              <SelectItem value="SAMIAC">SAMIAC</SelectItem>
+              <SelectItem value="LORING">LORING</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Cropster ID */}
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">Cropster:</span>
+            <Input
+              type="text"
+              className="w-20 h-7 text-sm px-2"
+              value={cropsterId}
+              onChange={handleCropsterIdChange}
+              onFocus={onInputFocus}
+              onBlur={onInputBlur}
+              placeholder="—"
+              disabled={isUpdating}
+            />
+          </div>
+
+          {/* Notes */}
+          <div className="flex items-center gap-1 flex-1 min-w-[100px]">
+            <span className="text-xs text-muted-foreground">Notes:</span>
+            <Input
+              type="text"
+              className="h-7 text-sm px-2 flex-1"
+              value={notes}
+              onChange={handleNotesChange}
+              onFocus={onInputFocus}
+              onBlur={onInputBlur}
+              placeholder="—"
+              disabled={isUpdating}
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-1 ml-auto">
+            {/* Oh Shit Button - always visible */}
+            <Button 
+              size="sm" 
+              variant="ghost"
+              className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={() => onOhShit(batch)}
+              title="Unexpected issue? Tap here."
+            >
+              <AlertTriangle className="h-4 w-4" />
+            </Button>
+            
+            {isPlanned && (
+              <>
+                <Button 
+                  size="sm" 
+                  variant="default"
+                  className="h-7 text-xs"
+                  onClick={handleMarkRoasted}
+                >
+                  <Flame className="h-3 w-3 mr-1" />
+                  Mark Roasted
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                  onClick={() => onDelete(batch.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+            {isRoasted && (
+              <Button 
+                size="sm" 
+                variant="ghost"
+                className="h-7 text-xs"
+                onClick={() => onUndo(batch.id)}
+              >
+                <Undo2 className="h-3 w-3 mr-1" />
+                Undo
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Hints row */}
+        <div className="flex items-center gap-3 pl-8 text-xs text-muted-foreground">
+          {/* Expected output hint (when inbound is set but no output yet) */}
+          {isPlanned && inboundKg > 0 && outputKg === 0 && (
+            <span>
+              Expected output: {expectedOutputKg.toFixed(1)} kg (at {expectedYieldLossPct}% loss)
+            </span>
+          )}
+          {/* Implied loss hint (when both inbound and output are set) */}
+          {inboundKg > 0 && outputKg > 0 && impliedLossPct !== null && (
+            <span className={isImpliedLossUnusual ? 'text-amber-600 font-medium' : ''}>
+              Implied loss: {impliedLossPct.toFixed(1)}%
+              {isImpliedLossUnusual && ' (unusual)'}
+            </span>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Yield Warning Dialog */}
+      <AlertDialog open={showYieldWarning} onOpenChange={setShowYieldWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Unusual Yield Loss
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  The implied yield loss for this batch is{' '}
+                  <strong>
+                    {pendingMarkRoasted && inboundKg > 0 
+                      ? ((1 - pendingMarkRoasted.actualKg / inboundKg) * 100).toFixed(1)
+                      : '—'}%
+                  </strong>
+                  , which is outside the typical 10–20% range.
+                </p>
+                <p className="text-sm">
+                  This could indicate a data entry error. Please double-check the inbound (green) and output (roasted) weights.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingMarkRoasted(null)}>
+              Edit Numbers
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmMarkRoasted}>
+              Confirm Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

@@ -41,6 +41,7 @@ interface RoastGroupConfig {
   roast_group: string;
   standard_batch_kg: number;
   default_roaster: DefaultRoaster;
+  expected_yield_loss_pct: number;
   is_active: boolean;
   notes: string | null;
 }
@@ -65,6 +66,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
   const [configRoastGroup, setConfigRoastGroup] = useState<string>('');
   const [configStandardBatch, setConfigStandardBatch] = useState<string>('20');
   const [configDefaultRoaster, setConfigDefaultRoaster] = useState<DefaultRoaster>('EITHER');
+  const [configYieldLoss, setConfigYieldLoss] = useState<string>('16');
 
   // Sort-freeze state for drawer editing
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
@@ -347,13 +349,19 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
   });
 
   const upsertRoastGroupMutation = useMutation({
-    mutationFn: async ({ roastGroup, standardBatchKg, defaultRoaster }: { roastGroup: string; standardBatchKg: number; defaultRoaster: DefaultRoaster }) => {
+    mutationFn: async ({ roastGroup, standardBatchKg, defaultRoaster, expectedYieldLossPct }: { 
+      roastGroup: string; 
+      standardBatchKg: number; 
+      defaultRoaster: DefaultRoaster;
+      expectedYieldLossPct: number;
+    }) => {
       const { error } = await supabase
         .from('roast_groups')
         .upsert({
           roast_group: roastGroup,
           standard_batch_kg: standardBatchKg,
           default_roaster: defaultRoaster,
+          expected_yield_loss_pct: expectedYieldLossPct,
           is_active: true,
         }, {
           onConflict: 'roast_group',
@@ -376,6 +384,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     setConfigRoastGroup(roastGroup);
     setConfigStandardBatch((config?.standard_batch_kg ?? 20).toString());
     setConfigDefaultRoaster(config?.default_roaster ?? 'EITHER');
+    setConfigYieldLoss((config?.expected_yield_loss_pct ?? 16).toString());
     setShowConfigDialog(true);
   };
 
@@ -383,19 +392,26 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     const config = configByGroup[roastGroup];
     const standardBatch = config?.standard_batch_kg ?? 20;
     const defaultRoaster = config?.default_roaster ?? 'EITHER';
+    const yieldLossPct = config?.expected_yield_loss_pct ?? 16;
     
-    const existingPlannedKg = (batchesByGroup[roastGroup] ?? [])
+    // Calculate expected output from planned batches (applying yield loss)
+    const plannedExpectedOutput = (batchesByGroup[roastGroup] ?? [])
       .filter(b => b.status === 'PLANNED')
-      .reduce((sum, b) => sum + (b.planned_output_kg ?? 0), 0);
+      .reduce((sum, b) => {
+        const inboundKg = b.planned_output_kg ?? 0;
+        return sum + inboundKg * (1 - yieldLossPct / 100);
+      }, 0);
     const roastedKg = roastedInventory[roastGroup] ?? 0;
-    const remainingNeed = demandKg - roastedKg - existingPlannedKg;
+    const remainingNeed = demandKg - roastedKg - plannedExpectedOutput;
     
     if (remainingNeed <= 0) {
       toast.info('No additional batches needed');
       return;
     }
     
-    const batchCount = Math.ceil(remainingNeed / standardBatch);
+    // Calculate how many batches needed based on expected output per batch
+    const expectedOutputPerBatch = standardBatch * (1 - yieldLossPct / 100);
+    const batchCount = Math.ceil(remainingNeed / expectedOutputPerBatch);
     createSuggestedBatchesMutation.mutate({
       roastGroup,
       count: batchCount,
@@ -410,10 +426,16 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
       toast.error('Standard batch must be a positive number');
       return;
     }
+    const yieldLoss = parseFloat(configYieldLoss);
+    if (isNaN(yieldLoss) || yieldLoss < 0 || yieldLoss > 100) {
+      toast.error('Expected yield loss must be between 0 and 100');
+      return;
+    }
     upsertRoastGroupMutation.mutate({
       roastGroup: configRoastGroup,
       standardBatchKg: batchKg,
       defaultRoaster: configDefaultRoaster,
+      expectedYieldLossPct: yieldLoss,
     });
   };
 
@@ -491,12 +513,17 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                   const defaultRoaster = config?.default_roaster ?? 'EITHER';
                   const hasConfig = group.roast_group in configByGroup;
                   
-                  // Calculate suggestion for quick-add
-                  const plannedTotal = groupBatches
+                  // Calculate suggestion for quick-add (using expected output)
+                  const yieldLossPct = config?.expected_yield_loss_pct ?? 16;
+                  const plannedExpectedOutput = groupBatches
                     .filter(b => b.status === 'PLANNED')
-                    .reduce((sum, b) => sum + (b.planned_output_kg ?? 0), 0);
-                  const remainingNeed = Math.max(0, group.total_kg - roastedTotal - plannedTotal);
-                  const suggestedBatches = remainingNeed > 0 ? Math.ceil(remainingNeed / standardBatch) : 0;
+                    .reduce((sum, b) => {
+                      const inboundKg = b.planned_output_kg ?? 0;
+                      return sum + inboundKg * (1 - yieldLossPct / 100);
+                    }, 0);
+                  const remainingNeed = Math.max(0, group.total_kg - roastedTotal - plannedExpectedOutput);
+                  const expectedOutputPerBatch = standardBatch * (1 - yieldLossPct / 100);
+                  const suggestedBatches = remainingNeed > 0 ? Math.ceil(remainingNeed / expectedOutputPerBatch) : 0;
                   
                   return (
                     <React.Fragment key={group.roast_group}>
@@ -544,11 +571,15 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                 {/* Quick-add batches section */}
                 {sortedGroups.some(g => {
                   const config = configByGroup[g.roast_group];
+                  if (!config) return false;
                   const groupBatches = batchesByGroup[g.roast_group] ?? [];
-                  const plannedTotal = groupBatches.filter(b => b.status === 'PLANNED').reduce((sum, b) => sum + (b.planned_output_kg ?? 0), 0);
+                  const yieldLossPct = config.expected_yield_loss_pct ?? 16;
+                  const plannedExpectedOutput = groupBatches
+                    .filter(b => b.status === 'PLANNED')
+                    .reduce((sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - yieldLossPct / 100), 0);
                   const roastedTotal = roastedInventory[g.roast_group] ?? 0;
-                  const remainingNeed = g.total_kg - roastedTotal - plannedTotal;
-                  return remainingNeed > 0 && config;
+                  const remainingNeed = g.total_kg - roastedTotal - plannedExpectedOutput;
+                  return remainingNeed > 0;
                 }) && (
                   <tr className="border-t bg-muted/20">
                     <td colSpan={6} className="py-3 px-4">
@@ -560,10 +591,14 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                           if (!config) return null;
                           
                           const groupBatches = batchesByGroup[g.roast_group] ?? [];
-                          const plannedTotal = groupBatches.filter(b => b.status === 'PLANNED').reduce((sum, b) => sum + (b.planned_output_kg ?? 0), 0);
+                          const yieldLossPct = config.expected_yield_loss_pct ?? 16;
+                          const plannedExpectedOutput = groupBatches
+                            .filter(b => b.status === 'PLANNED')
+                            .reduce((sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - yieldLossPct / 100), 0);
                           const roastedTotal = roastedInventory[g.roast_group] ?? 0;
-                          const remainingNeed = g.total_kg - roastedTotal - plannedTotal;
-                          const suggestedBatches = remainingNeed > 0 ? Math.ceil(remainingNeed / config.standard_batch_kg) : 0;
+                          const remainingNeed = g.total_kg - roastedTotal - plannedExpectedOutput;
+                          const expectedOutputPerBatch = config.standard_batch_kg * (1 - yieldLossPct / 100);
+                          const suggestedBatches = remainingNeed > 0 ? Math.ceil(remainingNeed / expectedOutputPerBatch) : 0;
                           
                           if (suggestedBatches <= 0) return null;
                           
@@ -690,6 +725,22 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
               </Select>
               <p className="text-xs text-muted-foreground mt-1">
                 Pre-assigns roaster when creating planned batches.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="yieldLoss">Expected Yield Loss (%)</Label>
+              <Input
+                id="yieldLoss"
+                type="number"
+                step="0.5"
+                min="0"
+                max="100"
+                value={configYieldLoss}
+                onChange={(e) => setConfigYieldLoss(e.target.value)}
+                placeholder="16"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Typical roast shrinkage. Used to estimate output from inbound green kg.
               </p>
             </div>
             <div className="flex justify-end gap-2 pt-4">

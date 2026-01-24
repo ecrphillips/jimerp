@@ -629,6 +629,7 @@ export type Database = {
         Row: {
           created_at: string
           default_roaster: Database["public"]["Enums"]["default_roaster"]
+          expected_yield_loss_pct: number
           is_active: boolean
           notes: string | null
           roast_group: string
@@ -638,6 +639,7 @@ export type Database = {
         Insert: {
           created_at?: string
           default_roaster?: Database["public"]["Enums"]["default_roaster"]
+          expected_yield_loss_pct?: number
           is_active?: boolean
           notes?: string | null
           roast_group: string
@@ -647,6 +649,7 @@ export type Database = {
         Update: {
           created_at?: string
           default_roaster?: Database["public"]["Enums"]["default_roaster"]
+          expected_yield_loss_pct?: number
           is_active?: boolean
           notes?: string | null
           roast_group?: string
