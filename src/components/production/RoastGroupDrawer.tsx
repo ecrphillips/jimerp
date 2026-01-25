@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -91,12 +91,14 @@ export function RoastGroupDrawer({
   const [deleteConfirmBatchId, setDeleteConfirmBatchId] = useState<string | null>(null);
   const [ohShitBatch, setOhShitBatch] = useState<RoastBatch | null>(null);
   
-  // Edit mode tracking for sort-freeze
-  const [isEditingAny, setIsEditingAny] = useState(false);
-  const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Edit mode tracking for sort-freeze - freeze order while user is editing
+  const [hasEditedSinceOpen, setHasEditedSinceOpen] = useState(false);
   
-  // Frozen batches order - captured when drawer opens or when editing starts
+  // Frozen batches order - captured when drawer opens, only refreshed on collapse/reopen or Mark Roasted
   const [frozenBatches, setFrozenBatches] = useState<RoastBatch[] | null>(null);
+  
+  // Track drawer open state to detect reopen
+  const prevExpandedRef = React.useRef(isExpanded);
 
   // Calculate stats
   const plannedBatches = batches.filter(b => b.status === 'PLANNED');
@@ -123,7 +125,7 @@ export function RoastGroupDrawer({
   const coverageDelta = totalCoverage - demandKg;
 
   // Sort batches helper function
-  const sortBatches = (batchList: RoastBatch[]) => {
+  const sortBatches = useCallback((batchList: RoastBatch[]) => {
     return [...batchList].sort((a, b) => {
       if (a.status !== b.status) {
         return a.status === 'PLANNED' ? -1 : 1;
@@ -133,65 +135,71 @@ export function RoastGroupDrawer({
       }
       return (b.updated_at ?? '').localeCompare(a.updated_at ?? '');
     });
-  };
+  }, []);
 
-  // Freeze batches when drawer opens
+  // Capture frozen order when drawer opens or reopens
   useEffect(() => {
-    if (isExpanded && !frozenBatches) {
+    const wasCollapsed = !prevExpandedRef.current;
+    const isNowExpanded = isExpanded;
+    
+    if (wasCollapsed && isNowExpanded) {
+      // Drawer just opened - freeze the current order
       setFrozenBatches(sortBatches(batches));
-    } else if (!isExpanded) {
+      setHasEditedSinceOpen(false);
+    } else if (!isNowExpanded) {
+      // Drawer closed - clear frozen state
       setFrozenBatches(null);
+      setHasEditedSinceOpen(false);
     }
-  }, [isExpanded, batches]);
+    
+    prevExpandedRef.current = isExpanded;
+  }, [isExpanded, batches, sortBatches]);
 
-  // Use frozen order while drawer is open, but update batch data values
-  const sortedBatches = frozenBatches
-    ? frozenBatches.map(frozen => {
-        const updated = batches.find(b => b.id === frozen.id);
-        return updated ?? frozen;
-      }).filter(b => batches.some(batch => batch.id === b.id))
-    : sortBatches(batches);
+  // Use frozen order while drawer is open, but update batch data values (not positions)
+  const sortedBatches = useMemo(() => {
+    if (frozenBatches && hasEditedSinceOpen) {
+      // Keep frozen order but with updated data values
+      return frozenBatches
+        .map(frozen => {
+          const updated = batches.find(b => b.id === frozen.id);
+          return updated ?? frozen;
+        })
+        .filter(b => batches.some(batch => batch.id === b.id));
+    }
+    // Not frozen or no edits yet - use live sorted order
+    return sortBatches(batches);
+  }, [frozenBatches, hasEditedSinceOpen, batches, sortBatches]);
 
-  // Notify parent of editing state changes
+  // Refresh frozen batches (called after Mark Roasted to reflect new positions)
+  const refreshFrozenBatches = useCallback(() => {
+    if (isExpanded) {
+      // Re-freeze with current sorted order
+      setFrozenBatches(sortBatches(batches));
+      setHasEditedSinceOpen(false);
+    }
+  }, [isExpanded, batches, sortBatches]);
+
+  // Notify parent of editing state changes (for outer roast group sorting)
   const notifyEditingChange = useCallback((editing: boolean) => {
-    setIsEditingAny(editing);
     onEditingChange(editing);
   }, [onEditingChange]);
 
-  // Reset idle timeout - allows re-sort after 1200ms of inactivity
-  const resetIdleTimeout = useCallback(() => {
-    if (idleTimeoutRef.current) {
-      clearTimeout(idleTimeoutRef.current);
-    }
-    idleTimeoutRef.current = setTimeout(() => {
-      notifyEditingChange(false);
-    }, 1200);
+  // Called when user starts editing any input - freeze the batch order
+  const handleInputFocus = useCallback(() => {
+    setHasEditedSinceOpen(true);
+    notifyEditingChange(true);
   }, [notifyEditingChange]);
 
-  const handleInputFocus = useCallback(() => {
-    notifyEditingChange(true);
-    resetIdleTimeout();
-  }, [notifyEditingChange, resetIdleTimeout]);
-
+  // Called when user leaves input - don't unfreeze (keep frozen until drawer closes)
   const handleInputBlur = useCallback(() => {
-    if (idleTimeoutRef.current) {
-      clearTimeout(idleTimeoutRef.current);
-      idleTimeoutRef.current = null;
-    }
+    // Don't unfreeze on blur - keep order stable while drawer is open
+    // Parent sort-freeze is handled separately
     notifyEditingChange(false);
   }, [notifyEditingChange]);
 
+  // Called when user types - mark as edited
   const handleInputChange = useCallback(() => {
-    resetIdleTimeout();
-  }, [resetIdleTimeout]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (idleTimeoutRef.current) {
-        clearTimeout(idleTimeoutRef.current);
-      }
-    };
+    setHasEditedSinceOpen(true);
   }, []);
 
   // Mutations
@@ -256,6 +264,8 @@ export function RoastGroupDrawer({
       toast.success('Batch marked as roasted');
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
       queryClient.invalidateQueries({ queryKey: ['wip-ledger'] });
+      // Refresh frozen batch order to reflect new status positions
+      refreshFrozenBatches();
     },
     onError: (err) => {
       console.error(err);
@@ -310,6 +320,8 @@ export function RoastGroupDrawer({
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
       queryClient.invalidateQueries({ queryKey: ['wip-ledger'] });
       setUndoConfirmBatchId(null);
+      // Refresh frozen batch order to reflect new status positions
+      refreshFrozenBatches();
     },
     onError: (err) => {
       console.error(err);
