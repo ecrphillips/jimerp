@@ -448,13 +448,12 @@ export function RoastGroupDrawer({
         </td>
         <td className="py-3 text-right">
           {coverageDelta >= 0 ? (
-            <Badge variant="default" className="bg-primary text-primary-foreground">
-              <Check className="h-3 w-3 mr-1" />
-              {coverageDelta > 0 ? `+${coverageDelta.toFixed(1)} kg` : 'On target'}
+            <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+              +{coverageDelta.toFixed(1)} kg expected
             </Badge>
           ) : (
             <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300">
-              Short {Math.abs(coverageDelta).toFixed(1)} kg
+              Short {Math.abs(coverageDelta).toFixed(1)} kg roasted
             </Badge>
           )}
         </td>
