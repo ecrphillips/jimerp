@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ChevronRight,
   Flame,
+  BookOpen,
   Warehouse,
   Wrench
 } from 'lucide-react';
@@ -41,9 +42,14 @@ const productionSubItems = [
   { to: '/boards', label: 'Board Mgmt', icon: Settings },
 ];
 
+// Inventory sub-items
+const inventorySubItems = [
+  { to: '/inventory', label: 'Levels', icon: Warehouse },
+  { to: '/inventory/ledger', label: 'Ledger', icon: BookOpen },
+];
+
 // Bottom nav items (removed Green Coffee)
 const bottomNavItems = [
-  { to: '/inventory', label: 'Inventory', icon: Warehouse },
   { to: '/products', label: 'Products', icon: Package },
   { to: '/clients', label: 'Clients', icon: Users },
 ];
@@ -58,12 +64,22 @@ export function InternalLayout({ children }: InternalLayoutProps) {
   const isProductionRoute = location.pathname.startsWith('/production') || location.pathname === '/boards';
   const [productionOpen, setProductionOpen] = React.useState(isProductionRoute);
 
-  // Keep production open when navigating within it
+  // Inventory section is open if we're on an inventory route
+  const isInventoryRoute = location.pathname.startsWith('/inventory');
+  const [inventoryOpen, setInventoryOpen] = React.useState(isInventoryRoute);
+
+  // Keep sections open when navigating within them
   React.useEffect(() => {
     if (isProductionRoute) {
       setProductionOpen(true);
     }
   }, [isProductionRoute]);
+
+  React.useEffect(() => {
+    if (isInventoryRoute) {
+      setInventoryOpen(true);
+    }
+  }, [isInventoryRoute]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -157,7 +173,50 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 </Collapsible>
               </li>
 
-              {/* Bottom items: Inventory, Products, Clients */}
+              {/* Inventory - Collapsible group */}
+              <li>
+                <Collapsible open={inventoryOpen} onOpenChange={setInventoryOpen}>
+                  <CollapsibleTrigger asChild>
+                    <button
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        isInventoryRoute
+                          ? "bg-sidebar-accent text-sidebar-primary"
+                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                      )}
+                    >
+                      <Warehouse className="h-5 w-5" />
+                      Inventory
+                      {inventoryOpen ? (
+                        <ChevronDown className="ml-auto h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="ml-auto h-4 w-4" />
+                      )}
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-1 space-y-1 pl-4">
+                    {inventorySubItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={item.to === '/inventory'}
+                        onClick={() => setSidebarOpen(false)}
+                        className={({ isActive }) => cn(
+                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                          isActive
+                            ? "bg-sidebar-accent text-sidebar-primary"
+                            : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                        )}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+              </li>
+
+              {/* Bottom items: Products, Clients */}
               {bottomNavItems.map((item) => (
                 <li key={item.to}>
                   <NavLink

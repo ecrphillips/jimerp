@@ -25,6 +25,7 @@ import NoSmokeBoard from "@/pages/internal/NoSmokeBoard";
 import BoardManagement from "@/pages/internal/BoardManagement";
 import BulkProducts from "@/pages/internal/BulkProducts";
 import Inventory from "@/pages/internal/Inventory";
+import InventoryLedger from "@/pages/internal/InventoryLedger";
 import AdminTools from "@/pages/internal/AdminTools";
 import NewOrder from "@/pages/client/NewOrder";
 import OrderHistory from "@/pages/client/OrderHistory";
@@ -114,6 +115,11 @@ const App = () => (
             <Route path="/inventory" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><Inventory /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/inventory/ledger" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><InventoryLedger /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/bulk-products" element={
