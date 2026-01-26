@@ -461,10 +461,11 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                       <tr 
                         className={`border-b last:border-0 cursor-pointer transition-colors 
                           ${product.hasTimeSensitive ? 'bg-destructive/5' : ''} 
-                          ${product.isReadyToPack && !isExpanded ? 'bg-primary/10 border-l-2 border-l-primary' : ''}
-                          ${isExpanded 
-                            ? 'bg-accent/40 border-l-2 border-l-primary' 
-                            : product.isReadyToPack ? '' : 'hover:bg-muted/50'
+                          ${product.isReadyToPack 
+                            ? 'bg-green-50 dark:bg-green-950/30 border-l-2 border-l-green-500' 
+                            : isExpanded 
+                              ? 'bg-accent/30 border-l-2 border-l-accent-foreground/30' 
+                              : 'hover:bg-muted/50'
                           }`}
                         onClick={toggleExpand}
                       >
@@ -492,8 +493,8 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                               </Badge>
                             )}
                             {product.isReadyToPack && (
-                              <Badge variant="default" className="text-xs bg-primary/80">
-                                <CheckCircle className="h-3 w-3 mr-1" />
+                              <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 border-green-300">
+                                <CheckCircle className="h-3 w-3 mr-1 text-green-600 dark:text-green-400" />
                                 WIP ready
                               </Badge>
                             )}

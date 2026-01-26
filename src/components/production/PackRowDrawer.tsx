@@ -45,11 +45,15 @@ export function PackRowDrawer({
   };
 
   return (
-    <tr className="bg-accent/30 border-l-2 border-l-primary">
+    <tr className={`border-l-2 ${isReadyToPack 
+      ? 'bg-green-50/50 dark:bg-green-950/20 border-l-green-500' 
+      : 'bg-accent/30 border-l-accent-foreground/30'}`}>
       <td colSpan={6} className="py-3 px-4 pl-6">
         {/* WIP Status Banner */}
         {roastGroup && (
-          <div className={`mb-3 p-2 rounded-md text-sm ${isReadyToPack ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+          <div className={`mb-3 p-2 rounded-md text-sm ${isReadyToPack 
+            ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200' 
+            : 'bg-muted text-muted-foreground'}`}>
             {isReadyToPack ? (
               <span className="font-medium">
                 ✓ WIP available for {roastGroup}: {wipAvailableKg.toFixed(2)} kg • This row needs: {requiredKg.toFixed(2)} kg
