@@ -8,10 +8,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Flame, Plus, Check, Zap, Clock, Settings } from 'lucide-react';
+import { Flame, Plus, Check, Zap, Clock, Settings, ChevronUp, ChevronDown, Sparkles } from 'lucide-react';
 import { RoastGroupDrawer } from './RoastGroupDrawer';
 
 interface RoastTabProps {
@@ -44,6 +54,7 @@ interface RoastGroupConfig {
   expected_yield_loss_pct: number;
   is_active: boolean;
   notes: string | null;
+  display_order: number | null;
 }
 
 interface DemandByRoastGroup {
@@ -70,17 +81,22 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
 
   // Sort-freeze state for drawer editing
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
-  const [frozenOrder, setFrozenOrder] = useState<DemandByRoastGroup[] | null>(null);
+  const [frozenOrder, setFrozenOrder] = useState<string[] | null>(null);
   const lastEditTimeRef = useRef<number>(0);
+  
+  // Auto-prioritize confirmation dialog
+  const [showAutoPrioritizeConfirm, setShowAutoPrioritizeConfirm] = useState(false);
 
-  // Fetch roast_groups config
+  // Fetch roast_groups config (with display_order)
   const { data: roastGroupsConfig } = useQuery({
     queryKey: ['roast-groups-config'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roast_groups')
         .select('*')
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .order('display_order', { ascending: true, nullsFirst: false })
+        .order('roast_group', { ascending: true });
       if (error) throw error;
       return (data ?? []) as RoastGroupConfig[];
     },
@@ -213,18 +229,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
       products: Array.from(data.products.entries()).map(([name, kg]) => ({ name, kg })),
       hasTimeSensitive: data.hasTimeSensitive,
       earliestShipDate: data.earliestShipDate,
-    })).sort((a, b) => {
-      // Sort by TIME_SENSITIVE first
-      if (a.hasTimeSensitive && !b.hasTimeSensitive) return -1;
-      if (!a.hasTimeSensitive && b.hasTimeSensitive) return 1;
-      // Then by earliest ship date
-      if (a.earliestShipDate && b.earliestShipDate) {
-        if (a.earliestShipDate < b.earliestShipDate) return -1;
-        if (a.earliestShipDate > b.earliestShipDate) return 1;
-      }
-      // Then by name
-      return a.roast_group.localeCompare(b.roast_group);
-    });
+    }));
   }, [orderLineItems, timeSensitiveProducts]);
 
   // Calculate roasted inventory per roast_group (sum of ROASTED batches)
@@ -276,12 +281,18 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     return groupBatches.some(b => b.assigned_roaster === roasterFilter);
   };
 
-  // Computed sorted groups (for freeze logic) - fully roasted groups move to bottom
+  // Computed sorted groups - use display_order from config (manual ordering)
   const computedSortedGroups = useMemo(() => {
     const filtered = demandByRoastGroup.filter(group => groupMatchesRoasterFilter(group.roast_group));
     
-    // Sort: groups with PLANNED batches first, fully roasted (no PLANNED) last
+    // Sort by display_order from config (manual ordering), then by name
     return [...filtered].sort((a, b) => {
+      const configA = configByGroup[a.roast_group];
+      const configB = configByGroup[b.roast_group];
+      const orderA = configA?.display_order ?? 999999;
+      const orderB = configB?.display_order ?? 999999;
+      
+      // Fully roasted groups go to the bottom
       const aBatches = batchesByGroup[a.roast_group] ?? [];
       const bBatches = batchesByGroup[b.roast_group] ?? [];
       const aHasPlanned = aBatches.some(batch => batch.status === 'PLANNED');
@@ -289,31 +300,23 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
       const aFullyRoasted = !aHasPlanned && aBatches.some(batch => batch.status === 'ROASTED');
       const bFullyRoasted = !bHasPlanned && bBatches.some(batch => batch.status === 'ROASTED');
       
-      // Fully roasted groups go to the bottom
       if (aFullyRoasted && !bFullyRoasted) return 1;
       if (!aFullyRoasted && bFullyRoasted) return -1;
       
-      // Then by TIME_SENSITIVE
-      if (a.hasTimeSensitive && !b.hasTimeSensitive) return -1;
-      if (!a.hasTimeSensitive && b.hasTimeSensitive) return 1;
-      
-      // Then by earliest ship date
-      if (a.earliestShipDate && b.earliestShipDate) {
-        if (a.earliestShipDate < b.earliestShipDate) return -1;
-        if (a.earliestShipDate > b.earliestShipDate) return 1;
-      }
+      // Then by display_order
+      if (orderA !== orderB) return orderA - orderB;
       
       // Then by name
       return a.roast_group.localeCompare(b.roast_group);
     });
   }, [demandByRoastGroup, roasterFilter, configByGroup, batchesByGroup]);
 
-  // Handle editing state changes from drawer
+  // Handle editing state changes from drawer - freeze order by roast_group names
   const handleEditingChange = useCallback((groupId: string, isEditing: boolean) => {
     if (isEditing) {
       // Freeze the current order when editing starts
       if (!editingGroupId) {
-        setFrozenOrder(computedSortedGroups);
+        setFrozenOrder(computedSortedGroups.map(g => g.roast_group));
       }
       setEditingGroupId(groupId);
       lastEditTimeRef.current = Date.now();
@@ -329,14 +332,90 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
   // Use frozen order while editing, otherwise use computed sorted groups
   const sortedGroups = useMemo(() => {
     if (editingGroupId && frozenOrder) {
-      // Return frozen order but with updated data (keep order, update values)
-      return frozenOrder.map(frozen => {
-        const updated = demandByRoastGroup.find(g => g.roast_group === frozen.roast_group);
-        return updated ?? frozen;
-      }).filter(g => demandByRoastGroup.some(d => d.roast_group === g.roast_group));
+      // Return groups in frozen order but with updated demand data
+      return frozenOrder
+        .map(groupName => demandByRoastGroup.find(g => g.roast_group === groupName))
+        .filter((g): g is DemandByRoastGroup => g !== undefined)
+        .filter(g => groupMatchesRoasterFilter(g.roast_group));
     }
     return computedSortedGroups;
-  }, [editingGroupId, frozenOrder, computedSortedGroups, demandByRoastGroup]);
+  }, [editingGroupId, frozenOrder, computedSortedGroups, demandByRoastGroup, groupMatchesRoasterFilter]);
+
+  // Manual ordering mutations
+  const updateDisplayOrderMutation = useMutation({
+    mutationFn: async ({ roastGroup, newOrder }: { roastGroup: string; newOrder: number }) => {
+      const { error } = await supabase
+        .from('roast_groups')
+        .update({ display_order: newOrder })
+        .eq('roast_group', roastGroup);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roast-groups-config'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to update order');
+    },
+  });
+
+  // Move group up/down
+  const moveGroup = useCallback((roastGroup: string, direction: 'up' | 'down') => {
+    const currentIndex = sortedGroups.findIndex(g => g.roast_group === roastGroup);
+    if (currentIndex === -1) return;
+    
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= sortedGroups.length) return;
+    
+    const currentGroup = sortedGroups[currentIndex];
+    const targetGroup = sortedGroups[targetIndex];
+    
+    const currentConfig = configByGroup[currentGroup.roast_group];
+    const targetConfig = configByGroup[targetGroup.roast_group];
+    
+    const currentOrder = currentConfig?.display_order ?? currentIndex * 10;
+    const targetOrder = targetConfig?.display_order ?? targetIndex * 10;
+    
+    // Swap display_order values
+    updateDisplayOrderMutation.mutate({ roastGroup: currentGroup.roast_group, newOrder: targetOrder });
+    updateDisplayOrderMutation.mutate({ roastGroup: targetGroup.roast_group, newOrder: currentOrder });
+  }, [sortedGroups, configByGroup, updateDisplayOrderMutation]);
+
+  // Auto-prioritize: reorder based on urgency
+  const autoPrioritizeMutation = useMutation({
+    mutationFn: async () => {
+      // Calculate priority order: TIME_SENSITIVE first, then earliest ship date, then shortage
+      const prioritized = [...demandByRoastGroup].sort((a, b) => {
+        if (a.hasTimeSensitive !== b.hasTimeSensitive) {
+          return a.hasTimeSensitive ? -1 : 1;
+        }
+        if (a.earliestShipDate !== b.earliestShipDate) {
+          if (!a.earliestShipDate) return 1;
+          if (!b.earliestShipDate) return -1;
+          return a.earliestShipDate.localeCompare(b.earliestShipDate);
+        }
+        return b.total_kg - a.total_kg; // Higher demand = higher priority
+      });
+      
+      // Update display_order for all groups
+      for (let i = 0; i < prioritized.length; i++) {
+        const { error } = await supabase
+          .from('roast_groups')
+          .update({ display_order: (i + 1) * 10 })
+          .eq('roast_group', prioritized[i].roast_group);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      toast.success('Roast groups reordered by urgency');
+      queryClient.invalidateQueries({ queryKey: ['roast-groups-config'] });
+      setShowAutoPrioritizeConfirm(false);
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to auto-prioritize');
+    },
+  });
 
   // Create multiple suggested batches at once with default roaster
   const createSuggestedBatchesMutation = useMutation({
@@ -483,10 +562,20 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                 Roast Plan
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Click a roast group to expand batch queue. Urgent orders shown first.
+                Use arrows to reorder groups manually. Order persists across sessions.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => setShowAutoPrioritizeConfirm(true)}
+                disabled={autoPrioritizeMutation.isPending}
+              >
+                <Sparkles className="h-4 w-4" />
+                Auto-prioritize
+              </Button>
               <span className="text-sm text-muted-foreground">Filter:</span>
               <ToggleGroup 
                 type="single" 
@@ -524,6 +613,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
               <thead>
                 <tr className="border-b text-left">
                   <th className="pb-2 w-8"></th>
+                  <th className="pb-2 w-16"></th>
                   <th className="pb-2">Roast Group</th>
                   <th className="pb-2 text-right">Demand</th>
                   <th className="pb-2 text-right">Planned</th>
@@ -532,7 +622,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                 </tr>
               </thead>
               <tbody>
-                {sortedGroups.map((group) => {
+                {sortedGroups.map((group, index) => {
                   const groupBatches = batchesByGroup[group.roast_group] ?? [];
                   const config = configByGroup[group.roast_group];
                   const roastedTotal = roastedInventory[group.roast_group] ?? 0;
@@ -565,12 +655,16 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                         allRoastGroups={allRoastGroups}
                         onOpenConfig={openConfigDialog}
                         onEditingChange={(isEditing) => handleEditingChange(group.roast_group, isEditing)}
+                        onMoveUp={() => moveGroup(group.roast_group, 'up')}
+                        onMoveDown={() => moveGroup(group.roast_group, 'down')}
+                        canMoveUp={index > 0}
+                        canMoveDown={index < sortedGroups.length - 1}
                       />
                       
                       {/* Quick batch suggestion row (shown below collapsed row if there's demand and no batches visible) */}
                       {suggestedBatches > 0 && !hasConfig && (
                         <tr className="bg-muted/30">
-                          <td colSpan={6} className="py-2 px-4 pl-10 text-sm">
+                          <td colSpan={7} className="py-2 px-4 pl-10 text-sm">
                             <div className="flex items-center gap-3">
                               <Badge variant="outline" className="text-xs">
                                 <Settings className="h-3 w-3 mr-1" />
@@ -609,7 +703,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                   return remainingNeed > 0;
                 }) && (
                   <tr className="border-t bg-muted/20">
-                    <td colSpan={6} className="py-3 px-4">
+                    <td colSpan={7} className="py-3 px-4">
                       <div className="flex flex-wrap items-center gap-2">
                         <Zap className="h-4 w-4 text-primary" />
                         <span className="text-sm font-medium">Quick add suggested batches:</span>
@@ -782,6 +876,31 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Auto-prioritize Confirmation Dialog */}
+      <AlertDialog open={showAutoPrioritizeConfirm} onOpenChange={setShowAutoPrioritizeConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Auto-prioritize Roast Groups?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will reorder all roast groups based on urgency: TIME_SENSITIVE orders first, 
+              then earliest ship date, then highest demand. Your manual ordering will be replaced.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => autoPrioritizeMutation.mutate()}
+              disabled={autoPrioritizeMutation.isPending}
+            >
+              {autoPrioritizeMutation.isPending ? 'Reordering…' : 'Reorder by Urgency'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

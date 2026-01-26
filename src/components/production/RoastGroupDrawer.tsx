@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { 
   ChevronDown, 
   ChevronRight, 
+  ChevronUp,
   Flame, 
   Check, 
   Trash2, 
@@ -69,6 +70,10 @@ interface RoastGroupDrawerProps {
   allRoastGroups: string[];
   onOpenConfig: (roastGroup: string) => void;
   onEditingChange: (isEditing: boolean) => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }
 
 export function RoastGroupDrawer({
@@ -82,6 +87,10 @@ export function RoastGroupDrawer({
   allRoastGroups,
   onOpenConfig,
   onEditingChange,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp = false,
+  canMoveDown = false,
 }: RoastGroupDrawerProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -416,6 +425,30 @@ export function RoastGroupDrawer({
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           )}
         </td>
+        <td className="py-1 w-16" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-0.5">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }}
+              disabled={!canMoveUp}
+              title="Move up"
+            >
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }}
+              disabled={!canMoveDown}
+              title="Move down"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </div>
+        </td>
         <td className="py-3">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold">{roastGroup}</span>
@@ -462,7 +495,7 @@ export function RoastGroupDrawer({
       {/* Expanded Drawer */}
       {isExpanded && (
         <tr className="bg-accent/30 border-l-2 border-l-primary">
-          <td colSpan={6} className="py-3 px-4 pl-8">
+          <td colSpan={7} className="py-3 px-4 pl-8">
             <div className="space-y-3">
               {/* Header with config button */}
               <div className="flex items-center justify-between">

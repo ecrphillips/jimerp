@@ -564,6 +564,7 @@ export type Database = {
           internal_packaging_notes: string | null
           is_active: boolean
           is_perennial: boolean
+          pack_display_order: number | null
           packaging_variant:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
@@ -582,6 +583,7 @@ export type Database = {
           internal_packaging_notes?: string | null
           is_active?: boolean
           is_perennial?: boolean
+          pack_display_order?: number | null
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
@@ -600,6 +602,7 @@ export type Database = {
           internal_packaging_notes?: string | null
           is_active?: boolean
           is_perennial?: boolean
+          pack_display_order?: number | null
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
@@ -702,6 +705,7 @@ export type Database = {
         Row: {
           created_at: string
           default_roaster: Database["public"]["Enums"]["default_roaster"]
+          display_order: number | null
           expected_yield_loss_pct: number
           is_active: boolean
           notes: string | null
@@ -712,6 +716,7 @@ export type Database = {
         Insert: {
           created_at?: string
           default_roaster?: Database["public"]["Enums"]["default_roaster"]
+          display_order?: number | null
           expected_yield_loss_pct?: number
           is_active?: boolean
           notes?: string | null
@@ -722,6 +727,7 @@ export type Database = {
         Update: {
           created_at?: string
           default_roaster?: Database["public"]["Enums"]["default_roaster"]
+          display_order?: number | null
           expected_yield_loss_pct?: number
           is_active?: boolean
           notes?: string | null
