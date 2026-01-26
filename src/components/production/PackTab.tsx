@@ -451,6 +451,7 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                   const packed = packing?.units_packed ?? 0;
                   const isComplete = packed >= product.demanded_units;
                   const isExpanded = expandedProductId === product.product_id;
+                  const hasWipAvailable = product.isReadyToPack;
                   
                   const toggleExpand = () => {
                     setExpandedProductId(isExpanded ? null : product.product_id);
@@ -461,12 +462,14 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                       <tr 
                         className={`border-b last:border-0 cursor-pointer transition-colors 
                           ${product.hasTimeSensitive ? 'bg-destructive/5' : ''} 
-                          ${product.isReadyToPack 
-                            ? 'bg-green-50 dark:bg-green-950/30 border-l-2 border-l-green-500' 
-                            : isExpanded 
-                              ? 'bg-accent/30 border-l-2 border-l-accent-foreground/30' 
-                              : 'hover:bg-muted/50'
-                          }`}
+                          ${hasWipAvailable
+                            ? (isExpanded
+                                ? 'bg-success/15 border-l-2 border-l-success'
+                                : 'bg-success/10 border-l-2 border-l-success')
+                            : isExpanded
+                              ? 'bg-muted/40 border-l-2 border-l-border'
+                              : 'hover:bg-muted/50'}
+                        `}
                         onClick={toggleExpand}
                       >
                         <td className="py-3 w-8">
@@ -492,9 +495,12 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                                 Unblocks: {product.unblocksOrders} order{product.unblocksOrders !== 1 ? 's' : ''}
                               </Badge>
                             )}
-                            {product.isReadyToPack && (
-                              <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 border-green-300">
-                                <CheckCircle className="h-3 w-3 mr-1 text-green-600 dark:text-green-400" />
+                            {hasWipAvailable && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs bg-success/15 text-success border-success/30"
+                              >
+                                <CheckCircle className="h-3 w-3 mr-1 text-success" />
                                 WIP ready
                               </Badge>
                             )}
@@ -550,7 +556,7 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                           unblocksOrders={product.unblocksOrders}
                           wipAvailableKg={product.wipAvailableKg}
                           requiredKg={product.requiredKg}
-                          isReadyToPack={product.isReadyToPack}
+                          hasWipAvailable={hasWipAvailable}
                         />
                       )}
                     </React.Fragment>
