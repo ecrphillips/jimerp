@@ -1,12 +1,23 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Package, Check, AlertTriangle, Clock, ShoppingCart, ChevronDown, ChevronRight } from 'lucide-react';
+import { Package, Check, AlertTriangle, Clock, ShoppingCart, ChevronDown, ChevronRight, ChevronUp, Sparkles } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { InlinePackingControl } from './InlinePackingControl';
 import { PackRowDrawer } from './PackRowDrawer';
@@ -40,6 +51,7 @@ interface ProductDemand {
   earliestShipDate: string | null;
   shortage: number;
   unblocksOrders: number;
+  pack_display_order: number | null;
 }
 
 export function PackTab({ dateFilter, today }: PackTabProps) {
@@ -53,15 +65,20 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [frozenOrder, setFrozenOrder] = useState<ProductDemand[] | null>(null);
   const lastEditTimeRef = useRef<number>(0);
+  
+  // Auto-prioritize confirmation dialog
+  const [showAutoPrioritizeConfirm, setShowAutoPrioritizeConfirm] = useState(false);
 
-  // Fetch products (only active)
+  // Fetch products (only active) with pack_display_order
   const { data: products } = useQuery({
     queryKey: ['all-products-for-pack'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, bag_size_g, packaging_variant, roast_group')
-        .eq('is_active', true);
+        .select('id, product_name, sku, bag_size_g, packaging_variant, roast_group, pack_display_order')
+        .eq('is_active', true)
+        .order('pack_display_order', { ascending: true, nullsFirst: false })
+        .order('product_name', { ascending: true });
       if (error) throw error;
       return data ?? [];
     },
@@ -183,6 +200,8 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
       if (!li.product) continue;
       
       if (!productMap[li.product_id]) {
+        // Get pack_display_order from products query
+        const productInfo = products?.find(p => p.id === li.product_id);
         productMap[li.product_id] = {
           product_id: li.product_id,
           product_name: li.product.product_name,
@@ -196,6 +215,7 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
           earliestShipDate: null,
           shortage: 0,
           unblocksOrders: 0,
+          pack_display_order: productInfo?.pack_display_order ?? null,
           orderIds: new Set(),
           shipDates: [],
         };
