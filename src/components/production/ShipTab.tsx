@@ -1,18 +1,30 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { format, parseISO } from 'date-fns';
-import { Truck, Clock, ChevronDown, ChevronRight, MessageSquare, AlertTriangle, ExternalLink, Package, CheckCircle2, Layers } from 'lucide-react';
+import { Truck, AlertTriangle, Package } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { IncompleteFulfillmentModal } from '@/components/internal/IncompleteFulfillmentModal';
+import { SortableShipCard } from './SortableShipCard';
 import type { Database } from '@/integrations/supabase/types';
 
 type ShipPriority = 'NORMAL' | 'TIME_SENSITIVE';
@@ -59,12 +71,12 @@ interface ShippableOrder {
   }[];
   allLineItemsPacked: boolean;
   priority: ShipPriority;
-  hasContention: boolean; // True if any SKU in the order is short overall
-  // Complexity metrics
+  hasContention: boolean;
   skuCount: number;
   totalUnits: number;
   missingSkuCount: number;
   missingUnitsTotal: number;
+  ship_display_order: number | null;
 }
 
 interface ShortListItem {
@@ -80,9 +92,7 @@ interface ShortListItem {
 export function ShipTab({ dateFilter, today }: ShipTabProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   
-  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [showIncompleteModal, setShowIncompleteModal] = useState(false);
   const [incompleteSteps, setIncompleteSteps] = useState<string[]>([]);
   const [pendingShipOrderId, setPendingShipOrderId] = useState<string | null>(null);
@@ -135,7 +145,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
     },
   });
 
-  // Fetch orders for shippable view
+  // Fetch orders for shippable view (including ship_display_order)
   const { data: ordersForShipping } = useQuery({
     queryKey: ['shippable-orders', dateFilter],
     queryFn: async () => {
@@ -152,6 +162,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
           packed,
           invoiced,
           status,
+          ship_display_order,
           client:clients(name),
           line_items:order_line_items(
             id,
@@ -161,7 +172,9 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
           )
         `)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY'])
-        .in('requested_ship_date', dateFilter);
+        .in('requested_ship_date', dateFilter)
+        .order('ship_display_order', { ascending: true, nullsFirst: false })
+        .order('order_number', { ascending: true });
       if (error) throw error;
       return data ?? [];
     },
@@ -257,42 +270,17 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
         totalUnits,
         missingSkuCount,
         missingUnitsTotal,
+        ship_display_order: (order as any).ship_display_order ?? null,
       });
     }
 
-    // Sort: Shippable first, then not-yet-shippable
+    // Sort ONLY by ship_display_order (manual ordering) - NO automatic sorting
     return orders.sort((a, b) => {
-      // Shippable orders come first
-      if (a.allLineItemsPacked !== b.allLineItemsPacked) {
-        return a.allLineItemsPacked ? -1 : 1;
-      }
-
-      if (a.allLineItemsPacked && b.allLineItemsPacked) {
-        // Both shippable: TIME_SENSITIVE first, then fewer SKUs, then fewer units, then order number
-        if (a.priority !== b.priority) {
-          return a.priority === 'TIME_SENSITIVE' ? -1 : 1;
-        }
-        if (a.skuCount !== b.skuCount) return a.skuCount - b.skuCount;
-        if (a.totalUnits !== b.totalUnits) return a.totalUnits - b.totalUnits;
-        return a.order_number.localeCompare(b.order_number);
-      } else {
-        // Both not-yet-shippable: sort by closeness
-        // TIME_SENSITIVE first
-        if (a.priority !== b.priority) {
-          return a.priority === 'TIME_SENSITIVE' ? -1 : 1;
-        }
-        // Fewer missing SKUs first
-        if (a.missingSkuCount !== b.missingSkuCount) return a.missingSkuCount - b.missingSkuCount;
-        // Fewer missing units first
-        if (a.missingUnitsTotal !== b.missingUnitsTotal) return a.missingUnitsTotal - b.missingUnitsTotal;
-        // Fewer total SKUs first
-        if (a.skuCount !== b.skuCount) return a.skuCount - b.skuCount;
-        // Earlier ship date first
-        const dateA = a.requested_ship_date ? new Date(a.requested_ship_date).getTime() : Infinity;
-        const dateB = b.requested_ship_date ? new Date(b.requested_ship_date).getTime() : Infinity;
-        if (dateA !== dateB) return dateA - dateB;
-        return a.order_number.localeCompare(b.order_number);
-      }
+      const orderA = a.ship_display_order ?? 999999;
+      const orderB = b.ship_display_order ?? 999999;
+      
+      if (orderA !== orderB) return orderA - orderB;
+      return a.order_number.localeCompare(b.order_number);
     });
   }, [ordersForShipping, checkmarks, packingByProduct, demandByProduct]);
 
@@ -426,17 +414,57 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
     },
   });
 
-  const toggleOrderExpand = (orderId: string) => {
-    setExpandedOrders((prev) => {
-      const next = new Set(prev);
-      if (next.has(orderId)) {
-        next.delete(orderId);
-      } else {
-        next.add(orderId);
-      }
-      return next;
+  // Mutation to update ship_display_order
+  const updateDisplayOrderMutation = useMutation({
+    mutationFn: async ({ orderId, newOrder }: { orderId: string; newOrder: number }) => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ ship_display_order: newOrder })
+        .eq('id', orderId);
+      if (error) throw error;
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to update order');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shippable-orders'] });
+    },
+  });
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // Handle drag end for reordering
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (!over || active.id === over.id) return;
+    
+    const oldIndex = allOrdersWithMetrics.findIndex(o => o.id === active.id);
+    const newIndex = allOrdersWithMetrics.findIndex(o => o.id === over.id);
+    
+    if (oldIndex === -1 || newIndex === -1) return;
+    
+    // Reorder and persist
+    const reordered = [...allOrdersWithMetrics];
+    const [moved] = reordered.splice(oldIndex, 1);
+    reordered.splice(newIndex, 0, moved);
+    
+    // Update all items with new display_order
+    reordered.forEach((order, index) => {
+      updateDisplayOrderMutation.mutate({ orderId: order.id, newOrder: (index + 1) * 10 });
     });
-  };
+  }, [allOrdersWithMetrics, updateDisplayOrderMutation]);
 
   const toggleOrderPriority = (order: ShippableOrder) => {
     const newPriority: ShipPriority = order.priority === 'NORMAL' ? 'TIME_SENSITIVE' : 'NORMAL';
@@ -597,7 +625,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
         </Card>
       )}
 
-      {/* All Orders - Unified List */}
+      {/* All Orders - Unified List with Drag & Drop */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -608,7 +636,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
             </span>
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Sorted by shippability, then by complexity (easy wins first).
+            Drag to reorder. Green = ready to ship.
           </p>
         </CardHeader>
         <CardContent>
@@ -617,194 +645,29 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
               No orders for the selected date window.
             </p>
           ) : (
-            <div className="space-y-3">
-              {allOrdersWithMetrics.map((order) => {
-                const isTimeSensitive = order.priority === 'TIME_SENSITIVE';
-                const hasNotes = order.client_notes || order.internal_ops_notes;
-                const hasOpsNotes = !!order.internal_ops_notes;
-                const isShippable = order.allLineItemsPacked;
-                
-                  return (
-                    <div
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={allOrdersWithMetrics.map(o => o.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-3">
+                  {allOrdersWithMetrics.map((order) => (
+                    <SortableShipCard
                       key={order.id}
-                      className={`border rounded-lg p-4 transition-colors ${
-                        isShippable 
-                          ? 'border-green-500 bg-green-50 ring-2 ring-green-200 shadow-sm' 
-                          : isTimeSensitive 
-                            ? 'border-destructive/30 bg-destructive/5' 
-                            : 'border-muted bg-muted/20 opacity-80'
-                      }`}
-                    >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <span className="font-semibold text-lg">{order.order_number}</span>
-                          <span className="text-muted-foreground">•</span>
-                          <span className="font-medium">{order.client_name}</span>
-                          
-                          {/* Shippable badge */}
-                          {isShippable && (
-                            <Badge className="text-xs bg-green-600 hover:bg-green-700">
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Ready
-                            </Badge>
-                          )}
-                          
-                          {isTimeSensitive && (
-                            <Badge variant="destructive" className="text-xs">
-                              <Clock className="h-3 w-3 mr-1" />
-                              Urgent
-                            </Badge>
-                          )}
-                          
-                          {order.hasContention && (
-                            <Badge variant="outline" className="text-xs border-amber-400 text-amber-700 bg-amber-50">
-                              <AlertTriangle className="h-3 w-3 mr-1" />
-                              Shared SKU short
-                            </Badge>
-                          )}
-                          
-                          {/* Notes indicators */}
-                          {hasOpsNotes && (
-                            <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-800 border-orange-300">
-                              <MessageSquare className="h-3 w-3 mr-1" />
-                              Ops note
-                            </Badge>
-                          )}
-                          {hasNotes && !hasOpsNotes && (
-                            <Badge variant="outline" className="text-xs">
-                              <MessageSquare className="h-3 w-3 mr-1" />
-                              Notes
-                            </Badge>
-                          )}
-                        </div>
-                        
-                        {/* Metrics row */}
-                        <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground flex-wrap">
-                          <span>
-                            Ship: {order.requested_ship_date 
-                              ? format(parseISO(order.requested_ship_date), 'MMM d, yyyy')
-                              : 'Not set'}
-                          </span>
-                          <span>•</span>
-                          <span>{order.delivery_method}</span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1">
-                            <Layers className="h-3 w-3" />
-                            {order.skuCount} SKU{order.skuCount !== 1 ? 's' : ''}, {order.totalUnits} units
-                          </span>
-                          
-                          {/* Missing metrics for non-shippable orders */}
-                          {!isShippable && order.missingSkuCount === 1 && order.missingUnitsTotal <= 5 && (
-                            <>
-                              <span>•</span>
-                              <span className="text-blue-600 font-medium">
-                                Almost ready: 1 SKU, {order.missingUnitsTotal} unit{order.missingUnitsTotal !== 1 ? 's' : ''} short
-                              </span>
-                            </>
-                          )}
-                          {!isShippable && !(order.missingSkuCount === 1 && order.missingUnitsTotal <= 5) && (
-                            <>
-                              <span>•</span>
-                              <span className="text-muted-foreground">
-                                Needs: {order.missingSkuCount} SKU{order.missingSkuCount !== 1 ? 's' : ''}, {order.missingUnitsTotal} unit{order.missingUnitsTotal !== 1 ? 's' : ''}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigate(`/orders/${order.id}`)}
-                        >
-                          <ExternalLink className="h-4 w-4 mr-1" />
-                          Open Order
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={isTimeSensitive ? 'destructive' : 'outline'}
-                          onClick={() => toggleOrderPriority(order)}
-                        >
-                          <Clock className="h-4 w-4 mr-1" />
-                          {isTimeSensitive ? 'Urgent' : 'Normal'}
-                        </Button>
-                        {isShippable && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleMarkOrderShipped(order)}
-                            disabled={markOrderShippedMutation.isPending}
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            <Truck className="h-4 w-4 mr-1" />
-                            Mark Shipped
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Notes - always show if present */}
-                    {hasNotes && (
-                      <Collapsible defaultOpen={hasOpsNotes}>
-                        <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground mt-2 hover:text-foreground">
-                          <MessageSquare className="h-3 w-3" />
-                          {hasOpsNotes ? 'View notes (has ops note)' : 'View notes'}
-                        </CollapsibleTrigger>
-                        <CollapsibleContent className="mt-2 p-2 bg-muted/50 rounded text-sm">
-                          {order.internal_ops_notes && (
-                            <p className="mb-1"><strong className="text-orange-700">Ops:</strong> {order.internal_ops_notes}</p>
-                          )}
-                          {order.client_notes && (
-                            <p><strong>Client:</strong> {order.client_notes}</p>
-                          )}
-                        </CollapsibleContent>
-                      </Collapsible>
-                    )}
-
-                    {/* Line Items */}
-                    <Collapsible open={expandedOrders.has(order.id)} onOpenChange={() => toggleOrderExpand(order.id)}>
-                      <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground mt-3 hover:text-foreground">
-                        {expandedOrders.has(order.id) ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                        {order.lineItems.length} line item{order.lineItems.length !== 1 ? 's' : ''}
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="mt-2">
-                        <div className="space-y-1">
-                          {order.lineItems.map((li) => {
-                            const packed = packingByProduct[li.product_id] ?? 0;
-                            const isMissing = packed < li.quantity_units;
-                            
-                            return (
-                              <div 
-                                key={li.id} 
-                                className={`flex items-center gap-2 text-sm p-2 rounded ${
-                                  isMissing ? 'bg-amber-50 border border-amber-200' : 'bg-muted/30'
-                                }`}
-                              >
-                                <span className="font-medium">{li.product_name}</span>
-                                <PackagingBadge variant={li.packaging_variant} />
-                                <span className="text-muted-foreground">{li.bag_size_g}g</span>
-                                <span className="ml-auto font-medium">× {li.quantity_units}</span>
-                                {isMissing && (
-                                  <span className="text-amber-600 text-xs">
-                                    (packed: {packed})
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </div>
-                );
-              })}
-            </div>
+                      order={order}
+                      packingByProduct={packingByProduct}
+                      onTogglePriority={toggleOrderPriority}
+                      onMarkShipped={handleMarkOrderShipped}
+                      isShipping={markOrderShippedMutation.isPending}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
         </CardContent>
       </Card>
