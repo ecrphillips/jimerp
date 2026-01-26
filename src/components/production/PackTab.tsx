@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DndContext,
@@ -10,6 +10,7 @@ import {
   DragEndEvent,
 } from '@dnd-kit/core';
 import {
+  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
@@ -66,13 +67,14 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
   // Removed sortBy state - order is now manual only via pack_display_order
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
   
+  // Local order state for optimistic DnD updates
+  const [localProducts, setLocalProducts] = useState<ProductDemand[]>([]);
+  const hasUserReorderedRef = useRef(false);
+  
   // Sort-freeze state: track which product is being edited
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [frozenOrder, setFrozenOrder] = useState<ProductDemand[] | null>(null);
   const lastEditTimeRef = useRef<number>(0);
-  
-  // Auto-prioritize confirmation dialog
-  const [showAutoPrioritizeConfirm, setShowAutoPrioritizeConfirm] = useState(false);
 
   // Fetch products (only active) with pack_display_order
   const { data: products } = useQuery({
@@ -87,6 +89,8 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 30000, // 30 seconds to prevent refetches overriding user reorder
+    refetchOnWindowFocus: false,
   });
 
   // Fetch order line items for demand with ship_priority from production_checkmarks
@@ -298,12 +302,29 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
     return sorted;
   }, [demandByProduct]);
 
+  // Sync local state from server data, but only when not actively reordering
+  useEffect(() => {
+    if (!hasUserReorderedRef.current && computedSortedProducts.length > 0) {
+      setLocalProducts(computedSortedProducts);
+    }
+  }, [computedSortedProducts]);
+
+  // Reset the reorder flag after a delay to allow server sync
+  useEffect(() => {
+    if (hasUserReorderedRef.current) {
+      const timeout = setTimeout(() => {
+        hasUserReorderedRef.current = false;
+      }, 2000);
+      return () => clearTimeout(timeout);
+    }
+  }, [localProducts]);
+
   // Handle editing state changes from InlinePackingControl
   const handleEditingChange = useCallback((productId: string, isEditing: boolean) => {
     if (isEditing) {
       // Freeze the current order when editing starts
       if (!editingProductId) {
-        setFrozenOrder(computedSortedProducts);
+        setFrozenOrder(localProducts);
       }
       setEditingProductId(productId);
       lastEditTimeRef.current = Date.now();
@@ -314,9 +335,9 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
         setFrozenOrder(null);
       }
     }
-  }, [editingProductId, computedSortedProducts]);
+  }, [editingProductId, localProducts]);
 
-  // Use frozen order while editing, otherwise use computed sorted products
+  // Use frozen order while editing, otherwise use local products
   const sortedProducts = useMemo(() => {
     if (editingProductId && frozenOrder) {
       // Return frozen order but with updated data (keep order, update values)
@@ -325,8 +346,8 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
         return updated ?? frozen;
       }).filter(p => demandByProduct.some(d => d.product_id === p.product_id));
     }
-    return computedSortedProducts;
-  }, [editingProductId, frozenOrder, computedSortedProducts, demandByProduct]);
+    return localProducts.length > 0 ? localProducts : computedSortedProducts;
+  }, [editingProductId, frozenOrder, localProducts, computedSortedProducts, demandByProduct]);
 
 
   // Map packing runs by product_id
@@ -394,7 +415,7 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
     })
   );
 
-  // Handle drag end for reordering
+  // Handle drag end for reordering - use local state for optimistic updates
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     
@@ -405,12 +426,14 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
     
     if (oldIndex === -1 || newIndex === -1) return;
     
-    // Reorder and persist
-    const reordered = [...sortedProducts];
-    const [moved] = reordered.splice(oldIndex, 1);
-    reordered.splice(newIndex, 0, moved);
+    // Mark that user has reordered to prevent server sync from overriding
+    hasUserReorderedRef.current = true;
     
-    // Update all items with new display_order
+    // Optimistically update local state immediately
+    const reordered = arrayMove(sortedProducts, oldIndex, newIndex);
+    setLocalProducts(reordered);
+    
+    // Persist new order to DB
     reordered.forEach((product, index) => {
       updateDisplayOrderMutation.mutate({ productId: product.product_id, newOrder: (index + 1) * 10 });
     });
