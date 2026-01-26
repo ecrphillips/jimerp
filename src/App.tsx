@@ -19,10 +19,7 @@ import Products from "@/pages/internal/Products";
 import Pricing from "@/pages/internal/Pricing";
 import Production from "@/pages/internal/Production";
 import GreenCoffee from "@/pages/internal/GreenCoffee";
-import MatchstickBoard from "@/pages/internal/MatchstickBoard";
-import FunkBoard from "@/pages/internal/FunkBoard";
-import NoSmokeBoard from "@/pages/internal/NoSmokeBoard";
-import BoardManagement from "@/pages/internal/BoardManagement";
+import BoardsDisabled from "@/pages/internal/BoardsDisabled";
 import BulkProducts from "@/pages/internal/BulkProducts";
 import Inventory from "@/pages/internal/Inventory";
 import InventoryLedger from "@/pages/internal/InventoryLedger";
@@ -87,29 +84,30 @@ const App = () => (
                 <InternalLayout><Production /></InternalLayout>
               </ProtectedRoute>
             } />
+            {/* Andon boards disabled for MVP - show disabled message */}
             <Route path="/production/matchstick" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
-                <InternalLayout><MatchstickBoard /></InternalLayout>
+                <InternalLayout><BoardsDisabled /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/production/funk" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
-                <InternalLayout><FunkBoard /></InternalLayout>
+                <InternalLayout><BoardsDisabled /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/production/nosmoke" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
-                <InternalLayout><NoSmokeBoard /></InternalLayout>
+                <InternalLayout><BoardsDisabled /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/boards" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><BoardsDisabled /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/green-coffee" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><GreenCoffee /></InternalLayout>
-              </ProtectedRoute>
-            } />
-            <Route path="/boards" element={
-              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
-                <InternalLayout><BoardManagement /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/inventory" element={
