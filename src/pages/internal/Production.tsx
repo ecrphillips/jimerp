@@ -22,19 +22,53 @@ function getVancouverDate(daysOffset = 0): string {
 export default function Production() {
   const [searchParams, setSearchParams] = useSearchParams();
   const today = getVancouverDate(0);
-  const tomorrow = getVancouverDate(1);
+  const todayPlusOne = getVancouverDate(1);
+  const todayPlusTwo = getVancouverDate(2);
 
   // Date filter: 'today', 'tomorrow', or 'all'
   type DateFilterMode = 'today' | 'tomorrow' | 'all';
   const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('today');
   
-  // Compute actual dateFilter array based on mode
-  const dateFilter = useMemo(() => {
-    if (dateFilterMode === 'today') return [today];
-    if (dateFilterMode === 'tomorrow') return [tomorrow];
-    // 'all' mode - return empty array to signal "no date filter"
-    return [];
-  }, [dateFilterMode, today, tomorrow]);
+  // NEW BUCKET LOGIC:
+  // - TODAY: requested_ship_date <= today + 1 (shipping tomorrow or sooner)
+  // - TOMORROW: requested_ship_date == today + 2 OR manually_deprioritized = true (day after, or deferred)
+  // - ALL: show all open orders (no date filter)
+  // 
+  // The actual filtering is done in child components with these parameters
+  const dateFilterConfig = useMemo(() => {
+    if (dateFilterMode === 'today') {
+      // TODAY bucket: ship date <= tomorrow
+      return {
+        mode: 'today' as const,
+        maxDate: todayPlusOne, // <= this date
+      };
+    }
+    if (dateFilterMode === 'tomorrow') {
+      // TOMORROW bucket: ship date == day after tomorrow OR manually_deprioritized
+      return {
+        mode: 'tomorrow' as const,
+        exactDate: todayPlusTwo,
+      };
+    }
+    // ALL mode - no date filter
+    return {
+      mode: 'all' as const,
+    };
+  }, [dateFilterMode, todayPlusOne, todayPlusTwo]);
+
+  // Helper text for filter buttons
+  const filterHelperText = useMemo(() => {
+    switch (dateFilterMode) {
+      case 'today':
+        return 'Shipping tomorrow or sooner';
+      case 'tomorrow':
+        return 'Shipping day after, or deferred';
+      case 'all':
+        return 'All open orders';
+      default:
+        return '';
+    }
+  }, [dateFilterMode]);
   
   // Read initial tab from URL param, default to 'roast'
   const tabFromUrl = searchParams.get('tab') as StationView | null;
@@ -54,10 +88,7 @@ export default function Production() {
         <div>
           <h1 className="page-title">Production</h1>
           <p className="text-sm text-muted-foreground">
-            Viewing: {dateFilterMode === 'all' 
-              ? 'All dates' 
-              : dateFilter.map((d) => format(new Date(d + 'T12:00:00'), 'MMM d')).join(', ')
-            }
+            {filterHelperText}
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -105,15 +136,15 @@ export default function Production() {
         </TabsList>
 
         <TabsContent value="roast" className="mt-4">
-          <RoastTab dateFilter={dateFilter} today={today} />
+          <RoastTab dateFilterConfig={dateFilterConfig} today={today} />
         </TabsContent>
 
         <TabsContent value="pack" className="mt-4">
-          <PackTab dateFilter={dateFilter} today={today} />
+          <PackTab dateFilterConfig={dateFilterConfig} today={today} />
         </TabsContent>
 
         <TabsContent value="ship" className="mt-4">
-          <ShipTab dateFilter={dateFilter} today={today} />
+          <ShipTab dateFilterConfig={dateFilterConfig} today={today} />
         </TabsContent>
       </Tabs>
     </div>

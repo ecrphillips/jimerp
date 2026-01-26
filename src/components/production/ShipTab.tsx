@@ -25,13 +25,15 @@ import { toast } from 'sonner';
 import { Truck, AlertTriangle, Package } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { SortableShipCard } from './SortableShipCard';
+import { format, addDays, parseISO } from 'date-fns';
 import type { Database } from '@/integrations/supabase/types';
+import type { DateFilterConfig } from './types';
 
 type ShipPriority = 'NORMAL' | 'TIME_SENSITIVE';
 type OrderStatus = Database['public']['Enums']['order_status'];
 
 interface ShipTabProps {
-  dateFilter: string[];
+  dateFilterConfig: DateFilterConfig;
   today: string;
 }
 
@@ -77,6 +79,7 @@ interface ShippableOrder {
   missingSkuCount: number;
   missingUnitsTotal: number;
   ship_display_order: number | null;
+  manually_deprioritized?: boolean;
 }
 
 interface ShortListItem {
@@ -89,7 +92,7 @@ interface ShortListItem {
   shortage: number;
 }
 
-export function ShipTab({ dateFilter, today }: ShipTabProps) {
+export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   
@@ -102,26 +105,24 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
 
   // Fetch checkmarks for priority tracking
   const { data: checkmarks } = useQuery({
-    queryKey: ['production-checkmarks', dateFilter],
+    queryKey: ['production-checkmarks', dateFilterConfig],
     queryFn: async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from('production_checkmarks')
         .select('*');
       
-      if (dateFilter.length > 0) {
-        query = query.in('target_date', dateFilter);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      return data ?? [];
+      // Note: checkmarks don't need the same date filter - we use them for priority info
+      const { data: result, error: err } = await supabase
+        .from('production_checkmarks')
+        .select('*');
+      if (err) throw err;
+      return result ?? [];
     },
   });
 
-  // Fetch order line items for demand
-  // If dateFilter is empty (All mode), fetch all active orders
+  // Fetch order line items for demand based on dateFilterConfig
   const { data: orderLineItems } = useQuery({
-    queryKey: ['ship-demand', dateFilter],
+    queryKey: ['ship-demand', dateFilterConfig],
     queryFn: async () => {
       let query = supabase
         .from('order_line_items')
@@ -129,14 +130,21 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
           id,
           product_id,
           quantity_units,
-          order:orders!inner(status, requested_ship_date),
+          order:orders!inner(status, requested_ship_date, manually_deprioritized),
           product:products(id, product_name, bag_size_g, packaging_variant)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
       
-      if (dateFilter.length > 0) {
-        query = query.in('order.requested_ship_date', dateFilter);
+      // Apply date filter based on mode
+      if (dateFilterConfig.mode === 'today') {
+        // TODAY: requested_ship_date <= maxDate
+        query = query.lte('order.requested_ship_date', dateFilterConfig.maxDate);
+      } else if (dateFilterConfig.mode === 'tomorrow') {
+        // TOMORROW: requested_ship_date == exactDate OR manually_deprioritized = true
+        // This requires OR logic which Supabase supports via .or()
+        query = query.or(`requested_ship_date.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`, { referencedTable: 'orders' });
       }
+      // ALL mode: no date filter
       
       const { data, error } = await query;
       if (error) throw error;
@@ -144,19 +152,14 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
     },
   });
 
-  // Fetch packing runs
+  // Fetch packing runs - for "All" mode don't filter by date
   const { data: packingRuns } = useQuery({
-    queryKey: ['packing-runs', dateFilter],
+    queryKey: ['packing-runs', dateFilterConfig],
     queryFn: async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from('packing_runs')
         .select('*');
       
-      if (dateFilter.length > 0) {
-        query = query.in('target_date', dateFilter);
-      }
-      
-      const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
     },
@@ -164,7 +167,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
 
   // Fetch orders for shippable view (including ship_display_order)
   const { data: ordersForShipping } = useQuery({
-    queryKey: ['shippable-orders', dateFilter],
+    queryKey: ['shippable-orders', dateFilterConfig],
     queryFn: async () => {
       let query = supabase
         .from('orders')
@@ -180,6 +183,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
           invoiced,
           status,
           ship_display_order,
+          manually_deprioritized,
           client:clients(name),
           line_items:order_line_items(
             id,
@@ -192,9 +196,13 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
         .order('ship_display_order', { ascending: true, nullsFirst: false })
         .order('order_number', { ascending: true });
       
-      if (dateFilter.length > 0) {
-        query = query.in('requested_ship_date', dateFilter);
+      // Apply date filter based on mode
+      if (dateFilterConfig.mode === 'today') {
+        query = query.lte('requested_ship_date', dateFilterConfig.maxDate);
+      } else if (dateFilterConfig.mode === 'tomorrow') {
+        query = query.or(`requested_ship_date.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`);
       }
+      // ALL mode: no date filter
       
       const { data, error } = await query;
       if (error) throw error;
@@ -295,6 +303,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
         missingSkuCount,
         missingUnitsTotal,
         ship_display_order: (order as any).ship_display_order ?? null,
+        manually_deprioritized: (order as any).manually_deprioritized ?? false,
       });
     }
 
@@ -528,6 +537,71 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
     Promise.all(updates);
   };
 
+  // Calculate today + 1 for "Do this today" action
+  const todayPlusOne = useMemo(() => {
+    const todayDate = parseISO(today + 'T12:00:00');
+    return format(addDays(todayDate, 1), 'yyyy-MM-dd');
+  }, [today]);
+
+  // "Do this later" - increment ship date by 1 day and set manually_deprioritized = true
+  const doThisLaterMutation = useMutation({
+    mutationFn: async (order: ShippableOrder) => {
+      const currentDate = order.requested_ship_date ? parseISO(order.requested_ship_date) : new Date();
+      const newDate = format(addDays(currentDate, 1), 'yyyy-MM-dd');
+      
+      const { error } = await supabase
+        .from('orders')
+        .update({ 
+          requested_ship_date: newDate,
+          manually_deprioritized: true,
+        })
+        .eq('id', order.id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Order moved to tomorrow');
+      queryClient.invalidateQueries({ queryKey: ['shippable-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['ship-demand'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to update order');
+    },
+  });
+
+  // "Do this today" - set ship date to today+1 and clear manually_deprioritized
+  const doThisTodayMutation = useMutation({
+    mutationFn: async (order: ShippableOrder) => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ 
+          requested_ship_date: todayPlusOne,
+          manually_deprioritized: false,
+        })
+        .eq('id', order.id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Order moved to today');
+      queryClient.invalidateQueries({ queryKey: ['shippable-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['ship-demand'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to update order');
+    },
+  });
+
+  const handleDoThisLater = useCallback((order: ShippableOrder) => {
+    doThisLaterMutation.mutate(order);
+  }, [doThisLaterMutation]);
+
+  const handleDoThisToday = useCallback((order: ShippableOrder) => {
+    doThisTodayMutation.mutate(order);
+  }, [doThisTodayMutation]);
+
   // Directly show decrement modal - no incomplete steps check
   const handleMarkOrderShipped = (order: ShippableOrder) => {
     setPendingShipOrder(order);
@@ -643,6 +717,9 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
                       onTogglePriority={toggleOrderPriority}
                       onMarkShipped={handleMarkOrderShipped}
                       isShipping={markOrderShippedMutation.isPending}
+                      onDoThisLater={handleDoThisLater}
+                      onDoThisToday={handleDoThisToday}
+                      todayPlusOne={todayPlusOne}
                     />
                   ))}
                 </div>

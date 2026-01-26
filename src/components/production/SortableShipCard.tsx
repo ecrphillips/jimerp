@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { format, parseISO } from 'date-fns';
-import { Truck, Clock, ChevronDown, ChevronRight, MessageSquare, AlertTriangle, ExternalLink, Layers, CheckCircle2, GripVertical, Minus, Plus } from 'lucide-react';
+import { Truck, Clock, ChevronDown, ChevronRight, MessageSquare, AlertTriangle, ExternalLink, Layers, CheckCircle2, GripVertical, Minus, Plus, CalendarPlus, CalendarMinus } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -43,6 +43,7 @@ interface ShippableOrder {
   missingSkuCount: number;
   missingUnitsTotal: number;
   ship_display_order: number | null;
+  manually_deprioritized?: boolean;
 }
 
 interface ShipPick {
@@ -58,6 +59,9 @@ interface SortableShipCardProps {
   onTogglePriority: (order: ShippableOrder) => void;
   onMarkShipped: (order: ShippableOrder) => void;
   isShipping: boolean;
+  onDoThisLater: (order: ShippableOrder) => void;
+  onDoThisToday: (order: ShippableOrder) => void;
+  todayPlusOne: string;
 }
 
 export function SortableShipCard({
@@ -66,6 +70,9 @@ export function SortableShipCard({
   onTogglePriority,
   onMarkShipped,
   isShipping,
+  onDoThisLater,
+  onDoThisToday,
+  todayPlusOne,
 }: SortableShipCardProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -156,6 +163,12 @@ export function SortableShipCard({
   const hasNotes = order.client_notes || order.internal_ops_notes;
   const hasOpsNotes = !!order.internal_ops_notes;
   const isShippable = order.allLineItemsPacked && allItemsFullyPicked;
+  
+  // Determine if "Do this today" should be visible
+  // Only show if requested_ship_date > todayPlusOne
+  const canDoThisToday = order.requested_ship_date 
+    ? order.requested_ship_date > todayPlusOne 
+    : false;
 
   return (
     <div
@@ -250,14 +263,36 @@ export function SortableShipCard({
           </div>
         </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Deprioritization buttons */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onDoThisLater(order)}
+            title="Push this order to tomorrow (+1 day)"
+          >
+            <CalendarPlus className="h-4 w-4 mr-1" />
+            Later
+          </Button>
+          {canDoThisToday && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => onDoThisToday(order)}
+              title="Pull this order into today's bucket"
+            >
+              <CalendarMinus className="h-4 w-4 mr-1" />
+              Today
+            </Button>
+          )}
+          
           <Button
             size="sm"
             variant="outline"
             onClick={() => navigate(`/orders/${order.id}`)}
           >
             <ExternalLink className="h-4 w-4 mr-1" />
-            Open Order
+            Open
           </Button>
           <Button
             size="sm"
@@ -275,7 +310,7 @@ export function SortableShipCard({
             title={!allItemsFullyPicked ? `${remainingSkus} SKUs / ${remainingUnits} units remaining to pick` : ''}
           >
             <Truck className="h-4 w-4 mr-1" />
-            Mark Shipped
+            Ship
           </Button>
         </div>
       </div>

@@ -307,6 +307,7 @@ export type Database = {
           id: string
           internal_ops_notes: string | null
           invoiced: boolean
+          manually_deprioritized: boolean
           order_number: string
           packed: boolean
           requested_ship_date: string | null
@@ -327,6 +328,7 @@ export type Database = {
           id?: string
           internal_ops_notes?: string | null
           invoiced?: boolean
+          manually_deprioritized?: boolean
           order_number: string
           packed?: boolean
           requested_ship_date?: string | null
@@ -347,6 +349,7 @@ export type Database = {
           id?: string
           internal_ops_notes?: string | null
           invoiced?: boolean
+          manually_deprioritized?: boolean
           order_number?: string
           packed?: boolean
           requested_ship_date?: string | null
