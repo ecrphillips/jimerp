@@ -1,27 +1,28 @@
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Package, Check, AlertTriangle, Clock, ShoppingCart, ChevronDown, ChevronRight, ChevronUp, Sparkles, Layers, CheckCircle } from 'lucide-react';
+import { Package, Layers } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
-import { InlinePackingControl } from './InlinePackingControl';
-import { PackRowDrawer } from './PackRowDrawer';
+import { type PackagingVariant } from '@/components/PackagingBadge';
+import { SortablePackRow } from './SortablePackRow';
 
 // Removed SortOption type - no more auto-sorting, order is manual via pack_display_order
 
@@ -363,24 +364,57 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
     queryClient.invalidateQueries({ queryKey: ['packing-runs'] });
   }, [packingByProduct, today, user?.id, queryClient]);
 
-  // Group by roast_group for inventory display
-  const roastGroupSummary = useMemo(() => {
-    const groups: Record<string, { roasted_kg: number; products: string[] }> = {};
+  // Mutation to update pack_display_order
+  const updateDisplayOrderMutation = useMutation({
+    mutationFn: async ({ productId, newOrder }: { productId: string; newOrder: number }) => {
+      const { error } = await supabase
+        .from('products')
+        .update({ pack_display_order: newOrder })
+        .eq('id', productId);
+      if (error) throw error;
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to update order');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['all-products-for-pack'] });
+    },
+  });
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // Handle drag end for reordering
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
     
-    for (const product of products ?? []) {
-      if (product.roast_group) {
-        if (!groups[product.roast_group]) {
-          groups[product.roast_group] = {
-            roasted_kg: roastedInventory[product.roast_group] ?? 0,
-            products: [],
-          };
-        }
-        groups[product.roast_group].products.push(product.product_name);
-      }
-    }
+    if (!over || active.id === over.id) return;
     
-    return groups;
-  }, [products, roastedInventory]);
+    const oldIndex = sortedProducts.findIndex(p => p.product_id === active.id);
+    const newIndex = sortedProducts.findIndex(p => p.product_id === over.id);
+    
+    if (oldIndex === -1 || newIndex === -1) return;
+    
+    // Reorder and persist
+    const reordered = [...sortedProducts];
+    const [moved] = reordered.splice(oldIndex, 1);
+    reordered.splice(newIndex, 0, moved);
+    
+    // Update all items with new display_order
+    reordered.forEach((product, index) => {
+      updateDisplayOrderMutation.mutate({ productId: product.product_id, newOrder: (index + 1) * 10 });
+    });
+  }, [sortedProducts, updateDisplayOrderMutation]);
 
   return (
     <div className="space-y-4">
@@ -394,7 +428,7 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                 Pack SKUs
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Track packing progress per SKU. Rows highlighted green have sufficient roasted WIP available.
+                Drag rows to reorder. Green highlight = WIP available.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -404,7 +438,6 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                   Open Roasted Inventory Ledger
                 </Link>
               </Button>
-              {/* Removed sort dropdown - order is manual only */}
             </div>
           </div>
         </CardHeader>
@@ -412,136 +445,62 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
           {sortedProducts.length === 0 ? (
             <p className="text-muted-foreground py-4">No products demanded for selected dates.</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left">
-                  <th className="pb-2 w-8"></th>
-                  <th className="pb-2">Product</th>
-                  <th className="pb-2">Roast Group</th>
-                  <th className="pb-2 text-right">Demanded</th>
-                  <th className="pb-2 text-right">Packed</th>
-                  <th className="pb-2 text-right">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedProducts.map((product) => {
-                  const packing = packingByProduct[product.product_id];
-                  const packed = packing?.units_packed ?? 0;
-                  const isComplete = packed >= product.demanded_units;
-                  const isExpanded = expandedProductId === product.product_id;
-                  const hasWipAvailable = product.isReadyToPack;
-                  
-                  const toggleExpand = () => {
-                    setExpandedProductId(isExpanded ? null : product.product_id);
-                  };
-                  
-                  return (
-                    <React.Fragment key={product.product_id}>
-                      <tr 
-                        className={`border-b last:border-0 cursor-pointer transition-colors 
-                          ${product.hasTimeSensitive ? 'bg-destructive/5' : ''} 
-                          ${hasWipAvailable
-                            ? (isExpanded
-                                ? 'bg-success/15 border-l-2 border-l-success'
-                                : 'bg-success/10 border-l-2 border-l-success')
-                            : isExpanded
-                              ? 'bg-muted/40 border-l-2 border-l-border'
-                              : 'hover:bg-muted/50'}
-                        `}
-                        onClick={toggleExpand}
-                      >
-                        <td className="py-3 w-8">
-                          {isExpanded ? (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </td>
-                        <td className="py-3">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium">{product.product_name}</span>
-                            <PackagingBadge variant={product.packaging_variant} />
-                            {product.hasTimeSensitive && (
-                              <Badge variant="destructive" className="text-xs">
-                                <Clock className="h-3 w-3 mr-1" />
-                                Urgent
-                              </Badge>
-                            )}
-                            {product.unblocksOrders > 0 && product.shortage > 0 && (
-                              <Badge variant="outline" className="text-xs">
-                                <ShoppingCart className="h-3 w-3 mr-1" />
-                                Unblocks: {product.unblocksOrders} order{product.unblocksOrders !== 1 ? 's' : ''}
-                              </Badge>
-                            )}
-                            {hasWipAvailable && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs bg-success/15 text-success border-success/30"
-                              >
-                                <CheckCircle className="h-3 w-3 mr-1 text-success" />
-                                WIP ready
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {product.bag_size_g}g • {product.sku || 'No SKU'}
-                          </div>
-                        </td>
-                        <td className="py-3">
-                          {product.roast_group ? (
-                            <Badge variant="secondary">{product.roast_group}</Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="py-3 text-right">
-                          <span className="font-medium">{product.demanded_units}</span>
-                          <span className="text-muted-foreground text-xs ml-1">units</span>
-                        </td>
-                        <td className="py-3" onClick={(e) => e.stopPropagation()}>
-                          <InlinePackingControl
-                            value={packed}
-                            onCommit={(newValue) => updatePackingUnits(product.product_id, newValue)}
-                            onEditingChange={(isEditing) => handleEditingChange(product.product_id, isEditing)}
-                            isComplete={isComplete}
-                          />
-                        </td>
-                        <td className="py-3 text-right">
-                          {isComplete ? (
-                            <Badge variant="default" className="bg-primary text-primary-foreground">
-                              <Check className="h-3 w-3 mr-1" />
-                              Complete
-                            </Badge>
-                          ) : packed > 0 ? (
-                            <Badge variant="secondary">
-                              {Math.round((packed / product.demanded_units) * 100)}%
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline">
-                              <AlertTriangle className="h-3 w-3 mr-1" />
-                              Pending
-                            </Badge>
-                          )}
-                        </td>
-                      </tr>
-                      {isExpanded && (
-                        <PackRowDrawer
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={sortedProducts.map(p => p.product_id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left">
+                      <th className="pb-2 w-10"></th>
+                      <th className="pb-2 w-8"></th>
+                      <th className="pb-2">Product</th>
+                      <th className="pb-2">Roast Group</th>
+                      <th className="pb-2 text-right">Demanded</th>
+                      <th className="pb-2 text-right">Packed</th>
+                      <th className="pb-2 text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedProducts.map((product) => {
+                      const packing = packingByProduct[product.product_id];
+                      const packed = packing?.units_packed ?? 0;
+                      const isExpanded = expandedProductId === product.product_id;
+                      const hasWipAvailable = product.isReadyToPack;
+                      
+                      return (
+                        <SortablePackRow
+                          key={product.product_id}
                           productId={product.product_id}
                           productName={product.product_name}
                           sku={product.sku}
+                          bagSizeG={product.bag_size_g}
+                          packagingVariant={product.packaging_variant}
                           roastGroup={product.roast_group}
-                          packingRun={packing}
+                          demandedUnits={product.demanded_units}
+                          packedUnits={packed}
+                          hasTimeSensitive={product.hasTimeSensitive}
+                          hasWipAvailable={hasWipAvailable}
                           unblocksOrders={product.unblocksOrders}
                           wipAvailableKg={product.wipAvailableKg}
                           requiredKg={product.requiredKg}
-                          hasWipAvailable={hasWipAvailable}
+                          packingRun={packing}
+                          isExpanded={isExpanded}
+                          onToggleExpand={() => setExpandedProductId(isExpanded ? null : product.product_id)}
+                          onUpdatePackedUnits={(newValue) => updatePackingUnits(product.product_id, newValue)}
+                          onEditingChange={(isEditing) => handleEditingChange(product.product_id, isEditing)}
                         />
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </SortableContext>
+            </DndContext>
           )}
         </CardContent>
       </Card>

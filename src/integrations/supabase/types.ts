@@ -311,6 +311,7 @@ export type Database = {
           packed: boolean
           requested_ship_date: string | null
           roasted: boolean
+          ship_display_order: number | null
           shipped_or_ready: boolean
           status: Database["public"]["Enums"]["order_status"]
           updated_at: string
@@ -330,6 +331,7 @@ export type Database = {
           packed?: boolean
           requested_ship_date?: string | null
           roasted?: boolean
+          ship_display_order?: number | null
           shipped_or_ready?: boolean
           status?: Database["public"]["Enums"]["order_status"]
           updated_at?: string
@@ -349,6 +351,7 @@ export type Database = {
           packed?: boolean
           requested_ship_date?: string | null
           roasted?: boolean
+          ship_display_order?: number | null
           shipped_or_ready?: boolean
           status?: Database["public"]["Enums"]["order_status"]
           updated_at?: string
