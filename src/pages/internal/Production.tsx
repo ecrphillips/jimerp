@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -24,7 +24,17 @@ export default function Production() {
   const today = getVancouverDate(0);
   const tomorrow = getVancouverDate(1);
 
-  const [dateFilter, setDateFilter] = useState<string[]>([today, tomorrow]);
+  // Date filter: 'today', 'tomorrow', or 'all'
+  type DateFilterMode = 'today' | 'tomorrow' | 'all';
+  const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('today');
+  
+  // Compute actual dateFilter array based on mode
+  const dateFilter = useMemo(() => {
+    if (dateFilterMode === 'today') return [today];
+    if (dateFilterMode === 'tomorrow') return [tomorrow];
+    // 'all' mode - return empty array to signal "no date filter"
+    return [];
+  }, [dateFilterMode, today, tomorrow]);
   
   // Read initial tab from URL param, default to 'roast'
   const tabFromUrl = searchParams.get('tab') as StationView | null;
@@ -38,39 +48,40 @@ export default function Production() {
     setSearchParams({ tab });
   };
 
-  const toggleDateFilter = (date: string) => {
-    setDateFilter((prev) => {
-      if (prev.includes(date)) {
-        return prev.filter((d) => d !== date);
-      }
-      return [...prev, date].sort();
-    });
-  };
-
   return (
     <div className="page-container">
       <div className="page-header">
         <div>
           <h1 className="page-title">Production</h1>
           <p className="text-sm text-muted-foreground">
-            Viewing: {dateFilter.map((d) => format(new Date(d + 'T12:00:00'), 'MMM d')).join(', ')}
+            Viewing: {dateFilterMode === 'all' 
+              ? 'All dates' 
+              : dateFilter.map((d) => format(new Date(d + 'T12:00:00'), 'MMM d')).join(', ')
+            }
           </p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex gap-2">
             <Button
-              variant={dateFilter.includes(today) ? 'default' : 'outline'}
+              variant={dateFilterMode === 'today' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => toggleDateFilter(today)}
+              onClick={() => setDateFilterMode('today')}
             >
               Today
             </Button>
             <Button
-              variant={dateFilter.includes(tomorrow) ? 'default' : 'outline'}
+              variant={dateFilterMode === 'tomorrow' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => toggleDateFilter(tomorrow)}
+              onClick={() => setDateFilterMode('tomorrow')}
             >
               Tomorrow
+            </Button>
+            <Button
+              variant={dateFilterMode === 'all' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setDateFilterMode('all')}
+            >
+              All
             </Button>
           </div>
         </div>

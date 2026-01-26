@@ -791,6 +791,48 @@ export type Database = {
         }
         Relationships: []
       }
+      ship_picks: {
+        Row: {
+          id: string
+          order_id: string
+          order_line_item_id: string
+          units_picked: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: string
+          order_id: string
+          order_line_item_id: string
+          units_picked?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          order_id?: string
+          order_line_item_id?: string
+          units_picked?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ship_picks_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ship_picks_order_line_item_id_fkey"
+            columns: ["order_line_item_id"]
+            isOneToOne: true
+            referencedRelation: "order_line_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       source_board_products: {
         Row: {
           created_at: string
