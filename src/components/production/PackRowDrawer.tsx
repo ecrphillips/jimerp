@@ -22,7 +22,7 @@ interface PackRowDrawerProps {
   unblocksOrders: number;
   wipAvailableKg: number;
   requiredKg: number;
-  isReadyToPack: boolean;
+  hasWipAvailable: boolean;
 }
 
 export function PackRowDrawer({
@@ -34,7 +34,7 @@ export function PackRowDrawer({
   unblocksOrders,
   wipAvailableKg,
   requiredKg,
-  isReadyToPack,
+  hasWipAvailable,
 }: PackRowDrawerProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -45,16 +45,20 @@ export function PackRowDrawer({
   };
 
   return (
-    <tr className={`border-l-2 ${isReadyToPack 
-      ? 'bg-green-50/50 dark:bg-green-950/20 border-l-green-500' 
-      : 'bg-accent/30 border-l-accent-foreground/30'}`}>
+    <tr
+      className={`border-l-2 ${hasWipAvailable
+        ? 'bg-success/5 border-l-success'
+        : 'bg-muted/30 border-l-border'}`}
+    >
       <td colSpan={6} className="py-3 px-4 pl-6">
         {/* WIP Status Banner */}
         {roastGroup && (
-          <div className={`mb-3 p-2 rounded-md text-sm ${isReadyToPack 
-            ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200' 
-            : 'bg-muted text-muted-foreground'}`}>
-            {isReadyToPack ? (
+          <div
+            className={`mb-3 p-2 rounded-md text-sm ${hasWipAvailable
+              ? 'bg-success/15 text-success'
+              : 'bg-muted text-muted-foreground'}`}
+          >
+            {hasWipAvailable ? (
               <span className="font-medium">
                 ✓ WIP available for {roastGroup}: {wipAvailableKg.toFixed(2)} kg • This row needs: {requiredKg.toFixed(2)} kg
               </span>
