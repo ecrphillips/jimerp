@@ -23,7 +23,7 @@ import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBad
 import { InlinePackingControl } from './InlinePackingControl';
 import { PackRowDrawer } from './PackRowDrawer';
 
-type SortOption = 'urgent' | 'shortage' | 'alpha';
+// Removed SortOption type - no more auto-sorting, order is manual via pack_display_order
 
 interface PackTabProps {
   dateFilter: string[];
@@ -62,7 +62,7 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   
-  const [sortBy, setSortBy] = useState<SortOption>('urgent');
+  // Removed sortBy state - order is now manual only via pack_display_order
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
   
   // Sort-freeze state: track which product is being edited
@@ -280,35 +280,22 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
     return Object.values(productMap).map(({ orderIds, shipDates, ...rest }) => rest);
   }, [orderLineItems, checkmarks, packingByProductUnits, roastedInventory]);
 
-  // Sort products based on selected sort option
+  // Sort products by pack_display_order only (manual ordering)
+  // NO automatic reprioritization - order is strictly user-controlled
   const computedSortedProducts = useMemo(() => {
     const sorted = [...demandByProduct];
     
-    switch (sortBy) {
-      case 'urgent':
-        // TIME_SENSITIVE first, then earliest ship date, then highest shortage
-        sorted.sort((a, b) => {
-          if (a.hasTimeSensitive !== b.hasTimeSensitive) {
-            return a.hasTimeSensitive ? -1 : 1;
-          }
-          if (a.earliestShipDate !== b.earliestShipDate) {
-            if (!a.earliestShipDate) return 1;
-            if (!b.earliestShipDate) return -1;
-            return a.earliestShipDate.localeCompare(b.earliestShipDate);
-          }
-          return b.shortage - a.shortage;
-        });
-        break;
-      case 'shortage':
-        sorted.sort((a, b) => b.shortage - a.shortage);
-        break;
-      case 'alpha':
-        sorted.sort((a, b) => a.product_name.localeCompare(b.product_name));
-        break;
-    }
+    // Sort ONLY by pack_display_order (manual), then by name as tie-breaker
+    sorted.sort((a, b) => {
+      const orderA = a.pack_display_order ?? 999999;
+      const orderB = b.pack_display_order ?? 999999;
+      
+      if (orderA !== orderB) return orderA - orderB;
+      return a.product_name.localeCompare(b.product_name);
+    });
     
     return sorted;
-  }, [demandByProduct, sortBy]);
+  }, [demandByProduct]);
 
   // Handle editing state changes from InlinePackingControl
   const handleEditingChange = useCallback((productId: string, isEditing: boolean) => {
@@ -417,16 +404,7 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                   Open Roasted Inventory Ledger
                 </Link>
               </Button>
-              <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Sort by..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="urgent">Most urgent first</SelectItem>
-                  <SelectItem value="shortage">Largest shortage first</SelectItem>
-                  <SelectItem value="alpha">Alphabetical</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* Removed sort dropdown - order is manual only */}
             </div>
           </div>
         </CardHeader>
