@@ -704,6 +704,38 @@ export type Database = {
           },
         ]
       }
+      roast_group_inventory_levels: {
+        Row: {
+          fg_kg: number
+          roast_group: string
+          updated_at: string
+          updated_by: string | null
+          wip_kg: number
+        }
+        Insert: {
+          fg_kg?: number
+          roast_group: string
+          updated_at?: string
+          updated_by?: string | null
+          wip_kg?: number
+        }
+        Update: {
+          fg_kg?: number
+          roast_group?: string
+          updated_at?: string
+          updated_by?: string | null
+          wip_kg?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roast_group_inventory_levels_roast_group_fkey"
+            columns: ["roast_group"]
+            isOneToOne: true
+            referencedRelation: "roast_groups"
+            referencedColumns: ["roast_group"]
+          },
+        ]
+      }
       roast_groups: {
         Row: {
           created_at: string

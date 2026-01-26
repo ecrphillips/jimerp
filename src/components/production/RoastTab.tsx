@@ -21,8 +21,9 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Flame, Plus, Check, Zap, Clock, Settings, Sparkles } from 'lucide-react';
+import { Flame, Plus, Check, Zap, Clock, Settings, Sparkles, Package } from 'lucide-react';
 import { RoastGroupDrawer } from './RoastGroupDrawer';
+import { WipFgAdjustModal } from './WipFgAdjustModal';
 import {
   DndContext,
   closestCenter,
@@ -74,6 +75,9 @@ interface RoastGroupConfig {
 interface DemandByRoastGroup {
   roast_group: string;
   total_kg: number;
+  net_demand_kg: number; // total_kg - wip_kg - fg_kg
+  wip_kg: number;
+  fg_kg: number;
   products: { name: string; kg: number }[];
   hasTimeSensitive: boolean;
   earliestShipDate: string | null;
@@ -100,6 +104,9 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
   
   // Auto-prioritize confirmation dialog
   const [showAutoPrioritizeConfirm, setShowAutoPrioritizeConfirm] = useState(false);
+  
+  // WIP/FG adjustment modal state
+  const [wipFgModalGroup, setWipFgModalGroup] = useState<string | null>(null);
 
   // Fetch roast_groups config (with display_order)
   const { data: roastGroupsConfig } = useQuery({
@@ -214,6 +221,30 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     },
   });
 
+  // Fetch roast_group_inventory_levels for WIP + FG
+  const { data: inventoryLevels } = useQuery({
+    queryKey: ['roast-group-inventory-levels'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('roast_group_inventory_levels')
+        .select('*');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Map roast_group to inventory levels
+  const inventoryLevelsByGroup = useMemo(() => {
+    const map: Record<string, { wip_kg: number; fg_kg: number }> = {};
+    for (const level of inventoryLevels ?? []) {
+      map[level.roast_group] = {
+        wip_kg: Number(level.wip_kg) || 0,
+        fg_kg: Number(level.fg_kg) || 0,
+      };
+    }
+    return map;
+  }, [inventoryLevels]);
+
   // Aggregate demand by roast_group with priority info
   const demandByRoastGroup = useMemo((): DemandByRoastGroup[] => {
     const groupMap: Record<string, { 
@@ -254,14 +285,23 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
       groupMap[roastGroup].products.set(productName, existing + kgForLine);
     }
 
-    return Object.entries(groupMap).map(([roast_group, data]) => ({
-      roast_group,
-      total_kg: data.total_kg,
-      products: Array.from(data.products.entries()).map(([name, kg]) => ({ name, kg })),
-      hasTimeSensitive: data.hasTimeSensitive,
-      earliestShipDate: data.earliestShipDate,
-    }));
-  }, [orderLineItems, timeSensitiveProducts]);
+    return Object.entries(groupMap).map(([roast_group, data]) => {
+      const wip_kg = inventoryLevelsByGroup[roast_group]?.wip_kg ?? 0;
+      const fg_kg = inventoryLevelsByGroup[roast_group]?.fg_kg ?? 0;
+      const net_demand_kg = Math.max(0, data.total_kg - wip_kg - fg_kg);
+      
+      return {
+        roast_group,
+        total_kg: data.total_kg,
+        net_demand_kg,
+        wip_kg,
+        fg_kg,
+        products: Array.from(data.products.entries()).map(([name, kg]) => ({ name, kg })),
+        hasTimeSensitive: data.hasTimeSensitive,
+        earliestShipDate: data.earliestShipDate,
+      };
+    });
+  }, [orderLineItems, timeSensitiveProducts, inventoryLevelsByGroup]);
 
   // Calculate roasted inventory per roast_group (sum of ROASTED batches)
   const roastedInventory = useMemo(() => {
@@ -677,6 +717,9 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                           <RoastGroupDrawer
                             roastGroup={group.roast_group}
                             demandKg={group.total_kg}
+                            netDemandKg={group.net_demand_kg}
+                            wipKg={group.wip_kg}
+                            fgKg={group.fg_kg}
                             hasTimeSensitive={group.hasTimeSensitive}
                             batches={groupBatches}
                             config={config}
@@ -685,6 +728,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                             allRoastGroups={allRoastGroups}
                             onOpenConfig={openConfigDialog}
                             onEditingChange={(isEditing) => handleEditingChange(group.roast_group, isEditing)}
+                            onAdjustWipFg={(rg) => setWipFgModalGroup(rg)}
                           />
                           
                           {/* Quick batch suggestion row (shown below collapsed row if there's demand and no batches visible) */}
@@ -812,6 +856,9 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                         key={roastGroup}
                         roastGroup={roastGroup}
                         demandKg={0}
+                        netDemandKg={0}
+                        wipKg={inventoryLevelsByGroup[roastGroup]?.wip_kg ?? 0}
+                        fgKg={inventoryLevelsByGroup[roastGroup]?.fg_kg ?? 0}
                         hasTimeSensitive={false}
                         batches={groupBatches}
                         config={config}
@@ -820,6 +867,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                         allRoastGroups={allRoastGroups}
                         onOpenConfig={openConfigDialog}
                         onEditingChange={(isEditing) => handleEditingChange(roastGroup, isEditing)}
+                        onAdjustWipFg={(rg) => setWipFgModalGroup(rg)}
                       />
                     );
                   })}
@@ -926,6 +974,17 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {/* WIP/FG Adjustment Modal */}
+      {wipFgModalGroup && (
+        <WipFgAdjustModal
+          open={!!wipFgModalGroup}
+          onOpenChange={(open) => !open && setWipFgModalGroup(null)}
+          roastGroup={wipFgModalGroup}
+          currentWipKg={inventoryLevelsByGroup[wipFgModalGroup]?.wip_kg ?? 0}
+          currentFgKg={inventoryLevelsByGroup[wipFgModalGroup]?.fg_kg ?? 0}
+        />
+      )}
     </div>
   );
 }

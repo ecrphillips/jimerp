@@ -14,12 +14,14 @@ import {
   Check, 
   Trash2, 
   Plus,
+  Minus,
   Undo2,
   Settings,
   Clock,
   Loader2,
   AlertTriangle,
-  GripVertical
+  GripVertical,
+  Package
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -64,6 +66,9 @@ interface RoastGroupConfig {
 interface RoastGroupDrawerProps {
   roastGroup: string;
   demandKg: number;
+  netDemandKg: number;
+  wipKg: number;
+  fgKg: number;
   hasTimeSensitive: boolean;
   batches: RoastBatch[];
   config: RoastGroupConfig | undefined;
@@ -72,12 +77,16 @@ interface RoastGroupDrawerProps {
   allRoastGroups: string[];
   onOpenConfig: (roastGroup: string) => void;
   onEditingChange: (isEditing: boolean) => void;
+  onAdjustWipFg: (roastGroup: string) => void;
   isDragging?: boolean;
 }
 
 export function RoastGroupDrawer({
   roastGroup,
   demandKg,
+  netDemandKg,
+  wipKg,
+  fgKg,
   hasTimeSensitive,
   batches,
   config,
@@ -86,6 +95,7 @@ export function RoastGroupDrawer({
   allRoastGroups,
   onOpenConfig,
   onEditingChange,
+  onAdjustWipFg,
   isDragging = false,
 }: RoastGroupDrawerProps) {
   const { user } = useAuth();
@@ -135,8 +145,9 @@ export function RoastGroupDrawer({
   const roastedTodayKg = roastedBatches.reduce((sum, b) => sum + b.actual_output_kg, 0);
   
   // Total coverage = expected from planned + actual from roasted
+  // Compare against NET demand (demand - WIP - FG)
   const totalCoverage = plannedExpectedOutput + roastedTotal;
-  const coverageDelta = totalCoverage - demandKg;
+  const coverageDelta = totalCoverage - netDemandKg;
 
   // Sort batches helper function - STATIC ORDER by created_at only
   // No resorting by status - preserve user's "work down the list" flow
@@ -459,8 +470,15 @@ export function RoastGroupDrawer({
           </div>
         </td>
         <td className="py-3 text-right">
-          <span className="font-medium">{demandKg.toFixed(1)}</span>
-          <span className="text-muted-foreground text-xs ml-1">kg</span>
+          <div className="flex flex-col items-end">
+            <span className="font-medium">{netDemandKg.toFixed(1)}</span>
+            <span className="text-muted-foreground text-xs">net demand</span>
+            {(wipKg > 0 || fgKg > 0) && (
+              <span className="text-muted-foreground text-[10px]">
+                ({demandKg.toFixed(1)} - {wipKg.toFixed(1)} WIP - {fgKg.toFixed(1)} FG)
+              </span>
+            )}
+          </div>
         </td>
         <td className="py-3 text-right">
           <div className="flex flex-col items-end">
@@ -475,11 +493,11 @@ export function RoastGroupDrawer({
         <td className="py-3 text-right">
           {coverageDelta >= 0 ? (
             <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
-              +{coverageDelta.toFixed(1)} kg expected
+              Covered +{coverageDelta.toFixed(1)} kg
             </Badge>
           ) : (
             <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300">
-              Short {Math.abs(coverageDelta).toFixed(1)} kg roasted
+              Short {Math.abs(coverageDelta).toFixed(1)} kg
             </Badge>
           )}
         </td>
@@ -490,7 +508,7 @@ export function RoastGroupDrawer({
         <tr className="bg-accent/30 border-l-2 border-l-primary">
           <td colSpan={7} className="py-3 px-4 pl-8">
             <div className="space-y-3">
-              {/* Header with config button */}
+              {/* Header with config and WIP/FG buttons */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span>Std batch: {standardBatch} kg inbound</span>
@@ -503,8 +521,22 @@ export function RoastGroupDrawer({
                       e.stopPropagation();
                       onOpenConfig(roastGroup);
                     }}
+                    title="Configure batch size and roaster"
                   >
                     <Settings className="h-3 w-3" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-6 px-2 text-xs gap-1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAdjustWipFg(roastGroup);
+                    }}
+                    title="Adjust WIP and FG inventory"
+                  >
+                    <Package className="h-3 w-3" />
+                    WIP/FG
                   </Button>
                 </div>
                 <Button
@@ -814,20 +846,52 @@ function BatchRow({
             <span className="text-xs text-muted-foreground">kg</span>
           </div>
 
-          {/* Actual output kg */}
+          {/* Actual output kg with +/- 0.1 buttons */}
           <div className="flex items-center gap-1">
             <span className="text-xs text-muted-foreground">Actual output:</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => {
+                const current = parseFloat(actualKg) || 0;
+                const newVal = Math.max(0, current - 0.1).toFixed(1);
+                setActualKg(newVal);
+                onInputChange();
+                scheduleUpdate('actual_output_kg', parseFloat(newVal));
+              }}
+              disabled={isUpdating}
+            >
+              <Minus className="h-3 w-3" />
+            </Button>
             <Input
               type="text"
               inputMode="decimal"
               pattern="[0-9]*\.?[0-9]*"
-              className="w-16 h-7 text-sm px-2"
+              className="w-16 h-7 text-sm px-2 text-center"
               value={actualKg}
               onChange={handleActualKgChange}
               onFocus={onInputFocus}
               onBlur={onInputBlur}
               disabled={isUpdating}
             />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => {
+                const current = parseFloat(actualKg) || 0;
+                const newVal = (current + 0.1).toFixed(1);
+                setActualKg(newVal);
+                onInputChange();
+                scheduleUpdate('actual_output_kg', parseFloat(newVal));
+              }}
+              disabled={isUpdating}
+            >
+              <Plus className="h-3 w-3" />
+            </Button>
             <span className="text-xs text-muted-foreground">kg</span>
           </div>
 
