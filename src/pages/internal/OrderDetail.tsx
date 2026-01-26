@@ -10,11 +10,12 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package } from 'lucide-react';
+import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, Edit, PenSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { HistoricalEditWarningModal } from '@/components/internal/HistoricalEditWarningModal';
 import { IncompleteFulfillmentModal } from '@/components/internal/IncompleteFulfillmentModal';
 import { StatusChangeModal } from '@/components/internal/StatusChangeModal';
+import { OrderEditModal } from '@/components/internal/OrderEditModal';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -56,6 +57,8 @@ export default function OrderDetail() {
           shipped_or_ready,
           invoiced,
           created_by_admin,
+          client_id,
+          updated_at,
           client:clients(name)
         `)
         .eq('id', id!)
@@ -66,6 +69,9 @@ export default function OrderDetail() {
     },
     enabled: !!id,
   });
+
+  // Edit modal state
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // Fetch line items with product details including roast_group
   const { data: lineItems } = useQuery({
@@ -454,6 +460,12 @@ export default function OrderDetail() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Edit Order button */}
+          <Button variant="outline" onClick={() => setShowEditModal(true)} className="gap-2">
+            <PenSquare className="h-4 w-4" />
+            Edit Order
+          </Button>
+          
           {/* Confirm button for SUBMITTED orders */}
           {order.status === 'SUBMITTED' && (
             <Button onClick={() => confirmMutation.mutate()} disabled={confirmMutation.isPending}>
@@ -710,6 +722,32 @@ export default function OrderDetail() {
         newStatus={pendingStatusChange ?? ''}
         onConfirm={confirmStatusChange}
       />
+
+      {/* Order Edit Modal */}
+      {order && lineItemsWithPackedStatus && (
+        <OrderEditModal
+          open={showEditModal}
+          onOpenChange={setShowEditModal}
+          order={{
+            id: order.id,
+            order_number: order.order_number,
+            requested_ship_date: order.requested_ship_date,
+            delivery_method: order.delivery_method,
+            status: order.status,
+            client_id: (order as any).client_id,
+            created_by_admin: order.created_by_admin,
+          }}
+          lineItems={lineItemsWithPackedStatus.map(li => ({
+            id: li.id,
+            product_id: li.product_id,
+            product_name: li.product?.product_name ?? 'Unknown',
+            quantity_units: li.quantity_units,
+            grind: li.grind,
+            unit_price_locked: li.unit_price_locked,
+          }))}
+          clientId={(order as any).client_id}
+        />
+      )}
     </div>
   );
 }

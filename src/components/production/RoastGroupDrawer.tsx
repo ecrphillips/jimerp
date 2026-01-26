@@ -138,16 +138,12 @@ export function RoastGroupDrawer({
   const totalCoverage = plannedExpectedOutput + roastedTotal;
   const coverageDelta = totalCoverage - demandKg;
 
-  // Sort batches helper function
+  // Sort batches helper function - STATIC ORDER by created_at only
+  // No resorting by status - preserve user's "work down the list" flow
   const sortBatches = useCallback((batchList: RoastBatch[]) => {
     return [...batchList].sort((a, b) => {
-      if (a.status !== b.status) {
-        return a.status === 'PLANNED' ? -1 : 1;
-      }
-      if (a.status === 'PLANNED') {
-        return (a.created_at ?? '').localeCompare(b.created_at ?? '');
-      }
-      return (b.updated_at ?? '').localeCompare(a.updated_at ?? '');
+      // Sort ONLY by created_at - do not move roasted batches to bottom
+      return (a.created_at ?? '').localeCompare(b.created_at ?? '');
     });
   }, []);
 
@@ -668,7 +664,14 @@ function BatchRow({
   getRoasterBadgeColor,
 }: BatchRowProps) {
   const [plannedKg, setPlannedKg] = useState(batch.planned_output_kg?.toString() ?? '');
-  const [actualKg, setActualKg] = useState(batch.actual_output_kg?.toString() ?? '0');
+  // Default actual output to expected output based on yield loss
+  const inboundDefault = batch.planned_output_kg ?? 0;
+  const expectedOutputDefault = inboundDefault * (1 - expectedYieldLossPct / 100);
+  const [actualKg, setActualKg] = useState(
+    batch.actual_output_kg > 0 
+      ? batch.actual_output_kg.toString() 
+      : (inboundDefault > 0 ? expectedOutputDefault.toFixed(1) : '0')
+  );
   const [cropsterId, setCropsterId] = useState(batch.cropster_batch_id ?? '');
   const [notes, setNotes] = useState(batch.notes ?? '');
   const [showYieldWarning, setShowYieldWarning] = useState(false);
@@ -794,12 +797,13 @@ function BatchRow({
             )}
           </div>
 
-          {/* Inbound (green) kg */}
+          {/* Inbound/Green kg */}
           <div className="flex items-center gap-1">
-            <span className="text-xs text-muted-foreground">Inbound:</span>
+            <span className="text-xs text-muted-foreground">Inbound/Green:</span>
             <Input
               type="number"
               step="0.1"
+              min="0"
               className="w-16 h-7 text-sm px-2"
               value={plannedKg}
               onChange={handlePlannedKgChange}
@@ -810,12 +814,13 @@ function BatchRow({
             <span className="text-xs text-muted-foreground">kg</span>
           </div>
 
-          {/* Output (roasted) kg */}
+          {/* Actual output kg */}
           <div className="flex items-center gap-1">
-            <span className="text-xs text-muted-foreground">Output:</span>
+            <span className="text-xs text-muted-foreground">Actual output:</span>
             <Input
-              type="number"
-              step="0.1"
+              type="text"
+              inputMode="decimal"
+              pattern="[0-9]*\.?[0-9]*"
               className="w-16 h-7 text-sm px-2"
               value={actualKg}
               onChange={handleActualKgChange}

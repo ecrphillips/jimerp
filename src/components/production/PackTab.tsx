@@ -94,10 +94,11 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
   });
 
   // Fetch order line items for demand with ship_priority from production_checkmarks
+  // If dateFilter is empty (All mode), fetch all active orders regardless of date
   const { data: orderLineItems } = useQuery({
     queryKey: ['pack-demand', dateFilter],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('order_line_items')
         .select(`
           id,
@@ -107,8 +108,13 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
           order:orders!inner(id, status, requested_ship_date),
           product:products(id, product_name, sku, bag_size_g, packaging_variant, roast_group)
         `)
-        .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY'])
-        .in('order.requested_ship_date', dateFilter);
+        .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
+      
+      if (dateFilter.length > 0) {
+        query = query.in('order.requested_ship_date', dateFilter);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
     },
@@ -118,10 +124,15 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
   const { data: checkmarks } = useQuery({
     queryKey: ['production-checkmarks', dateFilter],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('production_checkmarks')
-        .select('*')
-        .in('target_date', dateFilter);
+        .select('*');
+      
+      if (dateFilter.length > 0) {
+        query = query.in('target_date', dateFilter);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
     },
@@ -131,11 +142,16 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
   const { data: roastedBatches } = useQuery({
     queryKey: ['roasted-batches-for-pack', dateFilter],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('roasted_batches')
         .select('*')
-        .eq('status', 'ROASTED')
-        .in('target_date', dateFilter);
+        .eq('status', 'ROASTED');
+      
+      if (dateFilter.length > 0) {
+        query = query.in('target_date', dateFilter);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
     },
@@ -145,10 +161,15 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
   const { data: packingRuns } = useQuery({
     queryKey: ['packing-runs', dateFilter],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('packing_runs')
-        .select('*')
-        .in('target_date', dateFilter);
+        .select('*');
+      
+      if (dateFilter.length > 0) {
+        query = query.in('target_date', dateFilter);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as PackingRun[];
     },
