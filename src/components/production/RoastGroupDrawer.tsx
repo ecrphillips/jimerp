@@ -10,7 +10,6 @@ import { toast } from 'sonner';
 import { 
   ChevronDown, 
   ChevronRight, 
-  ChevronUp,
   Flame, 
   Check, 
   Trash2, 
@@ -19,7 +18,8 @@ import {
   Settings,
   Clock,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  GripVertical
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -32,6 +32,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { OhShitModal } from './OhShitModal';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 type RoasterMachine = 'SAMIAC' | 'LORING';
 type DefaultRoaster = 'SAMIAC' | 'LORING' | 'EITHER';
@@ -70,10 +72,7 @@ interface RoastGroupDrawerProps {
   allRoastGroups: string[];
   onOpenConfig: (roastGroup: string) => void;
   onEditingChange: (isEditing: boolean) => void;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
-  canMoveUp?: boolean;
-  canMoveDown?: boolean;
+  isDragging?: boolean;
 }
 
 export function RoastGroupDrawer({
@@ -87,13 +86,19 @@ export function RoastGroupDrawer({
   allRoastGroups,
   onOpenConfig,
   onEditingChange,
-  onMoveUp,
-  onMoveDown,
-  canMoveUp = false,
-  canMoveDown = false,
+  isDragging = false,
 }: RoastGroupDrawerProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  
+  // Sortable hook for drag and drop
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: roastGroup });
   
   const [isExpanded, setIsExpanded] = useState(false);
   const [undoConfirmBatchId, setUndoConfirmBatchId] = useState<string | null>(null);
@@ -408,14 +413,22 @@ export function RoastGroupDrawer({
     }
   };
 
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
   return (
     <>
       {/* Collapsed Row */}
       <tr 
+        ref={setNodeRef}
+        style={style}
         className={`border-b cursor-pointer transition-colors 
           ${isFullyRoasted ? 'opacity-60' : ''}
           ${hasTimeSensitive && !isFullyRoasted ? 'bg-destructive/5' : ''} 
-          ${isExpanded ? 'bg-accent/40 border-l-2 border-l-primary' : 'hover:bg-muted/50'}`}
+          ${isExpanded ? 'bg-accent/40 border-l-2 border-l-primary' : 'hover:bg-muted/50'}
+          ${isDragging ? 'opacity-50' : ''}`}
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <td className="py-3 w-8 px-2">
@@ -425,29 +438,13 @@ export function RoastGroupDrawer({
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           )}
         </td>
-        <td className="py-1 w-16" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center gap-0.5">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6"
-              onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }}
-              disabled={!canMoveUp}
-              title="Move up"
-            >
-              <ChevronUp className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6"
-              onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }}
-              disabled={!canMoveDown}
-              title="Move down"
-            >
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-          </div>
+        <td 
+          className="py-1 w-10 cursor-grab active:cursor-grabbing" 
+          onClick={(e) => e.stopPropagation()}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
         </td>
         <td className="py-3">
           <div className="flex items-center gap-2 flex-wrap">

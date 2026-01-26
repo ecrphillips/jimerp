@@ -21,8 +21,22 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Flame, Plus, Check, Zap, Clock, Settings, ChevronUp, ChevronDown, Sparkles } from 'lucide-react';
+import { Flame, Plus, Check, Zap, Clock, Settings, Sparkles } from 'lucide-react';
 import { RoastGroupDrawer } from './RoastGroupDrawer';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 
 interface RoastTabProps {
   dateFilter: string[];
@@ -359,27 +373,39 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     },
   });
 
-  // Move group up/down
-  const moveGroup = useCallback((roastGroup: string, direction: 'up' | 'down') => {
-    const currentIndex = sortedGroups.findIndex(g => g.roast_group === roastGroup);
-    if (currentIndex === -1) return;
+  // Handle drag end for reordering
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
     
-    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    if (targetIndex < 0 || targetIndex >= sortedGroups.length) return;
+    if (!over || active.id === over.id) return;
     
-    const currentGroup = sortedGroups[currentIndex];
-    const targetGroup = sortedGroups[targetIndex];
+    const oldIndex = sortedGroups.findIndex(g => g.roast_group === active.id);
+    const newIndex = sortedGroups.findIndex(g => g.roast_group === over.id);
     
-    const currentConfig = configByGroup[currentGroup.roast_group];
-    const targetConfig = configByGroup[targetGroup.roast_group];
+    if (oldIndex === -1 || newIndex === -1) return;
     
-    const currentOrder = currentConfig?.display_order ?? currentIndex * 10;
-    const targetOrder = targetConfig?.display_order ?? targetIndex * 10;
+    // Calculate new display_order values - reindex all groups
+    const reorderedGroups = [...sortedGroups];
+    const [movedGroup] = reorderedGroups.splice(oldIndex, 1);
+    reorderedGroups.splice(newIndex, 0, movedGroup);
     
-    // Swap display_order values
-    updateDisplayOrderMutation.mutate({ roastGroup: currentGroup.roast_group, newOrder: targetOrder });
-    updateDisplayOrderMutation.mutate({ roastGroup: targetGroup.roast_group, newOrder: currentOrder });
-  }, [sortedGroups, configByGroup, updateDisplayOrderMutation]);
+    // Update all groups with new display_order
+    reorderedGroups.forEach((group, index) => {
+      updateDisplayOrderMutation.mutate({ roastGroup: group.roast_group, newOrder: (index + 1) * 10 });
+    });
+  }, [sortedGroups, updateDisplayOrderMutation]);
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Auto-prioritize: reorder based on urgency
   const autoPrioritizeMutation = useMutation({
@@ -562,7 +588,7 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
                 Roast Plan
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Use arrows to reorder groups manually. Order persists across sessions.
+                Drag the grip handle to reorder groups manually. Order persists across sessions.
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -609,140 +635,144 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
               No roast groups match the "{roasterFilter}" filter. Try selecting "All".
             </p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left">
-                  <th className="pb-2 w-8"></th>
-                  <th className="pb-2 w-16"></th>
-                  <th className="pb-2">Roast Group</th>
-                  <th className="pb-2 text-right">Demand</th>
-                  <th className="pb-2 text-right">Planned</th>
-                  <th className="pb-2 text-right">Roasted</th>
-                  <th className="pb-2 text-right">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedGroups.map((group, index) => {
-                  const groupBatches = batchesByGroup[group.roast_group] ?? [];
-                  const config = configByGroup[group.roast_group];
-                  const roastedTotal = roastedInventory[group.roast_group] ?? 0;
-                  const standardBatch = config?.standard_batch_kg ?? 20;
-                  const defaultRoaster = config?.default_roaster ?? 'EITHER';
-                  const hasConfig = group.roast_group in configByGroup;
-                  
-                  // Calculate suggestion for quick-add (using expected output)
-                  const yieldLossPct = config?.expected_yield_loss_pct ?? 16;
-                  const plannedExpectedOutput = groupBatches
-                    .filter(b => b.status === 'PLANNED')
-                    .reduce((sum, b) => {
-                      const inboundKg = b.planned_output_kg ?? 0;
-                      return sum + inboundKg * (1 - yieldLossPct / 100);
-                    }, 0);
-                  const remainingNeed = Math.max(0, group.total_kg - roastedTotal - plannedExpectedOutput);
-                  const expectedOutputPerBatch = standardBatch * (1 - yieldLossPct / 100);
-                  const suggestedBatches = remainingNeed > 0 ? Math.ceil(remainingNeed / expectedOutputPerBatch) : 0;
-                  
-                  return (
-                    <React.Fragment key={group.roast_group}>
-                      <RoastGroupDrawer
-                        roastGroup={group.roast_group}
-                        demandKg={group.total_kg}
-                        hasTimeSensitive={group.hasTimeSensitive}
-                        batches={groupBatches}
-                        config={config}
-                        roastedTotal={roastedTotal}
-                        today={today}
-                        allRoastGroups={allRoastGroups}
-                        onOpenConfig={openConfigDialog}
-                        onEditingChange={(isEditing) => handleEditingChange(group.roast_group, isEditing)}
-                        onMoveUp={() => moveGroup(group.roast_group, 'up')}
-                        onMoveDown={() => moveGroup(group.roast_group, 'down')}
-                        canMoveUp={index > 0}
-                        canMoveDown={index < sortedGroups.length - 1}
-                      />
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={sortedGroups.map(g => g.roast_group)}
+                strategy={verticalListSortingStrategy}
+              >
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left">
+                      <th className="pb-2 w-8"></th>
+                      <th className="pb-2 w-10"></th>
+                      <th className="pb-2">Roast Group</th>
+                      <th className="pb-2 text-right">Demand</th>
+                      <th className="pb-2 text-right">Planned</th>
+                      <th className="pb-2 text-right">Roasted</th>
+                      <th className="pb-2 text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedGroups.map((group, index) => {
+                      const groupBatches = batchesByGroup[group.roast_group] ?? [];
+                      const config = configByGroup[group.roast_group];
+                      const roastedTotal = roastedInventory[group.roast_group] ?? 0;
+                      const standardBatch = config?.standard_batch_kg ?? 20;
+                      const defaultRoaster = config?.default_roaster ?? 'EITHER';
+                      const hasConfig = group.roast_group in configByGroup;
                       
-                      {/* Quick batch suggestion row (shown below collapsed row if there's demand and no batches visible) */}
-                      {suggestedBatches > 0 && !hasConfig && (
-                        <tr className="bg-muted/30">
-                          <td colSpan={7} className="py-2 px-4 pl-10 text-sm">
-                            <div className="flex items-center gap-3">
-                              <Badge variant="outline" className="text-xs">
-                                <Settings className="h-3 w-3 mr-1" />
-                                No config
-                              </Badge>
-                              <span className="text-muted-foreground">
-                                Set batch size to get suggestions
-                              </span>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 text-xs"
-                                onClick={() => openConfigDialog(group.roast_group)}
-                              >
-                                Configure
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-                
-                {/* Quick-add batches section */}
-                {sortedGroups.some(g => {
-                  const config = configByGroup[g.roast_group];
-                  if (!config) return false;
-                  const groupBatches = batchesByGroup[g.roast_group] ?? [];
-                  const yieldLossPct = config.expected_yield_loss_pct ?? 16;
-                  const plannedExpectedOutput = groupBatches
-                    .filter(b => b.status === 'PLANNED')
-                    .reduce((sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - yieldLossPct / 100), 0);
-                  const roastedTotal = roastedInventory[g.roast_group] ?? 0;
-                  const remainingNeed = g.total_kg - roastedTotal - plannedExpectedOutput;
-                  return remainingNeed > 0;
-                }) && (
-                  <tr className="border-t bg-muted/20">
-                    <td colSpan={7} className="py-3 px-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Zap className="h-4 w-4 text-primary" />
-                        <span className="text-sm font-medium">Quick add suggested batches:</span>
-                        {sortedGroups.map(g => {
-                          const config = configByGroup[g.roast_group];
-                          if (!config) return null;
+                      // Calculate suggestion for quick-add (using expected output)
+                      const yieldLossPct = config?.expected_yield_loss_pct ?? 16;
+                      const plannedExpectedOutput = groupBatches
+                        .filter(b => b.status === 'PLANNED')
+                        .reduce((sum, b) => {
+                          const inboundKg = b.planned_output_kg ?? 0;
+                          return sum + inboundKg * (1 - yieldLossPct / 100);
+                        }, 0);
+                      const remainingNeed = Math.max(0, group.total_kg - roastedTotal - plannedExpectedOutput);
+                      const expectedOutputPerBatch = standardBatch * (1 - yieldLossPct / 100);
+                      const suggestedBatches = remainingNeed > 0 ? Math.ceil(remainingNeed / expectedOutputPerBatch) : 0;
+                      
+                      return (
+                        <React.Fragment key={group.roast_group}>
+                          <RoastGroupDrawer
+                            roastGroup={group.roast_group}
+                            demandKg={group.total_kg}
+                            hasTimeSensitive={group.hasTimeSensitive}
+                            batches={groupBatches}
+                            config={config}
+                            roastedTotal={roastedTotal}
+                            today={today}
+                            allRoastGroups={allRoastGroups}
+                            onOpenConfig={openConfigDialog}
+                            onEditingChange={(isEditing) => handleEditingChange(group.roast_group, isEditing)}
+                          />
                           
-                          const groupBatches = batchesByGroup[g.roast_group] ?? [];
-                          const yieldLossPct = config.expected_yield_loss_pct ?? 16;
-                          const plannedExpectedOutput = groupBatches
-                            .filter(b => b.status === 'PLANNED')
-                            .reduce((sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - yieldLossPct / 100), 0);
-                          const roastedTotal = roastedInventory[g.roast_group] ?? 0;
-                          const remainingNeed = g.total_kg - roastedTotal - plannedExpectedOutput;
-                          const expectedOutputPerBatch = config.standard_batch_kg * (1 - yieldLossPct / 100);
-                          const suggestedBatches = remainingNeed > 0 ? Math.ceil(remainingNeed / expectedOutputPerBatch) : 0;
-                          
-                          if (suggestedBatches <= 0) return null;
-                          
-                          return (
-                            <Button
-                              key={g.roast_group}
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs"
-                              onClick={() => handleCreateSuggestedBatches(g.roast_group, g.total_kg)}
-                              disabled={createSuggestedBatchesMutation.isPending}
-                            >
-                              <Plus className="h-3 w-3 mr-1" />
-                              {g.roast_group} (+{suggestedBatches})
-                            </Button>
-                          );
-                        })}
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                          {/* Quick batch suggestion row (shown below collapsed row if there's demand and no batches visible) */}
+                          {suggestedBatches > 0 && !hasConfig && (
+                            <tr className="bg-muted/30">
+                              <td colSpan={7} className="py-2 px-4 pl-10 text-sm">
+                                <div className="flex items-center gap-3">
+                                  <Badge variant="outline" className="text-xs">
+                                    <Settings className="h-3 w-3 mr-1" />
+                                    No config
+                                  </Badge>
+                                  <span className="text-muted-foreground">
+                                    Set batch size to get suggestions
+                                  </span>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 text-xs"
+                                    onClick={() => openConfigDialog(group.roast_group)}
+                                  >
+                                    Configure
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                    
+                    {/* Quick-add batches section */}
+                    {sortedGroups.some(g => {
+                      const config = configByGroup[g.roast_group];
+                      if (!config) return false;
+                      const groupBatches = batchesByGroup[g.roast_group] ?? [];
+                      const yieldLossPct = config.expected_yield_loss_pct ?? 16;
+                      const plannedExpectedOutput = groupBatches
+                        .filter(b => b.status === 'PLANNED')
+                        .reduce((sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - yieldLossPct / 100), 0);
+                      const roastedTotal = roastedInventory[g.roast_group] ?? 0;
+                      const remainingNeed = Math.max(0, g.total_kg - roastedTotal - plannedExpectedOutput);
+                      return remainingNeed > 0;
+                    }) && (
+                      <tr className="bg-primary/5 border-t-2 border-primary/20">
+                        <td colSpan={7} className="py-3 px-4">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-medium text-primary mr-2">Quick add batches:</span>
+                            {sortedGroups.map(g => {
+                              const config = configByGroup[g.roast_group];
+                              if (!config) return null;
+                              const groupBatches = batchesByGroup[g.roast_group] ?? [];
+                              const yieldLossPct = config.expected_yield_loss_pct ?? 16;
+                              const plannedExpectedOutput = groupBatches
+                                .filter(b => b.status === 'PLANNED')
+                                .reduce((sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - yieldLossPct / 100), 0);
+                              const roastedTotal = roastedInventory[g.roast_group] ?? 0;
+                              const remainingNeed = Math.max(0, g.total_kg - roastedTotal - plannedExpectedOutput);
+                              const expectedOutputPerBatch = config.standard_batch_kg * (1 - yieldLossPct / 100);
+                              const suggestedBatches = remainingNeed > 0 ? Math.ceil(remainingNeed / expectedOutputPerBatch) : 0;
+                              
+                              if (suggestedBatches === 0) return null;
+                              
+                              return (
+                                <Button
+                                  key={g.roast_group}
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs"
+                                  onClick={() => handleCreateSuggestedBatches(g.roast_group, g.total_kg)}
+                                >
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  {g.roast_group} (+{suggestedBatches})
+                                </Button>
+                              );
+                            })}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </SortableContext>
+            </DndContext>
           )}
         </CardContent>
       </Card>
