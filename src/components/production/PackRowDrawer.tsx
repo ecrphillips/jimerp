@@ -20,6 +20,9 @@ interface PackRowDrawerProps {
   roastGroup: string | null;
   packingRun: PackingRun | null;
   unblocksOrders: number;
+  wipAvailableKg: number;
+  requiredKg: number;
+  isReadyToPack: boolean;
 }
 
 export function PackRowDrawer({
@@ -29,6 +32,9 @@ export function PackRowDrawer({
   roastGroup,
   packingRun,
   unblocksOrders,
+  wipAvailableKg,
+  requiredKg,
+  isReadyToPack,
 }: PackRowDrawerProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -41,6 +47,23 @@ export function PackRowDrawer({
   return (
     <tr className="bg-accent/30 border-l-2 border-l-primary">
       <td colSpan={6} className="py-3 px-4 pl-6">
+        {/* WIP Status Banner */}
+        {roastGroup && (
+          <div className={`mb-3 p-2 rounded-md text-sm ${isReadyToPack ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+            {isReadyToPack ? (
+              <span className="font-medium">
+                ✓ WIP available for {roastGroup}: {wipAvailableKg.toFixed(2)} kg • This row needs: {requiredKg.toFixed(2)} kg
+              </span>
+            ) : requiredKg > 0 ? (
+              <span>
+                WIP short for {roastGroup}: {wipAvailableKg.toFixed(2)} kg available • This row needs: {requiredKg.toFixed(2)} kg
+              </span>
+            ) : (
+              <span>No remaining demand for this SKU</span>
+            )}
+          </div>
+        )}
+        
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
             <span className="text-muted-foreground text-xs block mb-1">SKU</span>
