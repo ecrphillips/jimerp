@@ -370,11 +370,14 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   }, [packingRuns]);
 
   // Inline update for packing - returns a promise for the InlinePackingControl
-  // Now calculates kg_consumed from units_packed and bag_size_g
+  // Calculates kg_consumed from units_packed and bag_size_g
   const updatePackingUnits = useCallback(async (productId: string, newUnits: number, bagSizeG: number) => {
     // Calculate kg_consumed from units and bag size
     // kg_consumed = units_packed * (bag_size_g / 1000)
     const kgConsumed = bagSizeG > 0 ? (newUnits * bagSizeG) / 1000 : 0;
+    
+    // Debug log to verify calculation
+    console.log('[PackTab] updatePackingUnits:', { productId, newUnits, bagSizeG, kgConsumed, target_date: today });
     
     const { error } = await supabase
       .from('packing_runs')
@@ -393,7 +396,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       throw error;
     }
     
-    // Invalidate both packing-runs and roasted-batches queries to update WIP display
+    // Invalidate packing-runs to update WIP display
     queryClient.invalidateQueries({ queryKey: ['packing-runs'] });
   }, [today, user?.id, queryClient]);
 
