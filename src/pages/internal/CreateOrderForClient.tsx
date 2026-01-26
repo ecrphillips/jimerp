@@ -342,17 +342,49 @@ export default function CreateOrderForClient() {
       {/* Client Selection */}
       <Card className="mb-6">
         <CardHeader><CardTitle>Select Client</CardTitle></CardHeader>
-        <CardContent>
-          <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-            <SelectTrigger className="w-full max-w-md">
-              <SelectValue placeholder="Choose a client..." />
-            </SelectTrigger>
-            <SelectContent>
-              {clients?.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <CardContent className="space-y-4">
+          {/* Quick-select buttons for common clients */}
+          {(() => {
+            const commonClients = clients?.filter(c => 
+              ['Matchstick', 'Funk', 'No Smoke'].some(name => 
+                c.name.toLowerCase().includes(name.toLowerCase())
+              )
+            ) ?? [];
+            if (commonClients.length > 0) {
+              return (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Common Clients</p>
+                  <div className="flex flex-wrap gap-2">
+                    {commonClients.map((c) => (
+                      <Button
+                        key={c.id}
+                        variant={selectedClientId === c.id ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setSelectedClientId(c.id)}
+                      >
+                        {c.name}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
+          
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">All Clients</p>
+            <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+              <SelectTrigger className="w-full max-w-md">
+                <SelectValue placeholder="Choose a client..." />
+              </SelectTrigger>
+              <SelectContent>
+                {clients?.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
       </Card>
 

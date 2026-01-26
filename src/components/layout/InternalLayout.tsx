@@ -33,13 +33,9 @@ const navItems = [
   { to: '/orders', label: 'Orders', icon: ShoppingCart },
 ];
 
-// Production is now a nested group
+// Production is now a nested group (Andon boards hidden for MVP)
 const productionSubItems = [
   { to: '/production', label: 'Run Sheet', icon: Flame, match: '/production' },
-  { to: '/production/matchstick', label: 'Matchstick', icon: Clipboard },
-  { to: '/production/funk', label: 'Funk', icon: Clipboard },
-  { to: '/production/nosmoke', label: 'No Smoke', icon: Clipboard },
-  { to: '/boards', label: 'Board Mgmt', icon: Settings },
 ];
 
 // Inventory sub-items
