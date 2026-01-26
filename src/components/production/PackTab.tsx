@@ -370,9 +370,11 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   }, [packingRuns]);
 
   // Inline update for packing - returns a promise for the InlinePackingControl
-  const updatePackingUnits = useCallback(async (productId: string, newUnits: number) => {
-    const existing = packingByProduct[productId];
-    const kgConsumed = existing?.kg_consumed ?? 0;
+  // Now calculates kg_consumed from units_packed and bag_size_g
+  const updatePackingUnits = useCallback(async (productId: string, newUnits: number, bagSizeG: number) => {
+    // Calculate kg_consumed from units and bag size
+    // kg_consumed = units_packed * (bag_size_g / 1000)
+    const kgConsumed = bagSizeG > 0 ? (newUnits * bagSizeG) / 1000 : 0;
     
     const { error } = await supabase
       .from('packing_runs')
@@ -391,9 +393,9 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       throw error;
     }
     
-    // Silently invalidate - no success toast for inline edits
+    // Invalidate both packing-runs and roasted-batches queries to update WIP display
     queryClient.invalidateQueries({ queryKey: ['packing-runs'] });
-  }, [packingByProduct, today, user?.id, queryClient]);
+  }, [today, user?.id, queryClient]);
 
   // Mutation to update pack_display_order
   const updateDisplayOrderMutation = useMutation({
@@ -525,7 +527,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                           packingRun={packing}
                           isExpanded={isExpanded}
                           onToggleExpand={() => setExpandedProductId(isExpanded ? null : product.product_id)}
-                          onUpdatePackedUnits={(newValue) => updatePackingUnits(product.product_id, newValue)}
+                          onUpdatePackedUnits={(newValue) => updatePackingUnits(product.product_id, newValue, product.bag_size_g)}
                           onEditingChange={(isEditing) => handleEditingChange(product.product_id, isEditing)}
                         />
                       );
