@@ -24,11 +24,12 @@ import { Package, Layers } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { type PackagingVariant } from '@/components/PackagingBadge';
 import { SortablePackRow } from './SortablePackRow';
+import type { DateFilterConfig } from './types';
 
 // Removed SortOption type - no more auto-sorting, order is manual via pack_display_order
 
 interface PackTabProps {
-  dateFilter: string[];
+  dateFilterConfig: DateFilterConfig;
   today: string;
 }
 
@@ -60,7 +61,7 @@ interface ProductDemand {
   pack_display_order: number | null;
 }
 
-export function PackTab({ dateFilter, today }: PackTabProps) {
+export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   
@@ -94,9 +95,8 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
   });
 
   // Fetch order line items for demand with ship_priority from production_checkmarks
-  // If dateFilter is empty (All mode), fetch all active orders regardless of date
   const { data: orderLineItems } = useQuery({
-    queryKey: ['pack-demand', dateFilter],
+    queryKey: ['pack-demand', dateFilterConfig],
     queryFn: async () => {
       let query = supabase
         .from('order_line_items')
@@ -105,14 +105,18 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
           product_id,
           quantity_units,
           order_id,
-          order:orders!inner(id, status, requested_ship_date),
+          order:orders!inner(id, status, requested_ship_date, manually_deprioritized),
           product:products(id, product_name, sku, bag_size_g, packaging_variant, roast_group)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
       
-      if (dateFilter.length > 0) {
-        query = query.in('order.requested_ship_date', dateFilter);
+      // Apply date filter based on mode
+      if (dateFilterConfig.mode === 'today') {
+        query = query.lte('order.requested_ship_date', dateFilterConfig.maxDate);
+      } else if (dateFilterConfig.mode === 'tomorrow') {
+        query = query.or(`requested_ship_date.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`, { referencedTable: 'orders' });
       }
+      // ALL mode: no date filter
       
       const { data, error } = await query;
       if (error) throw error;
@@ -122,54 +126,39 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
 
   // Fetch production checkmarks for TIME_SENSITIVE priority
   const { data: checkmarks } = useQuery({
-    queryKey: ['production-checkmarks', dateFilter],
+    queryKey: ['production-checkmarks', dateFilterConfig],
     queryFn: async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from('production_checkmarks')
         .select('*');
       
-      if (dateFilter.length > 0) {
-        query = query.in('target_date', dateFilter);
-      }
-      
-      const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  // Fetch roasted batches for inventory display (all ROASTED batches in date window)
+  // Fetch roasted batches for inventory display (all ROASTED batches)
   const { data: roastedBatches } = useQuery({
-    queryKey: ['roasted-batches-for-pack', dateFilter],
+    queryKey: ['roasted-batches-for-pack', dateFilterConfig],
     queryFn: async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from('roasted_batches')
         .select('*')
         .eq('status', 'ROASTED');
       
-      if (dateFilter.length > 0) {
-        query = query.in('target_date', dateFilter);
-      }
-      
-      const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  // Fetch packing runs for the date window
+  // Fetch packing runs
   const { data: packingRuns } = useQuery({
-    queryKey: ['packing-runs', dateFilter],
+    queryKey: ['packing-runs', dateFilterConfig],
     queryFn: async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from('packing_runs')
         .select('*');
       
-      if (dateFilter.length > 0) {
-        query = query.in('target_date', dateFilter);
-      }
-      
-      const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as PackingRun[];
     },

@@ -38,9 +38,10 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
+import type { DateFilterConfig } from './types';
 
 interface RoastTabProps {
-  dateFilter: string[];
+  dateFilterConfig: DateFilterConfig;
   today: string;
 }
 
@@ -83,7 +84,7 @@ interface DemandByRoastGroup {
   earliestShipDate: string | null;
 }
 
-export function RoastTab({ dateFilter, today }: RoastTabProps) {
+export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   
@@ -147,9 +148,8 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
   });
 
   // Fetch order line items for demand calculation with ship_priority
-  // If dateFilter is empty (All mode), fetch all active orders regardless of date
   const { data: orderLineItems } = useQuery({
-    queryKey: ['roast-demand', dateFilter],
+    queryKey: ['roast-demand', dateFilterConfig],
     queryFn: async () => {
       let query = supabase
         .from('order_line_items')
@@ -157,15 +157,18 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
           id,
           product_id,
           quantity_units,
-          order:orders!inner(id, status, requested_ship_date),
+          order:orders!inner(id, status, requested_ship_date, manually_deprioritized),
           product:products(id, product_name, roast_group, bag_size_g)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
       
-      // Only filter by date if dateFilter is not empty
-      if (dateFilter.length > 0) {
-        query = query.in('order.requested_ship_date', dateFilter);
+      // Apply date filter based on mode
+      if (dateFilterConfig.mode === 'today') {
+        query = query.lte('order.requested_ship_date', dateFilterConfig.maxDate);
+      } else if (dateFilterConfig.mode === 'tomorrow') {
+        query = query.or(`requested_ship_date.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`, { referencedTable: 'orders' });
       }
+      // ALL mode: no date filter
       
       const { data, error } = await query;
       if (error) throw error;
@@ -175,17 +178,12 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
 
   // Fetch production checkmarks for TIME_SENSITIVE priority
   const { data: checkmarks } = useQuery({
-    queryKey: ['production-checkmarks-for-roast', dateFilter],
+    queryKey: ['production-checkmarks-for-roast', dateFilterConfig],
     queryFn: async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from('production_checkmarks')
         .select('product_id, ship_priority');
       
-      if (dateFilter.length > 0) {
-        query = query.in('target_date', dateFilter);
-      }
-      
-      const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
     },
@@ -204,18 +202,13 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
 
   // Fetch existing batches
   const { data: batches } = useQuery({
-    queryKey: ['roasted-batches', dateFilter],
+    queryKey: ['roasted-batches', dateFilterConfig],
     queryFn: async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from('roasted_batches')
         .select('*')
         .order('created_at', { ascending: true });
       
-      if (dateFilter.length > 0) {
-        query = query.in('target_date', dateFilter);
-      }
-      
-      const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as RoastBatch[];
     },
