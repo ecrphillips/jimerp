@@ -295,35 +295,22 @@ export function RoastTab({ dateFilter, today }: RoastTabProps) {
     return groupBatches.some(b => b.assigned_roaster === roasterFilter);
   };
 
-  // Computed sorted groups - use display_order from config (manual ordering)
+  // Computed sorted groups - use display_order from config (manual ordering only)
+  // NO automatic reprioritization - order is strictly user-controlled
   const computedSortedGroups = useMemo(() => {
     const filtered = demandByRoastGroup.filter(group => groupMatchesRoasterFilter(group.roast_group));
     
-    // Sort by display_order from config (manual ordering), then by name
+    // Sort ONLY by display_order (manual), then by name as tie-breaker
     return [...filtered].sort((a, b) => {
       const configA = configByGroup[a.roast_group];
       const configB = configByGroup[b.roast_group];
       const orderA = configA?.display_order ?? 999999;
       const orderB = configB?.display_order ?? 999999;
       
-      // Fully roasted groups go to the bottom
-      const aBatches = batchesByGroup[a.roast_group] ?? [];
-      const bBatches = batchesByGroup[b.roast_group] ?? [];
-      const aHasPlanned = aBatches.some(batch => batch.status === 'PLANNED');
-      const bHasPlanned = bBatches.some(batch => batch.status === 'PLANNED');
-      const aFullyRoasted = !aHasPlanned && aBatches.some(batch => batch.status === 'ROASTED');
-      const bFullyRoasted = !bHasPlanned && bBatches.some(batch => batch.status === 'ROASTED');
-      
-      if (aFullyRoasted && !bFullyRoasted) return 1;
-      if (!aFullyRoasted && bFullyRoasted) return -1;
-      
-      // Then by display_order
       if (orderA !== orderB) return orderA - orderB;
-      
-      // Then by name
       return a.roast_group.localeCompare(b.roast_group);
     });
-  }, [demandByRoastGroup, roasterFilter, configByGroup, batchesByGroup]);
+  }, [demandByRoastGroup, roasterFilter, configByGroup]);
 
   // Handle editing state changes from drawer - freeze order by roast_group names
   const handleEditingChange = useCallback((groupId: string, isEditing: boolean) => {
