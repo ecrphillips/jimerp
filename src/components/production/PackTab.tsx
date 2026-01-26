@@ -17,7 +17,8 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Package, Check, AlertTriangle, Clock, ShoppingCart, ChevronDown, ChevronRight, ChevronUp, Sparkles } from 'lucide-react';
+import { Package, Check, AlertTriangle, Clock, ShoppingCart, ChevronDown, ChevronRight, ChevronUp, Sparkles, Layers, CheckCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { InlinePackingControl } from './InlinePackingControl';
 import { PackRowDrawer } from './PackRowDrawer';
@@ -48,6 +49,9 @@ interface ProductDemand {
   demanded_units: number;
   demanded_kg: number;
   hasTimeSensitive: boolean;
+  wipAvailableKg: number;
+  requiredKg: number;
+  isReadyToPack: boolean;
   earliestShipDate: string | null;
   shortage: number;
   unblocksOrders: number;
@@ -218,6 +222,9 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
           pack_display_order: productInfo?.pack_display_order ?? null,
           orderIds: new Set(),
           shipDates: [],
+          wipAvailableKg: 0,
+          requiredKg: 0,
+          isReadyToPack: false,
         };
       }
       productMap[li.product_id].demanded_units += li.quantity_units;
@@ -239,7 +246,7 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
       }
     }
 
-    // Calculate shortage, earliest ship date, and unblocks orders
+    // Calculate shortage, earliest ship date, unblocks orders, and WIP readiness
     for (const product of Object.values(productMap)) {
       const packed = packingByProductUnits[product.product_id] ?? 0;
       product.shortage = Math.max(0, product.demanded_units - packed);
@@ -250,7 +257,6 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
       }
       
       // Calculate how many orders this SKU unblocks if packed
-      // An order is "blocked" if this SKU is short AND the order's quantity > packed
       let unblocksCount = 0;
       for (const li of orderLineItems ?? []) {
         if (li.product_id !== product.product_id) continue;
@@ -260,10 +266,19 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
         }
       }
       product.unblocksOrders = unblocksCount;
+      
+      // Calculate WIP readiness
+      const remainingUnits = Math.max(0, product.demanded_units - packed);
+      const requiredKg = (remainingUnits * product.bag_size_g) / 1000;
+      const wipAvailableKg = product.roast_group ? (roastedInventory[product.roast_group] ?? 0) : 0;
+      
+      product.wipAvailableKg = wipAvailableKg;
+      product.requiredKg = requiredKg;
+      product.isReadyToPack = wipAvailableKg >= requiredKg && remainingUnits > 0;
     }
 
     return Object.values(productMap).map(({ orderIds, shipDates, ...rest }) => rest);
-  }, [orderLineItems, checkmarks, packingByProductUnits]);
+  }, [orderLineItems, checkmarks, packingByProductUnits, roastedInventory]);
 
   // Sort products based on selected sort option
   const computedSortedProducts = useMemo(() => {
@@ -382,54 +397,37 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
 
   return (
     <div className="space-y-4">
-      {/* Roasted Inventory Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            Roasted Inventory On Hand
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Net roasted kg by roast group (roasted output − kg consumed by packing).
-          </p>
-        </CardHeader>
-        <CardContent>
-          {Object.keys(roastGroupSummary).length === 0 ? (
-            <p className="text-muted-foreground">No roast groups with inventory.</p>
-          ) : (
-            <div className="flex flex-wrap gap-3">
-              {Object.entries(roastGroupSummary).map(([group, data]) => (
-                <Badge key={group} variant="outline" className="text-sm py-1 px-3">
-                  {group}: {data.roasted_kg.toFixed(2)} kg
-                </Badge>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Packing Progress */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Package className="h-5 w-5" />
                 Pack SKUs
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Track packing progress per SKU. This is the source of truth for shipped quantity checks.
+                Track packing progress per SKU. Rows highlighted green have sufficient roasted WIP available.
               </p>
             </div>
-            <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Sort by..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="urgent">Most urgent first</SelectItem>
-                <SelectItem value="shortage">Largest shortage first</SelectItem>
-                <SelectItem value="alpha">Alphabetical</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/inventory?tab=wip">
+                  <Layers className="h-4 w-4 mr-1" />
+                  Open Roasted Inventory Ledger
+                </Link>
+              </Button>
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Sort by..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="urgent">Most urgent first</SelectItem>
+                  <SelectItem value="shortage">Largest shortage first</SelectItem>
+                  <SelectItem value="alpha">Alphabetical</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -463,9 +461,10 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                       <tr 
                         className={`border-b last:border-0 cursor-pointer transition-colors 
                           ${product.hasTimeSensitive ? 'bg-destructive/5' : ''} 
+                          ${product.isReadyToPack && !isExpanded ? 'bg-primary/10 border-l-2 border-l-primary' : ''}
                           ${isExpanded 
                             ? 'bg-accent/40 border-l-2 border-l-primary' 
-                            : 'hover:bg-muted/50'
+                            : product.isReadyToPack ? '' : 'hover:bg-muted/50'
                           }`}
                         onClick={toggleExpand}
                       >
@@ -490,6 +489,12 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                               <Badge variant="outline" className="text-xs">
                                 <ShoppingCart className="h-3 w-3 mr-1" />
                                 Unblocks: {product.unblocksOrders} order{product.unblocksOrders !== 1 ? 's' : ''}
+                              </Badge>
+                            )}
+                            {product.isReadyToPack && (
+                              <Badge variant="default" className="text-xs bg-primary/80">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                WIP ready
                               </Badge>
                             )}
                           </div>
@@ -542,6 +547,9 @@ export function PackTab({ dateFilter, today }: PackTabProps) {
                           roastGroup={product.roast_group}
                           packingRun={packing}
                           unblocksOrders={product.unblocksOrders}
+                          wipAvailableKg={product.wipAvailableKg}
+                          requiredKg={product.requiredKg}
+                          isReadyToPack={product.isReadyToPack}
                         />
                       )}
                     </React.Fragment>
