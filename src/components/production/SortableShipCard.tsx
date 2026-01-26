@@ -5,10 +5,10 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ShipPickInput } from './ShipPickInput';
 import { format, parseISO } from 'date-fns';
-import { Truck, Clock, ChevronDown, ChevronRight, MessageSquare, AlertTriangle, ExternalLink, Layers, CheckCircle2, GripVertical, Minus, Plus, CalendarPlus, CalendarMinus } from 'lucide-react';
+import { Truck, Clock, ChevronDown, ChevronRight, MessageSquare, AlertTriangle, ExternalLink, Layers, CheckCircle2, GripVertical, CalendarPlus, CalendarMinus } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -387,35 +387,14 @@ export function SortableShipCard({
                     {available}
                   </span>
                   
-                  {/* Picked input with +/- buttons */}
-                  <div className="w-28 flex items-center justify-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 w-7 p-0"
-                      onClick={() => handlePickChange(li.id, picked - 1, available)}
-                      disabled={picked <= 0 || upsertPickMutation.isPending}
-                    >
-                      <Minus className="h-3 w-3" />
-                    </Button>
-                    <Input
-                      type="number"
-                      min="0"
-                      max={available}
+                  {/* Picked input with local state - commits on blur/Enter */}
+                  <div className="w-28">
+                    <ShipPickInput
                       value={picked}
-                      onChange={(e) => handlePickChange(li.id, parseInt(e.target.value) || 0, available)}
-                      className="w-12 h-7 text-center text-sm px-1"
+                      maxValue={available}
+                      onCommit={(newValue) => handlePickChange(li.id, newValue, available)}
                       disabled={upsertPickMutation.isPending}
                     />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 w-7 p-0"
-                      onClick={() => handlePickChange(li.id, picked + 1, available)}
-                      disabled={picked >= available || upsertPickMutation.isPending}
-                    >
-                      <Plus className="h-3 w-3" />
-                    </Button>
                   </div>
                   
                   <span className={`w-16 text-center ${remaining > 0 ? 'text-amber-600 font-medium' : 'text-green-600'}`}>
