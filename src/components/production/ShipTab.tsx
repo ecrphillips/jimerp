@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DndContext,
@@ -10,6 +10,7 @@ import {
   DragEndEvent,
 } from '@dnd-kit/core';
 import {
+  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
@@ -23,7 +24,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Truck, AlertTriangle, Package } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
-import { IncompleteFulfillmentModal } from '@/components/internal/IncompleteFulfillmentModal';
 import { SortableShipCard } from './SortableShipCard';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -93,9 +93,10 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   
-  const [showIncompleteModal, setShowIncompleteModal] = useState(false);
-  const [incompleteSteps, setIncompleteSteps] = useState<string[]>([]);
-  const [pendingShipOrderId, setPendingShipOrderId] = useState<string | null>(null);
+  // Local order state for optimistic DnD updates
+  const [localOrders, setLocalOrders] = useState<ShippableOrder[]>([]);
+  const hasUserReorderedRef = useRef(false);
+  
   const [showDecrementModal, setShowDecrementModal] = useState(false);
   const [pendingShipOrder, setPendingShipOrder] = useState<ShippableOrder | null>(null);
 
@@ -178,6 +179,8 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 30000, // 30 seconds stale time to prevent refetches overriding user changes
+    refetchOnWindowFocus: false,
   });
 
   // Map packing runs by product_id (aggregate units_packed per product across all dates in window)
@@ -283,6 +286,23 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
       return a.order_number.localeCompare(b.order_number);
     });
   }, [ordersForShipping, checkmarks, packingByProduct, demandByProduct]);
+
+  // Sync local state from server data, but only when not actively reordering
+  useEffect(() => {
+    if (!hasUserReorderedRef.current && allOrdersWithMetrics.length > 0) {
+      setLocalOrders(allOrdersWithMetrics);
+    }
+  }, [allOrdersWithMetrics]);
+
+  // Reset the reorder flag after a delay to allow server sync
+  useEffect(() => {
+    if (hasUserReorderedRef.current) {
+      const timeout = setTimeout(() => {
+        hasUserReorderedRef.current = false;
+      }, 2000);
+      return () => clearTimeout(timeout);
+    }
+  }, [localOrders]);
 
   // Separate shippable and not-yet-shippable for display counts
   const shippableOrders = useMemo(() => allOrdersWithMetrics.filter(o => o.allLineItemsPacked), [allOrdersWithMetrics]);
@@ -444,33 +464,34 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
     })
   );
 
-  // Handle drag end for reordering
+  // Handle drag end for reordering - use local state for optimistic updates
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     
     if (!over || active.id === over.id) return;
     
-    const oldIndex = allOrdersWithMetrics.findIndex(o => o.id === active.id);
-    const newIndex = allOrdersWithMetrics.findIndex(o => o.id === over.id);
+    const oldIndex = localOrders.findIndex(o => o.id === active.id);
+    const newIndex = localOrders.findIndex(o => o.id === over.id);
     
     if (oldIndex === -1 || newIndex === -1) return;
     
-    // Reorder and persist
-    const reordered = [...allOrdersWithMetrics];
-    const [moved] = reordered.splice(oldIndex, 1);
-    reordered.splice(newIndex, 0, moved);
+    // Mark that user has reordered to prevent server sync from overriding
+    hasUserReorderedRef.current = true;
     
-    // Update all items with new display_order
+    // Optimistically update local state immediately
+    const reordered = arrayMove(localOrders, oldIndex, newIndex);
+    setLocalOrders(reordered);
+    
+    // Persist new order to DB
     reordered.forEach((order, index) => {
       updateDisplayOrderMutation.mutate({ orderId: order.id, newOrder: (index + 1) * 10 });
     });
-  }, [allOrdersWithMetrics, updateDisplayOrderMutation]);
+  }, [localOrders, updateDisplayOrderMutation]);
 
   const toggleOrderPriority = (order: ShippableOrder) => {
     const newPriority: ShipPriority = order.priority === 'NORMAL' ? 'TIME_SENSITIVE' : 'NORMAL';
     
     const updates = order.lineItems.map((li) => {
-      const key = `${li.product_id}-${li.bag_size_g}`;
       const existingCheckmark = checkmarks?.find(
         (cm) => cm.product_id === li.product_id && cm.bag_size_g === li.bag_size_g
       ) ?? null;
@@ -486,32 +507,10 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
     Promise.all(updates);
   };
 
+  // Directly show decrement modal - no incomplete steps check
   const handleMarkOrderShipped = (order: ShippableOrder) => {
-    const missing: string[] = [];
-    if (!order.roasted) missing.push('Roasted');
-    if (!order.packed) missing.push('Packed');
-    if (!order.invoiced) missing.push('Invoiced');
-
-    if (missing.length > 0) {
-      setIncompleteSteps(missing);
-      setPendingShipOrderId(order.id);
-      setPendingShipOrder(order);
-      setShowIncompleteModal(true);
-    } else {
-      // Show decrement modal
-      setPendingShipOrder(order);
-      setShowDecrementModal(true);
-    }
-  };
-
-  const confirmShipOrder = () => {
-    if (pendingShipOrderId && pendingShipOrder) {
-      // After incomplete modal, show decrement modal
-      setShowIncompleteModal(false);
-      setShowDecrementModal(true);
-    } else {
-      setShowIncompleteModal(false);
-    }
+    setPendingShipOrder(order);
+    setShowDecrementModal(true);
   };
 
   const shipWithDecrement = async () => {
@@ -526,7 +525,6 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
     
     setShowDecrementModal(false);
     setPendingShipOrder(null);
-    setPendingShipOrderId(null);
   };
 
   const shipWithoutDecrement = async () => {
@@ -536,18 +534,17 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
     
     setShowDecrementModal(false);
     setPendingShipOrder(null);
-    setPendingShipOrderId(null);
   };
+
+  // Use localOrders for rendering to prevent snapping
+  const displayOrders = localOrders.length > 0 ? localOrders : allOrdersWithMetrics;
+
+  // Update counts based on display orders
+  const displayShippableCount = displayOrders.filter(o => o.allLineItemsPacked).length;
+  const displayPendingCount = displayOrders.filter(o => !o.allLineItemsPacked).length;
 
   return (
     <div className="space-y-4">
-      <IncompleteFulfillmentModal
-        open={showIncompleteModal}
-        onOpenChange={setShowIncompleteModal}
-        incompleteSteps={incompleteSteps}
-        onConfirm={confirmShipOrder}
-      />
-
       {/* Decrement Inventory Modal */}
       <Dialog open={showDecrementModal} onOpenChange={setShowDecrementModal}>
         <DialogContent>
@@ -587,44 +584,6 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Short List */}
-      {shortList.length > 0 && (
-        <Card className="border-amber-200 bg-amber-50/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-amber-800">
-              <AlertTriangle className="h-5 w-5" />
-              Short List
-              <Badge variant="outline" className="ml-2 border-amber-300 text-amber-700">
-                {shortList.length} items
-              </Badge>
-            </CardTitle>
-            <p className="text-sm text-amber-700">
-              SKUs where packed units are less than demanded.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {shortList.map((item) => (
-                <div key={item.product_id} className="flex items-center justify-between p-2 bg-white rounded border border-amber-200">
-                  <div className="flex items-center gap-2">
-                    <Package className="h-4 w-4 text-amber-600" />
-                    <span className="font-medium">{item.product_name}</span>
-                    <PackagingBadge variant={item.packaging_variant} />
-                    <span className="text-xs text-muted-foreground">{item.bag_size_g}g</span>
-                  </div>
-                  <div className="text-sm">
-                    <span className="text-amber-700 font-medium">Short: {item.shortage}</span>
-                    <span className="text-muted-foreground ml-2">
-                      ({item.packed_units}/{item.demanded_units} packed)
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* All Orders - Unified List with Drag & Drop */}
       <Card>
         <CardHeader>
@@ -632,7 +591,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
             <Truck className="h-5 w-5" />
             Orders
             <span className="ml-2 text-xs font-normal text-muted-foreground">
-              ({shippableOrders.length} ready • {notYetShippableOrders.length} pending)
+              ({displayShippableCount} ready • {displayPendingCount} pending)
             </span>
           </CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -640,7 +599,7 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
           </p>
         </CardHeader>
         <CardContent>
-          {allOrdersWithMetrics.length === 0 ? (
+          {displayOrders.length === 0 ? (
             <p className="text-muted-foreground py-8 text-center">
               No orders for the selected date window.
             </p>
@@ -651,11 +610,11 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
               onDragEnd={handleDragEnd}
             >
               <SortableContext
-                items={allOrdersWithMetrics.map(o => o.id)}
+                items={displayOrders.map(o => o.id)}
                 strategy={verticalListSortingStrategy}
               >
                 <div className="space-y-3">
-                  {allOrdersWithMetrics.map((order) => (
+                  {displayOrders.map((order) => (
                     <SortableShipCard
                       key={order.id}
                       order={order}
@@ -671,6 +630,44 @@ export function ShipTab({ dateFilter, today }: ShipTabProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Short List - at bottom */}
+      {shortList.length > 0 && (
+        <Card className="border-warning/50 bg-warning/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-warning">
+              <AlertTriangle className="h-5 w-5" />
+              Short List
+              <Badge variant="outline" className="ml-2 border-warning/50 text-warning">
+                {shortList.length} items
+              </Badge>
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              SKUs where packed units are less than demanded.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {shortList.map((item) => (
+                <div key={item.product_id} className="flex items-center justify-between p-2 bg-background rounded border border-warning/30">
+                  <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4 text-warning" />
+                    <span className="font-medium">{item.product_name}</span>
+                    <PackagingBadge variant={item.packaging_variant} />
+                    <span className="text-xs text-muted-foreground">{item.bag_size_g}g</span>
+                  </div>
+                  <div className="text-sm">
+                    <span className="text-warning font-medium">Short: {item.shortage}</span>
+                    <span className="text-muted-foreground ml-2">
+                      ({item.packed_units}/{item.demanded_units} packed)
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
