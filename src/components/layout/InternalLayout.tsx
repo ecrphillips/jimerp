@@ -101,7 +101,10 @@ export function InternalLayout({ children }: InternalLayoutProps) {
           {/* Logo */}
           <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
             <Coffee className="h-8 w-8 text-sidebar-primary" />
-            <span className="text-lg font-semibold">Lite ERP</span>
+            <div className="flex flex-col leading-tight">
+              <span className="text-lg font-bold">JIM</span>
+              <span className="text-xs italic text-sidebar-foreground/60">by Home Island Software</span>
+            </div>
           </div>
 
           {/* Navigation */}
@@ -283,7 +286,10 @@ export function InternalLayout({ children }: InternalLayoutProps) {
           </Button>
           <div className="flex items-center gap-2">
             <Coffee className="h-6 w-6 text-primary" />
-            <span className="font-semibold">Lite ERP</span>
+            <div className="flex flex-col leading-tight">
+              <span className="text-sm font-bold">JIM</span>
+              <span className="text-[10px] italic text-muted-foreground">by Home Island Software</span>
+            </div>
           </div>
         </header>
 
