@@ -98,7 +98,7 @@ export default function OrderHistory() {
   // Detail View
   if (selectedOrder) {
     return (
-      <div>
+      <div className="page-container">
         <div className="page-header flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => setSelectedOrderId(null)}>
             <ArrowLeft className="h-5 w-5" />
@@ -197,7 +197,7 @@ export default function OrderHistory() {
 
   // List View
   return (
-    <div>
+    <div className="page-container">
       <div className="page-header">
         <h1 className="page-title">Order History</h1>
       </div>

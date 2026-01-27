@@ -24,7 +24,7 @@ export default function Account() {
   });
 
   return (
-    <div>
+    <div className="page-container">
       <div className="page-header">
         <h1 className="page-title">Account</h1>
       </div>
