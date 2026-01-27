@@ -84,65 +84,52 @@ export function RoastGroupsTab() {
     return roastGroups?.filter((g) => !g.is_active).length ?? 0;
   }, [roastGroups]);
 
-  // Generate a unique system key from display name
-  const generateSystemKey = async (name: string): Promise<string> => {
-    const baseKey = name.trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
-    
-    // Check if base key exists
-    const { data: existing } = await supabase
-      .from('roast_groups')
-      .select('roast_group')
-      .like('roast_group', `${baseKey}%`);
-    
-    if (!existing || existing.length === 0) {
-      return baseKey;
-    }
-    
-    // Check if exact base key is taken
-    const exactMatch = existing.find(e => e.roast_group === baseKey);
-    if (!exactMatch) {
-      return baseKey;
-    }
-    
-    // Find next available suffix
-    let suffix = 2;
-    while (existing.some(e => e.roast_group === `${baseKey}${suffix}`)) {
-      suffix++;
-    }
-    return `${baseKey}${suffix}`;
+  const normalizeDisplayName = (name: string) => name.trim().replace(/\s+/g, ' ');
+
+  const makeBaseSystemKey = (displayName: string) => {
+    const base = displayName
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, '_')
+      .replace(/[^A-Z0-9_]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return base || 'ROAST_GROUP';
   };
 
-  // Validate display name uniqueness
+  // Validate display name uniqueness (case-insensitive via CITEXT)
   const validateDisplayName = async (name: string, excludeKey?: string): Promise<boolean> => {
-    const trimmed = name.trim();
-    if (!trimmed) {
+    const normalized = normalizeDisplayName(name);
+    if (!normalized) {
       setDisplayNameError('Display name is required');
       return false;
     }
-    
+
     let query = supabase
       .from('roast_groups')
-      .select('roast_group, display_name')
-      .ilike('display_name', trimmed);
-    
+      .select('roast_group')
+      .eq('display_name', normalized)
+      .limit(1);
+
     if (excludeKey) {
       query = query.neq('roast_group', excludeKey);
     }
-    
-    const { data } = await query;
-    
+
+    const { data, error } = await query;
+    if (error) throw error;
+
     if (data && data.length > 0) {
-      setDisplayNameError('A roast group with this display name already exists. Reactivate or choose a different name.');
+      setDisplayNameError('A roast group with this display name already exists.');
       return false;
     }
-    
+
     setDisplayNameError('');
     return true;
   };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const trimmedDisplayName = displayName.trim();
+      const trimmedDisplayName = normalizeDisplayName(displayName);
       
       // Validate display name uniqueness
       const isValid = await validateDisplayName(
@@ -168,22 +155,45 @@ export function RoastGroupsTab() {
           .eq('roast_group', editingGroup.roast_group);
         if (error) throw error;
       } else {
-        // Generate unique system key
-        const systemKey = await generateSystemKey(trimmedDisplayName);
-        const code = systemKey.replace(/[^A-Z0-9]/g, '').substring(0, 3);
-        
-        const { error } = await supabase.from('roast_groups').insert({
-          roast_group: systemKey,
-          roast_group_code: code,
-          display_name: trimmedDisplayName,
-          standard_batch_kg: standardBatchKg,
-          expected_yield_loss_pct: yieldLossPct,
-          default_roaster: defaultRoaster,
-          is_active: isActive,
-          notes: notes || null,
-          cropster_profile_ref: cropsterProfileRef.trim() || null,
-        });
-        if (error) throw error;
+        // Generate system key from display name; if it collides, auto-suffix and retry.
+        const baseKey = makeBaseSystemKey(trimmedDisplayName);
+        const code = baseKey.replace(/[^A-Z0-9]/g, '').substring(0, 3);
+
+        let lastError: any = null;
+        for (let attempt = 0; attempt < 25; attempt++) {
+          const systemKey = attempt === 0 ? baseKey : `${baseKey}_${attempt + 1}`;
+          const { error } = await supabase.from('roast_groups').insert({
+            roast_group: systemKey,
+            roast_group_code: code,
+            display_name: trimmedDisplayName,
+            standard_batch_kg: standardBatchKg,
+            expected_yield_loss_pct: yieldLossPct,
+            default_roaster: defaultRoaster,
+            is_active: isActive,
+            notes: notes || null,
+            cropster_profile_ref: cropsterProfileRef.trim() || null,
+          });
+
+          if (!error) {
+            return;
+          }
+
+          if (error?.code === '23505') {
+            const msg = String(error?.message ?? '').toLowerCase();
+            // Display name collision should be user-facing
+            if (msg.includes('display_name')) {
+              setDisplayNameError('A roast group with this display name already exists.');
+              throw new Error('Display name validation failed');
+            }
+            // Otherwise assume system_key collision; retry with suffix.
+            lastError = error;
+            continue;
+          }
+
+          throw error;
+        }
+
+        throw lastError ?? new Error('Failed to generate a unique system key');
       }
     },
     onSuccess: () => {
@@ -198,14 +208,13 @@ export function RoastGroupsTab() {
         return;
       }
       if (err?.code === '23505') {
-        if (err?.message?.includes('display_name')) {
-          setDisplayNameError('A roast group with this display name already exists. Reactivate or choose a different name.');
-        } else {
-          toast.error('A roast group with this name already exists');
+        // In case a display_name collision slipped through (race), show the correct message.
+        if (String(err?.message ?? '').toLowerCase().includes('display_name')) {
+          setDisplayNameError('A roast group with this display name already exists.');
+          return;
         }
-      } else {
-        toast.error('Failed to save roast group');
       }
+      toast.error('Failed to save roast group');
     },
   });
 
