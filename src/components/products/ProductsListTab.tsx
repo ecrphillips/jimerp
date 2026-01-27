@@ -11,7 +11,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { ProductFormat, GrindOption } from '@/types/database';
 import { PackagingBadge, PACKAGING_OPTIONS, type PackagingVariant } from '@/components/PackagingBadge';
-import { NewProductModal } from './NewProductModal';
+import { ProductTypeChoiceModal } from './ProductTypeChoiceModal';
+import { NewSingleOriginProductModal } from './NewSingleOriginProductModal';
+import { NewBlendProductModal } from './NewBlendProductModal';
 import { SafeDeleteModal } from '@/components/SafeDeleteModal';
 import { Trash2 } from 'lucide-react';
 
@@ -49,7 +51,11 @@ export function ProductsListTab() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showInactive, setShowInactive] = useState(false);
-  const [newProductModalOpen, setNewProductModalOpen] = useState(false);
+  
+  // Product type choice + separate modals
+  const [typeChoiceOpen, setTypeChoiceOpen] = useState(false);
+  const [singleOriginModalOpen, setSingleOriginModalOpen] = useState(false);
+  const [blendModalOpen, setBlendModalOpen] = useState(false);
   
   // Delete modal state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -322,7 +328,17 @@ export function ProductsListTab() {
   }, [deletePreflightMutation]);
 
   const openNew = () => {
-    setNewProductModalOpen(true);
+    setTypeChoiceOpen(true);
+  };
+  
+  const handleChooseSingleOrigin = () => {
+    setTypeChoiceOpen(false);
+    setSingleOriginModalOpen(true);
+  };
+  
+  const handleChooseBlend = () => {
+    setTypeChoiceOpen(false);
+    setBlendModalOpen(true);
   };
 
   const openEdit = (p: Product) => {
@@ -613,9 +629,21 @@ export function ProductsListTab() {
         </DialogContent>
       </Dialog>
 
-      <NewProductModal 
-        open={newProductModalOpen} 
-        onOpenChange={setNewProductModalOpen} 
+      <ProductTypeChoiceModal
+        open={typeChoiceOpen}
+        onOpenChange={setTypeChoiceOpen}
+        onChooseSingleOrigin={handleChooseSingleOrigin}
+        onChooseBlend={handleChooseBlend}
+      />
+      
+      <NewSingleOriginProductModal
+        open={singleOriginModalOpen}
+        onOpenChange={setSingleOriginModalOpen}
+      />
+      
+      <NewBlendProductModal
+        open={blendModalOpen}
+        onOpenChange={setBlendModalOpen}
       />
 
       {/* Safe Delete Modal */}

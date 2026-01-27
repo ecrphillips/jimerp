@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,15 +9,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Plus, Check, AlertCircle } from 'lucide-react';
+import { AlertCircle, Plus, Trash2, ExternalLink, Info } from 'lucide-react';
 import { 
   generateProductCode, 
   generateRoastGroupCode, 
   buildSku, 
   PACKAGING_VARIANTS, 
-  COMMON_ORIGINS,
   type PackagingVariantValue 
 } from '@/lib/skuGenerator';
 
@@ -35,32 +36,37 @@ interface RoastGroup {
   display_name: string | null;
 }
 
-interface NewProductModalProps {
+interface BlendComponent {
+  id: string;
+  roastGroup: string;
+  percentage: number;
+}
+
+interface NewBlendProductModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-type RoastGroupMode = 'existing' | 'new';
-type RoastGroupType = 'single_origin' | 'blend';
 type LifecycleType = 'perennial' | 'seasonal';
 
-export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
+let componentIdCounter = 0;
+
+export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModalProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [, setSearchParams] = useSearchParams();
   
   // Step 1: Client
   const [clientId, setClientId] = useState('');
   
-  // Step 2: Roast Group
-  const [roastGroupMode, setRoastGroupMode] = useState<RoastGroupMode>('existing');
-  const [selectedRoastGroup, setSelectedRoastGroup] = useState('');
-  
-  // New roast group fields
-  const [roastGroupType, setRoastGroupType] = useState<RoastGroupType>('single_origin');
-  const [origin, setOrigin] = useState('');
-  const [customOrigin, setCustomOrigin] = useState('');
+  // Step 2: Blend definition
   const [blendName, setBlendName] = useState('');
   const [newRoastGroupCode, setNewRoastGroupCode] = useState('');
   const [newCropsterProfileRef, setNewCropsterProfileRef] = useState('');
+  const [components, setComponents] = useState<BlendComponent[]>([
+    { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
+    { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
+  ]);
   
   // Step 3: Product Name (suffix only)
   const [productSuffix, setProductSuffix] = useState('');
@@ -101,6 +107,12 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
     },
   });
   
+  // Filter to only single origin roast groups for component selection
+  const componentRoastGroups = useMemo(() => 
+    roastGroups?.filter(g => !g.is_blend) ?? [],
+    [roastGroups]
+  );
+  
   const { data: existingProducts } = useQuery({
     queryKey: ['existing-product-skus'],
     queryFn: async () => {
@@ -118,11 +130,6 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
     [clients, clientId]
   );
   
-  const selectedRoastGroupData = useMemo(() => 
-    roastGroups?.find(g => g.roast_group === selectedRoastGroup),
-    [roastGroups, selectedRoastGroup]
-  );
-  
   const existingRoastGroupCodes = useMemo(() => 
     new Set(roastGroups?.map(g => g.roast_group_code) ?? []),
     [roastGroups]
@@ -134,54 +141,40 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
       if (p.sku) {
         const parts = p.sku.split('-');
         if (parts.length >= 3) {
-          codes.add(parts[2]); // Product code is 3rd component
+          codes.add(parts[2]);
         }
       }
     });
     return codes;
   }, [existingProducts]);
   
-  // Calculate roast group display name based on mode
-  const roastGroupDisplayName = useMemo(() => {
-    if (roastGroupMode === 'existing' && selectedRoastGroupData) {
-      // Use display_name if set, otherwise fall back to formatted roast_group
-      return selectedRoastGroupData.display_name?.trim() || selectedRoastGroupData.roast_group.replace(/_/g, ' ');
-    }
-    if (roastGroupMode === 'new') {
-      if (roastGroupType === 'single_origin') {
-        return origin === '__custom__' ? customOrigin : origin;
-      }
-      return blendName;
-    }
-    return '';
-  }, [roastGroupMode, selectedRoastGroupData, roastGroupType, origin, customOrigin, blendName]);
-  
-  // Get the roast group code to use
-  const effectiveRoastGroupCode = useMemo(() => {
-    if (roastGroupMode === 'existing' && selectedRoastGroupData) {
-      return selectedRoastGroupData.roast_group_code;
-    }
-    return newRoastGroupCode;
-  }, [roastGroupMode, selectedRoastGroupData, newRoastGroupCode]);
-  
-  // Auto-suggest roast group code when creating new
+  // Auto-suggest roast group code when blend name changes
   useEffect(() => {
-    if (roastGroupMode === 'new') {
-      const name = roastGroupType === 'single_origin' 
-        ? (origin === '__custom__' ? customOrigin : origin)
-        : blendName;
-      if (name) {
-        const suggested = generateRoastGroupCode(name, roastGroupType === 'blend', existingRoastGroupCodes);
-        setNewRoastGroupCode(suggested);
-      }
+    if (blendName.trim()) {
+      const suggested = generateRoastGroupCode(blendName, true, existingRoastGroupCodes);
+      setNewRoastGroupCode(suggested);
     }
-  }, [roastGroupMode, roastGroupType, origin, customOrigin, blendName, existingRoastGroupCodes]);
+  }, [blendName, existingRoastGroupCodes]);
+  
+  // Component percentage total
+  const totalPercentage = useMemo(() => 
+    components.reduce((sum, c) => sum + (c.percentage || 0), 0),
+    [components]
+  );
+  
+  const percentageValid = totalPercentage === 100;
+  
+  // Check if all components have roast groups selected
+  const allComponentsSelected = useMemo(() => 
+    components.every(c => c.roastGroup),
+    [components]
+  );
   
   // Full product name
   const fullProductName = useMemo(() => {
-    if (!roastGroupDisplayName || !productSuffix.trim()) return '';
-    return `${roastGroupDisplayName} - ${productSuffix.trim()}`;
-  }, [roastGroupDisplayName, productSuffix]);
+    if (!blendName.trim() || !productSuffix.trim()) return '';
+    return `${blendName.trim()} - ${productSuffix.trim()}`;
+  }, [blendName, productSuffix]);
   
   // Generate product code from suffix
   const productCode = useMemo(() => {
@@ -191,7 +184,7 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
   
   // Generate SKU previews
   const skuPreviews = useMemo(() => {
-    if (!selectedClient || !effectiveRoastGroupCode || !productCode) return [];
+    if (!selectedClient || !newRoastGroupCode || !productCode) return [];
     
     return Array.from(selectedVariants).map(variantValue => {
       const variant = PACKAGING_VARIANTS.find(v => v.value === variantValue);
@@ -202,7 +195,7 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
         label: variant.label,
         sku: buildSku({
           clientCode: selectedClient.client_code,
-          roastGroupCode: effectiveRoastGroupCode,
+          roastGroupCode: newRoastGroupCode,
           productCode: productCode,
           variantCode: variant.code,
         }),
@@ -214,7 +207,7 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
       sku: string;
       bagSizeG: number;
     }>;
-  }, [selectedClient, effectiveRoastGroupCode, productCode, selectedVariants]);
+  }, [selectedClient, newRoastGroupCode, productCode, selectedVariants]);
   
   // Check for SKU collisions
   const skuCollisions = useMemo(() => {
@@ -223,85 +216,94 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
   }, [skuPreviews, existingProducts]);
   
   // Validation
-  const isRoastGroupCodeUnique = useMemo(() => {
-    if (roastGroupMode === 'existing') return true;
-    return !existingRoastGroupCodes.has(newRoastGroupCode);
-  }, [roastGroupMode, newRoastGroupCode, existingRoastGroupCodes]);
+  const isRoastGroupCodeUnique = !existingRoastGroupCodes.has(newRoastGroupCode);
+  
+  const hasNoComponents = componentRoastGroups.length === 0;
   
   const canSave = useMemo(() => {
     if (!clientId) return false;
-    if (roastGroupMode === 'existing' && !selectedRoastGroup) return false;
-    if (roastGroupMode === 'new') {
-      if (roastGroupType === 'single_origin' && !origin) return false;
-      if (roastGroupType === 'single_origin' && origin === '__custom__' && !customOrigin.trim()) return false;
-      if (roastGroupType === 'blend' && !blendName.trim()) return false;
-      if (!newRoastGroupCode.trim()) return false;
-      if (!isRoastGroupCodeUnique) return false;
-    }
+    if (!blendName.trim()) return false;
+    if (!newRoastGroupCode.trim()) return false;
+    if (!isRoastGroupCodeUnique) return false;
+    if (hasNoComponents) return false;
+    if (!allComponentsSelected) return false;
+    if (!percentageValid) return false;
     if (!productSuffix.trim()) return false;
     if (selectedVariants.size === 0) return false;
     if (!lifecycle) return false;
     if (skuCollisions.length > 0) return false;
     return true;
-  }, [clientId, roastGroupMode, selectedRoastGroup, roastGroupType, origin, customOrigin, blendName, newRoastGroupCode, isRoastGroupCodeUnique, productSuffix, selectedVariants, lifecycle, skuCollisions]);
+  }, [clientId, blendName, newRoastGroupCode, isRoastGroupCodeUnique, hasNoComponents, allComponentsSelected, percentageValid, productSuffix, selectedVariants, lifecycle, skuCollisions]);
   
   // Reset form
   const resetForm = () => {
     setClientId('');
-    setRoastGroupMode('existing');
-    setSelectedRoastGroup('');
-    setRoastGroupType('single_origin');
-    setOrigin('');
-    setCustomOrigin('');
     setBlendName('');
     setNewRoastGroupCode('');
     setNewCropsterProfileRef('');
+    setComponents([
+      { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
+      { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
+    ]);
     setProductSuffix('');
     setSelectedVariants(new Set());
     setPriceInput('');
     setLifecycle(null);
   };
   
+  // Component management
+  const addComponent = () => {
+    setComponents(prev => [...prev, { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 0 }]);
+  };
+  
+  const removeComponent = (id: string) => {
+    if (components.length <= 2) return; // Minimum 2 components
+    setComponents(prev => prev.filter(c => c.id !== id));
+  };
+  
+  const updateComponent = (id: string, field: 'roastGroup' | 'percentage', value: string | number) => {
+    setComponents(prev => prev.map(c => 
+      c.id === id ? { ...c, [field]: value } : c
+    ));
+  };
+  
+  // Navigate to roast groups tab
+  const goToRoastGroups = () => {
+    onOpenChange(false);
+    setSearchParams({ tab: 'roast-groups' });
+  };
+  
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
-      let roastGroupName: string;
-      let roastGroupCode: string;
+      const roastGroupName = blendName.trim().toUpperCase().replace(/\s+/g, '_');
+      const roastGroupCode = newRoastGroupCode.trim().toUpperCase();
       
-      // Step 1: Create roast group if needed
-      if (roastGroupMode === 'new') {
-        const originValue = roastGroupType === 'single_origin' 
-          ? (origin === '__custom__' ? customOrigin.trim() : origin)
-          : null;
-        const blendValue = roastGroupType === 'blend' ? blendName.trim() : null;
-        
-        roastGroupName = (originValue ?? blendValue ?? '').toUpperCase().replace(/\s+/g, '_');
-        roastGroupCode = newRoastGroupCode.trim().toUpperCase();
-        
-        const { error: rgError } = await supabase
-          .from('roast_groups')
-          .insert({
-            roast_group: roastGroupName,
-            roast_group_code: roastGroupCode,
-            is_blend: roastGroupType === 'blend',
-            origin: originValue,
-            blend_name: blendValue,
-            display_name: (originValue ?? blendValue ?? '').trim() || null,
-            standard_batch_kg: 20,
-            expected_yield_loss_pct: 16,
-            default_roaster: 'EITHER',
-            is_active: true,
-            cropster_profile_ref: newCropsterProfileRef.trim() || null,
-          });
-        
-        if (rgError) throw rgError;
-      } else {
-        roastGroupName = selectedRoastGroup;
-        roastGroupCode = selectedRoastGroupData!.roast_group_code;
-      }
+      // Create blend roast group
+      const { error: rgError } = await supabase
+        .from('roast_groups')
+        .insert({
+          roast_group: roastGroupName,
+          roast_group_code: roastGroupCode,
+          is_blend: true,
+          origin: null,
+          blend_name: blendName.trim(),
+          display_name: blendName.trim(),
+          standard_batch_kg: 20,
+          expected_yield_loss_pct: 16,
+          default_roaster: 'EITHER',
+          is_active: true,
+          cropster_profile_ref: newCropsterProfileRef.trim() || null,
+          // Note: blend components stored in notes for now (could be a separate table in future)
+          notes: `Blend components: ${components.map(c => {
+            const rg = componentRoastGroups.find(g => g.roast_group === c.roastGroup);
+            return `${rg?.display_name || c.roastGroup} (${c.percentage}%)`;
+          }).join(', ')}`,
+        });
       
-      // Step 2: Create products for each variant
-      // Treat blank price as 0.00 (not "no price")
+      if (rgError) throw rgError;
+      
+      // Create products for each variant
       const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
       const hasPrice = !isNaN(priceValue);
       
@@ -325,7 +327,7 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
       
       if (prodError) throw prodError;
       
-      // Step 3: Create prices if provided
+      // Create prices
       if (hasPrice && createdProducts) {
         const today = new Date().toISOString().split('T')[0];
         const priceInserts = createdProducts.map(p => ({
@@ -341,14 +343,13 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
         
         if (priceError) {
           console.error('Price insert failed:', priceError);
-          // Don't throw - products were created successfully
         }
       }
       
-      return { count: productInserts.length, roastGroupDisplayName };
+      return { count: productInserts.length, blendName: blendName.trim() };
     },
     onSuccess: (result) => {
-      toast.success(`Created ${result.count} product${result.count > 1 ? 's' : ''} under ${result.roastGroupDisplayName}`);
+      toast.success(`Created ${result.count} product${result.count > 1 ? 's' : ''} for ${result.blendName}`);
       queryClient.invalidateQueries({ queryKey: ['all-products'] });
       queryClient.invalidateQueries({ queryKey: ['all-prices'] });
       queryClient.invalidateQueries({ queryKey: ['active-roast-groups-with-code'] });
@@ -361,7 +362,7 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
       if (err?.code === '23505') {
         toast.error('A product with this SKU already exists');
       } else {
-        toast.error('Failed to create products');
+        toast.error('Failed to create blend products');
       }
     },
   });
@@ -378,14 +379,26 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
     });
   };
   
+  const getDisplayName = (rg: RoastGroup) => 
+    rg.display_name?.trim() || rg.roast_group.replace(/_/g, ' ');
+  
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>New Product</DialogTitle>
+          <DialogTitle>New Blend Product</DialogTitle>
         </DialogHeader>
         
         <div className="space-y-6">
+          {/* Guidance message */}
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              Post-roast blends require roast groups for each component coffee. 
+              {hasNoComponents && ' Create component roast groups first, then return here to build the blend.'}
+            </AlertDescription>
+          </Alert>
+          
           {/* Step 1: Client */}
           <div>
             <Label htmlFor="client">1. Client</Label>
@@ -403,131 +416,135 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
             </Select>
           </div>
           
-          {/* Step 2: Roast Group */}
-          <div className="space-y-3">
-            <Label>2. Roast Group</Label>
-            <RadioGroup 
-              value={roastGroupMode} 
-              onValueChange={(v) => setRoastGroupMode(v as RoastGroupMode)}
-              className="flex gap-4"
-            >
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="existing" id="rg-existing" />
-                <Label htmlFor="rg-existing" className="font-normal cursor-pointer">
-                  Select existing
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="new" id="rg-new" />
-                <Label htmlFor="rg-new" className="font-normal cursor-pointer">
-                  Create new
-                </Label>
-              </div>
-            </RadioGroup>
+          {/* Step 2: Blend Definition */}
+          <div className="space-y-4">
+            <Label>2. Blend Definition</Label>
             
-            {roastGroupMode === 'existing' && (
-              <Select value={selectedRoastGroup || 'NONE'} onValueChange={(v) => setSelectedRoastGroup(v === 'NONE' ? '' : v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select roast group" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NONE">Select roast group...</SelectItem>
-                  {roastGroups?.map(g => (
-                    <SelectItem key={g.roast_group} value={g.roast_group}>
-                      {g.display_name?.trim() || g.roast_group.replace(/_/g, ' ')} ({g.roast_group_code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
+              <div>
+                <Label htmlFor="blendName" className="text-xs text-muted-foreground">Blend Name</Label>
+                <Input
+                  id="blendName"
+                  placeholder="e.g. House Espresso, Technicolour"
+                  value={blendName}
+                  onChange={(e) => setBlendName(e.target.value)}
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="rgCode" className="text-xs text-muted-foreground">
+                  Blend Code (3-6 chars, must be unique)
+                </Label>
+                <Input
+                  id="rgCode"
+                  placeholder="e.g. HSE, TCH"
+                  value={newRoastGroupCode}
+                  onChange={(e) => setNewRoastGroupCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 6))}
+                  className={!isRoastGroupCodeUnique ? 'border-destructive' : ''}
+                />
+                {!isRoastGroupCodeUnique && (
+                  <p className="text-xs text-destructive mt-1">This code is already in use</p>
+                )}
+              </div>
+              
+              <div>
+                <Label htmlFor="cropsterRef" className="text-xs text-muted-foreground">
+                  Cropster Profile Ref (optional)
+                </Label>
+                <Input
+                  id="cropsterRef"
+                  placeholder="e.g. R-1234 or profile name"
+                  value={newCropsterProfileRef}
+                  onChange={(e) => setNewCropsterProfileRef(e.target.value)}
+                />
+              </div>
+            </div>
             
-            {roastGroupMode === 'new' && (
-              <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Type</Label>
-                  <RadioGroup 
-                    value={roastGroupType} 
-                    onValueChange={(v) => setRoastGroupType(v as RoastGroupType)}
-                    className="flex gap-4 mt-1"
+            {/* Component roast groups */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">Blend Components</Label>
+                <div className={`text-xs font-medium ${percentageValid ? 'text-green-600' : 'text-destructive'}`}>
+                  Total: {totalPercentage}%
+                </div>
+              </div>
+              
+              {hasNoComponents ? (
+                <div className="border rounded-lg p-6 text-center space-y-3 bg-muted/20">
+                  <p className="text-sm text-muted-foreground">
+                    No single origin roast groups available.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={goToRoastGroups}>
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Go to Roast Groups
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    {components.map((comp, idx) => (
+                      <div key={comp.id} className="flex items-center gap-2">
+                        <Select 
+                          value={comp.roastGroup || 'NONE'} 
+                          onValueChange={(v) => updateComponent(comp.id, 'roastGroup', v === 'NONE' ? '' : v)}
+                        >
+                          <SelectTrigger className="flex-1">
+                            <SelectValue placeholder="Select component..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="NONE">Select component...</SelectItem>
+                            {componentRoastGroups.map(g => (
+                              <SelectItem key={g.roast_group} value={g.roast_group}>
+                                {getDisplayName(g)} ({g.roast_group_code})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <div className="flex items-center gap-1 w-24">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={comp.percentage}
+                            onChange={(e) => updateComponent(comp.id, 'percentage', parseInt(e.target.value) || 0)}
+                            className="w-16 text-center"
+                          />
+                          <span className="text-sm text-muted-foreground">%</span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeComponent(comp.id)}
+                          disabled={components.length <= 2}
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addComponent}
+                    className="w-full"
                   >
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem value="single_origin" id="type-so" />
-                      <Label htmlFor="type-so" className="font-normal cursor-pointer">Single Origin</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem value="blend" id="type-blend" />
-                      <Label htmlFor="type-blend" className="font-normal cursor-pointer">Blend</Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-                
-                {roastGroupType === 'single_origin' && (
-                  <div>
-                    <Label htmlFor="origin" className="text-xs text-muted-foreground">Origin</Label>
-                    <Select value={origin || 'NONE'} onValueChange={(v) => setOrigin(v === 'NONE' ? '' : v)}>
-                      <SelectTrigger id="origin">
-                        <SelectValue placeholder="Select origin" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="NONE">Select origin...</SelectItem>
-                        {COMMON_ORIGINS.map(o => (
-                          <SelectItem key={o} value={o}>{o}</SelectItem>
-                        ))}
-                        <SelectItem value="__custom__">+ Add new origin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {origin === '__custom__' && (
-                      <Input
-                        className="mt-2"
-                        placeholder="Enter origin name"
-                        value={customOrigin}
-                        onChange={(e) => setCustomOrigin(e.target.value)}
-                      />
-                    )}
-                  </div>
-                )}
-                
-                {roastGroupType === 'blend' && (
-                  <div>
-                    <Label htmlFor="blendName" className="text-xs text-muted-foreground">Blend Name</Label>
-                    <Input
-                      id="blendName"
-                      placeholder="e.g. Medium Dark, House Blend"
-                      value={blendName}
-                      onChange={(e) => setBlendName(e.target.value)}
-                    />
-                  </div>
-                )}
-                
-                <div>
-                  <Label htmlFor="rgCode" className="text-xs text-muted-foreground">
-                    Roast Group Code (3-6 chars, must be unique)
-                  </Label>
-                  <Input
-                    id="rgCode"
-                    placeholder="e.g. GUA, ETH, MDK"
-                    value={newRoastGroupCode}
-                    onChange={(e) => setNewRoastGroupCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 6))}
-                    className={!isRoastGroupCodeUnique ? 'border-destructive' : ''}
-                  />
-                  {!isRoastGroupCodeUnique && (
-                    <p className="text-xs text-destructive mt-1">This code is already in use</p>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Component
+                  </Button>
+                  
+                  {!percentageValid && (
+                    <p className="text-xs text-destructive flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      Percentages must total exactly 100%
+                    </p>
                   )}
-                </div>
-                
-                <div>
-                  <Label htmlFor="cropsterRef" className="text-xs text-muted-foreground">
-                    Cropster Profile Ref (optional)
-                  </Label>
-                  <Input
-                    id="cropsterRef"
-                    placeholder="e.g. R-1234 or profile name"
-                    value={newCropsterProfileRef}
-                    onChange={(e) => setNewCropsterProfileRef(e.target.value)}
-                  />
-                </div>
-              </div>
-            )}
+                </>
+              )}
+            </div>
           </div>
           
           {/* Step 3: Product Name */}
@@ -535,11 +552,11 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
             <Label>3. Finished Good Name</Label>
             <div className="flex items-center gap-2 mt-1">
               <div className="bg-muted px-3 py-2 rounded-l-md border border-r-0 text-sm font-medium min-w-[120px]">
-                {roastGroupDisplayName || '(Roast Group)'}
+                {blendName.trim() || '(Blend Name)'}
               </div>
               <span className="text-muted-foreground">—</span>
               <Input
-                placeholder="e.g. Hermanos, House Espresso"
+                placeholder="e.g. Espresso, Filter Roast"
                 value={productSuffix}
                 onChange={(e) => setProductSuffix(e.target.value)}
                 className="flex-1"
@@ -612,7 +629,7 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
               onChange={(e) => setPriceInput(e.target.value)}
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Applied to all variants. Leave blank to set later.
+              Applied to all variants. Leave blank to default to $0.00.
             </p>
           </div>
           
