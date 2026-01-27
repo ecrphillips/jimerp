@@ -71,6 +71,7 @@ interface RoastGroupConfig {
   is_active: boolean;
   notes: string | null;
   display_order: number | null;
+  display_name: string | null;
 }
 
 interface DemandByRoastGroup {

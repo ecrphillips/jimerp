@@ -32,6 +32,7 @@ interface RoastGroup {
   is_blend: boolean;
   origin: string | null;
   blend_name: string | null;
+  display_name: string | null;
 }
 
 interface NewProductModalProps {
@@ -91,7 +92,7 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roast_groups')
-        .select('roast_group, roast_group_code, is_blend, origin, blend_name')
+        .select('roast_group, roast_group_code, is_blend, origin, blend_name, display_name')
         .eq('is_active', true)
         .order('roast_group');
       if (error) throw error;
@@ -142,7 +143,8 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
   // Calculate roast group display name based on mode
   const roastGroupDisplayName = useMemo(() => {
     if (roastGroupMode === 'existing' && selectedRoastGroupData) {
-      return selectedRoastGroupData.roast_group.replace(/_/g, ' ');
+      // Use display_name if set, otherwise fall back to formatted roast_group
+      return selectedRoastGroupData.display_name?.trim() || selectedRoastGroupData.roast_group.replace(/_/g, ' ');
     }
     if (roastGroupMode === 'new') {
       if (roastGroupType === 'single_origin') {
@@ -428,7 +430,7 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
                   <SelectItem value="NONE">Select roast group...</SelectItem>
                   {roastGroups?.map(g => (
                     <SelectItem key={g.roast_group} value={g.roast_group}>
-                      {g.roast_group.replace(/_/g, ' ')} ({g.roast_group_code})
+                      {g.display_name?.trim() || g.roast_group.replace(/_/g, ' ')} ({g.roast_group_code})
                     </SelectItem>
                   ))}
                 </SelectContent>

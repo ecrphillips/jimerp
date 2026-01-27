@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Plus, Pencil } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
+import { getDisplayName } from '@/lib/roastGroupUtils';
 
 type DefaultRoaster = Database['public']['Enums']['default_roaster'];
 
@@ -26,6 +27,7 @@ interface RoastGroup {
   origin: string | null;
   blend_name: string | null;
   notes: string | null;
+  display_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -41,6 +43,7 @@ export function RoastGroupsTab() {
   // Form state
   const [roastGroupName, setRoastGroupName] = useState('');
   const [roastGroupCode, setRoastGroupCode] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [standardBatchKg, setStandardBatchKg] = useState(20);
   const [yieldLossPct, setYieldLossPct] = useState(16);
   const [defaultRoaster, setDefaultRoaster] = useState<DefaultRoaster>('EITHER');
@@ -78,6 +81,7 @@ export function RoastGroupsTab() {
         const { error } = await supabase
           .from('roast_groups')
           .update({
+            display_name: displayName.trim() || null,
             standard_batch_kg: standardBatchKg,
             expected_yield_loss_pct: yieldLossPct,
             default_roaster: defaultRoaster,
@@ -90,6 +94,7 @@ export function RoastGroupsTab() {
         const { error } = await supabase.from('roast_groups').insert({
           roast_group: groupName,
           roast_group_code: code,
+          display_name: displayName.trim() || null,
           standard_batch_kg: standardBatchKg,
           expected_yield_loss_pct: yieldLossPct,
           default_roaster: defaultRoaster,
@@ -134,6 +139,7 @@ export function RoastGroupsTab() {
   const openNew = () => {
     setEditingGroup(null);
     setRoastGroupName('');
+    setDisplayName('');
     setStandardBatchKg(20);
     setYieldLossPct(16);
     setDefaultRoaster('EITHER');
@@ -145,6 +151,7 @@ export function RoastGroupsTab() {
   const openEdit = (g: RoastGroup) => {
     setEditingGroup(g);
     setRoastGroupName(g.roast_group);
+    setDisplayName(g.display_name ?? '');
     setStandardBatchKg(g.standard_batch_kg);
     setYieldLossPct(g.expected_yield_loss_pct);
     setDefaultRoaster(g.default_roaster);
@@ -215,7 +222,12 @@ export function RoastGroupsTab() {
                     key={g.roast_group}
                     className={`border-b last:border-0 ${!g.is_active ? 'opacity-60' : ''}`}
                   >
-                    <td className="py-2 font-medium font-mono">{g.roast_group}</td>
+                    <td className="py-2">
+                      <div className="flex flex-col">
+                        <span className="font-medium">{getDisplayName(g.display_name, g.roast_group)}</span>
+                        <span className="text-xs text-muted-foreground font-mono">{g.roast_group}</span>
+                      </div>
+                    </td>
                     <td className="py-2 text-right">{g.standard_batch_kg}</td>
                     <td className="py-2 text-right">{g.expected_yield_loss_pct}%</td>
                     <td className="py-2">
@@ -255,21 +267,41 @@ export function RoastGroupsTab() {
             <DialogTitle>{editingGroup ? 'Edit Roast Group' : 'New Roast Group'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {!editingGroup && (
+              <div>
+                <Label htmlFor="groupName">System Key</Label>
+                <Input
+                  id="groupName"
+                  value={roastGroupName}
+                  onChange={(e) => setRoastGroupName(e.target.value)}
+                  placeholder="e.g. MEDIUM_ESPRESSO"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Will be converted to UPPERCASE_SNAKE_CASE. Cannot be changed after creation.
+                </p>
+              </div>
+            )}
+
+            {editingGroup && (
+              <div>
+                <Label className="text-muted-foreground">System Key</Label>
+                <p className="font-mono text-sm py-2">{editingGroup.roast_group}</p>
+              </div>
+            )}
+
             <div>
-              <Label htmlFor="groupName">Roast Group Name</Label>
+              <Label htmlFor="displayName">Display Name</Label>
               <Input
-                id="groupName"
-                value={roastGroupName}
-                onChange={(e) => setRoastGroupName(e.target.value)}
-                placeholder="e.g. MEDIUM_ESPRESSO"
-                disabled={!!editingGroup}
+                id="displayName"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder={editingGroup ? editingGroup.roast_group.replace(/_/g, ' ') : 'Leave blank to use system key'}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                {editingGroup
-                  ? 'Name cannot be changed after creation.'
-                  : 'Will be converted to UPPERCASE_SNAKE_CASE.'}
+                Friendly name shown in production screens. Leave blank to use the system key.
               </p>
             </div>
+
 
             <div className="grid grid-cols-2 gap-4">
               <div>
