@@ -247,6 +247,63 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_transactions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_system_generated: boolean
+          notes: string | null
+          order_id: string | null
+          product_id: string | null
+          quantity_kg: number | null
+          quantity_units: number | null
+          roast_group: string | null
+          transaction_type: Database["public"]["Enums"]["inventory_transaction_type"]
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_system_generated?: boolean
+          notes?: string | null
+          order_id?: string | null
+          product_id?: string | null
+          quantity_kg?: number | null
+          quantity_units?: number | null
+          roast_group?: string | null
+          transaction_type: Database["public"]["Enums"]["inventory_transaction_type"]
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_system_generated?: boolean
+          notes?: string | null
+          order_id?: string | null
+          product_id?: string | null
+          quantity_kg?: number | null
+          quantity_units?: number | null
+          roast_group?: string | null
+          transaction_type?: Database["public"]["Enums"]["inventory_transaction_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_transactions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_date_audit_log: {
         Row: {
           changed_at: string
@@ -1099,6 +1156,13 @@ export type Database = {
         | "DECONSTRUCT"
         | "OTHER"
       grind_option: "WHOLE_BEAN" | "ESPRESSO" | "FILTER"
+      inventory_transaction_type:
+        | "ROAST_OUTPUT"
+        | "PACK_CONSUME_WIP"
+        | "PACK_PRODUCE_FG"
+        | "SHIP_CONSUME_FG"
+        | "ADJUSTMENT"
+        | "LOSS"
       order_status:
         | "DRAFT"
         | "SUBMITTED"
@@ -1283,6 +1347,14 @@ export const Constants = {
         "OTHER",
       ],
       grind_option: ["WHOLE_BEAN", "ESPRESSO", "FILTER"],
+      inventory_transaction_type: [
+        "ROAST_OUTPUT",
+        "PACK_CONSUME_WIP",
+        "PACK_PRODUCE_FG",
+        "SHIP_CONSUME_FG",
+        "ADJUSTMENT",
+        "LOSS",
+      ],
       order_status: [
         "DRAFT",
         "SUBMITTED",
