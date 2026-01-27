@@ -6,9 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertTriangle, Trash2, Sparkles } from 'lucide-react';
+import { AlertTriangle, Trash2, Sparkles, RotateCcw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+
+// Check if we're in development mode
+const isDev = import.meta.env.DEV;
 
 export default function AdminTools() {
   const navigate = useNavigate();
@@ -23,6 +26,11 @@ export default function AdminTools() {
   const [showSeedModal, setShowSeedModal] = useState(false);
   const [seedUnderstood, setSeedUnderstood] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
+
+  // Reset Test Day state (dev only)
+  const [showResetTestDayModal, setShowResetTestDayModal] = useState(false);
+  const [resetTestDayUnderstood, setResetTestDayUnderstood] = useState(false);
+  const [isResettingTestDay, setIsResettingTestDay] = useState(false);
 
   const canConfirmReset = resetConfirmText === 'RESET' && resetUnderstood;
 
@@ -64,6 +72,35 @@ export default function AdminTools() {
       toast.error(err.message || 'Seed failed');
     } finally {
       setIsSeeding(false);
+    }
+  };
+
+  const handleResetTestDay = async () => {
+    if (!resetTestDayUnderstood) return;
+    
+    setIsResettingTestDay(true);
+    try {
+      const { data, error } = await supabase.rpc('dev_reset_test_day');
+      if (error) throw error;
+      
+      const counts = data as Record<string, number>;
+      const totalCleared = Object.values(counts).reduce((sum, count) => sum + count, 0);
+      
+      toast.success(
+        `Test day reset complete. Cleared ${totalCleared} rows: ` +
+        `${counts.orders} orders, ${counts.order_line_items} line items, ` +
+        `${counts.roasted_batches} batches, ${counts.packing_runs} packing runs, ` +
+        `${counts.inventory_transactions} inventory txns`
+      );
+      
+      setShowResetTestDayModal(false);
+      setResetTestDayUnderstood(false);
+      navigate('/production?tab=roast');
+    } catch (err: any) {
+      console.error('Reset test day failed:', err);
+      toast.error(err.message || 'Reset test day failed');
+    } finally {
+      setIsResettingTestDay(false);
     }
   };
 
@@ -172,6 +209,54 @@ export default function AdminTools() {
         </CardContent>
       </Card>
 
+      {/* DEV ONLY: Reset Test Day Card */}
+      {isDev && (
+        <Card className="border-orange-500/50 bg-orange-500/5">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-orange-500" />
+              <CardTitle className="text-lg">Reset Test Day (DEV ONLY)</CardTitle>
+            </div>
+            <CardDescription>
+              Complete reset of all transactional data. Returns inventory to zero state. Hidden in production.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="text-sm text-muted-foreground">
+                <p className="font-medium mb-2">This will delete (in FK-safe order):</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>All inventory_transactions (the ledger)</li>
+                  <li>All ship_picks, packing_runs, roasted_batches</li>
+                  <li>All order_line_items and orders (admin-created)</li>
+                  <li>All production checkmarks and plan items</li>
+                  <li>All andon picks and external demand</li>
+                </ul>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                <p className="font-medium mb-2">Preserves:</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Clients, products, roast groups</li>
+                  <li>Board configuration (source_board_products)</li>
+                  <li>Price lists, users, roles</li>
+                </ul>
+              </div>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setResetTestDayUnderstood(false);
+                  setShowResetTestDayModal(true);
+                }}
+                className="gap-2 border-orange-500 text-orange-600 hover:bg-orange-500/10"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reset Test Day
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Reset Confirmation Modal */}
       <Dialog open={showResetModal} onOpenChange={setShowResetModal}>
         <DialogContent className="max-w-md">
@@ -269,6 +354,52 @@ export default function AdminTools() {
               disabled={!seedUnderstood || isSeeding}
             >
               {isSeeding ? 'Seeding...' : 'Confirm Seed'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Test Day Confirmation Modal (dev only) */}
+      <Dialog open={showResetTestDayModal} onOpenChange={setShowResetTestDayModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-600">
+              <RotateCcw className="h-5 w-5" />
+              Reset Test Day
+            </DialogTitle>
+            <DialogDescription>
+              This will clear all transactional data and reset inventory to zero. Returns row counts when complete.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="reset-test-day-understood"
+                checked={resetTestDayUnderstood}
+                onCheckedChange={(checked) => setResetTestDayUnderstood(checked === true)}
+              />
+              <Label htmlFor="reset-test-day-understood" className="text-sm leading-relaxed cursor-pointer">
+                I understand this clears all orders, batches, and inventory transactions
+              </Label>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowResetTestDayModal(false)}
+              disabled={isResettingTestDay}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleResetTestDay}
+              disabled={!resetTestDayUnderstood || isResettingTestDay}
+              className="border-orange-500 text-orange-600 hover:bg-orange-500/10"
+            >
+              {isResettingTestDay ? 'Resetting...' : 'Confirm Reset'}
             </Button>
           </DialogFooter>
         </DialogContent>

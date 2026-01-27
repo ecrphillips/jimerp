@@ -1132,6 +1132,7 @@ export type Database = {
         Args: { _client_id: string; _user_id: string }
         Returns: boolean
       }
+      dev_reset_test_day: { Args: never; Returns: Json }
       dev_test_reset: { Args: never; Returns: undefined }
       dev_test_seed_minimal: { Args: never; Returns: undefined }
       get_user_client_id: { Args: { _user_id: string }; Returns: string }
