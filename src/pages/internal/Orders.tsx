@@ -8,14 +8,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { 
   MessageSquare, 
-  Flame, 
-  Package, 
-  Truck, 
-  FileText, 
   Plus,
-  Check,
   UserPlus,
-  ArrowUpDown,
   ArrowUp,
   ArrowDown,
   CalendarClock
@@ -23,6 +17,7 @@ import {
 import { cn } from '@/lib/utils';
 import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
 import { SetDeadlineModal } from '@/components/orders/SetDeadlineModal';
+import { OrderProgressBar, DeadlineStatus } from '@/components/orders/OrderProgressBar';
 
 type SortDirection = 'asc' | 'desc';
 
@@ -36,6 +31,7 @@ export default function Orders() {
     status: string;
   }>({ open: false, orderId: '', orderNumber: '', status: '' });
 
+  // Fetch orders with line items for progress calculation
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['orders'],
     queryFn: async () => {
@@ -55,7 +51,8 @@ export default function Orders() {
           invoiced,
           created_by_admin,
           location_id,
-          client:clients(name)
+          client:clients(name),
+          order_line_items(id, product_id, quantity_units)
         `)
         .order('created_at', { ascending: false });
 
@@ -63,6 +60,27 @@ export default function Orders() {
       return data ?? [];
     },
   });
+
+  // Fetch packing runs for pack completion calculation
+  const { data: packingRuns } = useQuery({
+    queryKey: ['packing-runs-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('packing_runs')
+        .select('product_id, target_date, units_packed');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Map packing runs by product_id for quick lookup
+  const packingByProduct = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const pr of packingRuns ?? []) {
+      map[pr.product_id] = (map[pr.product_id] ?? 0) + pr.units_packed;
+    }
+    return map;
+  }, [packingRuns]);
 
   // Sort with SUBMITTED + no deadline pinned at top
   // Now uses work_deadline_at (timestamptz) as primary sort key
@@ -114,25 +132,16 @@ export default function Orders() {
     setDeadlineSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
   };
 
-  const ChecklistIcon = ({ 
-    checked, 
-    Icon, 
-    label 
-  }: { 
-    checked: boolean; 
-    Icon: React.ElementType; 
-    label: string; 
-  }) => (
-    <div 
-      className={cn(
-        "h-5 w-5 rounded flex items-center justify-center",
-        checked ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground/40"
-      )}
-      title={label}
-    >
-      {checked ? <Check className="h-3 w-3" /> : <Icon className="h-3 w-3" />}
-    </div>
-  );
+  // Calculate pack completion for an order
+  const getPackedComplete = (order: typeof sortedOrders[0]) => {
+    const lineItems = order.order_line_items ?? [];
+    if (lineItems.length === 0) return false;
+    
+    return lineItems.every((li) => {
+      const packed = packingByProduct[li.product_id] ?? 0;
+      return packed >= li.quantity_units;
+    });
+  };
 
   const isTerminalStatus = (status: string) => 
     status === 'SHIPPED' || status === 'CANCELLED';
@@ -163,25 +172,29 @@ export default function Orders() {
               <div className="flex items-center gap-4 px-2 py-2 text-xs font-medium text-muted-foreground border-b">
                 <div className="flex-1">Order / Client</div>
                 <div 
-                  className="w-28 flex items-center gap-1 cursor-pointer hover:text-foreground"
+                  className="w-32 flex items-center gap-1 cursor-pointer hover:text-foreground"
                   onClick={toggleDeadlineSort}
                 >
-                  Work Deadline
+                  Deadline
                   {deadlineSortDir === 'asc' ? (
                     <ArrowUp className="h-3 w-3" />
                   ) : (
                     <ArrowDown className="h-3 w-3" />
                   )}
                 </div>
-                <div className="w-24">Ship Date</div>
-                <div className="w-24">Checklist</div>
-                <div className="w-28 text-right">Status</div>
+                <div className="w-28">Progress</div>
+                <div className="w-20">Status</div>
+                <div className="w-16 text-center">Health</div>
               </div>
 
               {/* Order rows */}
               {sortedOrders.map((o) => {
                 const isSubmittedNoDeadline = o.status === 'SUBMITTED' && !o.work_deadline_at;
                 const isTerminal = isTerminalStatus(o.status);
+                const packedComplete = getPackedComplete(o);
+                
+                // Build progress data
+                const isConfirmed = !!o.work_deadline_at && ['CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'].includes(o.status);
                 
                 return (
                   <div
@@ -219,10 +232,14 @@ export default function Orders() {
                       <LocationCodeDisplay locationId={o.location_id} />
                     </div>
 
-                    {/* Work Deadline - show date and time */}
-                    <div className="w-28 text-sm">
+                    {/* Deadline column - show date/time or set button */}
+                    <div className="w-32 text-sm">
                       {o.work_deadline_at ? (
-                        <span title={format(new Date(o.work_deadline_at), 'PPP HH:mm')}>
+                        <span 
+                          className="text-xs"
+                          title={format(new Date(o.work_deadline_at), 'PPP HH:mm')}
+                          onClick={() => navigate(`/orders/${o.id}`)}
+                        >
                           {format(new Date(o.work_deadline_at), 'MMM d, HH:mm')}
                         </span>
                       ) : (
@@ -246,40 +263,51 @@ export default function Orders() {
                       )}
                     </div>
 
-                    {/* Ship Date */}
+                    {/* Progress bar */}
                     <div 
-                      className="w-24 text-sm text-muted-foreground"
+                      className="w-28"
                       onClick={() => navigate(`/orders/${o.id}`)}
                     >
-                      {o.requested_ship_date
-                        ? format(new Date(o.requested_ship_date), 'MMM d')
-                        : '—'}
-                    </div>
-
-                    {/* Checklist */}
-                    <div 
-                      className="w-24 flex items-center gap-1"
-                      onClick={() => navigate(`/orders/${o.id}`)}
-                    >
-                      <ChecklistIcon checked={o.roasted} Icon={Flame} label="Roasted" />
-                      <ChecklistIcon checked={o.packed} Icon={Package} label="Packed" />
-                      <ChecklistIcon checked={o.shipped_or_ready} Icon={Truck} label="Shipped/Ready" />
-                      <ChecklistIcon checked={o.invoiced} Icon={FileText} label="Invoiced" />
+                      <OrderProgressBar
+                        data={{
+                          status: o.status,
+                          workDeadlineAt: o.work_deadline_at,
+                          invoiced: o.invoiced,
+                          roastedCoverage: isConfirmed ? 1 : 0, // Simplified - needs roast data for full accuracy
+                          packedComplete,
+                          hasPickingData: false, // Picking not fully integrated in list view
+                        }}
+                        compact
+                        showNextAction={false}
+                      />
                     </div>
 
                     {/* Status */}
                     <div 
-                      className="w-28 text-right"
+                      className="w-20"
                       onClick={() => navigate(`/orders/${o.id}`)}
                     >
                       <span className={cn(
-                        "text-sm font-medium",
+                        "text-xs font-medium",
                         o.status === 'SUBMITTED' && 'text-warning',
                         o.status === 'SHIPPED' && 'text-muted-foreground',
                         o.status === 'CANCELLED' && 'text-destructive'
                       )}>
                         {o.status}
                       </span>
+                    </div>
+
+                    {/* Deadline health indicator */}
+                    <div 
+                      className="w-16 flex justify-center"
+                      onClick={() => navigate(`/orders/${o.id}`)}
+                    >
+                      <DeadlineStatus
+                        workDeadlineAt={o.work_deadline_at}
+                        status={o.status}
+                        packedComplete={packedComplete}
+                        compact
+                      />
                     </div>
                   </div>
                 );
