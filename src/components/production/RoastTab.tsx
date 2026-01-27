@@ -536,11 +536,21 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       const roastGroupCode = existing?.roast_group_code ?? 
         roastGroup.replace(/[^A-Za-z]/g, '').substring(0, 3).toUpperCase();
       
+      // Get existing display_name or generate one
+      const { data: existingGroup } = await supabase
+        .from('roast_groups')
+        .select('display_name')
+        .eq('roast_group', roastGroup)
+        .single();
+      
+      const displayName = existingGroup?.display_name ?? roastGroup.replace(/_/g, ' ');
+      
       const { error } = await supabase
         .from('roast_groups')
         .upsert({
           roast_group: roastGroup,
           roast_group_code: roastGroupCode,
+          display_name: displayName,
           standard_batch_kg: standardBatchKg,
           default_roaster: defaultRoaster,
           expected_yield_loss_pct: expectedYieldLossPct,

@@ -12,7 +12,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
-import { getDisplayName } from '@/lib/roastGroupUtils';
 import { SafeDeleteModal } from '@/components/SafeDeleteModal';
 
 type DefaultRoaster = Database['public']['Enums']['default_roaster'];
@@ -54,8 +53,6 @@ export function RoastGroupsTab() {
   const [blockedMessage, setBlockedMessage] = useState('');
 
   // Form state
-  const [roastGroupName, setRoastGroupName] = useState('');
-  const [roastGroupCode, setRoastGroupCode] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [standardBatchKg, setStandardBatchKg] = useState(20);
   const [yieldLossPct, setYieldLossPct] = useState(16);
@@ -63,6 +60,7 @@ export function RoastGroupsTab() {
   const [isActive, setIsActive] = useState(true);
   const [notes, setNotes] = useState('');
   const [cropsterProfileRef, setCropsterProfileRef] = useState('');
+  const [displayNameError, setDisplayNameError] = useState('');
 
   const { data: roastGroups, isLoading } = useQuery({
     queryKey: ['all-roast-groups'],
@@ -86,16 +84,80 @@ export function RoastGroupsTab() {
     return roastGroups?.filter((g) => !g.is_active).length ?? 0;
   }, [roastGroups]);
 
+  // Generate a unique system key from display name
+  const generateSystemKey = async (name: string): Promise<string> => {
+    const baseKey = name.trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
+    
+    // Check if base key exists
+    const { data: existing } = await supabase
+      .from('roast_groups')
+      .select('roast_group')
+      .like('roast_group', `${baseKey}%`);
+    
+    if (!existing || existing.length === 0) {
+      return baseKey;
+    }
+    
+    // Check if exact base key is taken
+    const exactMatch = existing.find(e => e.roast_group === baseKey);
+    if (!exactMatch) {
+      return baseKey;
+    }
+    
+    // Find next available suffix
+    let suffix = 2;
+    while (existing.some(e => e.roast_group === `${baseKey}${suffix}`)) {
+      suffix++;
+    }
+    return `${baseKey}${suffix}`;
+  };
+
+  // Validate display name uniqueness
+  const validateDisplayName = async (name: string, excludeKey?: string): Promise<boolean> => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setDisplayNameError('Display name is required');
+      return false;
+    }
+    
+    let query = supabase
+      .from('roast_groups')
+      .select('roast_group, display_name')
+      .ilike('display_name', trimmed);
+    
+    if (excludeKey) {
+      query = query.neq('roast_group', excludeKey);
+    }
+    
+    const { data } = await query;
+    
+    if (data && data.length > 0) {
+      setDisplayNameError('A roast group with this display name already exists. Reactivate or choose a different name.');
+      return false;
+    }
+    
+    setDisplayNameError('');
+    return true;
+  };
+
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const groupName = roastGroupName.trim().toUpperCase().replace(/\s+/g, '_');
-      const code = roastGroupCode.trim().toUpperCase() || groupName.replace(/[^A-Z]/g, '').substring(0, 3);
+      const trimmedDisplayName = displayName.trim();
+      
+      // Validate display name uniqueness
+      const isValid = await validateDisplayName(
+        trimmedDisplayName, 
+        editingGroup?.roast_group
+      );
+      if (!isValid) {
+        throw new Error('Display name validation failed');
+      }
       
       if (editingGroup) {
         const { error } = await supabase
           .from('roast_groups')
           .update({
-            display_name: displayName.trim() || null,
+            display_name: trimmedDisplayName,
             standard_batch_kg: standardBatchKg,
             expected_yield_loss_pct: yieldLossPct,
             default_roaster: defaultRoaster,
@@ -106,10 +168,14 @@ export function RoastGroupsTab() {
           .eq('roast_group', editingGroup.roast_group);
         if (error) throw error;
       } else {
+        // Generate unique system key
+        const systemKey = await generateSystemKey(trimmedDisplayName);
+        const code = systemKey.replace(/[^A-Z0-9]/g, '').substring(0, 3);
+        
         const { error } = await supabase.from('roast_groups').insert({
-          roast_group: groupName,
+          roast_group: systemKey,
           roast_group_code: code,
-          display_name: displayName.trim() || null,
+          display_name: trimmedDisplayName,
           standard_batch_kg: standardBatchKg,
           expected_yield_loss_pct: yieldLossPct,
           default_roaster: defaultRoaster,
@@ -127,8 +193,16 @@ export function RoastGroupsTab() {
     },
     onError: (err: any) => {
       console.error(err);
+      if (err?.message === 'Display name validation failed') {
+        // Error already shown via displayNameError state
+        return;
+      }
       if (err?.code === '23505') {
-        toast.error('A roast group with this name already exists');
+        if (err?.message?.includes('display_name')) {
+          setDisplayNameError('A roast group with this display name already exists. Reactivate or choose a different name.');
+        } else {
+          toast.error('A roast group with this name already exists');
+        }
       } else {
         toast.error('Failed to save roast group');
       }
@@ -238,8 +312,8 @@ export function RoastGroupsTab() {
 
   const openNew = () => {
     setEditingGroup(null);
-    setRoastGroupName('');
     setDisplayName('');
+    setDisplayNameError('');
     setStandardBatchKg(20);
     setYieldLossPct(16);
     setDefaultRoaster('EITHER');
@@ -251,8 +325,8 @@ export function RoastGroupsTab() {
 
   const openEdit = (g: RoastGroup) => {
     setEditingGroup(g);
-    setRoastGroupName(g.roast_group);
-    setDisplayName(g.display_name ?? '');
+    setDisplayName(g.display_name);
+    setDisplayNameError('');
     setStandardBatchKg(g.standard_batch_kg);
     setYieldLossPct(g.expected_yield_loss_pct);
     setDefaultRoaster(g.default_roaster);
@@ -265,6 +339,7 @@ export function RoastGroupsTab() {
   const closeDialog = () => {
     setDialogOpen(false);
     setEditingGroup(null);
+    setDisplayNameError('');
   };
 
   const getRoasterBadgeColor = (roaster: DefaultRoaster) => {
@@ -326,7 +401,7 @@ export function RoastGroupsTab() {
                   >
                     <td className="py-2">
                       <div className="flex flex-col">
-                        <span className="font-medium">{getDisplayName(g.display_name, g.roast_group)}</span>
+                        <span className="font-medium">{g.display_name}</span>
                         <span className="text-xs text-muted-foreground font-mono">{g.roast_group}</span>
                       </div>
                     </td>
@@ -378,41 +453,36 @@ export function RoastGroupsTab() {
           <DialogHeader>
             <DialogTitle>{editingGroup ? 'Edit Roast Group' : 'New Roast Group'}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            {!editingGroup && (
-              <div>
-                <Label htmlFor="groupName">System Key</Label>
-                <Input
-                  id="groupName"
-                  value={roastGroupName}
-                  onChange={(e) => setRoastGroupName(e.target.value)}
-                  placeholder="e.g. MEDIUM_ESPRESSO"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Will be converted to UPPERCASE_SNAKE_CASE. Cannot be changed after creation.
-                </p>
-              </div>
-            )}
-
-            {editingGroup && (
-              <div>
-                <Label className="text-muted-foreground">System Key</Label>
-                <p className="font-mono text-sm py-2">{editingGroup.roast_group}</p>
-              </div>
-            )}
-
+        <div className="space-y-4">
             <div>
               <Label htmlFor="displayName">Display Name</Label>
               <Input
                 id="displayName"
                 value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder={editingGroup ? editingGroup.roast_group.replace(/_/g, ' ') : 'Leave blank to use system key'}
+                onChange={(e) => {
+                  setDisplayName(e.target.value);
+                  setDisplayNameError('');
+                }}
+                placeholder="e.g. Catalogue Espresso"
+                className={displayNameError ? 'border-destructive' : ''}
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Friendly name shown in production screens. Leave blank to use the system key.
-              </p>
+              {displayNameError ? (
+                <p className="text-xs text-destructive mt-1">{displayNameError}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {editingGroup 
+                    ? 'The friendly name shown everywhere. Must be unique.'
+                    : 'A unique name for this roast group. The system key will be auto-generated.'}
+                </p>
+              )}
             </div>
+
+            {editingGroup && (
+              <div>
+                <Label className="text-muted-foreground">System Key (read-only)</Label>
+                <p className="font-mono text-sm py-2 px-3 bg-muted rounded-md">{editingGroup.roast_group}</p>
+              </div>
+            )}
 
 
             <div className="grid grid-cols-2 gap-4">
@@ -495,7 +565,7 @@ export function RoastGroupsTab() {
               </Button>
               <Button
                 onClick={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending || !roastGroupName.trim()}
+                disabled={saveMutation.isPending || !displayName.trim()}
               >
                 {saveMutation.isPending ? 'Saving…' : 'Save'}
               </Button>
@@ -509,7 +579,7 @@ export function RoastGroupsTab() {
         open={showDeleteModal}
         onOpenChange={setShowDeleteModal}
         entityType="roast_group"
-        entityName={deletingGroup ? getDisplayName(deletingGroup.display_name, deletingGroup.roast_group) : ''}
+        entityName={deletingGroup?.display_name ?? ''}
         counts={deleteCounts}
         isBlocked={isBlocked}
         blockedMessage={blockedMessage}

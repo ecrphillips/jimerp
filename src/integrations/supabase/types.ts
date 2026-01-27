@@ -897,7 +897,7 @@ export type Database = {
           created_at: string
           cropster_profile_ref: string | null
           default_roaster: Database["public"]["Enums"]["default_roaster"]
-          display_name: string | null
+          display_name: string
           display_order: number | null
           expected_yield_loss_pct: number
           is_active: boolean
@@ -914,7 +914,7 @@ export type Database = {
           created_at?: string
           cropster_profile_ref?: string | null
           default_roaster?: Database["public"]["Enums"]["default_roaster"]
-          display_name?: string | null
+          display_name: string
           display_order?: number | null
           expected_yield_loss_pct?: number
           is_active?: boolean
@@ -931,7 +931,7 @@ export type Database = {
           created_at?: string
           cropster_profile_ref?: string | null
           default_roaster?: Database["public"]["Enums"]["default_roaster"]
-          display_name?: string | null
+          display_name?: string
           display_order?: number | null
           expected_yield_loss_pct?: number
           is_active?: boolean
