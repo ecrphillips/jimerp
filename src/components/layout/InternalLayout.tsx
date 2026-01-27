@@ -117,10 +117,10 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                     to={item.to}
                     onClick={() => setSidebarOpen(false)}
                     className={({ isActive }) => cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
                       isActive 
-                        ? "bg-sidebar-accent text-sidebar-primary" 
-                        : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                        ? "bg-sidebar-accent" 
+                        : "hover:bg-sidebar-accent/85"
                     )}
                   >
                     <item.icon className="h-5 w-5" />
@@ -135,10 +135,10 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                   <CollapsibleTrigger asChild>
                     <button
                       className={cn(
-                        "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
                         isProductionRoute
-                          ? "bg-sidebar-accent text-sidebar-primary"
-                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                          ? "bg-sidebar-accent"
+                          : "hover:bg-sidebar-accent/85"
                       )}
                     >
                       <Flame className="h-5 w-5" />
@@ -158,10 +158,10 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                         end={item.to === '/production'}
                         onClick={() => setSidebarOpen(false)}
                         className={({ isActive }) => cn(
-                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
                           isActive
-                            ? "bg-sidebar-accent text-sidebar-primary"
-                            : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                            ? "bg-sidebar-accent"
+                            : "hover:bg-sidebar-accent/85"
                         )}
                       >
                         <item.icon className="h-4 w-4" />
@@ -178,10 +178,10 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                   <CollapsibleTrigger asChild>
                     <button
                       className={cn(
-                        "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
                         isInventoryRoute
-                          ? "bg-sidebar-accent text-sidebar-primary"
-                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                          ? "bg-sidebar-accent"
+                          : "hover:bg-sidebar-accent/85"
                       )}
                     >
                       <Warehouse className="h-5 w-5" />
@@ -201,10 +201,10 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                         end={item.to === '/inventory'}
                         onClick={() => setSidebarOpen(false)}
                         className={({ isActive }) => cn(
-                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
                           isActive
-                            ? "bg-sidebar-accent text-sidebar-primary"
-                            : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                            ? "bg-sidebar-accent"
+                            : "hover:bg-sidebar-accent/85"
                         )}
                       >
                         <item.icon className="h-4 w-4" />
@@ -222,10 +222,10 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                     to={item.to}
                     onClick={() => setSidebarOpen(false)}
                     className={({ isActive }) => cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
                       isActive 
-                        ? "bg-sidebar-accent text-sidebar-primary" 
-                        : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                        ? "bg-sidebar-accent" 
+                        : "hover:bg-sidebar-accent/85"
                     )}
                   >
                     <item.icon className="h-5 w-5" />
@@ -241,10 +241,10 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                     to="/admin-tools"
                     onClick={() => setSidebarOpen(false)}
                     className={({ isActive }) => cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
                       isActive 
-                        ? "bg-sidebar-accent text-sidebar-primary" 
-                        : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                        ? "bg-sidebar-accent" 
+                        : "hover:bg-sidebar-accent/85"
                     )}
                   >
                     <Wrench className="h-5 w-5" />
@@ -258,12 +258,12 @@ export function InternalLayout({ children }: InternalLayoutProps) {
           {/* User section */}
           <div className="border-t border-sidebar-border p-4">
             <div className="mb-3 px-3">
-              <p className="text-sm font-medium">{authUser?.profile?.name || authUser?.email}</p>
+              <p className="text-sm font-medium text-sidebar-foreground">{authUser?.profile?.name || authUser?.email}</p>
               <p className="text-xs text-sidebar-foreground/60">{authUser?.role}</p>
             </div>
             <Button
               variant="ghost"
-              className="w-full justify-start gap-3 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              className="w-full justify-start gap-3 text-sidebar-foreground hover:bg-sidebar-accent/85 hover:text-sidebar-foreground"
               onClick={handleSignOut}
             >
               <LogOut className="h-5 w-5" />
