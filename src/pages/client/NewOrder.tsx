@@ -467,7 +467,7 @@ export default function NewOrder() {
   };
 
   return (
-    <div>
+    <div className="page-container">
       <div className="page-header">
         <h1 className="page-title">New Order</h1>
       </div>
