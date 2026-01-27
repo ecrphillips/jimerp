@@ -1103,14 +1103,14 @@ export function OhShitModal({
               <div className="space-y-2">
                 <Label>Which batch was contaminated?</Label>
                 <Select
-                  value={flowData.affectedBatchId ?? ''}
-                  onValueChange={(val) => setFlowData(d => ({ ...d, affectedBatchId: val || null }))}
+                  value={flowData.affectedBatchId ?? 'UNKNOWN'}
+                  onValueChange={(val) => setFlowData(d => ({ ...d, affectedBatchId: val === 'UNKNOWN' ? null : val }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select if known..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None / Unknown</SelectItem>
+                    <SelectItem value="UNKNOWN">None / Unknown</SelectItem>
                     {recentBatches.map(b => (
                       <SelectItem key={b.id} value={b.id}>
                         {b.roast_group} — {b.actual_output_kg.toFixed(1)} kg
