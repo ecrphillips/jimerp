@@ -95,6 +95,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   });
 
   // Fetch order line items for demand with ship_priority from production_checkmarks
+  // NOW FILTERS BY work_deadline instead of requested_ship_date
   const { data: orderLineItems } = useQuery({
     queryKey: ['pack-demand', dateFilterConfig],
     queryFn: async () => {
@@ -105,16 +106,16 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
           product_id,
           quantity_units,
           order_id,
-          order:orders!inner(id, status, requested_ship_date, manually_deprioritized),
+          order:orders!inner(id, status, work_deadline, manually_deprioritized),
           product:products(id, product_name, sku, bag_size_g, packaging_variant, roast_group)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
       
-      // Apply date filter based on mode
+      // Apply date filter based on mode - using work_deadline
       if (dateFilterConfig.mode === 'today') {
-        query = query.lte('order.requested_ship_date', dateFilterConfig.maxDate);
+        query = query.lte('order.work_deadline', dateFilterConfig.maxDate);
       } else if (dateFilterConfig.mode === 'tomorrow') {
-        query = query.or(`requested_ship_date.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`, { referencedTable: 'orders' });
+        query = query.or(`work_deadline.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`, { referencedTable: 'orders' });
       }
       // ALL mode: no date filter
       
@@ -246,10 +247,10 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       productMap[li.product_id].demanded_kg += (li.quantity_units * li.product.bag_size_g) / 1000;
       productMap[li.product_id].orderIds.add(li.order_id);
       
-      // Track ship dates
-      const shipDate = li.order?.requested_ship_date;
-      if (shipDate) {
-        productMap[li.product_id].shipDates.push(shipDate);
+      // Track work_deadline for urgency calculation
+      const workDeadline = li.order?.work_deadline;
+      if (workDeadline) {
+        productMap[li.product_id].shipDates.push(workDeadline);
       }
       
       // Check for TIME_SENSITIVE from checkmarks

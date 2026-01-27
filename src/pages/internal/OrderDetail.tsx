@@ -7,15 +7,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, Edit, PenSquare } from 'lucide-react';
+import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, Edit, PenSquare, CalendarClock } from 'lucide-react';
 import { toast } from 'sonner';
 import { HistoricalEditWarningModal } from '@/components/internal/HistoricalEditWarningModal';
 import { IncompleteFulfillmentModal } from '@/components/internal/IncompleteFulfillmentModal';
 import { StatusChangeModal } from '@/components/internal/StatusChangeModal';
 import { OrderEditModal } from '@/components/internal/OrderEditModal';
+import { OrderDateAuditHistory } from '@/components/internal/OrderDateAuditHistory';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -48,6 +50,7 @@ export default function OrderDetail() {
           order_number,
           status,
           requested_ship_date,
+          work_deadline,
           delivery_method,
           client_po,
           client_notes,
@@ -199,6 +202,10 @@ export default function OrderDetail() {
   const [opsNotes, setOpsNotes] = useState('');
   const [opsNotesLoaded, setOpsNotesLoaded] = useState(false);
   
+  // Work deadline editing state
+  const [workDeadline, setWorkDeadline] = useState('');
+  const [workDeadlineLoaded, setWorkDeadlineLoaded] = useState(false);
+  
   // Historical edit warning modal state
   const [showHistoricalWarning, setShowHistoricalWarning] = useState(false);
   const [pendingChecklistUpdate, setPendingChecklistUpdate] = useState<{
@@ -219,13 +226,17 @@ export default function OrderDetail() {
   // Check if order is in a "historical" state that requires confirmation
   const isHistoricalStatus = order?.status === 'SHIPPED' || order?.status === 'CANCELLED';
 
-  // Initialize ops notes when order loads
+  // Initialize ops notes and work_deadline when order loads
   React.useEffect(() => {
     if (order && !opsNotesLoaded) {
       setOpsNotes(order.internal_ops_notes ?? '');
       setOpsNotesLoaded(true);
     }
-  }, [order, opsNotesLoaded]);
+    if (order && !workDeadlineLoaded) {
+      setWorkDeadline((order as any).work_deadline ?? '');
+      setWorkDeadlineLoaded(true);
+    }
+  }, [order, opsNotesLoaded, workDeadlineLoaded]);
 
   // Handler for checklist changes - shows warning for historical orders
   const handleChecklistChange = useCallback((updates: {
@@ -322,6 +333,26 @@ export default function OrderDetail() {
     onError: (err) => {
       console.error(err);
       toast.error('Failed to save notes');
+    },
+  });
+
+  // Mutation to save work_deadline
+  const saveWorkDeadlineMutation = useMutation({
+    mutationFn: async (deadline: string | null) => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ work_deadline: deadline || null })
+        .eq('id', id!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Work deadline saved');
+      queryClient.invalidateQueries({ queryKey: ['order', id] });
+      queryClient.invalidateQueries({ queryKey: ['order-date-audit', id] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to save work deadline');
     },
   });
 
@@ -503,16 +534,51 @@ export default function OrderDetail() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader><CardTitle>Order Info</CardTitle></CardHeader>
-          <CardContent className="space-y-2 text-sm">
+          <CardContent className="space-y-3 text-sm">
             <div><strong>Client:</strong> {order.client?.name ?? 'Unknown'}</div>
             <div><strong>Status:</strong> {order.status}</div>
             <div><strong>Delivery:</strong> {order.delivery_method}</div>
             <div><strong>Client PO:</strong> {order.client_po || '—'}</div>
             <div>
-              <strong>Requested Ship Date:</strong>{' '}
+              <strong>Expected Ship Date:</strong>{' '}
               {order.requested_ship_date
                 ? format(new Date(order.requested_ship_date), 'MMM d, yyyy')
                 : '—'}
+              <span className="text-xs text-muted-foreground ml-1">(client intent)</span>
+            </div>
+            
+            {/* Work Deadline - editable by Ops */}
+            <div className="border-t pt-3 mt-3">
+              <div className="flex items-center gap-2 mb-2">
+                <CalendarClock className="h-4 w-4 text-primary" />
+                <Label htmlFor="work-deadline" className="font-semibold">Work Deadline</Label>
+                <span className="text-xs text-muted-foreground">(internal priority)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="work-deadline"
+                  type="date"
+                  value={workDeadline}
+                  onChange={(e) => setWorkDeadline(e.target.value)}
+                  className="w-40"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => saveWorkDeadlineMutation.mutate(workDeadline || null)}
+                  disabled={saveWorkDeadlineMutation.isPending}
+                >
+                  {saveWorkDeadlineMutation.isPending ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                The absolute latest moment this order must be staged and ready to leave.
+              </p>
+            </div>
+            
+            {/* Audit History - collapsible */}
+            <div className="border-t pt-3 mt-3">
+              <OrderDateAuditHistory orderId={order.id} />
             </div>
           </CardContent>
         </Card>

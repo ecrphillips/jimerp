@@ -57,6 +57,7 @@ interface ShippableOrder {
   order_number: string;
   client_name: string;
   requested_ship_date: string | null;
+  work_deadline: string | null;
   delivery_method: string;
   client_notes: string | null;
   internal_ops_notes: string | null;
@@ -121,6 +122,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
   });
 
   // Fetch order line items for demand based on dateFilterConfig
+  // NOW FILTERS BY work_deadline instead of requested_ship_date
   const { data: orderLineItems } = useQuery({
     queryKey: ['ship-demand', dateFilterConfig],
     queryFn: async () => {
@@ -130,19 +132,18 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           id,
           product_id,
           quantity_units,
-          order:orders!inner(status, requested_ship_date, manually_deprioritized),
+          order:orders!inner(status, work_deadline, manually_deprioritized),
           product:products(id, product_name, bag_size_g, packaging_variant)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
       
-      // Apply date filter based on mode
+      // Apply date filter based on mode - using work_deadline
       if (dateFilterConfig.mode === 'today') {
-        // TODAY: requested_ship_date <= maxDate
-        query = query.lte('order.requested_ship_date', dateFilterConfig.maxDate);
+        // TODAY: work_deadline <= maxDate
+        query = query.lte('order.work_deadline', dateFilterConfig.maxDate);
       } else if (dateFilterConfig.mode === 'tomorrow') {
-        // TOMORROW: requested_ship_date == exactDate OR manually_deprioritized = true
-        // This requires OR logic which Supabase supports via .or()
-        query = query.or(`requested_ship_date.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`, { referencedTable: 'orders' });
+        // TOMORROW: work_deadline == exactDate OR manually_deprioritized = true
+        query = query.or(`work_deadline.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`, { referencedTable: 'orders' });
       }
       // ALL mode: no date filter
       
@@ -166,6 +167,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
   });
 
   // Fetch orders for shippable view (including ship_display_order)
+  // NOW FILTERS BY work_deadline instead of requested_ship_date
   const { data: ordersForShipping } = useQuery({
     queryKey: ['shippable-orders', dateFilterConfig],
     queryFn: async () => {
@@ -175,6 +177,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           id,
           order_number,
           requested_ship_date,
+          work_deadline,
           delivery_method,
           client_notes,
           internal_ops_notes,
@@ -196,11 +199,11 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         .order('ship_display_order', { ascending: true, nullsFirst: false })
         .order('order_number', { ascending: true });
       
-      // Apply date filter based on mode
+      // Apply date filter based on mode - using work_deadline
       if (dateFilterConfig.mode === 'today') {
-        query = query.lte('requested_ship_date', dateFilterConfig.maxDate);
+        query = query.lte('work_deadline', dateFilterConfig.maxDate);
       } else if (dateFilterConfig.mode === 'tomorrow') {
-        query = query.or(`requested_ship_date.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`);
+        query = query.or(`work_deadline.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`);
       }
       // ALL mode: no date filter
       
@@ -288,6 +291,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         order_number: order.order_number,
         client_name: order.client?.name ?? 'Unknown',
         requested_ship_date: order.requested_ship_date,
+        work_deadline: (order as any).work_deadline ?? null,
         delivery_method: order.delivery_method,
         client_notes: order.client_notes,
         internal_ops_notes: order.internal_ops_notes,
@@ -543,16 +547,16 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     return format(addDays(todayDate, 1), 'yyyy-MM-dd');
   }, [today]);
 
-  // "Do this later" - increment ship date by 1 day and set manually_deprioritized = true
+  // "Do this later" - increment work_deadline by 1 day and set manually_deprioritized = true
   const doThisLaterMutation = useMutation({
     mutationFn: async (order: ShippableOrder) => {
-      const currentDate = order.requested_ship_date ? parseISO(order.requested_ship_date) : new Date();
+      const currentDate = order.work_deadline ? parseISO(order.work_deadline) : new Date();
       const newDate = format(addDays(currentDate, 1), 'yyyy-MM-dd');
       
       const { error } = await supabase
         .from('orders')
         .update({ 
-          requested_ship_date: newDate,
+          work_deadline: newDate,
           manually_deprioritized: true,
         })
         .eq('id', order.id);
@@ -570,13 +574,13 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     },
   });
 
-  // "Do this today" - set ship date to today+1 and clear manually_deprioritized
+  // "Do this today" - set work_deadline to today+1 and clear manually_deprioritized
   const doThisTodayMutation = useMutation({
     mutationFn: async (order: ShippableOrder) => {
       const { error } = await supabase
         .from('orders')
         .update({ 
-          requested_ship_date: todayPlusOne,
+          work_deadline: todayPlusOne,
           manually_deprioritized: false,
         })
         .eq('id', order.id);

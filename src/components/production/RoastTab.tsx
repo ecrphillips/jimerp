@@ -148,6 +148,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   });
 
   // Fetch order line items for demand calculation with ship_priority
+  // NOW FILTERS BY work_deadline instead of requested_ship_date
   const { data: orderLineItems } = useQuery({
     queryKey: ['roast-demand', dateFilterConfig],
     queryFn: async () => {
@@ -157,16 +158,16 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
           id,
           product_id,
           quantity_units,
-          order:orders!inner(id, status, requested_ship_date, manually_deprioritized),
+          order:orders!inner(id, status, work_deadline, manually_deprioritized),
           product:products(id, product_name, roast_group, bag_size_g)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
       
-      // Apply date filter based on mode
+      // Apply date filter based on mode - using work_deadline
       if (dateFilterConfig.mode === 'today') {
-        query = query.lte('order.requested_ship_date', dateFilterConfig.maxDate);
+        query = query.lte('order.work_deadline', dateFilterConfig.maxDate);
       } else if (dateFilterConfig.mode === 'tomorrow') {
-        query = query.or(`requested_ship_date.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`, { referencedTable: 'orders' });
+        query = query.or(`work_deadline.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`, { referencedTable: 'orders' });
       }
       // ALL mode: no date filter
       
@@ -253,7 +254,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
 
       const kgForLine = (li.quantity_units * (li.product?.bag_size_g ?? 0)) / 1000;
       const isTimeSensitive = timeSensitiveProducts.has(li.product_id);
-      const shipDate = li.order?.requested_ship_date ?? null;
+      const workDeadline = li.order?.work_deadline ?? null;
       
       if (!groupMap[roastGroup]) {
         groupMap[roastGroup] = { 
@@ -269,8 +270,8 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
         groupMap[roastGroup].hasTimeSensitive = true;
       }
       
-      if (shipDate && (!groupMap[roastGroup].earliestShipDate || shipDate < groupMap[roastGroup].earliestShipDate)) {
-        groupMap[roastGroup].earliestShipDate = shipDate;
+      if (workDeadline && (!groupMap[roastGroup].earliestShipDate || workDeadline < groupMap[roastGroup].earliestShipDate)) {
+        groupMap[roastGroup].earliestShipDate = workDeadline;
       }
       
       const productName = li.product?.product_name ?? 'Unknown';
