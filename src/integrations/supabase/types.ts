@@ -55,6 +55,44 @@ export type Database = {
           },
         ]
       }
+      client_locations: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          location_code: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          location_code: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          location_code?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_locations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           billing_contact_name: string | null
@@ -405,6 +443,7 @@ export type Database = {
           id: string
           internal_ops_notes: string | null
           invoiced: boolean
+          location_id: string | null
           manually_deprioritized: boolean
           order_number: string
           packed: boolean
@@ -427,6 +466,7 @@ export type Database = {
           id?: string
           internal_ops_notes?: string | null
           invoiced?: boolean
+          location_id?: string | null
           manually_deprioritized?: boolean
           order_number: string
           packed?: boolean
@@ -449,6 +489,7 @@ export type Database = {
           id?: string
           internal_ops_notes?: string | null
           invoiced?: boolean
+          location_id?: string | null
           manually_deprioritized?: boolean
           order_number?: string
           packed?: boolean
@@ -466,6 +507,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "client_locations"
             referencedColumns: ["id"]
           },
         ]

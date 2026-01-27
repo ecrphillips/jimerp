@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Plus, Pencil } from 'lucide-react';
+import { ClientLocations } from '@/components/clients/ClientLocations';
 
 interface Client {
   id: string;
@@ -323,25 +324,31 @@ export default function Clients() {
           ) : (
             <ul className="space-y-3">
               {displayedClients.map((c) => (
-                <li key={c.id} className={`flex items-center justify-between border-b pb-2 last:border-0 ${!c.is_active ? 'opacity-60' : ''}`}>
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline" className="font-mono text-xs">
-                      {c.client_code}
-                    </Badge>
-                    <div>
-                      <span className="font-medium">{c.name}</span>
-                      {c.billing_email && (
-                        <span className="ml-2 text-sm text-muted-foreground">{c.billing_email}</span>
-                      )}
+                <li key={c.id} className={`border-b pb-3 last:border-0 ${!c.is_active ? 'opacity-60' : ''}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {c.client_code}
+                      </Badge>
+                      <div>
+                        <span className="font-medium">{c.name}</span>
+                        {c.billing_email && (
+                          <span className="ml-2 text-sm text-muted-foreground">{c.billing_email}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-sm ${c.is_active ? 'text-green-600' : 'text-muted-foreground'}`}>
+                        {c.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                      <Button variant="ghost" size="sm" onClick={() => openEditDialog(c)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`text-sm ${c.is_active ? 'text-green-600' : 'text-muted-foreground'}`}>
-                      {c.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                    <Button variant="ghost" size="sm" onClick={() => openEditDialog(c)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                  {/* Locations section */}
+                  <div className="mt-2">
+                    <ClientLocations clientId={c.id} clientName={c.name} />
                   </div>
                 </li>
               ))}
