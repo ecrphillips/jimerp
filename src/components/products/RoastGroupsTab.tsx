@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, AlertCircle } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 import { SafeDeleteModal } from '@/components/SafeDeleteModal';
 
@@ -61,6 +61,8 @@ export function RoastGroupsTab() {
   const [notes, setNotes] = useState('');
   const [cropsterProfileRef, setCropsterProfileRef] = useState('');
   const [displayNameError, setDisplayNameError] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [saveStartTime, setSaveStartTime] = useState<number | null>(null);
 
   const { data: roastGroups, isLoading } = useQuery({
     queryKey: ['all-roast-groups'],
@@ -127,8 +129,47 @@ export function RoastGroupsTab() {
     return true;
   };
 
+  // Format a user-friendly error message from Supabase error
+  const formatDbError = (err: any): string => {
+    const code = err?.code ?? '';
+    const message = err?.message ?? 'Unknown error';
+    const details = err?.details ?? '';
+    const hint = err?.hint ?? '';
+
+    // RLS / permission errors
+    if (code === '42501' || message.toLowerCase().includes('row-level security')) {
+      return 'Permission blocked (RLS). You may not have access to perform this action.';
+    }
+
+    // Unique constraint violations
+    if (code === '23505') {
+      const constraintMatch = message.match(/unique constraint "([^"]+)"/i);
+      const constraintName = constraintMatch ? constraintMatch[1] : 'unknown';
+      return `Duplicate value: ${constraintName}`;
+    }
+
+    // Foreign key violations
+    if (code === '23503') {
+      return `Foreign key violation: ${message}`;
+    }
+
+    // Not null violations
+    if (code === '23502') {
+      return `Missing required field: ${message}`;
+    }
+
+    // Build detailed message
+    let result = message;
+    if (details) result += ` — ${details}`;
+    if (hint) result += ` (Hint: ${hint})`;
+    return result;
+  };
+
   const saveMutation = useMutation({
     mutationFn: async () => {
+      setSaveError('');
+      setSaveStartTime(Date.now());
+      
       const trimmedDisplayName = normalizeDisplayName(displayName);
       
       // Validate display name uniqueness
@@ -140,42 +181,54 @@ export function RoastGroupsTab() {
         throw new Error('Display name validation failed');
       }
       
+      const payload = {
+        display_name: trimmedDisplayName,
+        standard_batch_kg: standardBatchKg,
+        expected_yield_loss_pct: yieldLossPct,
+        default_roaster: defaultRoaster,
+        is_active: isActive,
+        notes: notes || null,
+        cropster_profile_ref: cropsterProfileRef.trim() || null,
+      };
+
       if (editingGroup) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('roast_groups')
-          .update({
-            display_name: trimmedDisplayName,
-            standard_batch_kg: standardBatchKg,
-            expected_yield_loss_pct: yieldLossPct,
-            default_roaster: defaultRoaster,
-            is_active: isActive,
-            notes: notes || null,
-            cropster_profile_ref: cropsterProfileRef.trim() || null,
-          })
-          .eq('roast_group', editingGroup.roast_group);
-        if (error) throw error;
+          .update(payload)
+          .eq('roast_group', editingGroup.roast_group)
+          .select()
+          .single();
+        
+        if (error) {
+          console.error('Update roast group failed', { payload, error });
+          throw error;
+        }
+        return data;
       } else {
         // Generate system key from display name; if it collides, auto-suffix and retry.
         const baseKey = makeBaseSystemKey(trimmedDisplayName);
-        const code = baseKey.replace(/[^A-Z0-9]/g, '').substring(0, 3);
+        const baseCode = baseKey.replace(/[^A-Z0-9]/g, '').substring(0, 3);
 
         let lastError: any = null;
         for (let attempt = 0; attempt < 25; attempt++) {
           const systemKey = attempt === 0 ? baseKey : `${baseKey}_${attempt + 1}`;
-          const { error } = await supabase.from('roast_groups').insert({
+          // Also vary the code to avoid roast_groups_code_unique collision
+          const code = attempt === 0 ? baseCode : `${baseCode}${attempt + 1}`.substring(0, 6);
+          
+          const insertPayload = {
             roast_group: systemKey,
             roast_group_code: code,
-            display_name: trimmedDisplayName,
-            standard_batch_kg: standardBatchKg,
-            expected_yield_loss_pct: yieldLossPct,
-            default_roaster: defaultRoaster,
-            is_active: isActive,
-            notes: notes || null,
-            cropster_profile_ref: cropsterProfileRef.trim() || null,
-          });
+            ...payload,
+          };
 
-          if (!error) {
-            return;
+          const { data, error } = await supabase
+            .from('roast_groups')
+            .insert(insertPayload)
+            .select()
+            .single();
+
+          if (!error && data) {
+            return data;
           }
 
           if (error?.code === '23505') {
@@ -185,28 +238,37 @@ export function RoastGroupsTab() {
               setDisplayNameError('A roast group with this display name already exists.');
               throw new Error('Display name validation failed');
             }
-            // Otherwise assume system_key collision; retry with suffix.
+            // Otherwise assume system_key or code collision; retry with suffix.
             lastError = error;
+            console.warn(`Retry ${attempt + 1}: collision on ${systemKey} or ${code}`, error);
             continue;
           }
 
+          // Non-collision error: log and throw immediately
+          console.error('Create roast group failed', { payload: insertPayload, error });
           throw error;
         }
 
-        throw lastError ?? new Error('Failed to generate a unique system key');
+        // Exhausted retries
+        console.error('Create roast group failed after 25 retries', { payload, lastError });
+        throw lastError ?? new Error('Failed to generate a unique system key after 25 attempts');
       }
     },
     onSuccess: () => {
+      setSaveStartTime(null);
       toast.success(editingGroup ? 'Roast group updated' : 'Roast group created');
       queryClient.invalidateQueries({ queryKey: ['all-roast-groups'] });
       closeDialog();
     },
     onError: (err: any) => {
-      console.error(err);
+      setSaveStartTime(null);
+      console.error('Save roast group error:', err);
+      
       if (err?.message === 'Display name validation failed') {
         // Error already shown via displayNameError state
         return;
       }
+      
       if (err?.code === '23505') {
         // In case a display_name collision slipped through (race), show the correct message.
         if (String(err?.message ?? '').toLowerCase().includes('display_name')) {
@@ -214,9 +276,15 @@ export function RoastGroupsTab() {
           return;
         }
       }
-      toast.error('Failed to save roast group');
+      
+      const friendlyError = formatDbError(err);
+      setSaveError(friendlyError);
+      toast.error(friendlyError);
     },
   });
+  
+  // Show "Still saving..." after 2 seconds
+  const isSavingLong = saveMutation.isPending && saveStartTime && (Date.now() - saveStartTime > 2000);
 
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ name, active }: { name: string; active: boolean }) => {
@@ -323,6 +391,8 @@ export function RoastGroupsTab() {
     setEditingGroup(null);
     setDisplayName('');
     setDisplayNameError('');
+    setSaveError('');
+    setSaveStartTime(null);
     setStandardBatchKg(20);
     setYieldLossPct(16);
     setDefaultRoaster('EITHER');
@@ -336,6 +406,8 @@ export function RoastGroupsTab() {
     setEditingGroup(g);
     setDisplayName(g.display_name);
     setDisplayNameError('');
+    setSaveError('');
+    setSaveStartTime(null);
     setStandardBatchKg(g.standard_batch_kg);
     setYieldLossPct(g.expected_yield_loss_pct);
     setDefaultRoaster(g.default_roaster);
@@ -349,6 +421,8 @@ export function RoastGroupsTab() {
     setDialogOpen(false);
     setEditingGroup(null);
     setDisplayNameError('');
+    setSaveError('');
+    setSaveStartTime(null);
   };
 
   const getRoasterBadgeColor = (roaster: DefaultRoaster) => {
@@ -568,15 +642,26 @@ export function RoastGroupsTab() {
               <Label htmlFor="active">Active</Label>
             </div>
 
+            {/* Inline error display */}
+            {saveError && (
+              <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+                <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <span>{saveError}</span>
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={closeDialog}>
+              <Button variant="outline" onClick={closeDialog} disabled={saveMutation.isPending}>
                 Cancel
               </Button>
               <Button
                 onClick={() => saveMutation.mutate()}
                 disabled={saveMutation.isPending || !displayName.trim()}
               >
-                {saveMutation.isPending ? 'Saving…' : 'Save'}
+                {saveMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {saveMutation.isPending 
+                  ? (isSavingLong ? 'Still saving…' : 'Saving…') 
+                  : 'Save'}
               </Button>
             </div>
           </div>
