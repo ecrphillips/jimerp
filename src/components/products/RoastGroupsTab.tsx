@@ -28,6 +28,7 @@ interface RoastGroup {
   blend_name: string | null;
   notes: string | null;
   display_name: string | null;
+  cropster_profile_ref: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -49,6 +50,7 @@ export function RoastGroupsTab() {
   const [defaultRoaster, setDefaultRoaster] = useState<DefaultRoaster>('EITHER');
   const [isActive, setIsActive] = useState(true);
   const [notes, setNotes] = useState('');
+  const [cropsterProfileRef, setCropsterProfileRef] = useState('');
 
   const { data: roastGroups, isLoading } = useQuery({
     queryKey: ['all-roast-groups'],
@@ -87,6 +89,7 @@ export function RoastGroupsTab() {
             default_roaster: defaultRoaster,
             is_active: isActive,
             notes: notes || null,
+            cropster_profile_ref: cropsterProfileRef.trim() || null,
           })
           .eq('roast_group', editingGroup.roast_group);
         if (error) throw error;
@@ -100,6 +103,7 @@ export function RoastGroupsTab() {
           default_roaster: defaultRoaster,
           is_active: isActive,
           notes: notes || null,
+          cropster_profile_ref: cropsterProfileRef.trim() || null,
         });
         if (error) throw error;
       }
@@ -145,6 +149,7 @@ export function RoastGroupsTab() {
     setDefaultRoaster('EITHER');
     setIsActive(true);
     setNotes('');
+    setCropsterProfileRef('');
     setDialogOpen(true);
   };
 
@@ -157,6 +162,7 @@ export function RoastGroupsTab() {
     setDefaultRoaster(g.default_roaster);
     setIsActive(g.is_active);
     setNotes(g.notes ?? '');
+    setCropsterProfileRef(g.cropster_profile_ref ?? '');
     setDialogOpen(true);
   };
 
@@ -343,6 +349,19 @@ export function RoastGroupsTab() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="cropsterRef">Cropster Profile Ref (optional)</Label>
+              <Input
+                id="cropsterRef"
+                value={cropsterProfileRef}
+                onChange={(e) => setCropsterProfileRef(e.target.value)}
+                placeholder="e.g. R-1234 or profile name"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Reference to a Cropster roast profile for traceability.
+              </p>
             </div>
 
             <div>

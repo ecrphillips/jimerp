@@ -60,6 +60,7 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
   const [customOrigin, setCustomOrigin] = useState('');
   const [blendName, setBlendName] = useState('');
   const [newRoastGroupCode, setNewRoastGroupCode] = useState('');
+  const [newCropsterProfileRef, setNewCropsterProfileRef] = useState('');
   
   // Step 3: Product Name (suffix only)
   const [productSuffix, setProductSuffix] = useState('');
@@ -254,6 +255,7 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
     setCustomOrigin('');
     setBlendName('');
     setNewRoastGroupCode('');
+    setNewCropsterProfileRef('');
     setProductSuffix('');
     setSelectedVariants(new Set());
     setPriceInput('');
@@ -284,10 +286,12 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
             is_blend: roastGroupType === 'blend',
             origin: originValue,
             blend_name: blendValue,
+            display_name: (originValue ?? blendValue ?? '').trim() || null,
             standard_batch_kg: 20,
             expected_yield_loss_pct: 16,
             default_roaster: 'EITHER',
             is_active: true,
+            cropster_profile_ref: newCropsterProfileRef.trim() || null,
           });
         
         if (rgError) throw rgError;
@@ -509,6 +513,18 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
                   {!isRoastGroupCodeUnique && (
                     <p className="text-xs text-destructive mt-1">This code is already in use</p>
                   )}
+                </div>
+                
+                <div>
+                  <Label htmlFor="cropsterRef" className="text-xs text-muted-foreground">
+                    Cropster Profile Ref (optional)
+                  </Label>
+                  <Input
+                    id="cropsterRef"
+                    placeholder="e.g. R-1234 or profile name"
+                    value={newCropsterProfileRef}
+                    onChange={(e) => setNewCropsterProfileRef(e.target.value)}
+                  />
                 </div>
               </div>
             )}
