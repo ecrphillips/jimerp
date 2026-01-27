@@ -7,11 +7,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, Edit, PenSquare, CalendarClock } from 'lucide-react';
+import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock } from 'lucide-react';
 import { LocationBadge } from '@/components/orders/LocationSelect';
 import { toast } from 'sonner';
 import { HistoricalEditWarningModal } from '@/components/internal/HistoricalEditWarningModal';
@@ -19,6 +18,7 @@ import { IncompleteFulfillmentModal } from '@/components/internal/IncompleteFulf
 import { StatusChangeModal } from '@/components/internal/StatusChangeModal';
 import { OrderEditModal } from '@/components/internal/OrderEditModal';
 import { OrderDateAuditHistory } from '@/components/internal/OrderDateAuditHistory';
+import { WorkDeadlinePicker } from '@/components/orders/WorkDeadlinePicker';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -52,6 +52,7 @@ export default function OrderDetail() {
           status,
           requested_ship_date,
           work_deadline,
+          work_deadline_at,
           delivery_method,
           client_po,
           client_notes,
@@ -204,8 +205,8 @@ export default function OrderDetail() {
   const [opsNotes, setOpsNotes] = useState('');
   const [opsNotesLoaded, setOpsNotesLoaded] = useState(false);
   
-  // Work deadline editing state
-  const [workDeadline, setWorkDeadline] = useState('');
+  // Work deadline editing state (using new timestamptz field)
+  const [workDeadlineAt, setWorkDeadlineAt] = useState<string | null>(null);
   const [workDeadlineLoaded, setWorkDeadlineLoaded] = useState(false);
   
   // Historical edit warning modal state
@@ -228,14 +229,14 @@ export default function OrderDetail() {
   // Check if order is in a "historical" state that requires confirmation
   const isHistoricalStatus = order?.status === 'SHIPPED' || order?.status === 'CANCELLED';
 
-  // Initialize ops notes and work_deadline when order loads
+  // Initialize ops notes and work_deadline_at when order loads
   React.useEffect(() => {
     if (order && !opsNotesLoaded) {
       setOpsNotes(order.internal_ops_notes ?? '');
       setOpsNotesLoaded(true);
     }
     if (order && !workDeadlineLoaded) {
-      setWorkDeadline((order as any).work_deadline ?? '');
+      setWorkDeadlineAt((order as any).work_deadline_at ?? null);
       setWorkDeadlineLoaded(true);
     }
   }, [order, opsNotesLoaded, workDeadlineLoaded]);
@@ -338,12 +339,12 @@ export default function OrderDetail() {
     },
   });
 
-  // Mutation to save work_deadline
+  // Mutation to save work_deadline_at (timestamptz)
   const saveWorkDeadlineMutation = useMutation({
-    mutationFn: async (deadline: string | null) => {
+    mutationFn: async (deadlineAt: string | null) => {
       const { error } = await supabase
         .from('orders')
-        .update({ work_deadline: deadline || null })
+        .update({ work_deadline_at: deadlineAt })
         .eq('id', id!);
       if (error) throw error;
     },
@@ -550,30 +551,19 @@ export default function OrderDetail() {
               <span className="text-xs text-muted-foreground ml-1">(client intent)</span>
             </div>
             
-            {/* Work Deadline - editable by Ops */}
+            {/* Work Deadline - editable by Ops (date + time picker) */}
             <div className="border-t pt-3 mt-3">
               <div className="flex items-center gap-2 mb-2">
                 <CalendarClock className="h-4 w-4 text-primary" />
-                <Label htmlFor="work-deadline" className="font-semibold">Work Deadline</Label>
+                <Label className="font-semibold">Work Deadline</Label>
                 <span className="text-xs text-muted-foreground">(internal priority)</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="work-deadline"
-                  type="date"
-                  value={workDeadline}
-                  onChange={(e) => setWorkDeadline(e.target.value)}
-                  className="w-40"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => saveWorkDeadlineMutation.mutate(workDeadline || null)}
-                  disabled={saveWorkDeadlineMutation.isPending}
-                >
-                  {saveWorkDeadlineMutation.isPending ? 'Saving…' : 'Save'}
-                </Button>
-              </div>
+              <WorkDeadlinePicker
+                value={workDeadlineAt}
+                onChange={setWorkDeadlineAt}
+                onSave={() => saveWorkDeadlineMutation.mutate(workDeadlineAt)}
+                isSaving={saveWorkDeadlineMutation.isPending}
+              />
               <p className="text-xs text-muted-foreground mt-1">
                 The absolute latest moment this order must be staged and ready to leave.
               </p>

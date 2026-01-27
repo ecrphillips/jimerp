@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
-import { format } from 'date-fns';
-import { Calendar } from '@/components/ui/calendar';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -10,15 +8,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { CalendarIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { WorkDeadlinePicker } from './WorkDeadlinePicker';
 
 interface SetDeadlineModalProps {
   open: boolean;
@@ -37,20 +29,20 @@ export function SetDeadlineModal({
   currentStatus,
   onSuccess,
 }: SetDeadlineModalProps) {
-  const [date, setDate] = useState<Date | undefined>(undefined);
+  const [deadlineAt, setDeadlineAt] = useState<string | null>(null);
   const [confirmOrder, setConfirmOrder] = useState(currentStatus === 'SUBMITTED');
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
-    if (!date) {
-      toast.error('Please select a deadline date');
+    if (!deadlineAt) {
+      toast.error('Please select both date and time');
       return;
     }
 
     setSaving(true);
     try {
       const updates: Record<string, unknown> = {
-        work_deadline: format(date, 'yyyy-MM-dd'),
+        work_deadline_at: deadlineAt,
       };
 
       if (confirmOrder && currentStatus === 'SUBMITTED') {
@@ -79,38 +71,29 @@ export function SetDeadlineModal({
     }
   };
 
+  // Reset state when modal opens
+  React.useEffect(() => {
+    if (open) {
+      setDeadlineAt(null);
+      setConfirmOrder(currentStatus === 'SUBMITTED');
+    }
+  }, [open, currentStatus]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px]">
+      <DialogContent className="sm:max-w-[420px]">
         <DialogHeader>
           <DialogTitle>Set Work Deadline for {orderNumber}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Deadline Date</label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    'w-full justify-start text-left font-normal',
-                    !date && 'text-muted-foreground'
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {date ? format(date, 'PPP') : 'Pick a date'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={date}
-                  onSelect={setDate}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <label className="text-sm font-medium">Deadline Date & Time</label>
+            <WorkDeadlinePicker
+              value={deadlineAt}
+              onChange={setDeadlineAt}
+              showSaveButton={false}
+            />
           </div>
 
           {currentStatus === 'SUBMITTED' && (
@@ -134,7 +117,7 @@ export function SetDeadlineModal({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saving || !date}>
+          <Button onClick={handleSave} disabled={saving || !deadlineAt}>
             {saving ? 'Saving...' : 'Save'}
           </Button>
         </DialogFooter>
