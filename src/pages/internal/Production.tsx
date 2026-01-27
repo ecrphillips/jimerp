@@ -29,22 +29,23 @@ export default function Production() {
   type DateFilterMode = 'today' | 'tomorrow' | 'all';
   const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('today');
   
-  // NEW BUCKET LOGIC:
-  // - TODAY: requested_ship_date <= today + 1 (shipping tomorrow or sooner)
-  // - TOMORROW: requested_ship_date == today + 2 OR manually_deprioritized = true (day after, or deferred)
+  // WORK DEADLINE BUCKET LOGIC:
+  // - TODAY: work_deadline <= end of next business day (today + 1)
+  //          Assumes packing today to ship tomorrow.
+  // - TOMORROW: work_deadline == today + 2 OR manually_deprioritized = true
   // - ALL: show all open orders (no date filter)
   // 
-  // The actual filtering is done in child components with these parameters
+  // All production prioritization keys off work_deadline, NOT requested_ship_date
   const dateFilterConfig = useMemo(() => {
     if (dateFilterMode === 'today') {
-      // TODAY bucket: ship date <= tomorrow
+      // TODAY bucket: work_deadline <= tomorrow
       return {
         mode: 'today' as const,
         maxDate: todayPlusOne, // <= this date
       };
     }
     if (dateFilterMode === 'tomorrow') {
-      // TOMORROW bucket: ship date == day after tomorrow OR manually_deprioritized
+      // TOMORROW bucket: work_deadline == day after tomorrow OR manually_deprioritized
       return {
         mode: 'tomorrow' as const,
         exactDate: todayPlusTwo,
@@ -60,9 +61,9 @@ export default function Production() {
   const filterHelperText = useMemo(() => {
     switch (dateFilterMode) {
       case 'today':
-        return 'Shipping tomorrow or sooner';
+        return 'Work deadline: tomorrow or sooner';
       case 'tomorrow':
-        return 'Shipping day after, or deferred';
+        return 'Work deadline: day after tomorrow, or deferred';
       case 'all':
         return 'All open orders';
       default:

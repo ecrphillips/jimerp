@@ -28,6 +28,7 @@ interface ShippableOrder {
   order_number: string;
   client_name: string;
   requested_ship_date: string | null;
+  work_deadline: string | null;
   delivery_method: string;
   client_notes: string | null;
   internal_ops_notes: string | null;
@@ -165,9 +166,9 @@ export function SortableShipCard({
   const isShippable = order.allLineItemsPacked && allItemsFullyPicked;
   
   // Determine if "Do this today" should be visible
-  // Only show if requested_ship_date > todayPlusOne
-  const canDoThisToday = order.requested_ship_date 
-    ? order.requested_ship_date > todayPlusOne 
+  // Only show if work_deadline > todayPlusOne
+  const canDoThisToday = order.work_deadline 
+    ? order.work_deadline > todayPlusOne 
     : false;
 
   return (
@@ -236,12 +237,17 @@ export function SortableShipCard({
             )}
           </div>
           
-          {/* Metrics row */}
+          {/* Metrics row - show work_deadline as primary, ship date as secondary */}
           <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground flex-wrap">
-            <span>
-              Ship: {order.requested_ship_date 
-                ? format(parseISO(order.requested_ship_date), 'MMM d, yyyy')
+            <span className="font-medium text-foreground">
+              Deadline: {order.work_deadline 
+                ? format(parseISO(order.work_deadline), 'MMM d')
                 : 'Not set'}
+            </span>
+            <span className="text-xs">
+              (Ship: {order.requested_ship_date 
+                ? format(parseISO(order.requested_ship_date), 'MMM d')
+                : '—'})
             </span>
             <span>•</span>
             <span>{order.delivery_method}</span>

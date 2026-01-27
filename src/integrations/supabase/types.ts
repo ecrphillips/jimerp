@@ -247,6 +247,47 @@ export type Database = {
         }
         Relationships: []
       }
+      order_date_audit_log: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          field_name: string
+          id: string
+          new_value: string | null
+          notes: string | null
+          old_value: string | null
+          order_id: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          field_name: string
+          id?: string
+          new_value?: string | null
+          notes?: string | null
+          old_value?: string | null
+          order_id: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          field_name?: string
+          id?: string
+          new_value?: string | null
+          notes?: string | null
+          old_value?: string | null
+          order_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_date_audit_log_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_line_items: {
         Row: {
           created_at: string
@@ -316,6 +357,7 @@ export type Database = {
           shipped_or_ready: boolean
           status: Database["public"]["Enums"]["order_status"]
           updated_at: string
+          work_deadline: string | null
         }
         Insert: {
           client_id: string
@@ -337,6 +379,7 @@ export type Database = {
           shipped_or_ready?: boolean
           status?: Database["public"]["Enums"]["order_status"]
           updated_at?: string
+          work_deadline?: string | null
         }
         Update: {
           client_id?: string
@@ -358,6 +401,7 @@ export type Database = {
           shipped_or_ready?: boolean
           status?: Database["public"]["Enums"]["order_status"]
           updated_at?: string
+          work_deadline?: string | null
         }
         Relationships: [
           {

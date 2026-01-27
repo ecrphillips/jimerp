@@ -1,16 +1,62 @@
 import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ShoppingCart, Clock, CheckCircle, Package } from 'lucide-react';
+import { Flame, Package, Truck, FileCheck } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function Dashboard() {
   const { authUser } = useAuth();
 
+  // Fetch aggregated pressure metrics from orders
+  const { data: pressureMetrics } = useQuery({
+    queryKey: ['dashboard-pressure'],
+    queryFn: async () => {
+      // Orders needing roast (SUBMITTED, CONFIRMED - not yet roasted)
+      const { count: roastQueue } = await supabase
+        .from('orders')
+        .select('*', { count: 'exact', head: true })
+        .in('status', ['SUBMITTED', 'CONFIRMED'])
+        .eq('roasted', false);
+
+      // Orders needing pack (roasted but not packed)
+      const { count: packQueue } = await supabase
+        .from('orders')
+        .select('*', { count: 'exact', head: true })
+        .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION'])
+        .eq('roasted', true)
+        .eq('packed', false);
+
+      // Orders ready to ship (packed, not shipped)
+      const { count: shipQueue } = await supabase
+        .from('orders')
+        .select('*', { count: 'exact', head: true })
+        .in('status', ['CONFIRMED', 'IN_PRODUCTION', 'READY'])
+        .eq('packed', true)
+        .eq('shipped_or_ready', false);
+
+      // Orders staged but not invoiced
+      const { count: invoiceQueue } = await supabase
+        .from('orders')
+        .select('*', { count: 'exact', head: true })
+        .in('status', ['READY', 'SHIPPED'])
+        .eq('invoiced', false);
+
+      return {
+        roastQueue: roastQueue ?? 0,
+        packQueue: packQueue ?? 0,
+        shipQueue: shipQueue ?? 0,
+        invoiceQueue: invoiceQueue ?? 0,
+      };
+    },
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
   const stats = [
-    { label: 'Submitted Orders', value: '0', icon: Clock, color: 'text-warning' },
-    { label: 'In Production', value: '0', icon: Package, color: 'text-info' },
-    { label: 'Ready to Ship', value: '0', icon: CheckCircle, color: 'text-success' },
-    { label: 'Total Orders', value: '0', icon: ShoppingCart, color: 'text-primary' },
+    { label: 'Awaiting Roast', value: String(pressureMetrics?.roastQueue ?? 0), icon: Flame, color: 'text-orange-500' },
+    { label: 'Awaiting Pack', value: String(pressureMetrics?.packQueue ?? 0), icon: Package, color: 'text-blue-500' },
+    { label: 'Ready to Ship', value: String(pressureMetrics?.shipQueue ?? 0), icon: Truck, color: 'text-green-500' },
+    { label: 'Awaiting Invoice', value: String(pressureMetrics?.invoiceQueue ?? 0), icon: FileCheck, color: 'text-purple-500' },
   ];
 
   return (
@@ -40,10 +86,15 @@ export default function Dashboard() {
 
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle>Recent Submitted Orders</CardTitle>
+          <CardTitle>Production Flow</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground">No pending orders. Create demo data to get started.</p>
+          <p className="text-muted-foreground text-sm">
+            This dashboard shows aggregated pressure by station. Use the Production page to manage work priorities.
+          </p>
+          <p className="text-xs text-muted-foreground mt-2">
+            All prioritization is driven by <strong>work_deadline</strong>, not customer-entered ship dates.
+          </p>
         </CardContent>
       </Card>
     </div>
