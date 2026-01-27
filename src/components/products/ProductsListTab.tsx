@@ -439,12 +439,12 @@ export function ProductsListTab() {
             </div>
             <div>
               <Label htmlFor="roastGroup">Roast Group</Label>
-              <Select value={roastGroup} onValueChange={setRoastGroup}>
+              <Select value={roastGroup || 'NONE'} onValueChange={(v) => setRoastGroup(v === 'NONE' ? '' : v)}>
                 <SelectTrigger id="roastGroup">
                   <SelectValue placeholder="Select roast group" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="NONE">None</SelectItem>
                   {roastGroups?.map((g) => (
                     <SelectItem key={g.roast_group} value={g.roast_group}>
                       {g.roast_group}
