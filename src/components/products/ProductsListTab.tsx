@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { ProductFormat, GrindOption } from '@/types/database';
 import { PackagingBadge, PACKAGING_OPTIONS, type PackagingVariant } from '@/components/PackagingBadge';
+import { NewProductModal } from './NewProductModal';
 
 interface Product {
   id: string;
@@ -46,8 +47,9 @@ export function ProductsListTab() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showInactive, setShowInactive] = useState(false);
+  const [newProductModalOpen, setNewProductModalOpen] = useState(false);
 
-  // Form state
+  // Form state (for editing only now)
   const [productName, setProductName] = useState('');
   const [sku, setSku] = useState('');
   const [format, setFormat] = useState<ProductFormat>('WHOLE_BEAN');
@@ -234,19 +236,7 @@ export function ProductsListTab() {
   });
 
   const openNew = () => {
-    setEditingProduct(null);
-    setProductName('');
-    setSku('');
-    setFormat('WHOLE_BEAN');
-    setBagSize(340);
-    setGrindOptions([]);
-    setClientId(clients?.[0]?.id ?? '');
-    setIsActive(true);
-    setIsPerennial(false);
-    setPackagingVariant(null);
-    setPriceInput('');
-    setRoastGroup('');
-    setDialogOpen(true);
+    setNewProductModalOpen(true);
   };
 
   const openEdit = (p: Product) => {
@@ -526,6 +516,11 @@ export function ProductsListTab() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <NewProductModal 
+        open={newProductModalOpen} 
+        onOpenChange={setNewProductModalOpen} 
+      />
     </div>
   );
 }
