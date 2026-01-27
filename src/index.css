@@ -61,15 +61,15 @@
     --radius: 0.5rem;
 
     /* Sidebar - Left navigation for internal users */
-    /* Brand: Steel Blue #216089 = 204 61% 33%, Sand #D2AC58 = 41 59% 58% */
-    --sidebar-background: 204 61% 33%;
+    /* Brand: Navy #0B3E5E = 203 79% 21%, Steel Blue #216089 = 204 61% 33% */
+    --sidebar-background: 203 79% 21%;
     --sidebar-foreground: 0 0% 100%;
-    --sidebar-primary: 41 59% 58%;
-    --sidebar-primary-foreground: 204 61% 20%;
-    --sidebar-accent: 204 61% 28%;
+    --sidebar-primary: 204 61% 33%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 204 61% 33%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 204 50% 25%;
-    --sidebar-ring: 41 59% 58%;
+    --sidebar-border: 203 70% 16%;
+    --sidebar-ring: 204 61% 33%;
 
     /* Status colors */
     --status-draft: 210 15% 50%;
@@ -119,15 +119,15 @@
     --input: 25 15% 25%;
     --ring: 35 30% 75%;
 
-    /* Brand: Steel Blue darker for dark mode, Sand accent */
-    --sidebar-background: 204 61% 20%;
-    --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 41 59% 58%;
-    --sidebar-primary-foreground: 204 61% 15%;
-    --sidebar-accent: 204 55% 25%;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 204 50% 18%;
-    --sidebar-ring: 41 59% 58%;
+    /* Brand: Navy darker for dark mode, Steel Blue accent */
+    --sidebar-background: 203 79% 15%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 204 61% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 204 61% 40%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 203 70% 12%;
+    --sidebar-ring: 204 61% 40%;
 
     --status-draft: 210 15% 55%;
     --status-submitted: 38 75% 55%;
