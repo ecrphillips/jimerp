@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,8 @@ import { toast } from 'sonner';
 import type { ProductFormat, GrindOption } from '@/types/database';
 import { PackagingBadge, PACKAGING_OPTIONS, type PackagingVariant } from '@/components/PackagingBadge';
 import { NewProductModal } from './NewProductModal';
+import { SafeDeleteModal } from '@/components/SafeDeleteModal';
+import { Trash2 } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -48,6 +50,15 @@ export function ProductsListTab() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const [newProductModalOpen, setNewProductModalOpen] = useState(false);
+  
+  // Delete modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
+  const [deleteCounts, setDeleteCounts] = useState<{
+    open_orders: number;
+    completed_orders: number;
+    cancelled_orders: number;
+  } | null>(null);
 
   // Form state (for editing only now)
   const [productName, setProductName] = useState('');
@@ -235,6 +246,81 @@ export function ProductsListTab() {
     },
   });
 
+  // Delete preflight mutation
+  const deletePreflightMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const { data, error } = await supabase.rpc('get_product_delete_preflight', {
+        p_product_id: productId,
+      });
+      if (error) throw error;
+      return data as {
+        open_orders: number;
+        completed_orders: number;
+        cancelled_orders: number;
+      };
+    },
+    onSuccess: (data, productId) => {
+      const product = products?.find(p => p.id === productId);
+      if (product) {
+        setDeletingProduct(product);
+        setDeleteCounts(data);
+        setShowDeleteModal(true);
+      }
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to check product references');
+    },
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (force: boolean) => {
+      if (!deletingProduct) throw new Error('No product selected');
+      const { data, error } = await supabase.rpc('delete_product_safe', {
+        p_product_id: deletingProduct.id,
+        p_force: force,
+      });
+      if (error) throw error;
+      return data as { deleted: boolean; message: string };
+    },
+    onSuccess: (data) => {
+      if (data.deleted) {
+        toast.success('Product deleted');
+        queryClient.invalidateQueries({ queryKey: ['all-products'] });
+        queryClient.invalidateQueries({ queryKey: ['all-prices'] });
+      }
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to delete product');
+    },
+  });
+
+  // Set inactive mutation
+  const setInactiveMutation = useMutation({
+    mutationFn: async () => {
+      if (!deletingProduct) throw new Error('No product selected');
+      const { error } = await supabase
+        .from('products')
+        .update({ is_active: false })
+        .eq('id', deletingProduct.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Product set to inactive');
+      queryClient.invalidateQueries({ queryKey: ['all-products'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to set product inactive');
+    },
+  });
+
+  const openDeleteDialog = useCallback((p: Product) => {
+    deletePreflightMutation.mutate(p.id);
+  }, [deletePreflightMutation]);
+
   const openNew = () => {
     setNewProductModalOpen(true);
   };
@@ -347,7 +433,17 @@ export function ProductsListTab() {
                         </span>
                       </td>
                       <td className="py-2">
-                        <Button size="sm" variant="ghost" onClick={() => openEdit(p)}>Edit</Button>
+                        <div className="flex items-center gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => openEdit(p)}>Edit</Button>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            onClick={() => openDeleteDialog(p)}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -520,6 +616,18 @@ export function ProductsListTab() {
       <NewProductModal 
         open={newProductModalOpen} 
         onOpenChange={setNewProductModalOpen} 
+      />
+
+      {/* Safe Delete Modal */}
+      <SafeDeleteModal
+        open={showDeleteModal}
+        onOpenChange={setShowDeleteModal}
+        entityType="product"
+        entityName={deletingProduct?.product_name ?? ''}
+        counts={deleteCounts}
+        isLoading={deleteMutation.isPending || setInactiveMutation.isPending}
+        onSetInactive={() => setInactiveMutation.mutate()}
+        onConfirmDelete={() => deleteMutation.mutate(true)}
       />
     </div>
   );
