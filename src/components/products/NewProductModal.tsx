@@ -295,8 +295,9 @@ export function NewProductModal({ open, onOpenChange }: NewProductModalProps) {
       }
       
       // Step 2: Create products for each variant
-      const priceValue = parseFloat(priceInput);
-      const hasPrice = !isNaN(priceValue) && priceInput.trim() !== '';
+      // Treat blank price as 0.00 (not "no price")
+      const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
+      const hasPrice = !isNaN(priceValue);
       
       const productInserts = skuPreviews.map(preview => ({
         client_id: clientId,
