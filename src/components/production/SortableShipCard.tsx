@@ -21,6 +21,7 @@ interface LineItem {
   bag_size_g: number;
   packaging_variant: PackagingVariant | null;
   product_id: string;
+  roast_group: string | null;
 }
 
 interface ShippableOrder {
@@ -56,7 +57,7 @@ interface ShipPick {
 
 interface SortableShipCardProps {
   order: ShippableOrder;
-  packingByProduct: Record<string, number>;
+  fgInventory: Record<string, number>; // FG inventory from ledger by product_id
   onTogglePriority: (order: ShippableOrder) => void;
   onMarkShipped: (order: ShippableOrder) => void;
   isShipping: boolean;
@@ -67,7 +68,7 @@ interface SortableShipCardProps {
 
 export function SortableShipCard({
   order,
-  packingByProduct,
+  fgInventory,
   onTogglePriority,
   onMarkShipped,
   isShipping,
@@ -113,10 +114,23 @@ export function SortableShipCard({
     picksByLineItem[pick.order_line_item_id] = pick.units_picked;
   }
 
-  // Upsert ship pick mutation
+  // Upsert ship pick mutation - now writes ledger transactions
   const upsertPickMutation = useMutation({
-    mutationFn: async ({ lineItemId, unitsPicked }: { lineItemId: string; unitsPicked: number }) => {
-      const { error } = await supabase
+    mutationFn: async ({ 
+      lineItemId, 
+      unitsPicked, 
+      previousPicked, 
+      productId 
+    }: { 
+      lineItemId: string; 
+      unitsPicked: number; 
+      previousPicked: number;
+      productId: string;
+    }) => {
+      const delta = unitsPicked - previousPicked;
+      
+      // Update ship_picks record
+      const { error: pickError } = await supabase
         .from('ship_picks')
         .upsert({
           order_id: order.id,
@@ -126,10 +140,35 @@ export function SortableShipCard({
         }, {
           onConflict: 'order_line_item_id',
         });
-      if (error) throw error;
+      if (pickError) throw pickError;
+      
+      // Write SHIP_CONSUME_FG transaction for the delta
+      // Positive delta = consume FG (negative units)
+      // Negative delta = return FG (positive units)
+      if (delta !== 0) {
+        const { error: ledgerError } = await supabase
+          .from('inventory_transactions')
+          .insert({
+            transaction_type: 'SHIP_CONSUME_FG',
+            product_id: productId,
+            order_id: order.id,
+            quantity_units: -delta, // negative for consumption, positive for return
+            notes: delta > 0 
+              ? `Picked ${delta} units for order ${order.order_number}` 
+              : `Returned ${Math.abs(delta)} units from order ${order.order_number}`,
+            is_system_generated: true,
+            created_by: user?.id,
+          });
+        
+        if (ledgerError) {
+          console.error('[SortableShipCard] Ledger write failed:', ledgerError);
+          throw ledgerError;
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ship-picks', order.id] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-ledger-fg'] });
     },
     onError: (err) => {
       console.error(err);
@@ -137,11 +176,12 @@ export function SortableShipCard({
     },
   });
 
-  const handlePickChange = useCallback((lineItemId: string, newValue: number, available: number) => {
+  const handlePickChange = useCallback((lineItemId: string, newValue: number, available: number, productId: string) => {
+    const previousPicked = picksByLineItem[lineItemId] ?? 0;
     // Clamp to 0-available
     const clamped = Math.max(0, Math.min(newValue, available));
-    upsertPickMutation.mutate({ lineItemId, unitsPicked: clamped });
-  }, [upsertPickMutation]);
+    upsertPickMutation.mutate({ lineItemId, unitsPicked: clamped, previousPicked, productId });
+  }, [upsertPickMutation, picksByLineItem]);
 
   // Calculate if all items are fully picked
   const allItemsFullyPicked = order.lineItems.every((li) => {
@@ -163,7 +203,7 @@ export function SortableShipCard({
   const isTimeSensitive = order.priority === 'TIME_SENSITIVE';
   const hasNotes = order.client_notes || order.internal_ops_notes;
   const hasOpsNotes = !!order.internal_ops_notes;
-  const isShippable = order.allLineItemsPacked && allItemsFullyPicked;
+  const isShippable = allItemsFullyPicked;
   
   // Determine if "Do this today" should be visible
   // Only show if work_deadline > todayPlusOne
@@ -358,13 +398,14 @@ export function SortableShipCard({
             <div className="flex items-center gap-2 text-xs text-muted-foreground px-2 pb-1 border-b">
               <span className="flex-1">Product</span>
               <span className="w-16 text-center">Required</span>
-              <span className="w-16 text-center">Available</span>
+              <span className="w-16 text-center">FG Avail</span>
               <span className="w-28 text-center">Picked</span>
               <span className="w-16 text-center">Remaining</span>
             </div>
             
             {order.lineItems.map((li) => {
-              const available = packingByProduct[li.product_id] ?? 0;
+              // Use ledger-based FG inventory
+              const available = fgInventory[li.product_id] ?? 0;
               const picked = picksByLineItem[li.id] ?? 0;
               const remaining = Math.max(0, li.quantity_units - picked);
               const isComplete = picked >= li.quantity_units;
@@ -397,8 +438,8 @@ export function SortableShipCard({
                   <div className="w-28">
                     <ShipPickInput
                       value={picked}
-                      maxValue={available}
-                      onCommit={(newValue) => handlePickChange(li.id, newValue, available)}
+                      maxValue={Math.max(available + picked, li.quantity_units)} // Can pick up to what's available + already picked
+                      onCommit={(newValue) => handlePickChange(li.id, newValue, available + picked, li.product_id)}
                       disabled={upsertPickMutation.isPending}
                     />
                   </div>
