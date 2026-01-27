@@ -18,7 +18,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -38,12 +38,6 @@ interface ShipTabProps {
   today: string;
 }
 
-interface PackingRun {
-  product_id: string;
-  target_date: string;
-  units_packed: number;
-}
-
 interface Checkmark {
   product_id: string;
   bag_size_g: number;
@@ -51,6 +45,16 @@ interface Checkmark {
   roast_complete: boolean;
   pack_complete: boolean;
   ship_complete: boolean;
+}
+
+interface LineItem {
+  id: string;
+  product_name: string;
+  quantity_units: number;
+  bag_size_g: number;
+  packaging_variant: PackagingVariant | null;
+  product_id: string;
+  roast_group: string | null;
 }
 
 interface ShippableOrder {
@@ -65,14 +69,7 @@ interface ShippableOrder {
   roasted: boolean;
   packed: boolean;
   invoiced: boolean;
-  lineItems: {
-    id: string;
-    product_name: string;
-    quantity_units: number;
-    bag_size_g: number;
-    packaging_variant: PackagingVariant | null;
-    product_id: string;
-  }[];
+  lineItems: LineItem[];
   allLineItemsPacked: boolean;
   priority: ShipPriority;
   hasContention: boolean;
@@ -101,9 +98,6 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
   // Local order state for optimistic DnD updates
   const [localOrders, setLocalOrders] = useState<ShippableOrder[]>([]);
   const hasUserReorderedRef = useRef(false);
-  
-  const [showDecrementModal, setShowDecrementModal] = useState(false);
-  const [pendingShipOrder, setPendingShipOrder] = useState<ShippableOrder | null>(null);
 
   // Fetch checkmarks for priority tracking
   const { data: checkmarks } = useQuery({
@@ -157,19 +151,11 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
   // ========== LEDGER-BASED FG INVENTORY ==========
   // FG inventory from ledger: sum(quantity_units) by product_id
   const { data: fgInventory } = useFgInventory();
-
-  // Fetch packing runs - still needed for legacy units_packed until ledger migration
-  const { data: packingRuns } = useQuery({
-    queryKey: ['packing-runs', dateFilterConfig],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('packing_runs')
-        .select('*');
-      
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  
+  // FG inventory as a record for easy lookup
+  const fgInventoryMap = useMemo(() => {
+    return fgInventory ?? {};
+  }, [fgInventory]);
 
   // Fetch orders for shippable view (including ship_display_order)
   // NOW FILTERS BY work_deadline instead of requested_ship_date
@@ -197,7 +183,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
             id,
             product_id,
             quantity_units,
-            product:products(product_name, bag_size_g, packaging_variant)
+            product:products(product_name, bag_size_g, packaging_variant, roast_group)
           )
         `)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY'])
@@ -220,14 +206,42 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     refetchOnWindowFocus: false,
   });
 
-  // Map packing runs by product_id (aggregate units_packed per product across all dates in window)
-  const packingByProduct = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const pr of packingRuns ?? []) {
-      map[pr.product_id] = (map[pr.product_id] ?? 0) + pr.units_packed;
-    }
-    return map;
-  }, [packingRuns]);
+  // Fetch shipped orders awaiting invoice
+  const { data: shippedAwaitingInvoice } = useQuery({
+    queryKey: ['shipped-awaiting-invoice'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          order_number,
+          requested_ship_date,
+          work_deadline,
+          delivery_method,
+          client_notes,
+          internal_ops_notes,
+          roasted,
+          packed,
+          invoiced,
+          status,
+          ship_display_order,
+          manually_deprioritized,
+          client:clients(name),
+          line_items:order_line_items(
+            id,
+            product_id,
+            quantity_units,
+            product:products(product_name, bag_size_g, packaging_variant, roast_group)
+          )
+        `)
+        .eq('status', 'SHIPPED')
+        .eq('invoiced', false)
+        .order('order_number', { ascending: true });
+      
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   // Aggregate demand by product (total units demanded per product across orders)
   const demandByProduct = useMemo(() => {
@@ -245,38 +259,39 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     const orders: ShippableOrder[] = [];
     
     for (const order of ordersForShipping) {
-      const lineItems = (order.line_items ?? []).map((li: { id: string; product_id: string; quantity_units: number; product: { product_name: string; bag_size_g: number; packaging_variant: PackagingVariant | null } | null }) => ({
+      const lineItems: LineItem[] = (order.line_items ?? []).map((li: { id: string; product_id: string; quantity_units: number; product: { product_name: string; bag_size_g: number; packaging_variant: PackagingVariant | null; roast_group: string | null } | null }) => ({
         id: li.id,
         product_name: li.product?.product_name ?? 'Unknown',
         quantity_units: li.quantity_units,
         bag_size_g: li.product?.bag_size_g ?? 0,
         packaging_variant: li.product?.packaging_variant ?? null,
         product_id: li.product_id,
+        roast_group: li.product?.roast_group ?? null,
       }));
 
       // Complexity metrics
       const skuCount = lineItems.length;
       const totalUnits = lineItems.reduce((sum, li) => sum + li.quantity_units, 0);
       
-      // Calculate missing SKUs and units
+      // Calculate missing SKUs and units based on FG inventory
       let missingSkuCount = 0;
       let missingUnitsTotal = 0;
       for (const li of lineItems) {
-        const packed = packingByProduct[li.product_id] ?? 0;
-        if (packed < li.quantity_units) {
+        const fgAvailable = fgInventoryMap[li.product_id] ?? 0;
+        if (fgAvailable < li.quantity_units) {
           missingSkuCount++;
-          missingUnitsTotal += Math.max(0, li.quantity_units - packed);
+          missingUnitsTotal += Math.max(0, li.quantity_units - fgAvailable);
         }
       }
 
-      // Order is shippable if ALL its line items have sufficient packed units
+      // Order is shippable if ALL its line items have sufficient FG inventory
       const allLineItemsPacked = lineItems.length > 0 && missingSkuCount === 0;
 
-      // Check for contention: any SKU in this order where packed < total demand
+      // Check for contention: any SKU in this order where FG < total demand
       const hasContention = lineItems.some((li: { product_id: string }) => {
         const totalDemanded = demandByProduct[li.product_id] ?? 0;
-        const totalPacked = packingByProduct[li.product_id] ?? 0;
-        return totalPacked < totalDemanded;
+        const totalFg = fgInventoryMap[li.product_id] ?? 0;
+        return totalFg < totalDemanded;
       });
 
       // Priority from checkmarks
@@ -324,7 +339,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
       if (orderA !== orderB) return orderA - orderB;
       return a.order_number.localeCompare(b.order_number);
     });
-  }, [ordersForShipping, checkmarks, packingByProduct, demandByProduct]);
+  }, [ordersForShipping, checkmarks, fgInventoryMap, demandByProduct]);
 
   // Sync local state from server data, but only when not actively reordering
   useEffect(() => {
@@ -347,7 +362,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
   const shippableOrders = useMemo(() => allOrdersWithMetrics.filter(o => o.allLineItemsPacked), [allOrdersWithMetrics]);
   const notYetShippableOrders = useMemo(() => allOrdersWithMetrics.filter(o => !o.allLineItemsPacked), [allOrdersWithMetrics]);
 
-  // Short list calculation now uses the same packingByProduct and demandByProduct
+  // Short list calculation - now uses FG inventory from ledger
   const shortList = useMemo((): ShortListItem[] => {
     const demandMap: Record<string, { product_name: string; bag_size_g: number; packaging_variant: PackagingVariant | null; demanded: number }> = {};
     
@@ -367,22 +382,22 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
 
     const shortItems: ShortListItem[] = [];
     for (const [productId, data] of Object.entries(demandMap)) {
-      const packed = packingByProduct[productId] ?? 0;
-      if (packed < data.demanded) {
+      const fgAvailable = fgInventoryMap[productId] ?? 0;
+      if (fgAvailable < data.demanded) {
         shortItems.push({
           product_id: productId,
           product_name: data.product_name,
           bag_size_g: data.bag_size_g,
           packaging_variant: data.packaging_variant,
           demanded_units: data.demanded,
-          packed_units: packed,
-          shortage: data.demanded - packed,
+          packed_units: fgAvailable,
+          shortage: data.demanded - fgAvailable,
         });
       }
     }
 
     return shortItems.sort((a, b) => b.shortage - a.shortage);
-  }, [orderLineItems, packingByProduct]);
+  }, [orderLineItems, fgInventoryMap]);
 
   const priorityMutation = useMutation({
     mutationFn: async ({ productId, bagSize, priority, existingCheckmark }: { productId: string; bagSize: number; priority: ShipPriority; existingCheckmark: Checkmark | null }) => {
@@ -423,8 +438,8 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     onSuccess: () => {
       toast.success('Order marked as shipped');
       queryClient.invalidateQueries({ queryKey: ['shippable-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['shipped-awaiting-invoice'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
-      queryClient.invalidateQueries({ queryKey: ['packing-runs'] });
     },
     onError: (err) => {
       console.error(err);
@@ -432,44 +447,23 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     },
   });
 
-  // Mutation to decrement packing runs when shipping
-  const decrementPackingMutation = useMutation({
-    mutationFn: async ({ order }: { order: ShippableOrder }) => {
-      const clampedSkus: string[] = [];
-      
-      for (const li of order.lineItems) {
-        // Find existing packing run for this product + today
-        const existingRun = packingRuns?.find(
-          (pr) => pr.product_id === li.product_id
-        );
-        
-        if (existingRun) {
-          const currentPacked = existingRun.units_packed;
-          const newPacked = Math.max(currentPacked - li.quantity_units, 0);
-          
-          if (currentPacked < li.quantity_units) {
-            clampedSkus.push(li.product_name);
-          }
-          
-          const { error } = await supabase
-            .from('packing_runs')
-            .update({ units_packed: newPacked, updated_by: user?.id })
-            .eq('id', existingRun.id);
-          if (error) throw error;
-        }
-      }
-      
-      return clampedSkus;
+  // Mutation to mark order as invoiced
+  const markOrderInvoicedMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ invoiced: true })
+        .eq('id', orderId);
+      if (error) throw error;
     },
-    onSuccess: (clampedSkus) => {
-      if (clampedSkus.length > 0) {
-        toast.warning(`Packed units for ${clampedSkus.join(', ')} was less than shipped quantity; clamped to 0.`);
-      }
-      queryClient.invalidateQueries({ queryKey: ['packing-runs'] });
+    onSuccess: () => {
+      toast.success('Order marked as invoiced');
+      queryClient.invalidateQueries({ queryKey: ['shipped-awaiting-invoice'] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
     },
     onError: (err) => {
       console.error(err);
-      toast.error('Failed to decrement packed inventory');
+      toast.error('Failed to mark order as invoiced');
     },
   });
 
@@ -611,34 +605,15 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     doThisTodayMutation.mutate(order);
   }, [doThisTodayMutation]);
 
-  // Directly show decrement modal - no incomplete steps check
-  const handleMarkOrderShipped = (order: ShippableOrder) => {
-    setPendingShipOrder(order);
-    setShowDecrementModal(true);
-  };
+  // Mark shipped directly - no decrement modal needed (picking already deducted FG)
+  const handleMarkOrderShipped = useCallback((order: ShippableOrder) => {
+    markOrderShippedMutation.mutate(order.id);
+  }, [markOrderShippedMutation]);
 
-  const shipWithDecrement = async () => {
-    if (!pendingShipOrder) return;
-    
-    try {
-      await decrementPackingMutation.mutateAsync({ order: pendingShipOrder });
-      await markOrderShippedMutation.mutateAsync(pendingShipOrder.id);
-    } catch (err) {
-      // Errors handled in mutation callbacks
-    }
-    
-    setShowDecrementModal(false);
-    setPendingShipOrder(null);
-  };
-
-  const shipWithoutDecrement = async () => {
-    if (!pendingShipOrder) return;
-    
-    await markOrderShippedMutation.mutateAsync(pendingShipOrder.id);
-    
-    setShowDecrementModal(false);
-    setPendingShipOrder(null);
-  };
+  // Mark invoiced handler
+  const handleMarkInvoiced = useCallback((orderId: string) => {
+    markOrderInvoicedMutation.mutate(orderId);
+  }, [markOrderInvoicedMutation]);
 
   // Use localOrders for rendering to prevent snapping
   const displayOrders = localOrders.length > 0 ? localOrders : allOrdersWithMetrics;
@@ -647,47 +622,11 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
   const displayShippableCount = displayOrders.filter(o => o.allLineItemsPacked).length;
   const displayPendingCount = displayOrders.filter(o => !o.allLineItemsPacked).length;
 
+  // Shipped Awaiting Invoice count
+  const shippedAwaitingInvoiceCount = shippedAwaitingInvoice?.length ?? 0;
+
   return (
     <div className="space-y-4">
-      {/* Decrement Inventory Modal */}
-      <Dialog open={showDecrementModal} onOpenChange={setShowDecrementModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Decrement Packed Inventory?</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Do you want to decrement packed inventory for this order's items?
-            </p>
-            {pendingShipOrder && (
-              <div className="border rounded p-3 bg-muted/30 text-sm space-y-1">
-                <p className="font-medium">{pendingShipOrder.order_number} - {pendingShipOrder.client_name}</p>
-                {pendingShipOrder.lineItems.map((li) => (
-                  <p key={li.id} className="text-muted-foreground">
-                    {li.product_name}: {li.quantity_units} units
-                  </p>
-                ))}
-              </div>
-            )}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button 
-                variant="outline" 
-                onClick={shipWithoutDecrement}
-                disabled={decrementPackingMutation.isPending || markOrderShippedMutation.isPending}
-              >
-                Ship without decrement
-              </Button>
-              <Button 
-                onClick={shipWithDecrement}
-                disabled={decrementPackingMutation.isPending || markOrderShippedMutation.isPending}
-              >
-                {decrementPackingMutation.isPending ? 'Processing...' : 'Yes, decrement'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* All Orders - Unified List with Drag & Drop */}
       <Card>
         <CardHeader>
@@ -722,7 +661,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
                     <SortableShipCard
                       key={order.id}
                       order={order}
-                      packingByProduct={packingByProduct}
+                      fgInventory={fgInventoryMap}
                       onTogglePriority={toggleOrderPriority}
                       onMarkShipped={handleMarkOrderShipped}
                       isShipping={markOrderShippedMutation.isPending}
@@ -738,6 +677,51 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         </CardContent>
       </Card>
 
+      {/* Shipped, Awaiting Invoice */}
+      {shippedAwaitingInvoiceCount > 0 && (
+        <Card className="border-blue-300 bg-blue-50/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-blue-700">
+              <Truck className="h-5 w-5" />
+              Shipped, Awaiting Invoice
+              <Badge variant="outline" className="ml-2 border-blue-300 text-blue-700">
+                {shippedAwaitingInvoiceCount} order{shippedAwaitingInvoiceCount !== 1 ? 's' : ''}
+              </Badge>
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Orders that have been shipped but not yet invoiced.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {shippedAwaitingInvoice?.map((order) => (
+                <div 
+                  key={order.id} 
+                  className="flex items-center justify-between p-3 bg-background rounded border border-blue-200"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="font-semibold">{order.order_number}</span>
+                    <span className="text-muted-foreground">•</span>
+                    <span>{order.client?.name ?? 'Unknown'}</span>
+                    <span className="text-xs text-muted-foreground">
+                      ({(order.line_items ?? []).length} item{(order.line_items ?? []).length !== 1 ? 's' : ''})
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => handleMarkInvoiced(order.id)}
+                    disabled={markOrderInvoicedMutation.isPending}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    Mark Invoiced
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Short List - at bottom */}
       {shortList.length > 0 && (
         <Card className="border-warning/50 bg-warning/5">
@@ -750,7 +734,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
               </Badge>
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              SKUs where packed units are less than demanded.
+              SKUs where FG inventory is less than demanded.
             </p>
           </CardHeader>
           <CardContent>
@@ -766,7 +750,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
                   <div className="text-sm">
                     <span className="text-warning font-medium">Short: {item.shortage}</span>
                     <span className="text-muted-foreground ml-2">
-                      ({item.packed_units}/{item.demanded_units} packed)
+                      ({item.packed_units}/{item.demanded_units} FG)
                     </span>
                   </div>
                 </div>
