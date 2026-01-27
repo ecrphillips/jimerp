@@ -244,14 +244,16 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       }
       product.unblocksOrders = unblocksCount;
       
-      // Calculate WIP readiness
+      // Calculate WIP readiness - based purely on ledger WIP availability
+      // WIP is available if there's positive roasted coffee on hand for this roast group
+      const wipAvailableKg = product.roast_group ? (roastedInventory[product.roast_group] ?? 0) : 0;
       const remainingUnits = Math.max(0, product.demanded_units - packed);
       const requiredKg = (remainingUnits * product.bag_size_g) / 1000;
-      const wipAvailableKg = product.roast_group ? (roastedInventory[product.roast_group] ?? 0) : 0;
       
       product.wipAvailableKg = wipAvailableKg;
       product.requiredKg = requiredKg;
-      product.isReadyToPack = wipAvailableKg >= requiredKg && remainingUnits > 0;
+      // Only show as ready if WIP > 0 and there are remaining units to pack
+      product.isReadyToPack = wipAvailableKg > 0 && remainingUnits > 0;
     }
 
     return Object.values(productMap).map(({ orderIds, shipDates, ...rest }) => rest);
@@ -331,35 +333,98 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     return map;
   }, [packingRuns]);
 
-  // Inline update for packing - returns a promise for the InlinePackingControl
-  // Calculates kg_consumed from units_packed and bag_size_g
-  const updatePackingUnits = useCallback(async (productId: string, newUnits: number, bagSizeG: number) => {
-    // Calculate kg_consumed from units and bag size
-    // kg_consumed = units_packed * (bag_size_g / 1000)
-    const kgConsumed = bagSizeG > 0 ? (newUnits * bagSizeG) / 1000 : 0;
+  // Inline update for packing - writes ledger transactions for WIP consumption and FG production
+  // Now uses inventory_transactions ledger as source of truth
+  const updatePackingUnits = useCallback(async (
+    productId: string, 
+    newUnits: number, 
+    bagSizeG: number,
+    roastGroup: string | null,
+    previousUnits: number
+  ) => {
+    const delta = newUnits - previousUnits;
     
-    // Debug log to verify calculation
-    console.log('[PackTab] updatePackingUnits:', { productId, newUnits, bagSizeG, kgConsumed, target_date: today });
+    // No change, skip
+    if (delta === 0) return;
     
-    const { error } = await supabase
+    // Calculate kg consumed/returned for the delta
+    const kgDelta = bagSizeG > 0 ? (delta * bagSizeG) / 1000 : 0;
+    
+    console.log('[PackTab] updatePackingUnits:', { 
+      productId, newUnits, previousUnits, delta, bagSizeG, kgDelta, roastGroup, target_date: today 
+    });
+    
+    // Update packing_runs for legacy compatibility and tracking
+    const { error: packingError } = await supabase
       .from('packing_runs')
       .upsert({
         product_id: productId,
         target_date: today,
         units_packed: newUnits,
-        kg_consumed: kgConsumed,
+        kg_consumed: bagSizeG > 0 ? (newUnits * bagSizeG) / 1000 : 0,
         updated_by: user?.id,
       }, {
         onConflict: 'product_id,target_date',
       });
     
-    if (error) {
+    if (packingError) {
       toast.error('Failed to save packing progress');
-      throw error;
+      throw packingError;
     }
     
-    // Invalidate packing-runs to update WIP display
+    // Write ledger transactions for the delta
+    // For positive delta: consume WIP, produce FG
+    // For negative delta (reversal): return WIP, reduce FG
+    const transactions = [];
+    
+    // PACK_CONSUME_WIP: negative kg (consuming) or positive kg (returning)
+    if (roastGroup && kgDelta !== 0) {
+      transactions.push({
+        transaction_type: 'PACK_CONSUME_WIP' as const,
+        roast_group: roastGroup,
+        product_id: productId,
+        quantity_kg: -kgDelta, // negative for consumption, positive for return
+        quantity_units: null,
+        notes: delta > 0 
+          ? `Packed ${delta} units of ${bagSizeG}g` 
+          : `Reversed ${Math.abs(delta)} units of ${bagSizeG}g`,
+        is_system_generated: true,
+        created_by: user?.id,
+      });
+    }
+    
+    // PACK_PRODUCE_FG: positive units (producing) or negative units (reversing)
+    if (delta !== 0) {
+      transactions.push({
+        transaction_type: 'PACK_PRODUCE_FG' as const,
+        roast_group: roastGroup,
+        product_id: productId,
+        quantity_kg: null,
+        quantity_units: delta, // positive for production, negative for reversal
+        notes: delta > 0 
+          ? `Packed ${delta} units` 
+          : `Reversed ${Math.abs(delta)} units`,
+        is_system_generated: true,
+        created_by: user?.id,
+      });
+    }
+    
+    if (transactions.length > 0) {
+      const { error: ledgerError } = await supabase
+        .from('inventory_transactions')
+        .insert(transactions);
+      
+      if (ledgerError) {
+        console.error('[PackTab] Ledger write failed:', ledgerError);
+        toast.error('Failed to update inventory ledger');
+        throw ledgerError;
+      }
+    }
+    
+    // Invalidate queries to refresh UI
     queryClient.invalidateQueries({ queryKey: ['packing-runs'] });
+    queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
+    queryClient.invalidateQueries({ queryKey: ['inventory-ledger-fg'] });
   }, [today, user?.id, queryClient]);
 
   // Mutation to update pack_display_order
@@ -492,7 +557,13 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                           packingRun={packing}
                           isExpanded={isExpanded}
                           onToggleExpand={() => setExpandedProductId(isExpanded ? null : product.product_id)}
-                          onUpdatePackedUnits={(newValue) => updatePackingUnits(product.product_id, newValue, product.bag_size_g)}
+                          onUpdatePackedUnits={(newValue) => updatePackingUnits(
+                            product.product_id, 
+                            newValue, 
+                            product.bag_size_g,
+                            product.roast_group,
+                            packed
+                          )}
                           onEditingChange={(isEditing) => handleEditingChange(product.product_id, isEditing)}
                         />
                       );
