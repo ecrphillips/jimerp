@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
 
 interface Order {
   id: string;
@@ -16,6 +17,7 @@ interface Order {
   client_po: string | null;
   client_notes: string | null;
   created_at: string;
+  location_id: string | null;
 }
 
 interface LineItem {
@@ -35,7 +37,7 @@ export default function OrderHistory() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('orders')
-        .select('id, order_number, status, requested_ship_date, delivery_method, client_po, client_notes, created_at')
+        .select('id, order_number, status, requested_ship_date, delivery_method, client_po, client_notes, created_at, location_id')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -222,7 +224,10 @@ export default function OrderHistory() {
               <tbody>
                 {orders.map((o) => (
                   <tr key={o.id} className="border-b last:border-0 cursor-pointer hover:bg-muted/50" onClick={() => setSelectedOrderId(o.id)}>
-                    <td className="py-2 font-medium">{o.order_number}</td>
+                    <td className="py-2">
+                      <span className="font-medium">{o.order_number}</span>
+                      <LocationCodeDisplay locationId={o.location_id} />
+                    </td>
                     <td className="py-2">{format(new Date(o.created_at), 'MMM d, yyyy')}</td>
                     <td className="py-2">{o.requested_ship_date ? format(new Date(o.requested_ship_date), 'MMM d') : '—'}</td>
                     <td className="py-2">

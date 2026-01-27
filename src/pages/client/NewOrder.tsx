@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { Plus, Minus, Trash2 } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { UnusualOrderModal, type FlaggedItem } from '@/components/client/UnusualOrderModal';
+import { LocationSelect } from '@/components/orders/LocationSelect';
 import type { GrindOption, DeliveryMethod } from '@/types/database';
 
 interface LineItem {
@@ -43,6 +44,7 @@ export default function NewOrder() {
   const queryClient = useQueryClient();
 
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState<string>('');
   // Ship preference: 'SOONEST' or 'SPECIFIC'
   const [shipPreference, setShipPreference] = useState<'SOONEST' | 'SPECIFIC'>('SOONEST');
   const [requestedShipDate, setRequestedShipDate] = useState('');
@@ -340,6 +342,7 @@ export default function NewOrder() {
         .from('orders')
         .insert({
           client_id: authUser.clientId,
+          location_id: selectedLocationId || null,
           order_number: '', // Trigger will replace with auto-generated value
           status: 'SUBMITTED',
           requested_ship_date: shipPreference === 'SPECIFIC' && requestedShipDate ? requestedShipDate : null,
@@ -600,6 +603,15 @@ export default function NewOrder() {
               <CardTitle>Order Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Location Selection (if client has locations) */}
+              {authUser?.clientId && (
+                <LocationSelect
+                  clientId={authUser.clientId}
+                  value={selectedLocationId}
+                  onChange={setSelectedLocationId}
+                  required
+                />
+              )}
               {/* Ship Timing Preference */}
               <div className="space-y-2">
                 <Label>When do you need this order?</Label>

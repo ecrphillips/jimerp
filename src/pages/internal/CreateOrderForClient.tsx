@@ -15,6 +15,7 @@ import { Plus, Minus, Trash2, ArrowLeft } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import type { GrindOption } from '@/types/database';
 import type { Database } from '@/integrations/supabase/types';
+import { LocationSelect } from '@/components/orders/LocationSelect';
 
 type DeliveryMethod = Database['public']['Enums']['delivery_method'];
 import { Link } from 'react-router-dom';
@@ -52,6 +53,7 @@ export default function CreateOrderForClient() {
   const queryClient = useQueryClient();
 
   const [selectedClientId, setSelectedClientId] = useState<string>('');
+  const [selectedLocationId, setSelectedLocationId] = useState<string>('');
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [requestedShipDate, setRequestedShipDate] = useState('');
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('PICKUP');
@@ -116,9 +118,10 @@ export default function CreateOrderForClient() {
     enabled: !!selectedClientId,
   });
 
-  // Reset line items when client changes
+  // Reset line items and location when client changes
   React.useEffect(() => {
     setLineItems([]);
+    setSelectedLocationId('');
   }, [selectedClientId]);
 
   // Group products by perennial status
@@ -238,6 +241,7 @@ export default function CreateOrderForClient() {
         .from('orders')
         .insert({
           client_id: selectedClientId,
+          location_id: selectedLocationId || null,
           order_number: '',
           status: 'SUBMITTED',
           requested_ship_date: requestedShipDate || null,
@@ -385,6 +389,15 @@ export default function CreateOrderForClient() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Location selection for clients with locations */}
+          {selectedClientId && (
+            <LocationSelect
+              clientId={selectedClientId}
+              value={selectedLocationId}
+              onChange={setSelectedLocationId}
+            />
+          )}
         </CardContent>
       </Card>
 

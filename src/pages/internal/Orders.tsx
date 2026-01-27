@@ -16,6 +16,7 @@ import {
   UserPlus
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
 
 export default function Orders() {
   const navigate = useNavigate();
@@ -37,6 +38,7 @@ export default function Orders() {
           shipped_or_ready,
           invoiced,
           created_by_admin,
+          location_id,
           client:clients(name)
         `)
         .order('status', { ascending: true })
@@ -119,6 +121,7 @@ export default function Orders() {
                     <span className="text-sm text-muted-foreground">
                       {o.client?.name ?? 'Unknown client'}
                     </span>
+                    <LocationCodeDisplay locationId={o.location_id} />
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     {/* Fulfillment Checklist Icons */}

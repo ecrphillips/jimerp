@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, Edit, PenSquare, CalendarClock } from 'lucide-react';
+import { LocationBadge } from '@/components/orders/LocationSelect';
 import { toast } from 'sonner';
 import { HistoricalEditWarningModal } from '@/components/internal/HistoricalEditWarningModal';
 import { IncompleteFulfillmentModal } from '@/components/internal/IncompleteFulfillmentModal';
@@ -61,6 +62,7 @@ export default function OrderDetail() {
           invoiced,
           created_by_admin,
           client_id,
+          location_id,
           updated_at,
           client:clients(name)
         `)
@@ -489,6 +491,7 @@ export default function OrderDetail() {
               Admin Created
             </span>
           )}
+          <LocationBadge locationId={(order as any).location_id} />
         </div>
         <div className="flex items-center gap-2">
           {/* Edit Order button */}
