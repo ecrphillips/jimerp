@@ -893,6 +893,7 @@ export type Database = {
           blend_name: string | null
           created_at: string
           default_roaster: Database["public"]["Enums"]["default_roaster"]
+          display_name: string | null
           display_order: number | null
           expected_yield_loss_pct: number
           is_active: boolean
@@ -908,6 +909,7 @@ export type Database = {
           blend_name?: string | null
           created_at?: string
           default_roaster?: Database["public"]["Enums"]["default_roaster"]
+          display_name?: string | null
           display_order?: number | null
           expected_yield_loss_pct?: number
           is_active?: boolean
@@ -923,6 +925,7 @@ export type Database = {
           blend_name?: string | null
           created_at?: string
           default_roaster?: Database["public"]["Enums"]["default_roaster"]
+          display_name?: string | null
           display_order?: number | null
           expected_yield_loss_pct?: number
           is_active?: boolean

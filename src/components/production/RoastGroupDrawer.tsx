@@ -64,6 +64,7 @@ interface RoastGroupConfig {
   expected_yield_loss_pct: number;
   is_active: boolean;
   notes: string | null;
+  display_name: string | null;
 }
 
 interface RoastGroupDrawerProps {
@@ -520,7 +521,7 @@ export function RoastGroupDrawer({
         </td>
         <td className="py-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold">{roastGroup}</span>
+            <span className="font-semibold">{config?.display_name?.trim() || roastGroup.replace(/_/g, ' ')}</span>
             {defaultRoaster !== 'EITHER' && (
               <Badge variant="outline" className={`text-xs ${getRoasterBadgeColor(defaultRoaster)}`}>
                 {defaultRoaster}
