@@ -142,102 +142,129 @@ export function SafeDeleteModal({
   // Guarded delete - has references
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="max-w-md">
-        <AlertDialogHeader>
-          <div className="flex items-center gap-2 text-amber-600">
-            <AlertTriangle className="h-5 w-5" />
-            <AlertDialogTitle className="text-amber-600">
+      <AlertDialogContent className="max-w-[500px] max-h-[80vh] flex flex-col p-0 gap-0 overflow-hidden">
+        {/* Header */}
+        <AlertDialogHeader className="px-6 pt-6 pb-4 border-b border-border flex-shrink-0">
+          <div className="flex items-center gap-2.5 text-amber-600">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+            <AlertDialogTitle className="text-amber-600 text-lg">
               This {entityLabel} has {entityType === 'roast_group' ? 'history' : 'orders'}
             </AlertDialogTitle>
           </div>
-          <AlertDialogDescription asChild>
-            <div className="space-y-4">
-              {/* Counts display */}
-              <div className="bg-muted rounded-md p-3 text-sm space-y-1">
-                {counts?.open_orders !== undefined && (
-                  <p><strong>Open orders:</strong> {counts.open_orders}</p>
-                )}
-                {counts?.completed_orders !== undefined && (
-                  <p><strong>Completed orders:</strong> {counts.completed_orders}</p>
-                )}
-                {counts?.cancelled_orders !== undefined && counts.cancelled_orders > 0 && (
-                  <p className="text-muted-foreground"><strong>Cancelled orders:</strong> {counts.cancelled_orders}</p>
-                )}
-                {counts?.products !== undefined && counts.products > 0 && (
-                  <p><strong>Products:</strong> {counts.products}</p>
-                )}
-                {counts?.batches !== undefined && counts.batches > 0 && (
-                  <p><strong>Roast batches:</strong> {counts.batches}</p>
-                )}
-              </div>
+        </AlertDialogHeader>
 
-              <p className="text-sm">
-                Deleting will {(counts?.open_orders ?? 0) > 0 ? 'cancel open orders and ' : ''}
-                remove historical records. <strong>This is usually not what you want.</strong>
-              </p>
-
-              {!showDestructive ? (
-                <div className="bg-accent border border-border rounded-md p-3">
-                  <p className="text-sm text-accent-foreground">
-                    <strong>Recommended:</strong> Setting inactive preserves all history and is reversible.
-                  </p>
+        {/* Scrollable content */}
+        <AlertDialogDescription asChild>
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+            {/* Impact summary - simple list */}
+            <div className="space-y-1.5 text-sm text-muted-foreground">
+              {counts?.open_orders !== undefined && (
+                <div className="flex justify-between">
+                  <span>Open orders</span>
+                  <span className="font-medium text-foreground">{counts.open_orders}</span>
                 </div>
-              ) : (
-                <div className="space-y-3 border-t pt-3">
-                  <p className="text-sm text-destructive font-medium">
-                    Type DELETE to confirm permanent deletion:
-                  </p>
-                  <Input
-                    value={confirmText}
-                    onChange={(e) => setConfirmText(e.target.value)}
-                    placeholder="Type DELETE"
-                    className="font-mono"
-                    autoFocus
-                  />
+              )}
+              {counts?.completed_orders !== undefined && (
+                <div className="flex justify-between">
+                  <span>Completed orders</span>
+                  <span className="font-medium text-foreground">{counts.completed_orders}</span>
+                </div>
+              )}
+              {counts?.cancelled_orders !== undefined && counts.cancelled_orders > 0 && (
+                <div className="flex justify-between">
+                  <span>Cancelled orders</span>
+                  <span className="font-medium text-foreground">{counts.cancelled_orders}</span>
+                </div>
+              )}
+              {counts?.products !== undefined && counts.products > 0 && (
+                <div className="flex justify-between">
+                  <span>Products</span>
+                  <span className="font-medium text-foreground">{counts.products}</span>
+                </div>
+              )}
+              {counts?.batches !== undefined && counts.batches > 0 && (
+                <div className="flex justify-between">
+                  <span>Roast batches</span>
+                  <span className="font-medium text-foreground">{counts.batches}</span>
                 </div>
               )}
             </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-          <AlertDialogCancel onClick={handleClose} className="sm:mr-auto">
+
+            {/* Warning copy */}
+            <p className="text-sm text-muted-foreground">
+              Deleting will {(counts?.open_orders ?? 0) > 0 ? 'cancel open orders and ' : ''}
+              remove historical records.{' '}
+              <span className="text-foreground font-medium">This is usually not what you want.</span>
+            </p>
+
+            {!showDestructive ? (
+              /* Recommended action callout */
+              <div className="bg-accent/50 border border-accent rounded-md px-4 py-3">
+                <p className="text-sm text-foreground">
+                  <span className="font-medium">Recommended:</span>{' '}
+                  <span className="text-muted-foreground">Setting inactive preserves all history and is reversible.</span>
+                </p>
+              </div>
+            ) : (
+              /* Destructive confirmation */
+              <div className="space-y-3 pt-2 border-t border-border">
+                <p className="text-sm text-destructive font-medium">
+                  Type DELETE to confirm permanent deletion:
+                </p>
+                <Input
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder="Type DELETE"
+                  className="font-mono"
+                  autoFocus
+                />
+              </div>
+            )}
+          </div>
+        </AlertDialogDescription>
+
+        {/* Sticky footer */}
+        <AlertDialogFooter className="flex-shrink-0 px-6 py-4 border-t border-border bg-background flex-row justify-between gap-3">
+          <AlertDialogCancel onClick={handleClose} className="mt-0">
             Cancel
           </AlertDialogCancel>
           
-          {!showDestructive ? (
-            <>
-              <Button
-                variant="outline"
-                onClick={() => setShowDestructive(true)}
-                className="text-destructive border-destructive hover:bg-destructive/10"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete Anyway
-              </Button>
-              <Button onClick={handleSetInactive} disabled={isLoading}>
-                Set Inactive Instead
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowDestructive(false);
-                  setConfirmText('');
-                }}
-              >
-                Back
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDelete}
-                disabled={!isConfirmed || isLoading}
-              >
-                {isLoading ? 'Deleting…' : 'Permanently Delete'}
-              </Button>
-            </>
-          )}
+          <div className="flex gap-2">
+            {!showDestructive ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDestructive(true)}
+                  className="text-destructive border-destructive/50 hover:bg-destructive/10 hover:border-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Anyway
+                </Button>
+                <Button onClick={handleSetInactive} disabled={isLoading}>
+                  Set Inactive Instead
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowDestructive(false);
+                    setConfirmText('');
+                  }}
+                >
+                  Back
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={!isConfirmed || isLoading}
+                >
+                  {isLoading ? 'Deleting…' : 'Permanently Delete'}
+                </Button>
+              </>
+            )}
+          </div>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
