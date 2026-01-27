@@ -3,6 +3,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -267,24 +270,24 @@ export function RoastGroupDrawer({
         .eq('status', 'PLANNED');
       if (batchError) throw batchError;
       
-      // Create WIP ledger entry for roast output
+      // Create inventory_transactions entry for roast output (new ledger)
       const { error: ledgerError } = await supabase
-        .from('wip_ledger')
+        .from('inventory_transactions')
         .insert({
-          target_date,
+          transaction_type: 'ROAST_OUTPUT',
           roast_group,
-          entry_type: 'ROAST_OUTPUT',
-          delta_kg: actual_output_kg,
-          related_batch_id: id,
+          quantity_kg: actual_output_kg,
+          is_system_generated: true,
           created_by: user?.id,
-          notes: '',
+          notes: `Batch ${id.slice(0, 8)}`,
         });
       if (ledgerError) throw ledgerError;
     },
     onSuccess: () => {
       toast.success('Batch marked as roasted');
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
-      queryClient.invalidateQueries({ queryKey: ['wip-ledger'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
       // Refresh frozen batch order to reflect new status positions
       refreshFrozenBatches();
     },
@@ -311,17 +314,16 @@ export function RoastGroupDrawer({
         .eq('status', 'ROASTED');
       if (batchError) throw batchError;
       
-      // Create reversing WIP ledger entry (negative of original output)
+      // Create reversing inventory_transactions entry (negative ADJUSTMENT)
       const { error: ledgerError } = await supabase
-        .from('wip_ledger')
+        .from('inventory_transactions')
         .insert({
-          target_date,
+          transaction_type: 'ADJUSTMENT',
           roast_group,
-          entry_type: 'ADJUSTMENT',
-          delta_kg: -actual_output_kg,
-          related_batch_id: id,
+          quantity_kg: -actual_output_kg,
+          is_system_generated: true,
           created_by: user?.id,
-          notes: 'Reverted batch to planned',
+          notes: `Reverted batch ${id.slice(0, 8)} to planned`,
         });
       if (ledgerError) throw ledgerError;
       
@@ -339,7 +341,8 @@ export function RoastGroupDrawer({
           : 'Batch reverted to planned'
       );
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
-      queryClient.invalidateQueries({ queryKey: ['wip-ledger'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
       setUndoConfirmBatchId(null);
       // Refresh frozen batch order to reflect new status positions
       refreshFrozenBatches();
@@ -347,6 +350,68 @@ export function RoastGroupDrawer({
     onError: (err) => {
       console.error(err);
       toast.error('Failed to revert batch');
+    },
+  });
+
+  // Mutation to mark roasted with an additional LOSS transaction
+  const markRoastedWithLossMutation = useMutation({
+    mutationFn: async ({ id, actual_output_kg, roast_group, target_date, loss_kg, loss_note }: { 
+      id: string; 
+      actual_output_kg: number;
+      roast_group: string;
+      target_date: string;
+      loss_kg: number;
+      loss_note: string;
+    }) => {
+      // Update batch status
+      const { error: batchError } = await supabase
+        .from('roasted_batches')
+        .update({ 
+          status: 'ROASTED',
+          actual_output_kg,
+        })
+        .eq('id', id)
+        .eq('status', 'PLANNED');
+      if (batchError) throw batchError;
+      
+      // Create inventory_transactions entry for roast output
+      const { error: ledgerError } = await supabase
+        .from('inventory_transactions')
+        .insert({
+          transaction_type: 'ROAST_OUTPUT',
+          roast_group,
+          quantity_kg: actual_output_kg,
+          is_system_generated: true,
+          created_by: user?.id,
+          notes: `Batch ${id.slice(0, 8)}`,
+        });
+      if (ledgerError) throw ledgerError;
+      
+      // Create LOSS transaction if there's a loss amount
+      if (loss_kg > 0) {
+        const { error: lossError } = await supabase
+          .from('inventory_transactions')
+          .insert({
+            transaction_type: 'LOSS',
+            roast_group,
+            quantity_kg: -loss_kg, // Negative because it's a loss
+            is_system_generated: false,
+            created_by: user?.id,
+            notes: loss_note,
+          });
+        if (lossError) throw lossError;
+      }
+    },
+    onSuccess: () => {
+      toast.success('Batch marked as roasted with loss recorded');
+      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
+      refreshFrozenBatches();
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to mark batch as roasted');
     },
   });
 
@@ -574,6 +639,14 @@ export function RoastGroupDrawer({
                         roast_group: batch.roast_group,
                         target_date: batch.target_date,
                       })}
+                      onMarkRoastedWithLoss={(id, actual, lossKg, lossNote) => markRoastedWithLossMutation.mutate({
+                        id,
+                        actual_output_kg: actual,
+                        roast_group: batch.roast_group,
+                        target_date: batch.target_date,
+                        loss_kg: lossKg,
+                        loss_note: lossNote,
+                      })}
                       onUndo={(id) => setUndoConfirmBatchId(id)}
                       onDelete={(id) => setDeleteConfirmBatchId(id)}
                       onOhShit={(batch) => setOhShitBatch(batch)}
@@ -656,6 +729,7 @@ interface BatchRowProps {
   batch: RoastBatch;
   expectedYieldLossPct: number;
   onMarkRoasted: (id: string, actualKg: number) => void;
+  onMarkRoastedWithLoss: (id: string, actualKg: number, lossKg: number, lossNote: string) => void;
   onUndo: (id: string) => void;
   onDelete: (id: string) => void;
   onOhShit: (batch: RoastBatch) => void;
@@ -681,10 +755,13 @@ interface RoastBatch {
   updated_at?: string;
 }
 
+type YieldWarningChoice = 'edit_inbound' | 'edit_output' | 'record_loss';
+
 function BatchRow({
   batch,
   expectedYieldLossPct,
   onMarkRoasted,
+  onMarkRoastedWithLoss,
   onUndo,
   onDelete,
   onOhShit,
@@ -707,7 +784,9 @@ function BatchRow({
   const [cropsterId, setCropsterId] = useState(batch.cropster_batch_id ?? '');
   const [notes, setNotes] = useState(batch.notes ?? '');
   const [showYieldWarning, setShowYieldWarning] = useState(false);
-  const [pendingMarkRoasted, setPendingMarkRoasted] = useState<{ id: string; actualKg: number } | null>(null);
+  const [yieldWarningChoice, setYieldWarningChoice] = useState<YieldWarningChoice>('edit_inbound');
+  const [lossNote, setLossNote] = useState('');
+  const [pendingMarkRoasted, setPendingMarkRoasted] = useState<{ id: string; actualKg: number; inboundKg: number } | null>(null);
   
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -791,12 +870,42 @@ function BatchRow({
     const checkOutput = actualValue;
     const checkLoss = checkInbound > 0 ? (1 - checkOutput / checkInbound) * 100 : expectedYieldLossPct;
     
-    // If implied loss is outside 10-20%, show warning
+    // If implied loss is outside 10-20%, show warning with options
     if (checkInbound > 0 && (checkLoss < 10 || checkLoss > 20)) {
-      setPendingMarkRoasted({ id: batch.id, actualKg: actualValue });
+      setPendingMarkRoasted({ id: batch.id, actualKg: actualValue, inboundKg: checkInbound });
+      setYieldWarningChoice('edit_inbound');
+      setLossNote('');
       setShowYieldWarning(true);
     } else {
       onMarkRoasted(batch.id, actualValue);
+    }
+  };
+
+  const handleYieldWarningAction = () => {
+    if (!pendingMarkRoasted) return;
+    
+    if (yieldWarningChoice === 'edit_inbound' || yieldWarningChoice === 'edit_output') {
+      // User wants to edit - just close the modal
+      setShowYieldWarning(false);
+      setPendingMarkRoasted(null);
+      // Focus the appropriate input
+      return;
+    }
+    
+    if (yieldWarningChoice === 'record_loss' && lossNote.trim()) {
+      // Calculate expected output vs actual to determine loss amount
+      const expectedOutput = pendingMarkRoasted.inboundKg * (1 - expectedYieldLossPct / 100);
+      const lossKg = expectedOutput - pendingMarkRoasted.actualKg;
+      
+      onMarkRoastedWithLoss(
+        pendingMarkRoasted.id, 
+        pendingMarkRoasted.actualKg, 
+        Math.max(0, lossKg), 
+        lossNote.trim()
+      );
+      setShowYieldWarning(false);
+      setPendingMarkRoasted(null);
+      setLossNote('');
     }
   };
 
@@ -1010,38 +1119,96 @@ function BatchRow({
         </div>
       </div>
 
-      {/* Yield Warning Dialog */}
-      <AlertDialog open={showYieldWarning} onOpenChange={setShowYieldWarning}>
-        <AlertDialogContent>
+      {/* Yield Warning Dialog with Options */}
+      <AlertDialog open={showYieldWarning} onOpenChange={(open) => {
+        if (!open) {
+          setPendingMarkRoasted(null);
+          setLossNote('');
+        }
+        setShowYieldWarning(open);
+      }}>
+        <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
               Unusual Yield Loss
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <p>
                   The implied yield loss for this batch is{' '}
                   <strong>
-                    {pendingMarkRoasted && inboundKg > 0 
-                      ? ((1 - pendingMarkRoasted.actualKg / inboundKg) * 100).toFixed(1)
+                    {pendingMarkRoasted && pendingMarkRoasted.inboundKg > 0 
+                      ? ((1 - pendingMarkRoasted.actualKg / pendingMarkRoasted.inboundKg) * 100).toFixed(1)
                       : '—'}%
                   </strong>
                   , which is outside the typical 10–20% range.
                 </p>
-                <p className="text-sm">
-                  This could indicate a data entry error. Please double-check the inbound (green) and output (roasted) weights.
-                </p>
+                
+                <RadioGroup 
+                  value={yieldWarningChoice} 
+                  onValueChange={(val) => setYieldWarningChoice(val as YieldWarningChoice)}
+                  className="space-y-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="edit_inbound" id="edit_inbound" />
+                    <Label htmlFor="edit_inbound" className="text-sm font-normal cursor-pointer">
+                      Correct inbound (green) weight
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="edit_output" id="edit_output" />
+                    <Label htmlFor="edit_output" className="text-sm font-normal cursor-pointer">
+                      Correct output (roasted) weight
+                    </Label>
+                  </div>
+                  <div className="flex items-start space-x-2">
+                    <RadioGroupItem value="record_loss" id="record_loss" className="mt-1" />
+                    <div className="flex-1 space-y-2">
+                      <Label htmlFor="record_loss" className="text-sm font-normal cursor-pointer">
+                        Record as loss (requires note)
+                      </Label>
+                      {yieldWarningChoice === 'record_loss' && (
+                        <div className="space-y-1">
+                          <Textarea
+                            placeholder="Describe what happened (e.g., destoner spill, contamination)..."
+                            value={lossNote}
+                            onChange={(e) => setLossNote(e.target.value)}
+                            className="min-h-[60px] text-sm"
+                          />
+                          {pendingMarkRoasted && (
+                            <p className="text-xs text-muted-foreground">
+                              Loss amount: {((pendingMarkRoasted.inboundKg * (1 - expectedYieldLossPct / 100)) - pendingMarkRoasted.actualKg).toFixed(2)} kg
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </RadioGroup>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
             <AlertDialogCancel onClick={() => setPendingMarkRoasted(null)}>
-              Edit Numbers
+              Cancel
             </AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmMarkRoasted}>
-              Confirm Anyway
-            </AlertDialogAction>
+            {yieldWarningChoice === 'record_loss' ? (
+              <Button 
+                onClick={handleYieldWarningAction}
+                disabled={!lossNote.trim()}
+              >
+                Record Loss & Mark Roasted
+              </Button>
+            ) : yieldWarningChoice === 'edit_inbound' || yieldWarningChoice === 'edit_output' ? (
+              <Button onClick={handleYieldWarningAction}>
+                Go Back to Edit
+              </Button>
+            ) : (
+              <AlertDialogAction onClick={handleConfirmMarkRoasted}>
+                Confirm Anyway
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
