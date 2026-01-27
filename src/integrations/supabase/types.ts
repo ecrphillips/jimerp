@@ -1213,6 +1213,7 @@ export type Database = {
         Args: { p_force?: boolean; p_roast_group: string }
         Returns: Json
       }
+      dev_reset_master_data: { Args: never; Returns: Json }
       dev_reset_test_day: { Args: never; Returns: Json }
       dev_test_reset: { Args: never; Returns: undefined }
       dev_test_seed_minimal: { Args: never; Returns: undefined }

@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertTriangle, Trash2, Sparkles, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Trash2, Sparkles, RotateCcw, Bomb } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -32,7 +32,14 @@ export default function AdminTools() {
   const [resetTestDayUnderstood, setResetTestDayUnderstood] = useState(false);
   const [isResettingTestDay, setIsResettingTestDay] = useState(false);
 
+  // Reset Master Data state (dev only - nuclear option)
+  const [showResetMasterModal, setShowResetMasterModal] = useState(false);
+  const [resetMasterConfirmText, setResetMasterConfirmText] = useState('');
+  const [resetMasterUnderstood, setResetMasterUnderstood] = useState(false);
+  const [isResettingMaster, setIsResettingMaster] = useState(false);
+
   const canConfirmReset = resetConfirmText === 'RESET' && resetUnderstood;
+  const canConfirmResetMaster = resetMasterConfirmText === 'NUKE' && resetMasterUnderstood;
 
   const handleReset = async () => {
     if (!canConfirmReset) return;
@@ -101,6 +108,28 @@ export default function AdminTools() {
       toast.error(err.message || 'Reset test day failed');
     } finally {
       setIsResettingTestDay(false);
+    }
+  };
+
+  const handleResetMasterData = async () => {
+    if (!canConfirmResetMaster) return;
+    
+    setIsResettingMaster(true);
+    try {
+      const { data, error } = await supabase.rpc('dev_reset_master_data');
+      if (error) throw error;
+      
+      toast.success('Master data reset complete. All clients, products, and roast groups cleared.');
+      
+      setShowResetMasterModal(false);
+      setResetMasterConfirmText('');
+      setResetMasterUnderstood(false);
+      navigate('/clients');
+    } catch (err: any) {
+      console.error('Reset master data failed:', err);
+      toast.error(err.message || 'Reset master data failed');
+    } finally {
+      setIsResettingMaster(false);
     }
   };
 
@@ -211,50 +240,99 @@ export default function AdminTools() {
 
       {/* DEV ONLY: Reset Test Day Card */}
       {isDev && (
-        <Card className="border-orange-500/50 bg-orange-500/5">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <RotateCcw className="h-5 w-5 text-orange-500" />
-              <CardTitle className="text-lg">Reset Test Day (DEV ONLY)</CardTitle>
-            </div>
-            <CardDescription>
-              Complete reset of all transactional data. Returns inventory to zero state. Hidden in production.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="text-sm text-muted-foreground">
-                <p className="font-medium mb-2">This will delete (in FK-safe order):</p>
-                <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>All inventory_transactions (the ledger)</li>
-                  <li>All ship_picks, packing_runs, roasted_batches</li>
-                  <li>All order_line_items and orders (admin-created)</li>
-                  <li>All production checkmarks and plan items</li>
-                  <li>All andon picks and external demand</li>
-                </ul>
+        <>
+          <Card className="border-orange-500/50 bg-orange-500/5">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <RotateCcw className="h-5 w-5 text-orange-500" />
+                <CardTitle className="text-lg">Reset Test Day (DEV ONLY)</CardTitle>
               </div>
-              <div className="text-sm text-muted-foreground">
-                <p className="font-medium mb-2">Preserves:</p>
-                <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>Clients, products, roast groups</li>
-                  <li>Board configuration (source_board_products)</li>
-                  <li>Price lists, users, roles</li>
-                </ul>
+              <CardDescription>
+                Complete reset of all transactional data. Returns inventory to zero state. Hidden in production.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="text-sm text-muted-foreground">
+                  <p className="font-medium mb-2">This will delete (in FK-safe order):</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>All inventory_transactions (the ledger)</li>
+                    <li>All ship_picks, packing_runs, roasted_batches</li>
+                    <li>All order_line_items and orders (admin-created)</li>
+                    <li>All production checkmarks and plan items</li>
+                    <li>All andon picks and external demand</li>
+                  </ul>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  <p className="font-medium mb-2">Preserves:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>Clients, products, roast groups</li>
+                    <li>Board configuration (source_board_products)</li>
+                    <li>Price lists, users, roles</li>
+                  </ul>
+                </div>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setResetTestDayUnderstood(false);
+                    setShowResetTestDayModal(true);
+                  }}
+                  className="gap-2 border-orange-500 text-orange-600 hover:bg-orange-500/10"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset Test Day
+                </Button>
               </div>
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setResetTestDayUnderstood(false);
-                  setShowResetTestDayModal(true);
-                }}
-                className="gap-2 border-orange-500 text-orange-600 hover:bg-orange-500/10"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset Test Day
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          {/* DEV ONLY: Nuclear Reset - Clear ALL Master Data */}
+          <Card className="border-red-600/50 bg-red-500/5">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Bomb className="h-5 w-5 text-red-600" />
+                <CardTitle className="text-lg">Reset Master Data (DEV ONLY)</CardTitle>
+              </div>
+              <CardDescription>
+                <span className="font-bold text-red-600">NUCLEAR OPTION:</span> Clears ALL clients, products, roast groups, and their dependencies. Use to start fresh with real-world data entry.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="text-sm text-muted-foreground">
+                  <p className="font-medium mb-2">This will DELETE:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>All clients and client locations</li>
+                    <li>All products and price lists</li>
+                    <li>All roast groups and inventory levels</li>
+                    <li>All orders, batches, packing runs</li>
+                    <li>All board configurations</li>
+                    <li>All green coffee lots</li>
+                  </ul>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  <p className="font-medium mb-2">Preserves:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>Schema, enums, constraints</li>
+                    <li>Auth users and roles</li>
+                  </ul>
+                </div>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setResetMasterConfirmText('');
+                    setResetMasterUnderstood(false);
+                    setShowResetMasterModal(true);
+                  }}
+                  className="gap-2 border-red-600 text-red-600 hover:bg-red-600/10"
+                >
+                  <Bomb className="h-4 w-4" />
+                  Reset Master Data
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {/* Reset Confirmation Modal */}
@@ -400,6 +478,64 @@ export default function AdminTools() {
               className="border-orange-500 text-orange-600 hover:bg-orange-500/10"
             >
               {isResettingTestDay ? 'Resetting...' : 'Confirm Reset'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Master Data Confirmation Modal (dev only - nuclear) */}
+      <Dialog open={showResetMasterModal} onOpenChange={setShowResetMasterModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Bomb className="h-5 w-5" />
+              Reset All Master Data
+            </DialogTitle>
+            <DialogDescription>
+              <span className="font-bold">This is the nuclear option.</span> All clients, products, roast groups, and their data will be permanently deleted.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="confirm-nuke-text">
+                Type <span className="font-mono font-bold">NUKE</span> to confirm
+              </Label>
+              <Input
+                id="confirm-nuke-text"
+                value={resetMasterConfirmText}
+                onChange={(e) => setResetMasterConfirmText(e.target.value)}
+                placeholder="Type NUKE"
+                className="font-mono"
+              />
+            </div>
+            
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="reset-master-understood"
+                checked={resetMasterUnderstood}
+                onCheckedChange={(checked) => setResetMasterUnderstood(checked === true)}
+              />
+              <Label htmlFor="reset-master-understood" className="text-sm leading-relaxed cursor-pointer">
+                I understand this deletes ALL clients, products, roast groups, and starts fresh
+              </Label>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowResetMasterModal(false)}
+              disabled={isResettingMaster}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleResetMasterData}
+              disabled={!canConfirmResetMaster || isResettingMaster}
+            >
+              {isResettingMaster ? 'Resetting...' : 'Confirm Nuclear Reset'}
             </Button>
           </DialogFooter>
         </DialogContent>
