@@ -84,9 +84,10 @@ export default function Orders() {
     return new Date(order.created_at);
   };
 
-  // Check if order is shipped
-  const isShipped = (order: NonNullable<typeof data>[0]) => 
-    order.status === 'SHIPPED' || order.shipped_or_ready;
+  // Check if order is in a terminal/inactive state (shipped or cancelled)
+  // These orders sink to the bottom of the list
+  const isTerminalOrder = (order: NonNullable<typeof data>[0]) => 
+    order.status === 'SHIPPED' || order.status === 'CANCELLED' || order.shipped_or_ready;
 
   // Fetch packing runs for pack completion calculation
   const { data: packingRuns } = useQuery({
@@ -113,33 +114,33 @@ export default function Orders() {
   // 1. Unshipped always visible (never filtered by age)
   // 2. Shipped only visible within historyDays window
   // 3. Within each group: needs-deadline first, then by work_deadline_at
-  const { visibleOrders, hasMoreShipped, shippedCount, unshippedCount } = useMemo(() => {
-    if (!data) return { visibleOrders: [], hasMoreShipped: false, shippedCount: 0, unshippedCount: 0 };
+  const { visibleOrders, hasMoreHistory, terminalCount, activeCount } = useMemo(() => {
+    if (!data) return { visibleOrders: [], hasMoreHistory: false, terminalCount: 0, activeCount: 0 };
     
     const now = new Date();
     const cutoffDate = startOfDay(subDays(now, historyDays));
     
-    // Separate unshipped and shipped
-    const unshipped: typeof data = [];
-    const shipped: typeof data = [];
-    let hiddenShippedCount = 0;
+    // Separate active and terminal (shipped/cancelled)
+    const active: typeof data = [];
+    const terminal: typeof data = [];
+    let hiddenTerminalCount = 0;
     
     for (const order of data) {
-      if (isShipped(order)) {
+      if (isTerminalOrder(order)) {
         const ageRef = getAgeReference(order);
         if (ageRef >= cutoffDate) {
-          shipped.push(order);
+          terminal.push(order);
         } else {
-          hiddenShippedCount++;
+          hiddenTerminalCount++;
         }
       } else {
-        // Always include unshipped regardless of age
-        unshipped.push(order);
+        // Always include active orders regardless of age
+        active.push(order);
       }
     }
     
-    // Sort unshipped: needs-deadline at top, then by work_deadline_at asc
-    const sortedUnshipped = [...unshipped].sort((a, b) => {
+    // Sort active: needs-deadline at top, then by work_deadline_at asc
+    const sortedActive = [...active].sort((a, b) => {
       // Group 1: SUBMITTED with no deadline - always at top
       const aIsSubmittedNoDeadline = a.status === 'SUBMITTED' && !a.work_deadline_at;
       const bIsSubmittedNoDeadline = b.status === 'SUBMITTED' && !b.work_deadline_at;
@@ -173,18 +174,18 @@ export default function Orders() {
       return a.order_number.localeCompare(b.order_number);
     });
     
-    // Sort shipped: newest first (by age reference desc)
-    const sortedShipped = [...shipped].sort((a, b) => {
+    // Sort terminal (shipped/cancelled): newest first (by age reference desc)
+    const sortedTerminal = [...terminal].sort((a, b) => {
       const aRef = getAgeReference(a).getTime();
       const bRef = getAgeReference(b).getTime();
       return bRef - aRef; // Newest first
     });
     
     return {
-      visibleOrders: [...sortedUnshipped, ...sortedShipped],
-      hasMoreShipped: hiddenShippedCount > 0,
-      shippedCount: shipped.length,
-      unshippedCount: unshipped.length,
+      visibleOrders: [...sortedActive, ...sortedTerminal],
+      hasMoreHistory: hiddenTerminalCount > 0,
+      terminalCount: terminal.length,
+      activeCount: active.length,
     };
   }, [data, historyDays, deadlineSortDir]);
 
@@ -207,7 +208,7 @@ export default function Orders() {
     status === 'SHIPPED' || status === 'CANCELLED';
 
   // Visibility label
-  const visibilityLabel = `Showing ${unshippedCount} unshipped + ${shippedCount} shipped from the last ${historyDays} days`;
+  const visibilityLabel = `Showing ${activeCount} active + ${terminalCount} shipped/cancelled from the last ${historyDays} days`;
 
   return (
     <div className="page-container">
@@ -378,7 +379,7 @@ export default function Orders() {
               })}
 
               {/* Load more history control */}
-              {hasMoreShipped && (
+              {hasMoreHistory && (
                 <div className="pt-4 flex justify-center">
                   <Button
                     variant="ghost"
