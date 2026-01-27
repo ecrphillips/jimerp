@@ -10,15 +10,13 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { AlertCircle } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { 
-  generateProductCode, 
-  generateRoastGroupCode, 
-  buildSku, 
   PACKAGING_VARIANTS, 
   COMMON_ORIGINS,
   type PackagingVariantValue 
 } from '@/lib/skuGenerator';
+import { generateShortCode, insertProductsWithUniqueSkus } from '@/lib/skuUtils';
 
 interface Client {
   id: string;
@@ -53,14 +51,13 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
   const [roastGroupMode, setRoastGroupMode] = useState<RoastGroupMode>('existing');
   const [selectedRoastGroup, setSelectedRoastGroup] = useState('');
   
-  // New roast group fields (single origin only)
+  // New roast group fields
   const [origin, setOrigin] = useState('');
   const [customOrigin, setCustomOrigin] = useState('');
-  const [newRoastGroupCode, setNewRoastGroupCode] = useState('');
-  const [newCropsterProfileRef, setNewCropsterProfileRef] = useState('');
+  const [cropsterProfileRef, setCropsterProfileRef] = useState('');
   
-  // Step 3: Product Name (suffix only)
-  const [productSuffix, setProductSuffix] = useState('');
+  // Step 3: Finished Good Name (single field)
+  const [finishedGoodName, setFinishedGoodName] = useState('');
   
   // Step 4: Packaging variants
   const [selectedVariants, setSelectedVariants] = useState<Set<PackagingVariantValue>>(new Set());
@@ -104,17 +101,6 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
     [roastGroups]
   );
   
-  const { data: existingProducts } = useQuery({
-    queryKey: ['existing-product-skus'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('products')
-        .select('sku, product_name');
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-  
   // Derived values
   const selectedClient = useMemo(() => 
     clients?.find(c => c.id === clientId), 
@@ -126,104 +112,31 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
     [roastGroups, selectedRoastGroup]
   );
   
-  const existingRoastGroupCodes = useMemo(() => 
-    new Set(roastGroups?.map(g => g.roast_group_code) ?? []),
-    [roastGroups]
-  );
-  
-  const existingProductCodes = useMemo(() => {
-    const codes = new Set<string>();
-    existingProducts?.forEach(p => {
-      if (p.sku) {
-        const parts = p.sku.split('-');
-        if (parts.length >= 3) {
-          codes.add(parts[2]);
-        }
-      }
-    });
-    return codes;
-  }, [existingProducts]);
-  
-  // Calculate roast group display name based on mode
-  const roastGroupDisplayName = useMemo(() => {
-    if (roastGroupMode === 'existing' && selectedRoastGroupData) {
-      return selectedRoastGroupData.display_name?.trim() || selectedRoastGroupData.roast_group.replace(/_/g, ' ');
-    }
-    if (roastGroupMode === 'new') {
-      return origin === '__custom__' ? customOrigin : origin;
-    }
-    return '';
-  }, [roastGroupMode, selectedRoastGroupData, origin, customOrigin]);
-  
-  // Get the roast group code to use
-  const effectiveRoastGroupCode = useMemo(() => {
-    if (roastGroupMode === 'existing' && selectedRoastGroupData) {
-      return selectedRoastGroupData.roast_group_code;
-    }
-    return newRoastGroupCode;
-  }, [roastGroupMode, selectedRoastGroupData, newRoastGroupCode]);
-  
-  // Auto-suggest roast group code when creating new
-  useEffect(() => {
-    if (roastGroupMode === 'new') {
-      const name = origin === '__custom__' ? customOrigin : origin;
-      if (name) {
-        const suggested = generateRoastGroupCode(name, false, existingRoastGroupCodes);
-        setNewRoastGroupCode(suggested);
-      }
-    }
-  }, [roastGroupMode, origin, customOrigin, existingRoastGroupCodes]);
-  
-  // Full product name
-  const fullProductName = useMemo(() => {
-    if (!roastGroupDisplayName || !productSuffix.trim()) return '';
-    return `${roastGroupDisplayName} - ${productSuffix.trim()}`;
-  }, [roastGroupDisplayName, productSuffix]);
-  
-  // Generate product code from suffix
-  const productCode = useMemo(() => {
-    if (!productSuffix.trim()) return '';
-    return generateProductCode(productSuffix, existingProductCodes);
-  }, [productSuffix, existingProductCodes]);
-  
-  // Generate SKU previews
+  // Generate SKU previews (read-only)
   const skuPreviews = useMemo(() => {
-    if (!selectedClient || !effectiveRoastGroupCode || !productCode) return [];
+    if (!selectedClient || !finishedGoodName.trim()) return [];
+    
+    const productCode = generateShortCode(finishedGoodName.trim(), 6);
     
     return Array.from(selectedVariants).map(variantValue => {
       const variant = PACKAGING_VARIANTS.find(v => v.value === variantValue);
       if (!variant) return null;
       
+      const baseSku = `${selectedClient.client_code}-${productCode}-${variant.code}`;
+      
       return {
         variant: variantValue,
         label: variant.label,
-        sku: buildSku({
-          clientCode: selectedClient.client_code,
-          roastGroupCode: effectiveRoastGroupCode,
-          productCode: productCode,
-          variantCode: variant.code,
-        }),
+        baseSku,
         bagSizeG: variant.bagSizeG,
       };
     }).filter(Boolean) as Array<{
       variant: PackagingVariantValue;
       label: string;
-      sku: string;
+      baseSku: string;
       bagSizeG: number;
     }>;
-  }, [selectedClient, effectiveRoastGroupCode, productCode, selectedVariants]);
-  
-  // Check for SKU collisions
-  const skuCollisions = useMemo(() => {
-    const existingSkus = new Set(existingProducts?.map(p => p.sku) ?? []);
-    return skuPreviews.filter(p => existingSkus.has(p.sku));
-  }, [skuPreviews, existingProducts]);
-  
-  // Validation
-  const isRoastGroupCodeUnique = useMemo(() => {
-    if (roastGroupMode === 'existing') return true;
-    return !existingRoastGroupCodes.has(newRoastGroupCode);
-  }, [roastGroupMode, newRoastGroupCode, existingRoastGroupCodes]);
+  }, [selectedClient, finishedGoodName, selectedVariants]);
   
   const canSave = useMemo(() => {
     if (!clientId) return false;
@@ -231,15 +144,12 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
     if (roastGroupMode === 'new') {
       if (!origin) return false;
       if (origin === '__custom__' && !customOrigin.trim()) return false;
-      if (!newRoastGroupCode.trim()) return false;
-      if (!isRoastGroupCodeUnique) return false;
     }
-    if (!productSuffix.trim()) return false;
+    if (!finishedGoodName.trim()) return false;
     if (selectedVariants.size === 0) return false;
     if (!lifecycle) return false;
-    if (skuCollisions.length > 0) return false;
     return true;
-  }, [clientId, roastGroupMode, selectedRoastGroup, origin, customOrigin, newRoastGroupCode, isRoastGroupCodeUnique, productSuffix, selectedVariants, lifecycle, skuCollisions]);
+  }, [clientId, roastGroupMode, selectedRoastGroup, origin, customOrigin, finishedGoodName, selectedVariants, lifecycle]);
   
   // Reset form
   const resetForm = () => {
@@ -248,9 +158,8 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
     setSelectedRoastGroup('');
     setOrigin('');
     setCustomOrigin('');
-    setNewRoastGroupCode('');
-    setNewCropsterProfileRef('');
-    setProductSuffix('');
+    setCropsterProfileRef('');
+    setFinishedGoodName('');
     setSelectedVariants(new Set());
     setPriceInput('');
     setLifecycle(null);
@@ -259,66 +168,85 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
-      let roastGroupName: string;
-      let roastGroupCode: string;
+      const trimmedName = finishedGoodName.trim();
+      let roastGroupKey: string;
       
       // Create roast group if needed
       if (roastGroupMode === 'new') {
         const originValue = origin === '__custom__' ? customOrigin.trim() : origin;
+        const baseKey = originValue.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+        const baseCode = generateShortCode(originValue, 6);
         
-        roastGroupName = originValue.toUpperCase().replace(/\s+/g, '_');
-        roastGroupCode = newRoastGroupCode.trim().toUpperCase();
+        // Try to create with collision handling
+        let rgSuccess = false;
+        for (let attempt = 0; attempt < 50; attempt++) {
+          const key = attempt === 0 ? baseKey : `${baseKey}_${attempt + 1}`;
+          const code = attempt === 0 ? baseCode : `${baseCode}${attempt + 1}`.substring(0, 6);
+          
+          const { error: rgError } = await supabase
+            .from('roast_groups')
+            .insert({
+              roast_group: key,
+              roast_group_code: code,
+              is_blend: false,
+              origin: originValue,
+              blend_name: null,
+              display_name: originValue,
+              standard_batch_kg: 20,
+              expected_yield_loss_pct: 16,
+              default_roaster: 'EITHER',
+              is_active: true,
+              cropster_profile_ref: cropsterProfileRef.trim() || null,
+            });
+          
+          if (!rgError) {
+            roastGroupKey = key;
+            rgSuccess = true;
+            break;
+          }
+          
+          if (rgError.code !== '23505') {
+            throw rgError;
+          }
+        }
         
-        const { error: rgError } = await supabase
-          .from('roast_groups')
-          .insert({
-            roast_group: roastGroupName,
-            roast_group_code: roastGroupCode,
-            is_blend: false,
-            origin: originValue,
-            blend_name: null,
-            display_name: originValue.trim() || null,
-            standard_batch_kg: 20,
-            expected_yield_loss_pct: 16,
-            default_roaster: 'EITHER',
-            is_active: true,
-            cropster_profile_ref: newCropsterProfileRef.trim() || null,
-          });
-        
-        if (rgError) throw rgError;
+        if (!rgSuccess) {
+          throw new Error('Could not create roast group after 50 attempts');
+        }
       } else {
-        roastGroupName = selectedRoastGroup;
-        roastGroupCode = selectedRoastGroupData!.roast_group_code;
+        roastGroupKey = selectedRoastGroup;
       }
       
-      // Create products for each variant
+      // Create products using auto-dedupe
       const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
       const hasPrice = !isNaN(priceValue);
       
       const productInserts = skuPreviews.map(preview => ({
         client_id: clientId,
-        product_name: fullProductName,
-        sku: preview.sku,
-        roast_group: roastGroupName,
-        packaging_variant: preview.variant as "RETAIL_250G" | "RETAIL_300G" | "RETAIL_340G" | "RETAIL_454G" | "CROWLER_200G" | "CROWLER_250G" | "CAN_125G" | "BULK_2LB" | "BULK_1KG" | "BULK_5LB" | "BULK_2KG",
+        product_name: trimmedName,
+        baseSku: preview.baseSku,
+        roast_group: roastGroupKey!,
+        packaging_variant: preview.variant,
         bag_size_g: preview.bagSizeG,
-        format: 'WHOLE_BEAN' as const,
-        grind_options: ['WHOLE_BEAN'] as ("WHOLE_BEAN" | "ESPRESSO" | "FILTER")[],
+        format: 'WHOLE_BEAN',
+        grind_options: ['WHOLE_BEAN'],
         is_active: true,
         is_perennial: lifecycle === 'perennial',
       }));
       
-      const { data: createdProducts, error: prodError } = await supabase
-        .from('products')
-        .insert(productInserts)
-        .select('id');
+      const { created, errors } = await insertProductsWithUniqueSkus(supabase, productInserts);
       
-      if (prodError) throw prodError;
+      if (errors.length > 0) {
+        console.error('Product creation errors:', errors);
+        throw new Error(errors[0]);
+      }
+      
+      const adjustedCount = created.filter(c => c.wasAdjusted).length;
       
       // Create prices
-      if (hasPrice && createdProducts) {
+      if (hasPrice && created.length > 0) {
         const today = new Date().toISOString().split('T')[0];
-        const priceInserts = createdProducts.map(p => ({
+        const priceInserts = created.map(p => ({
           product_id: p.id,
           unit_price: priceValue,
           currency: 'CAD',
@@ -334,24 +262,28 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
         }
       }
       
-      return { count: productInserts.length, roastGroupDisplayName };
+      return { 
+        count: created.length, 
+        name: trimmedName, 
+        adjustedCount,
+      };
     },
     onSuccess: (result) => {
-      toast.success(`Created ${result.count} product${result.count > 1 ? 's' : ''} under ${result.roastGroupDisplayName}`);
+      let message = `Created ${result.count} product${result.count > 1 ? 's' : ''}: ${result.name}`;
+      if (result.adjustedCount > 0) {
+        message += ` (${result.adjustedCount} SKU${result.adjustedCount > 1 ? 's' : ''} auto-adjusted for uniqueness)`;
+      }
+      toast.success(message);
       queryClient.invalidateQueries({ queryKey: ['all-products'] });
       queryClient.invalidateQueries({ queryKey: ['all-prices'] });
       queryClient.invalidateQueries({ queryKey: ['active-roast-groups-with-code'] });
-      queryClient.invalidateQueries({ queryKey: ['existing-product-skus'] });
+      queryClient.invalidateQueries({ queryKey: ['existing-product-skus-set'] });
       resetForm();
       onOpenChange(false);
     },
     onError: (err: any) => {
-      console.error(err);
-      if (err?.code === '23505') {
-        toast.error('A product with this SKU already exists');
-      } else {
-        toast.error('Failed to create products');
-      }
+      console.error('Save failed:', err);
+      toast.error(err?.message || 'Failed to create products');
     },
   });
   
@@ -457,56 +389,32 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
                 </div>
                 
                 <div>
-                  <Label htmlFor="rgCode" className="text-xs text-muted-foreground">
-                    Roast Group Code (3-6 chars, must be unique)
-                  </Label>
-                  <Input
-                    id="rgCode"
-                    placeholder="e.g. GUA, ETH, COL"
-                    value={newRoastGroupCode}
-                    onChange={(e) => setNewRoastGroupCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 6))}
-                    className={!isRoastGroupCodeUnique ? 'border-destructive' : ''}
-                  />
-                  {!isRoastGroupCodeUnique && (
-                    <p className="text-xs text-destructive mt-1">This code is already in use</p>
-                  )}
-                </div>
-                
-                <div>
                   <Label htmlFor="cropsterRef" className="text-xs text-muted-foreground">
                     Cropster Profile Ref (optional)
                   </Label>
                   <Input
                     id="cropsterRef"
                     placeholder="e.g. R-1234 or profile name"
-                    value={newCropsterProfileRef}
-                    onChange={(e) => setNewCropsterProfileRef(e.target.value)}
+                    value={cropsterProfileRef}
+                    onChange={(e) => setCropsterProfileRef(e.target.value)}
                   />
                 </div>
               </div>
             )}
           </div>
           
-          {/* Step 3: Product Name */}
+          {/* Step 3: Finished Good Name */}
           <div>
-            <Label>3. Finished Good Name</Label>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="bg-muted px-3 py-2 rounded-l-md border border-r-0 text-sm font-medium min-w-[120px]">
-                {roastGroupDisplayName || '(Origin)'}
-              </div>
-              <span className="text-muted-foreground">—</span>
-              <Input
-                placeholder="e.g. Hermanos, Finca Santa Elena"
-                value={productSuffix}
-                onChange={(e) => setProductSuffix(e.target.value)}
-                className="flex-1"
-              />
-            </div>
-            {fullProductName && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Full name: <span className="font-medium">{fullProductName}</span>
-              </p>
-            )}
+            <Label htmlFor="fgName">3. Finished Good Name</Label>
+            <Input
+              id="fgName"
+              placeholder="e.g. Guatemala Huehuetenango, Ethiopia Yirgacheffe Natural"
+              value={finishedGoodName}
+              onChange={(e) => setFinishedGoodName(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              This name appears on orders, pack lists, and shipping.
+            </p>
           </div>
           
           {/* Step 4: Packaging Variants */}
@@ -531,27 +439,21 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
               ))}
             </div>
             
-            {/* SKU Previews */}
+            {/* SKU Previews (read-only) */}
             {skuPreviews.length > 0 && (
               <div className="mt-3 space-y-1">
-                <p className="text-xs text-muted-foreground">Generated SKUs:</p>
+                <p className="text-xs text-muted-foreground">SKU Preview (may be adjusted for uniqueness):</p>
                 <div className="flex flex-wrap gap-2">
                   {skuPreviews.map(p => (
                     <Badge 
-                      key={p.sku} 
-                      variant={skuCollisions.some(c => c.sku === p.sku) ? 'destructive' : 'secondary'}
+                      key={p.baseSku} 
+                      variant="secondary"
                       className="font-mono text-xs"
                     >
-                      {p.sku}
+                      {p.baseSku}
                     </Badge>
                   ))}
                 </div>
-                {skuCollisions.length > 0 && (
-                  <p className="text-xs text-destructive flex items-center gap-1 mt-1">
-                    <AlertCircle className="h-3 w-3" />
-                    Some SKUs already exist
-                  </p>
-                )}
               </div>
             )}
           </div>
@@ -608,7 +510,14 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
               onClick={() => saveMutation.mutate()} 
               disabled={!canSave || saveMutation.isPending}
             >
-              {saveMutation.isPending ? 'Creating…' : `Create ${selectedVariants.size} Product${selectedVariants.size !== 1 ? 's' : ''}`}
+              {saveMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating…
+                </>
+              ) : (
+                `Create ${selectedVariants.size} Product${selectedVariants.size !== 1 ? 's' : ''}`
+              )}
             </Button>
           </div>
         </div>
