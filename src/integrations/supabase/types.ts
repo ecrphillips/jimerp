@@ -892,6 +892,7 @@ export type Database = {
         Row: {
           blend_name: string | null
           created_at: string
+          cropster_profile_ref: string | null
           default_roaster: Database["public"]["Enums"]["default_roaster"]
           display_name: string | null
           display_order: number | null
@@ -908,6 +909,7 @@ export type Database = {
         Insert: {
           blend_name?: string | null
           created_at?: string
+          cropster_profile_ref?: string | null
           default_roaster?: Database["public"]["Enums"]["default_roaster"]
           display_name?: string | null
           display_order?: number | null
@@ -924,6 +926,7 @@ export type Database = {
         Update: {
           blend_name?: string | null
           created_at?: string
+          cropster_profile_ref?: string | null
           default_roaster?: Database["public"]["Enums"]["default_roaster"]
           display_name?: string | null
           display_order?: number | null
