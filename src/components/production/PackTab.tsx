@@ -25,6 +25,7 @@ import { Link } from 'react-router-dom';
 import { type PackagingVariant } from '@/components/PackagingBadge';
 import { SortablePackRow } from './SortablePackRow';
 import type { DateFilterConfig } from './types';
+import { useWipInventory, useFgInventory } from '@/hooks/useInventoryLedger';
 
 // Removed SortOption type - no more auto-sorting, order is manual via pack_display_order
 
@@ -138,21 +139,19 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     },
   });
 
-  // Fetch roasted batches for inventory display (all ROASTED batches)
-  const { data: roastedBatches } = useQuery({
-    queryKey: ['roasted-batches-for-pack', dateFilterConfig],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('roasted_batches')
-        .select('*')
-        .eq('status', 'ROASTED');
-      
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  // ========== LEDGER-BASED INVENTORY ==========
+  // WIP inventory from ledger: sum(quantity_kg) by roast_group
+  const { data: wipInventory } = useWipInventory();
+  
+  // FG inventory from ledger: sum(quantity_units) by product_id
+  const { data: fgInventory } = useFgInventory();
+  
+  // Use ledger-based WIP for roasted inventory display
+  const roastedInventory = useMemo(() => {
+    return wipInventory ?? {};
+  }, [wipInventory]);
 
-  // Fetch packing runs
+  // Fetch packing runs (still needed for units_packed tracking until ledger migration)
   const { data: packingRuns } = useQuery({
     queryKey: ['packing-runs', dateFilterConfig],
     queryFn: async () => {
@@ -164,44 +163,6 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       return (data ?? []) as PackingRun[];
     },
   });
-
-  // Map products to roast_group for consumption calculation
-  const productRoastGroupMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const p of products ?? []) {
-      if (p.roast_group) {
-        map[p.id] = p.roast_group;
-      }
-    }
-    return map;
-  }, [products]);
-
-  // Calculate roasted inventory by roast_group:
-  // sum(roasted_batches.actual_output_kg) - sum(packing_runs.kg_consumed)
-  const roastedInventory = useMemo(() => {
-    // Sum roasted output
-    const roastedOutput: Record<string, number> = {};
-    for (const b of roastedBatches ?? []) {
-      roastedOutput[b.roast_group] = (roastedOutput[b.roast_group] ?? 0) + b.actual_output_kg;
-    }
-
-    // Sum kg consumed from packing runs by roast_group
-    const consumed: Record<string, number> = {};
-    for (const pr of packingRuns ?? []) {
-      const roastGroup = productRoastGroupMap[pr.product_id];
-      if (roastGroup) {
-        consumed[roastGroup] = (consumed[roastGroup] ?? 0) + pr.kg_consumed;
-      }
-    }
-
-    // Net inventory = roasted - consumed
-    const inventory: Record<string, number> = {};
-    const allGroups = new Set([...Object.keys(roastedOutput), ...Object.keys(consumed)]);
-    for (const group of allGroups) {
-      inventory[group] = (roastedOutput[group] ?? 0) - (consumed[group] ?? 0);
-    }
-    return inventory;
-  }, [roastedBatches, packingRuns, productRoastGroupMap]);
 
   // Map packing by product for unblocks calculation
   const packingByProductUnits = useMemo(() => {

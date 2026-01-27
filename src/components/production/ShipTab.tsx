@@ -28,6 +28,7 @@ import { SortableShipCard } from './SortableShipCard';
 import { format, addDays, parseISO } from 'date-fns';
 import type { Database } from '@/integrations/supabase/types';
 import type { DateFilterConfig } from './types';
+import { useFgInventory } from '@/hooks/useInventoryLedger';
 
 type ShipPriority = 'NORMAL' | 'TIME_SENSITIVE';
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -153,7 +154,11 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     },
   });
 
-  // Fetch packing runs - for "All" mode don't filter by date
+  // ========== LEDGER-BASED FG INVENTORY ==========
+  // FG inventory from ledger: sum(quantity_units) by product_id
+  const { data: fgInventory } = useFgInventory();
+
+  // Fetch packing runs - still needed for legacy units_packed until ledger migration
   const { data: packingRuns } = useQuery({
     queryKey: ['packing-runs', dateFilterConfig],
     queryFn: async () => {
