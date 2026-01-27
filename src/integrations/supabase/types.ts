@@ -454,6 +454,7 @@ export type Database = {
           status: Database["public"]["Enums"]["order_status"]
           updated_at: string
           work_deadline: string | null
+          work_deadline_at: string | null
         }
         Insert: {
           client_id: string
@@ -477,6 +478,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["order_status"]
           updated_at?: string
           work_deadline?: string | null
+          work_deadline_at?: string | null
         }
         Update: {
           client_id?: string
@@ -500,6 +502,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["order_status"]
           updated_at?: string
           work_deadline?: string | null
+          work_deadline_at?: string | null
         }
         Relationships: [
           {

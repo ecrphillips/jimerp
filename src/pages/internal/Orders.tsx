@@ -47,6 +47,7 @@ export default function Orders() {
           status, 
           requested_ship_date, 
           work_deadline,
+          work_deadline_at,
           internal_ops_notes,
           roasted,
           packed,
@@ -64,13 +65,14 @@ export default function Orders() {
   });
 
   // Sort with SUBMITTED + no deadline pinned at top
+  // Now uses work_deadline_at (timestamptz) as primary sort key
   const sortedOrders = useMemo(() => {
     if (!data) return [];
     
     return [...data].sort((a, b) => {
       // Group 1: SUBMITTED with no deadline - always at top
-      const aIsSubmittedNoDeadline = a.status === 'SUBMITTED' && !a.work_deadline;
-      const bIsSubmittedNoDeadline = b.status === 'SUBMITTED' && !b.work_deadline;
+      const aIsSubmittedNoDeadline = a.status === 'SUBMITTED' && !a.work_deadline_at;
+      const bIsSubmittedNoDeadline = b.status === 'SUBMITTED' && !b.work_deadline_at;
       
       if (aIsSubmittedNoDeadline && !bIsSubmittedNoDeadline) return -1;
       if (!aIsSubmittedNoDeadline && bIsSubmittedNoDeadline) return 1;
@@ -79,9 +81,9 @@ export default function Orders() {
         return a.order_number.localeCompare(b.order_number);
       }
       
-      // Group 2: Everything else - sort by work_deadline
-      const aDeadline = a.work_deadline ? new Date(a.work_deadline).getTime() : null;
-      const bDeadline = b.work_deadline ? new Date(b.work_deadline).getTime() : null;
+      // Group 2: Everything else - sort by work_deadline_at
+      const aDeadline = a.work_deadline_at ? new Date(a.work_deadline_at).getTime() : null;
+      const bDeadline = b.work_deadline_at ? new Date(b.work_deadline_at).getTime() : null;
       
       // Handle nulls (push to end)
       if (aDeadline === null && bDeadline !== null) return 1;
@@ -178,7 +180,7 @@ export default function Orders() {
 
               {/* Order rows */}
               {sortedOrders.map((o) => {
-                const isSubmittedNoDeadline = o.status === 'SUBMITTED' && !o.work_deadline;
+                const isSubmittedNoDeadline = o.status === 'SUBMITTED' && !o.work_deadline_at;
                 const isTerminal = isTerminalStatus(o.status);
                 
                 return (
@@ -217,10 +219,12 @@ export default function Orders() {
                       <LocationCodeDisplay locationId={o.location_id} />
                     </div>
 
-                    {/* Work Deadline */}
+                    {/* Work Deadline - show date and time */}
                     <div className="w-28 text-sm">
-                      {o.work_deadline ? (
-                        <span>{format(new Date(o.work_deadline), 'MMM d')}</span>
+                      {o.work_deadline_at ? (
+                        <span title={format(new Date(o.work_deadline_at), 'PPP HH:mm')}>
+                          {format(new Date(o.work_deadline_at), 'MMM d, HH:mm')}
+                        </span>
                       ) : (
                         <Button
                           variant="ghost"
