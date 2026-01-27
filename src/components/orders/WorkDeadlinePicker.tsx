@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { format, setHours, setMinutes, parseISO, isValid as isValidDate } from 'date-fns';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { format, setHours, setMinutes, parseISO, isValid as isValidDate, startOfDay, isSameDay } from 'date-fns';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,26 @@ const TIME_OPTIONS = [
   { value: '16:00', label: '16:00' },
 ];
 
+/**
+ * Normalize a Date to midnight in local browser time.
+ * This ensures consistent comparison regardless of time component.
+ */
+function normalizeToLocalMidnight(date: Date): Date {
+  return startOfDay(date);
+}
+
+/**
+ * Create a "clean" local date for the calendar from a zoned date.
+ * React-Day-Picker expects dates at midnight in local browser time.
+ */
+function toCalendarDate(zonedDate: Date): Date {
+  // Extract the Vancouver date components and create a new Date at local midnight
+  const year = zonedDate.getFullYear();
+  const month = zonedDate.getMonth();
+  const day = zonedDate.getDate();
+  return new Date(year, month, day, 0, 0, 0, 0);
+}
+
 interface WorkDeadlinePickerProps {
   value: string | null; // ISO timestamptz string or null
   onChange: (value: string | null) => void;
@@ -50,19 +70,32 @@ export function WorkDeadlinePicker({
   isSaving = false,
   compact = false,
 }: WorkDeadlinePickerProps) {
+  // Use a "calendar date" (midnight local) for the picker, separate from time
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedTime, setSelectedTime] = useState<string>('10:00');
   const [hasInteracted, setHasInteracted] = useState(false);
+  
+  // Track the last value we emitted to avoid re-syncing our own updates
+  const lastEmittedValueRef = useRef<string | null>(null);
 
   // Parse incoming value to local date and time
+  // Only sync from prop if it's a genuinely new external value
   useEffect(() => {
+    // Skip if this is the value we just emitted
+    if (value === lastEmittedValueRef.current) {
+      return;
+    }
+    
     if (value) {
       try {
         const parsed = parseISO(value);
         if (isValidDate(parsed)) {
           // Convert to Vancouver timezone for display
           const zonedDate = toZonedTime(parsed, TIMEZONE);
-          setSelectedDate(zonedDate);
+          
+          // Create a clean calendar date (midnight local)
+          const calendarDate = toCalendarDate(zonedDate);
+          setSelectedDate(calendarDate);
           
           const hours = zonedDate.getHours().toString().padStart(2, '0');
           const minutes = zonedDate.getMinutes().toString().padStart(2, '0');
@@ -78,7 +111,7 @@ export function WorkDeadlinePicker({
         setSelectedTime('10:00');
       }
     } else {
-      // No value - set defaults
+      // No value - set defaults only if user hasn't interacted
       if (!hasInteracted) {
         setSelectedDate(undefined);
         setSelectedTime('10:00');
@@ -91,23 +124,51 @@ export function WorkDeadlinePicker({
     if (!selectedDate || !selectedTime) return null;
     
     const [hours, minutes] = selectedTime.split(':').map(Number);
-    const dateWithTime = setMinutes(setHours(selectedDate, hours), minutes);
+    
+    // selectedDate is at midnight local time
+    // Create the datetime with the selected time in Vancouver timezone
+    const year = selectedDate.getFullYear();
+    const month = selectedDate.getMonth();
+    const day = selectedDate.getDate();
+    
+    // Create a date representing the desired Vancouver time
+    const dateWithTime = new Date(year, month, day, hours, minutes, 0, 0);
     
     // Convert from Vancouver timezone to UTC for storage
     const utcDate = fromZonedTime(dateWithTime, TIMEZONE);
+    
+    // DEV ASSERTION: Verify round-trip consistency
+    if (process.env.NODE_ENV === 'development') {
+      const roundTrip = toZonedTime(utcDate, TIMEZONE);
+      const roundTripCalendar = toCalendarDate(roundTrip);
+      if (!isSameDay(roundTripCalendar, selectedDate)) {
+        console.error(
+          '[WorkDeadlinePicker] Date round-trip mismatch!',
+          { selectedDate, roundTripCalendar, utcDate: utcDate.toISOString() }
+        );
+      }
+    }
+    
     return utcDate.toISOString();
   }, [selectedDate, selectedTime]);
 
   // Update parent when combined value changes
   useEffect(() => {
     if (hasInteracted && combinedValue !== value) {
+      // Track what we're emitting to avoid re-sync loop
+      lastEmittedValueRef.current = combinedValue;
       onChange(combinedValue);
     }
   }, [combinedValue, hasInteracted, onChange, value]);
 
   const handleDateSelect = (date: Date | undefined) => {
     setHasInteracted(true);
-    setSelectedDate(date);
+    if (date) {
+      // Normalize to midnight to avoid time component issues
+      setSelectedDate(normalizeToLocalMidnight(date));
+    } else {
+      setSelectedDate(undefined);
+    }
   };
 
   const handleTimeSelect = (time: string) => {
@@ -119,7 +180,7 @@ export function WorkDeadlinePicker({
   const isComplete = selectedDate && selectedTime;
   const showValidation = hasInteracted && !isComplete;
 
-  // Formatted display
+  // Formatted display - use the calendar date components directly
   const displayText = useMemo(() => {
     if (!selectedDate || !selectedTime) return null;
     return `${format(selectedDate, 'EEE MMM d')}, ${selectedTime}`;
@@ -205,4 +266,22 @@ export function WorkDeadlinePicker({
       )}
     </div>
   );
+}
+
+/**
+ * Test helper for date normalization logic.
+ * Verifies that selecting tomorrow results in correct round-trip.
+ */
+export function testDateRoundTrip(localDate: Date, time: string = '10:00'): boolean {
+  const [hours, minutes] = time.split(':').map(Number);
+  const year = localDate.getFullYear();
+  const month = localDate.getMonth();
+  const day = localDate.getDate();
+  
+  const dateWithTime = new Date(year, month, day, hours, minutes, 0, 0);
+  const utcDate = fromZonedTime(dateWithTime, TIMEZONE);
+  const roundTrip = toZonedTime(utcDate, TIMEZONE);
+  const roundTripCalendar = toCalendarDate(roundTrip);
+  
+  return isSameDay(roundTripCalendar, localDate);
 }
