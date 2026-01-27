@@ -18,10 +18,8 @@ const demoUsers: DemoUser[] = [
   // Internal users
   { email: 'admin@demo.liteerp.com', password: 'demo1234', name: 'Admin User', role: 'ADMIN' },
   { email: 'ops@demo.liteerp.com', password: 'demo1234', name: 'Ops User', role: 'OPS' },
-  // Client users
-  { email: 'clienta@demo.liteerp.com', password: 'demo1234', name: 'Alex from Cafe A', role: 'CLIENT', clientId: '11111111-1111-1111-1111-111111111111' },
-  { email: 'clientb@demo.liteerp.com', password: 'demo1234', name: 'Blake from Cafe B', role: 'CLIENT', clientId: '22222222-2222-2222-2222-222222222222' },
-  { email: 'clientc@demo.liteerp.com', password: 'demo1234', name: 'Casey from Roaster C', role: 'CLIENT', clientId: '33333333-3333-3333-3333-333333333333' },
+  // Test client user - tied to real "Mah" client
+  { email: 'mah@test.liteerp.com', password: 'testmah123', name: 'Test User (Mah)', role: 'CLIENT', clientId: 'aaaaaaaa-0001-0001-0001-000000000001' },
 ];
 
 serve(async (req) => {
