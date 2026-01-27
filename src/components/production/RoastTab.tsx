@@ -525,10 +525,21 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       defaultRoaster: DefaultRoaster;
       expectedYieldLossPct: number;
     }) => {
+      // First check if group exists to get its code, or generate a new one
+      const { data: existing } = await supabase
+        .from('roast_groups')
+        .select('roast_group_code')
+        .eq('roast_group', roastGroup)
+        .single();
+      
+      const roastGroupCode = existing?.roast_group_code ?? 
+        roastGroup.replace(/[^A-Za-z]/g, '').substring(0, 3).toUpperCase();
+      
       const { error } = await supabase
         .from('roast_groups')
         .upsert({
           roast_group: roastGroup,
+          roast_group_code: roastGroupCode,
           standard_batch_kg: standardBatchKg,
           default_roaster: defaultRoaster,
           expected_yield_loss_pct: expectedYieldLossPct,

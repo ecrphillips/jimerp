@@ -890,35 +890,47 @@ export type Database = {
       }
       roast_groups: {
         Row: {
+          blend_name: string | null
           created_at: string
           default_roaster: Database["public"]["Enums"]["default_roaster"]
           display_order: number | null
           expected_yield_loss_pct: number
           is_active: boolean
+          is_blend: boolean
           notes: string | null
+          origin: string | null
           roast_group: string
+          roast_group_code: string
           standard_batch_kg: number
           updated_at: string
         }
         Insert: {
+          blend_name?: string | null
           created_at?: string
           default_roaster?: Database["public"]["Enums"]["default_roaster"]
           display_order?: number | null
           expected_yield_loss_pct?: number
           is_active?: boolean
+          is_blend?: boolean
           notes?: string | null
+          origin?: string | null
           roast_group: string
+          roast_group_code: string
           standard_batch_kg?: number
           updated_at?: string
         }
         Update: {
+          blend_name?: string | null
           created_at?: string
           default_roaster?: Database["public"]["Enums"]["default_roaster"]
           display_order?: number | null
           expected_yield_loss_pct?: number
           is_active?: boolean
+          is_blend?: boolean
           notes?: string | null
+          origin?: string | null
           roast_group?: string
+          roast_group_code?: string
           standard_batch_kg?: number
           updated_at?: string
         }

@@ -17,10 +17,14 @@ type DefaultRoaster = Database['public']['Enums']['default_roaster'];
 
 interface RoastGroup {
   roast_group: string;
+  roast_group_code: string;
   standard_batch_kg: number;
   expected_yield_loss_pct: number;
   default_roaster: DefaultRoaster;
   is_active: boolean;
+  is_blend: boolean;
+  origin: string | null;
+  blend_name: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -36,6 +40,7 @@ export function RoastGroupsTab() {
 
   // Form state
   const [roastGroupName, setRoastGroupName] = useState('');
+  const [roastGroupCode, setRoastGroupCode] = useState('');
   const [standardBatchKg, setStandardBatchKg] = useState(20);
   const [yieldLossPct, setYieldLossPct] = useState(16);
   const [defaultRoaster, setDefaultRoaster] = useState<DefaultRoaster>('EITHER');
@@ -66,23 +71,31 @@ export function RoastGroupsTab() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const payload = {
-        roast_group: roastGroupName.trim().toUpperCase().replace(/\s+/g, '_'),
-        standard_batch_kg: standardBatchKg,
-        expected_yield_loss_pct: yieldLossPct,
-        default_roaster: defaultRoaster,
-        is_active: isActive,
-        notes: notes || null,
-      };
-
+      const groupName = roastGroupName.trim().toUpperCase().replace(/\s+/g, '_');
+      const code = roastGroupCode.trim().toUpperCase() || groupName.replace(/[^A-Z]/g, '').substring(0, 3);
+      
       if (editingGroup) {
         const { error } = await supabase
           .from('roast_groups')
-          .update(payload)
+          .update({
+            standard_batch_kg: standardBatchKg,
+            expected_yield_loss_pct: yieldLossPct,
+            default_roaster: defaultRoaster,
+            is_active: isActive,
+            notes: notes || null,
+          })
           .eq('roast_group', editingGroup.roast_group);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('roast_groups').insert(payload);
+        const { error } = await supabase.from('roast_groups').insert({
+          roast_group: groupName,
+          roast_group_code: code,
+          standard_batch_kg: standardBatchKg,
+          expected_yield_loss_pct: yieldLossPct,
+          default_roaster: defaultRoaster,
+          is_active: isActive,
+          notes: notes || null,
+        });
         if (error) throw error;
       }
     },
