@@ -9,8 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Plus, Pencil } from 'lucide-react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { ClientLocations } from '@/components/clients/ClientLocations';
+import { SafeDeleteModal } from '@/components/SafeDeleteModal';
 
 interface Client {
   id: string;
@@ -65,6 +66,16 @@ export default function Clients() {
   const [showDialog, setShowDialog] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [showInactive, setShowInactive] = useState(false);
+  
+  // Delete modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingClient, setDeletingClient] = useState<Client | null>(null);
+  const [deleteCounts, setDeleteCounts] = useState<{
+    open_orders: number;
+    completed_orders: number;
+    cancelled_orders: number;
+    products: number;
+  } | null>(null);
   
   // Form state
   const [formName, setFormName] = useState('');
@@ -264,6 +275,81 @@ export default function Clients() {
     },
   });
 
+  // Delete preflight mutation
+  const deletePreflightMutation = useMutation({
+    mutationFn: async (clientId: string) => {
+      const { data, error } = await supabase.rpc('get_client_delete_preflight', {
+        p_client_id: clientId,
+      });
+      if (error) throw error;
+      return data as {
+        open_orders: number;
+        completed_orders: number;
+        cancelled_orders: number;
+        products: number;
+      };
+    },
+    onSuccess: (data, clientId) => {
+      const client = clients?.find(c => c.id === clientId);
+      if (client) {
+        setDeletingClient(client);
+        setDeleteCounts(data);
+        setShowDeleteModal(true);
+      }
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to check client references');
+    },
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (force: boolean) => {
+      if (!deletingClient) throw new Error('No client selected');
+      const { data, error } = await supabase.rpc('delete_client_safe', {
+        p_client_id: deletingClient.id,
+        p_force: force,
+      });
+      if (error) throw error;
+      return data as { deleted: boolean; message: string };
+    },
+    onSuccess: (data) => {
+      if (data.deleted) {
+        toast.success('Client deleted');
+        queryClient.invalidateQueries({ queryKey: ['clients'] });
+      }
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to delete client');
+    },
+  });
+
+  // Set inactive mutation (for the delete modal's recommended action)
+  const setInactiveMutation = useMutation({
+    mutationFn: async () => {
+      if (!deletingClient) throw new Error('No client selected');
+      const { error } = await supabase
+        .from('clients')
+        .update({ is_active: false })
+        .eq('id', deletingClient.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Client set to inactive');
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to set client inactive');
+    },
+  });
+
+  const openDeleteDialog = useCallback((client: Client) => {
+    deletePreflightMutation.mutate(client.id);
+  }, [deletePreflightMutation]);
+
   const handleSubmit = () => {
     if (!formName.trim()) {
       toast.error('Client name is required');
@@ -337,12 +423,20 @@ export default function Clients() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <span className={`text-sm ${c.is_active ? 'text-green-600' : 'text-muted-foreground'}`}>
                         {c.is_active ? 'Active' : 'Inactive'}
                       </span>
                       <Button variant="ghost" size="sm" onClick={() => openEditDialog(c)}>
                         <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => openDeleteDialog(c)}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -477,6 +571,18 @@ export default function Clients() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Safe Delete Modal */}
+      <SafeDeleteModal
+        open={showDeleteModal}
+        onOpenChange={setShowDeleteModal}
+        entityType="client"
+        entityName={deletingClient?.name ?? ''}
+        counts={deleteCounts}
+        isLoading={deleteMutation.isPending || setInactiveMutation.isPending}
+        onSetInactive={() => setInactiveMutation.mutate()}
+        onConfirmDelete={() => deleteMutation.mutate(true)}
+      />
     </div>
   );
 }

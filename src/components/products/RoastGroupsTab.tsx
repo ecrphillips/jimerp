@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,9 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Plus, Pencil } from 'lucide-react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 import { getDisplayName } from '@/lib/roastGroupUtils';
+import { SafeDeleteModal } from '@/components/SafeDeleteModal';
 
 type DefaultRoaster = Database['public']['Enums']['default_roaster'];
 
@@ -40,6 +41,17 @@ export function RoastGroupsTab() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<RoastGroup | null>(null);
   const [showInactive, setShowInactive] = useState(false);
+  
+  // Delete modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingGroup, setDeletingGroup] = useState<RoastGroup | null>(null);
+  const [deleteCounts, setDeleteCounts] = useState<{
+    products: number;
+    batches: number;
+    open_orders: number;
+  } | null>(null);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockedMessage, setBlockedMessage] = useState('');
 
   // Form state
   const [roastGroupName, setRoastGroupName] = useState('');
@@ -139,6 +151,90 @@ export function RoastGroupsTab() {
       toast.error('Failed to update status');
     },
   });
+
+  // Delete preflight mutation
+  const deletePreflightMutation = useMutation({
+    mutationFn: async (roastGroup: string) => {
+      const { data, error } = await supabase.rpc('get_roast_group_delete_preflight', {
+        p_roast_group: roastGroup,
+      });
+      if (error) throw error;
+      return data as {
+        products: number;
+        batches: number;
+        open_orders: number;
+      };
+    },
+    onSuccess: (data, roastGroup) => {
+      const group = roastGroups?.find(g => g.roast_group === roastGroup);
+      if (group) {
+        setDeletingGroup(group);
+        setDeleteCounts(data);
+        // Block if products exist
+        if (data.products > 0) {
+          setIsBlocked(true);
+          setBlockedMessage('This roast group still has products. Move products to another roast group or delete the products first.');
+        } else {
+          setIsBlocked(false);
+          setBlockedMessage('');
+        }
+        setShowDeleteModal(true);
+      }
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to check roast group references');
+    },
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (force: boolean) => {
+      if (!deletingGroup) throw new Error('No roast group selected');
+      const { data, error } = await supabase.rpc('delete_roast_group_safe', {
+        p_roast_group: deletingGroup.roast_group,
+        p_force: force,
+      });
+      if (error) throw error;
+      return data as { deleted: boolean; blocked?: boolean; message: string };
+    },
+    onSuccess: (data) => {
+      if (data.deleted) {
+        toast.success('Roast group deleted');
+        queryClient.invalidateQueries({ queryKey: ['all-roast-groups'] });
+      } else if (data.blocked) {
+        toast.error(data.message);
+      }
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to delete roast group');
+    },
+  });
+
+  // Set inactive mutation
+  const setInactiveMutation = useMutation({
+    mutationFn: async () => {
+      if (!deletingGroup) throw new Error('No roast group selected');
+      const { error } = await supabase
+        .from('roast_groups')
+        .update({ is_active: false })
+        .eq('roast_group', deletingGroup.roast_group);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Roast group set to inactive');
+      queryClient.invalidateQueries({ queryKey: ['all-roast-groups'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to set roast group inactive');
+    },
+  });
+
+  const openDeleteDialog = useCallback((g: RoastGroup) => {
+    deletePreflightMutation.mutate(g.roast_group);
+  }, [deletePreflightMutation]);
 
   const openNew = () => {
     setEditingGroup(null);
@@ -254,10 +350,20 @@ export function RoastGroupsTab() {
                       </button>
                     </td>
                     <td className="py-2">
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(g)} className="gap-1">
-                        <Pencil className="h-3 w-3" />
-                        Edit
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => openEdit(g)} className="gap-1">
+                          <Pencil className="h-3 w-3" />
+                          Edit
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          onClick={() => openDeleteDialog(g)}
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -397,6 +503,20 @@ export function RoastGroupsTab() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Safe Delete Modal */}
+      <SafeDeleteModal
+        open={showDeleteModal}
+        onOpenChange={setShowDeleteModal}
+        entityType="roast_group"
+        entityName={deletingGroup ? getDisplayName(deletingGroup.display_name, deletingGroup.roast_group) : ''}
+        counts={deleteCounts}
+        isBlocked={isBlocked}
+        blockedMessage={blockedMessage}
+        isLoading={deleteMutation.isPending || setInactiveMutation.isPending}
+        onSetInactive={() => setInactiveMutation.mutate()}
+        onConfirmDelete={() => deleteMutation.mutate(true)}
+      />
     </div>
   );
 }

@@ -1198,9 +1198,33 @@ export type Database = {
         Args: { _client_id: string; _user_id: string }
         Returns: boolean
       }
+      delete_client_safe: {
+        Args: { p_client_id: string; p_force?: boolean }
+        Returns: Json
+      }
+      delete_product_safe: {
+        Args: { p_force?: boolean; p_product_id: string }
+        Returns: Json
+      }
+      delete_roast_group_safe: {
+        Args: { p_force?: boolean; p_roast_group: string }
+        Returns: Json
+      }
       dev_reset_test_day: { Args: never; Returns: Json }
       dev_test_reset: { Args: never; Returns: undefined }
       dev_test_seed_minimal: { Args: never; Returns: undefined }
+      get_client_delete_preflight: {
+        Args: { p_client_id: string }
+        Returns: Json
+      }
+      get_product_delete_preflight: {
+        Args: { p_product_id: string }
+        Returns: Json
+      }
+      get_roast_group_delete_preflight: {
+        Args: { p_roast_group: string }
+        Returns: Json
+      }
       get_user_client_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
