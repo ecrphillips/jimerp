@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock } from 'lucide-react';
+import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock, FileText, Clock } from 'lucide-react';
 import { LocationBadge } from '@/components/orders/LocationSelect';
 import { toast } from 'sonner';
 import { HistoricalEditWarningModal } from '@/components/internal/HistoricalEditWarningModal';
@@ -266,22 +266,23 @@ export default function OrderDetail() {
   }, [pendingChecklistUpdate]);
 
   // Handler to initiate "Mark as Shipped" with safety check
-  // Uses derived pack complete status instead of manual order.packed
+  // Uses derived pack complete status - no longer checks invoiced as a blocker
   const handleMarkAsShipped = useCallback(() => {
     if (!order) return;
     
-    const missing: string[] = [];
-    // Use derived pack status from packing_runs
-    if (!isDerivedPackComplete) missing.push('Packed (per run sheet)');
-    if (!order.invoiced) missing.push('Invoiced');
-    
-    if (missing.length > 0) {
-      setIncompleteSteps(missing);
+    // Only check pack completion - invoiced is tracked separately
+    if (!isDerivedPackComplete) {
+      setIncompleteSteps(['Packed (per run sheet)']);
       setShowIncompleteModal(true);
     } else {
       markAsShippedMutation.mutate();
     }
   }, [order, isDerivedPackComplete]);
+
+  // Handler to mark as invoiced
+  const handleMarkAsInvoiced = useCallback(() => {
+    markAsInvoicedMutation.mutate();
+  }, []);
 
   // Handler to request status change (for undo)
   const handleStatusChange = useCallback((newStatus: OrderStatus) => {
@@ -399,6 +400,26 @@ export default function OrderDetail() {
     onError: (err) => {
       console.error(err);
       toast.error('Failed to mark as shipped');
+    },
+  });
+
+  // Mark order as invoiced
+  const markAsInvoicedMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ invoiced: true })
+        .eq('id', id!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Order marked as invoiced');
+      queryClient.invalidateQueries({ queryKey: ['order', id] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to mark as invoiced');
     },
   });
 
@@ -628,24 +649,61 @@ export default function OrderDetail() {
               </p>
             </div>
 
-            {/* Shipped / Ready - Manual checkbox */}
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="shipped_or_ready" 
-                checked={order.shipped_or_ready}
-                onCheckedChange={(checked) => handleChecklistChange({ shipped_or_ready: !!checked })}
-              />
-              <Label htmlFor="shipped_or_ready" className="cursor-pointer">Shipped / Ready for Pickup</Label>
+            {/* Shipped Status - Read-only badge + action button */}
+            <div className="space-y-2 pt-2 border-t">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Truck className="h-4 w-4 text-muted-foreground" />
+                  <Label className="text-sm font-medium">Shipped</Label>
+                </div>
+                {order.status === 'SHIPPED' ? (
+                  <Badge className="bg-primary text-primary-foreground text-xs gap-1">
+                    <Check className="h-3 w-3" />
+                    Yes
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-xs gap-1">
+                    <Clock className="h-3 w-3" />
+                    Pending
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Shipping status is set via the "Mark as Shipped" action.
+              </p>
             </div>
 
-            {/* Invoiced - Manual checkbox */}
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="invoiced" 
-                checked={order.invoiced}
-                onCheckedChange={(checked) => handleChecklistChange({ invoiced: !!checked })}
-              />
-              <Label htmlFor="invoiced" className="cursor-pointer">Invoiced</Label>
+            {/* Invoiced Status - Read-only badge + action button */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <Label className="text-sm font-medium">Invoiced</Label>
+                </div>
+                {order.invoiced ? (
+                  <Badge className="bg-primary text-primary-foreground text-xs gap-1">
+                    <Check className="h-3 w-3" />
+                    Yes
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-xs gap-1">
+                    <Clock className="h-3 w-3" />
+                    Pending
+                  </Badge>
+                )}
+              </div>
+              {!order.invoiced && order.status !== 'CANCELLED' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleMarkAsInvoiced}
+                  disabled={markAsInvoicedMutation.isPending}
+                  className="w-full"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  {markAsInvoicedMutation.isPending ? 'Processing…' : 'Mark as Invoiced'}
+                </Button>
+              )}
             </div>
 
             {/* Link to Production */}
