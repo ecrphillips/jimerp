@@ -35,7 +35,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { UserPlus, MoreHorizontal, Mail, Edit, Ban, CheckCircle, Loader2 } from 'lucide-react';
+import { UserPlus, MoreHorizontal, Mail, Edit, Ban, CheckCircle, Loader2, Filter } from 'lucide-react';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { AppRole } from '@/types/database';
@@ -57,6 +58,7 @@ export default function UsersAccess() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithDetails | null>(null);
+  const [roleFilter, setRoleFilter] = useState<AppRole | 'ALL'>('ALL');
   
   // Invite form state
   const [inviteEmail, setInviteEmail] = useState('');
@@ -113,12 +115,20 @@ export default function UsersAccess() {
       }
 
       return Array.from(userMap.values()).sort((a, b) => {
-        // Sort by role (ADMIN first, then OPS, then CLIENT)
+        // Sort active users first, then by role (ADMIN first, then OPS, then CLIENT)
+        if (a.is_active !== b.is_active) {
+          return a.is_active ? -1 : 1;
+        }
         const roleOrder = { ADMIN: 0, OPS: 1, CLIENT: 2 };
         return roleOrder[a.role] - roleOrder[b.role];
       });
     },
   });
+
+  // Filter users by role
+  const filteredUsers = users?.filter(user => 
+    roleFilter === 'ALL' || user.role === roleFilter
+  );
 
   // Fetch clients for dropdown
   const { data: clients } = useQuery({
@@ -342,10 +352,36 @@ export default function UsersAccess() {
 
       <Card>
         <CardHeader>
-          <CardTitle>All Users</CardTitle>
-          <CardDescription>
-            {users?.length || 0} users in the system
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>All Users</CardTitle>
+              <CardDescription>
+                {filteredUsers?.length || 0} of {users?.length || 0} users
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <ToggleGroup 
+                type="single" 
+                value={roleFilter} 
+                onValueChange={(value) => value && setRoleFilter(value as AppRole | 'ALL')}
+                className="justify-start"
+              >
+                <ToggleGroupItem value="ALL" aria-label="All roles" className="text-xs px-3">
+                  All
+                </ToggleGroupItem>
+                <ToggleGroupItem value="ADMIN" aria-label="Admin only" className="text-xs px-3">
+                  Admin
+                </ToggleGroupItem>
+                <ToggleGroupItem value="OPS" aria-label="Ops only" className="text-xs px-3">
+                  Ops
+                </ToggleGroupItem>
+                <ToggleGroupItem value="CLIENT" aria-label="Client only" className="text-xs px-3">
+                  Client
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {usersLoading ? (
@@ -366,7 +402,7 @@ export default function UsersAccess() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users?.map((user) => (
+                {filteredUsers?.map((user) => (
                   <TableRow key={user.user_id} className={!user.is_active ? 'opacity-50' : ''}>
                     <TableCell className="font-medium">{user.email}</TableCell>
                     <TableCell>{user.name || '—'}</TableCell>
@@ -432,10 +468,10 @@ export default function UsersAccess() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {!users?.length && (
+                {!filteredUsers?.length && (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                      No users found
+                      {roleFilter === 'ALL' ? 'No users found' : `No ${roleFilter.toLowerCase()} users found`}
                     </TableCell>
                   </TableRow>
                 )}
