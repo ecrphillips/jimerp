@@ -172,11 +172,16 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
       
-      // Apply date filter based on mode - using work_deadline
+      // Apply date filter based on mode - using work_deadline with 13:00 rule
       if (dateFilterConfig.mode === 'today') {
+        // TODAY: work_deadline <= tomorrow at 13:00
         query = query.lte('order.work_deadline', dateFilterConfig.maxDate);
       } else if (dateFilterConfig.mode === 'tomorrow') {
-        query = query.or(`work_deadline.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`, { referencedTable: 'orders' });
+        // TOMORROW: (work_deadline > tomorrow 13:00 AND <= day after tomorrow 13:00) OR manually_deprioritized
+        query = query.or(
+          `and(work_deadline.gt.${dateFilterConfig.minDate},work_deadline.lte.${dateFilterConfig.maxDate}),manually_deprioritized.eq.true`, 
+          { referencedTable: 'orders' }
+        );
       }
       // ALL mode: no date filter
       
@@ -693,6 +698,18 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
             <p className="text-muted-foreground py-4">
               No roast groups match the "{roasterFilter}" filter. Try selecting "All".
             </p>
+          ) : sortedGroups.length === 0 ? (
+            <div className="py-8 text-center">
+              <div className="text-4xl mb-3">🎉</div>
+              <p className="text-lg font-medium text-foreground mb-1">All caught up!</p>
+              <p className="text-muted-foreground text-sm">
+                {dateFilterConfig.mode === 'today' 
+                  ? "No roast demand for today. Check 'Tomorrow' or 'All' for future demand."
+                  : dateFilterConfig.mode === 'tomorrow'
+                    ? "No roast demand for tomorrow. Check 'All' for future demand."
+                    : "No roast demand across all dates."}
+              </p>
+            </div>
           ) : (
             <DndContext
               sensors={sensors}
@@ -847,7 +864,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
         </CardContent>
       </Card>
 
-      {/* Roast groups without current demand but with batches */}
+      {/* Completed Batches - roast groups without current demand but with batches */}
       {allRoastGroups
         .filter((g) => !demandByRoastGroup.find((d) => d.roast_group === g))
         .filter((g) => batchesByGroup[g]?.length > 0)
@@ -855,9 +872,9 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
         .length > 0 && (
         <Card className="opacity-70">
           <CardHeader>
-            <CardTitle className="text-base">Groups Without Demand</CardTitle>
+            <CardTitle className="text-base">Completed Batches</CardTitle>
             <p className="text-sm text-muted-foreground">
-              These roast groups have batches but no orders for the selected dates.
+              Roast groups with completed batches but no current demand.
             </p>
           </CardHeader>
           <CardContent>
