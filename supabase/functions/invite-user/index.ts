@@ -145,35 +145,75 @@ Deno.serve(async (req) => {
     }
 
     // NEW USER - send invitation email
-    console.log('[invite-user] Sending invitation email to:', email);
+    // inviteUserByEmail creates the user AND sends the invite email
+    console.log('[invite-user] Attempting to send invitation email to:', email);
+    console.log('[invite-user] Supabase URL:', supabaseUrl);
     
     const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-      data: { name: name || email.split('@')[0] }
+      data: { name: name || email.split('@')[0] },
+      redirectTo: `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.supabase.co')}/auth/v1/verify`
     });
 
     if (inviteError) {
-      console.error('[invite-user] Supabase invite error:', inviteError.message);
+      console.error('[invite-user] Supabase invite FAILED:', {
+        message: inviteError.message,
+        status: inviteError.status,
+        code: (inviteError as any).code,
+        name: inviteError.name
+      });
       
       // Check for common email delivery issues
       if (inviteError.message.includes('rate limit')) {
         return new Response(
-          JSON.stringify({ error: 'Email rate limit exceeded. Please wait before sending more invites.' }),
+          JSON.stringify({ 
+            error: 'Email rate limit exceeded. Please wait before sending more invites.',
+            email_sent: false 
+          }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (inviteError.message.includes('SMTP') || inviteError.message.includes('email')) {
+        console.error('[invite-user] Possible email provider issue');
+        return new Response(
+          JSON.stringify({ 
+            error: `Email delivery failed: ${inviteError.message}. Check email provider configuration.`,
+            email_sent: false,
+            debug: { error_type: 'email_provider' }
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
       return new Response(
-        JSON.stringify({ error: `Failed to send invitation email: ${inviteError.message}` }),
+        JSON.stringify({ 
+          error: `Failed to send invitation email: ${inviteError.message}`,
+          email_sent: false 
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     if (!inviteData.user) {
-      console.error('[invite-user] Invite succeeded but no user returned');
+      console.error('[invite-user] Invite API returned success but no user object - email may not have been sent');
       return new Response(
-        JSON.stringify({ error: 'Invitation failed - no user created. Check email provider configuration.' }),
+        JSON.stringify({ 
+          error: 'Invitation failed - no user created. Email was NOT sent. Check email provider configuration.',
+          email_sent: false
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+    
+    // Log confirmation that invite was processed
+    console.log('[invite-user] Invite API success - user created:', inviteData.user.id);
+    console.log('[invite-user] User confirmation_sent_at:', inviteData.user.confirmation_sent_at);
+    console.log('[invite-user] User email_confirmed_at:', inviteData.user.email_confirmed_at);
+    
+    // Verify email was actually queued
+    const emailWasSent = !!inviteData.user.confirmation_sent_at;
+    if (!emailWasSent) {
+      console.warn('[invite-user] WARNING: confirmation_sent_at is null - email may not have been sent!');
     }
 
     console.log('[invite-user] Invitation email sent, user created:', inviteData.user.id);
@@ -211,14 +251,20 @@ Deno.serve(async (req) => {
       console.error('[invite-user] Profile insert error (non-fatal):', profileError.message);
     }
 
-    console.log('[invite-user] SUCCESS - User invited:', inviteData.user.id, 'Email sent to:', email);
+    console.log('[invite-user] SUCCESS - User invited:', inviteData.user.id, 'Email queued for:', email, 'email_sent:', emailWasSent);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: `Invitation email sent to ${email}`,
+        message: emailWasSent 
+          ? `Invitation email sent to ${email}` 
+          : `User created but email delivery uncertain. Check ${email}'s inbox or resend invite.`,
         user_id: inviteData.user.id,
-        email_sent: true
+        email_sent: emailWasSent,
+        debug: {
+          confirmation_sent_at: inviteData.user.confirmation_sent_at,
+          email_confirmed_at: inviteData.user.email_confirmed_at
+        }
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
