@@ -24,7 +24,8 @@ import {
   Loader2,
   AlertTriangle,
   GripVertical,
-  Package
+  Package,
+  Layers,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -83,6 +84,8 @@ interface RoastGroupDrawerProps {
   onEditingChange: (isEditing: boolean) => void;
   onAdjustWipFg: (roastGroup: string) => void;
   isDragging?: boolean;
+  isBlend?: boolean;
+  onPlanBlendBatches?: () => void;
 }
 
 export function RoastGroupDrawer({
@@ -101,6 +104,8 @@ export function RoastGroupDrawer({
   onEditingChange,
   onAdjustWipFg,
   isDragging = false,
+  isBlend = false,
+  onPlanBlendBatches,
 }: RoastGroupDrawerProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -522,6 +527,12 @@ export function RoastGroupDrawer({
         <td className="py-3">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold">{config?.display_name?.trim() || roastGroup.replace(/_/g, ' ')}</span>
+            {isBlend && (
+              <Badge variant="secondary" className="text-xs bg-violet-100 text-violet-800 border-violet-300">
+                <Layers className="h-3 w-3 mr-1" />
+                Blend
+              </Badge>
+            )}
             {defaultRoaster !== 'EITHER' && (
               <Badge variant="outline" className={`text-xs ${getRoasterBadgeColor(defaultRoaster)}`}>
                 {defaultRoaster}
@@ -605,23 +616,39 @@ export function RoastGroupDrawer({
                     WIP/FG
                   </Button>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    createBatchMutation.mutate();
-                  }}
-                  disabled={createBatchMutation.isPending}
-                >
-                  {createBatchMutation.isPending ? (
-                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                  ) : (
-                    <Plus className="h-3 w-3 mr-1" />
-                  )}
-                  Add batch
-                </Button>
+                {/* Different button for blends vs single origins */}
+                {isBlend ? (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="h-7 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPlanBlendBatches?.();
+                    }}
+                  >
+                    <Layers className="h-3 w-3 mr-1" />
+                    Plan blend batches
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      createBatchMutation.mutate();
+                    }}
+                    disabled={createBatchMutation.isPending}
+                  >
+                    {createBatchMutation.isPending ? (
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    ) : (
+                      <Plus className="h-3 w-3 mr-1" />
+                    )}
+                    Add batch
+                  </Button>
+                )}
               </div>
 
               {/* Batch Queue */}
