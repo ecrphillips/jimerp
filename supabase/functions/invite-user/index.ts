@@ -5,8 +5,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Canonical app URL - this is the JIM app, NOT the Supabase dashboard
-const SITE_URL = 'https://id-preview--3db16675-5a7a-40ca-b657-6ccdc5ce15e4.lovable.app';
+// Canonical app URL - use environment variable with fallback to published URL
+// IMPORTANT: Set SITE_URL environment variable in production
+const SITE_URL = Deno.env.get('SITE_URL') || 'https://jimerp.lovable.app';
 
 interface InviteRequest {
   email: string;
