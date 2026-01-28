@@ -9,6 +9,7 @@ interface AuthUser {
   role: AppRole;
   clientId: string | null;
   profile: Profile | null;
+  isActive: boolean;
 }
 
 interface AuthContextType {
@@ -69,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: roleData.role as AppRole,
         clientId: roleData.client_id,
         profile: profileData as Profile | null,
+        isActive: profileData?.is_active ?? true,
       };
     } catch (error) {
       console.error('Error in fetchUserData:', error);

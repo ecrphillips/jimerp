@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
 import type { AppRole } from '@/types/database';
 
 interface ProtectedRouteProps {
@@ -8,7 +9,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, authUser, loading } = useAuth();
+  const { user, authUser, loading, signOut } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -33,9 +34,29 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="mx-4 max-w-md rounded-lg border bg-card p-8 text-center shadow-sm">
           <h2 className="mb-2 text-lg font-semibold">Account Pending</h2>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground mb-4">
             Your account is awaiting role assignment. Please contact an administrator.
           </p>
+          <Button variant="outline" onClick={() => signOut()}>
+            Sign Out
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Account disabled
+  if (!authUser.isActive) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="mx-4 max-w-md rounded-lg border bg-card p-8 text-center shadow-sm">
+          <h2 className="mb-2 text-lg font-semibold text-destructive">Account Disabled</h2>
+          <p className="text-muted-foreground mb-4">
+            Your account has been disabled. Please contact an administrator if you believe this is an error.
+          </p>
+          <Button variant="outline" onClick={() => signOut()}>
+            Sign Out
+          </Button>
         </div>
       </div>
     );

@@ -18,7 +18,8 @@ import {
   Flame,
   BookOpen,
   Warehouse,
-  Wrench
+  Wrench,
+  Users2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -234,23 +235,40 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 </li>
               ))}
 
-              {/* Admin Tools - ADMIN only */}
+              {/* Admin section - ADMIN only */}
               {authUser?.role === 'ADMIN' && (
-                <li>
-                  <NavLink
-                    to="/admin-tools"
-                    onClick={() => setSidebarOpen(false)}
-                    className={({ isActive }) => cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
-                      isActive 
-                        ? "bg-sidebar-accent" 
-                        : "hover:bg-sidebar-accent/85"
-                    )}
-                  >
-                    <Wrench className="h-5 w-5" />
-                    Admin Tools
-                  </NavLink>
-                </li>
+                <>
+                  <li>
+                    <NavLink
+                      to="/admin/users"
+                      onClick={() => setSidebarOpen(false)}
+                      className={({ isActive }) => cn(
+                        "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
+                        isActive 
+                          ? "bg-sidebar-accent" 
+                          : "hover:bg-sidebar-accent/85"
+                      )}
+                    >
+                      <Users2 className="h-5 w-5" />
+                      Users & Access
+                    </NavLink>
+                  </li>
+                  <li>
+                    <NavLink
+                      to="/admin-tools"
+                      onClick={() => setSidebarOpen(false)}
+                      className={({ isActive }) => cn(
+                        "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
+                        isActive 
+                          ? "bg-sidebar-accent" 
+                          : "hover:bg-sidebar-accent/85"
+                      )}
+                    >
+                      <Wrench className="h-5 w-5" />
+                      Admin Tools
+                    </NavLink>
+                  </li>
+                </>
               )}
             </ul>
           </nav>
