@@ -3,6 +3,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { useOrderNotifications } from '@/hooks/useOrderNotifications';
+import { AccountSheet } from '@/components/account/AccountSheet';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -57,6 +58,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const [accountSheetOpen, setAccountSheetOpen] = React.useState(false);
   
   // Subscribe to real-time order notifications for OPS/ADMIN users
   useOrderNotifications();
@@ -279,10 +281,15 @@ export function InternalLayout({ children }: InternalLayoutProps) {
 
           {/* User section */}
           <div className="border-t border-sidebar-border p-4">
-            <div className="mb-3 px-3">
-              <p className="text-sm font-medium text-sidebar-foreground">{authUser?.profile?.name || authUser?.email}</p>
+            <button
+              onClick={() => setAccountSheetOpen(true)}
+              className="w-full mb-3 px-3 py-2 rounded-md text-left transition-colors hover:bg-sidebar-accent/85 group"
+            >
+              <p className="text-sm font-medium text-sidebar-foreground group-hover:underline">
+                {authUser?.profile?.name || authUser?.email}
+              </p>
               <p className="text-xs text-sidebar-foreground/60">{authUser?.role}</p>
-            </div>
+            </button>
             <Button
               variant="ghost"
               className="w-full justify-start gap-3 text-sidebar-foreground hover:bg-sidebar-accent/85 hover:text-sidebar-foreground"
@@ -294,6 +301,9 @@ export function InternalLayout({ children }: InternalLayoutProps) {
           </div>
         </div>
       </aside>
+
+      {/* Account Sheet */}
+      <AccountSheet open={accountSheetOpen} onOpenChange={setAccountSheetOpen} />
 
       {/* Main content */}
       <div className="flex flex-1 flex-col">

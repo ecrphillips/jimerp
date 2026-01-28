@@ -2,6 +2,7 @@ import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+import { AccountSheet } from '@/components/account/AccountSheet';
 import {
   Home,
   PlusCircle,
@@ -30,6 +31,7 @@ export function ClientLayout({ children }: ClientLayoutProps) {
   const { authUser, signOut } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const [accountSheetOpen, setAccountSheetOpen] = React.useState(false);
 
   const handleSignOut = async () => {
     await signOut();
@@ -87,10 +89,15 @@ export function ClientLayout({ children }: ClientLayoutProps) {
 
           {/* User section - matches InternalLayout */}
           <div className="border-t border-sidebar-border p-4">
-            <div className="mb-3 px-3">
-              <p className="text-sm font-medium text-sidebar-foreground">{authUser?.profile?.name || authUser?.email}</p>
+            <button
+              onClick={() => setAccountSheetOpen(true)}
+              className="w-full mb-3 px-3 py-2 rounded-md text-left transition-colors hover:bg-sidebar-accent/85 group"
+            >
+              <p className="text-sm font-medium text-sidebar-foreground group-hover:underline">
+                {authUser?.profile?.name || authUser?.email}
+              </p>
               <p className="text-xs text-sidebar-foreground/60">Client</p>
-            </div>
+            </button>
             <Button
               variant="ghost"
               className="w-full justify-start gap-3 text-sidebar-foreground hover:bg-sidebar-accent/85 hover:text-sidebar-foreground"
@@ -102,6 +109,9 @@ export function ClientLayout({ children }: ClientLayoutProps) {
           </div>
         </div>
       </aside>
+
+      {/* Account Sheet */}
+      <AccountSheet open={accountSheetOpen} onOpenChange={setAccountSheetOpen} />
 
       {/* Main content */}
       <div className="flex flex-1 flex-col">
