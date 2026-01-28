@@ -144,26 +144,35 @@ Deno.serve(async (req) => {
       
       // Check for specific error cases
       if (inviteError.message.includes('already been registered')) {
-        // User has already confirmed - they should use password reset instead
-        console.log('[resend-invite] User already confirmed, generating password reset');
+        // User has already confirmed - use resetPasswordForEmail to SEND an actual email
+        // Note: generateLink only generates the link but does NOT send an email!
+        console.log('[resend-invite] User already confirmed, sending password reset email via resetPasswordForEmail');
         
-        const { error: resetError } = await adminClient.auth.admin.generateLink({
-          type: 'recovery',
-          email: user.email,
+        // Use the public API method which actually sends the email
+        const { error: resetError } = await adminClient.auth.resetPasswordForEmail(user.email, {
+          redirectTo: `${req.headers.get('origin') || supabaseUrl}/auth?type=recovery`
         });
 
         if (resetError) {
-          console.error('[resend-invite] Password reset error:', resetError.message);
+          console.error('[resend-invite] Password reset email FAILED:', resetError.message, 'code:', resetError.code);
           return new Response(
-            JSON.stringify({ error: `User is already active. Password reset failed: ${resetError.message}` }),
+            JSON.stringify({ 
+              error: `User is already active. Password reset email failed: ${resetError.message}`,
+              email_sent: false,
+              debug: {
+                error_code: resetError.code,
+                error_message: resetError.message
+              }
+            }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
+        console.log('[resend-invite] Password reset email SENT to:', user.email);
         return new Response(
           JSON.stringify({ 
             success: true, 
-            message: 'User is already active. Password reset email sent instead.',
+            message: 'User is already active. Password reset email sent.',
             email_sent: true,
             type: 'password_reset'
           }),
