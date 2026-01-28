@@ -24,6 +24,42 @@ serve(async (req: Request) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
+    // ========== AUTHENTICATION ==========
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      console.error("[notify-new-order] Missing authorization header");
+      return new Response(
+        JSON.stringify({ ok: false, error: "Missing authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await adminClient.auth.getUser(token);
+
+    if (authError || !user) {
+      console.error("[notify-new-order] Invalid token:", authError?.message);
+      return new Response(
+        JSON.stringify({ ok: false, error: "Invalid token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ========== AUTHORIZATION ==========
+    const { data: roleData, error: roleError } = await adminClient
+      .from("user_roles")
+      .select("role, client_id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (roleError || !roleData) {
+      console.error("[notify-new-order] No role found for user:", user.id);
+      return new Response(
+        JSON.stringify({ ok: false, error: "No role assigned" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const { order_id, test = false }: NotifyRequest = await req.json();
 
     if (!order_id) {
@@ -33,15 +69,16 @@ serve(async (req: Request) => {
       );
     }
 
-    console.log(`[notify-new-order] Processing order_id=${order_id}, test=${test}`);
+    console.log(`[notify-new-order] Processing order_id=${order_id}, test=${test}, user=${user.id}, role=${roleData.role}`);
 
-    // Fetch order details
+    // Fetch order details first to verify access
     const { data: order, error: orderError } = await adminClient
       .from("orders")
       .select(`
         id,
         order_number,
         work_deadline,
+        client_id,
         client:clients(id, name)
       `)
       .eq("id", order_id)
@@ -53,6 +90,24 @@ serve(async (req: Request) => {
         JSON.stringify({ ok: false, error: "Order not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // ========== ROLE-BASED ACCESS CHECK ==========
+    const isInternal = roleData.role === "ADMIN" || roleData.role === "OPS";
+    
+    // If CLIENT role, verify they own this order
+    if (roleData.role === "CLIENT") {
+      if (order.client_id !== roleData.client_id) {
+        console.error("[notify-new-order] CLIENT user attempted to access order from different client:", {
+          user_id: user.id,
+          user_client_id: roleData.client_id,
+          order_client_id: order.client_id
+        });
+        return new Response(
+          JSON.stringify({ ok: false, error: "Forbidden - you can only notify for your own orders" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // order.client from a select with join returns an object (not array) when single-relation
@@ -78,7 +133,7 @@ serve(async (req: Request) => {
       );
     }
 
-    console.log("[notify-new-order] Notification created successfully");
+    console.log("[notify-new-order] Notification created successfully by", isInternal ? "internal user" : "client user");
 
     return new Response(
       JSON.stringify({ 
