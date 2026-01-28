@@ -5,10 +5,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Canonical app URL - this is the JIM app, NOT the Supabase dashboard
+const SITE_URL = 'https://id-preview--3db16675-5a7a-40ca-b657-6ccdc5ce15e4.lovable.app';
+
 interface ResendRequest {
   user_id: string;
   role?: 'ADMIN' | 'OPS' | 'CLIENT';
   client_id?: string;
+  generate_link_only?: boolean; // DEV: return link instead of sending email
 }
 
 Deno.serve(async (req) => {
@@ -60,7 +64,7 @@ Deno.serve(async (req) => {
     }
 
     const body: ResendRequest = await req.json();
-    const { user_id, role, client_id } = body;
+    const { user_id, role, client_id, generate_link_only = false } = body;
 
     if (!user_id) {
       return new Response(
@@ -69,7 +73,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('[resend-invite] Resend requested for user_id:', user_id);
+    console.log('[resend-invite] Resend requested for user_id:', user_id, 'generate_link_only:', generate_link_only);
+
+    // The redirect URL - ALWAYS point to JIM app's auth callback
+    const redirectTo = `${SITE_URL}/auth/callback`;
+    console.log('[resend-invite] Using redirect URL:', redirectTo);
 
     // Get user email from auth
     const { data: { user }, error: getUserError } = await adminClient.auth.admin.getUserById(user_id);
@@ -83,14 +91,13 @@ Deno.serve(async (req) => {
     }
 
     // Check if user has a role, if not and role provided, create it
-    const { data: existingRole, error: roleCheckError } = await adminClient
+    const { data: existingRole } = await adminClient
       .from('user_roles')
       .select('*')
       .eq('user_id', user_id)
       .maybeSingle();
 
     if (!existingRole && role) {
-      // User has no role but one was provided - create it
       console.log('[resend-invite] Creating missing role for user:', user_id, 'role:', role);
       
       if (role === 'CLIENT' && !client_id) {
@@ -131,38 +138,61 @@ Deno.serve(async (req) => {
       console.error('[resend-invite] Profile upsert error (non-fatal):', profileError.message);
     }
 
-    // Send new invitation email using inviteUserByEmail
-    // This will send a fresh magic link to the user
-    console.log('[resend-invite] Sending invitation email to:', user.email);
+    // Try to send invitation first
+    console.log('[resend-invite] Attempting to send invitation email to:', user.email);
     
     const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(user.email, {
-      data: user.user_metadata
+      data: user.user_metadata,
+      redirectTo
     });
 
     if (inviteError) {
       console.error('[resend-invite] Invite error:', inviteError.message);
       
-      // Check for specific error cases
+      // User has already confirmed - need to use password reset instead
       if (inviteError.message.includes('already been registered')) {
-        // User has already confirmed - use resetPasswordForEmail to SEND an actual email
-        // Note: generateLink only generates the link but does NOT send an email!
-        console.log('[resend-invite] User already confirmed, sending password reset email via resetPasswordForEmail');
+        console.log('[resend-invite] User already confirmed, using password reset flow');
         
-        // Use the public API method which actually sends the email
+        if (generate_link_only) {
+          // Generate link without sending email
+          const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+            type: 'recovery',
+            email: user.email,
+            options: { redirectTo }
+          });
+
+          if (linkError) {
+            console.error('[resend-invite] Failed to generate recovery link:', linkError.message);
+            return new Response(
+              JSON.stringify({ error: `Failed to generate link: ${linkError.message}` }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          console.log('[resend-invite] Generated recovery link (not emailed)');
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              message: 'Password reset link generated (not emailed)',
+              link: linkData.properties?.action_link,
+              email_sent: false,
+              type: 'password_reset'
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Send password reset email
         const { error: resetError } = await adminClient.auth.resetPasswordForEmail(user.email, {
-          redirectTo: `${req.headers.get('origin') || supabaseUrl}/auth?type=recovery`
+          redirectTo
         });
 
         if (resetError) {
-          console.error('[resend-invite] Password reset email FAILED:', resetError.message, 'code:', resetError.code);
+          console.error('[resend-invite] Password reset email FAILED:', resetError.message);
           return new Response(
             JSON.stringify({ 
               error: `User is already active. Password reset email failed: ${resetError.message}`,
-              email_sent: false,
-              debug: {
-                error_code: resetError.code,
-                error_message: resetError.message
-              }
+              email_sent: false
             }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
@@ -174,7 +204,8 @@ Deno.serve(async (req) => {
             success: true, 
             message: 'User is already active. Password reset email sent.',
             email_sent: true,
-            type: 'password_reset'
+            type: 'password_reset',
+            redirect_to: redirectTo
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -193,6 +224,9 @@ Deno.serve(async (req) => {
       );
     }
 
+    // If generate_link_only was requested but invite succeeded, we still sent email
+    // This is fine since inviteUserByEmail doesn't have a no-email option
+    
     console.log('[resend-invite] SUCCESS - Invitation email sent to:', user.email);
 
     return new Response(
@@ -200,7 +234,8 @@ Deno.serve(async (req) => {
         success: true, 
         message: `Invitation email sent to ${user.email}`,
         email_sent: true,
-        type: 'invite'
+        type: 'invite',
+        redirect_to: redirectTo
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -35,7 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { UserPlus, MoreHorizontal, Mail, Edit, Ban, CheckCircle, Loader2, Filter } from 'lucide-react';
+import { UserPlus, MoreHorizontal, Mail, Edit, Ban, CheckCircle, Loader2, Filter, Link2, Copy } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -311,6 +311,38 @@ export default function UsersAccess() {
     }
   };
 
+  // DEV: Copy invite link to clipboard for debugging email issues
+  const handleCopyInviteLink = async (user: UserWithDetails) => {
+    try {
+      const response = await supabase.functions.invoke('resend-invite', {
+        body: { user_id: user.user_id, generate_link_only: true },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      const data = response.data;
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      if (data?.link) {
+        await navigator.clipboard.writeText(data.link);
+        toast.success('Invite link copied to clipboard', {
+          description: 'This link is for debugging only. Expires in 24h.',
+          duration: 5000,
+        });
+      } else {
+        toast.error('No link returned from server');
+      }
+    } catch (error: any) {
+      console.error('Copy link error:', error);
+      toast.error(error.message || 'Failed to generate invite link');
+    }
+  };
+
   const resetInviteForm = () => {
     setInviteEmail('');
     setInviteName('');
@@ -445,6 +477,10 @@ export default function UsersAccess() {
                           <DropdownMenuItem onClick={() => handleResendInvite(user)}>
                             <Mail className="h-4 w-4 mr-2" />
                             Resend Invite
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleCopyInviteLink(user)} className="text-muted-foreground">
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy Link (debug)
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
