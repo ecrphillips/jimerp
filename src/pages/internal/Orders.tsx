@@ -110,15 +110,38 @@ export default function Orders() {
     return map;
   }, [packingRuns]);
 
+  // "Needs invoicing" filter state
+  const [needsInvoicingFilter, setNeedsInvoicingFilter] = useState(false);
+
   // Filter and sort orders with grouping:
   // 1. Unshipped always visible (never filtered by age)
   // 2. Shipped only visible within historyDays window
   // 3. Within each group: needs-deadline first, then by work_deadline_at
-  const { visibleOrders, hasMoreHistory, terminalCount, activeCount } = useMemo(() => {
-    if (!data) return { visibleOrders: [], hasMoreHistory: false, terminalCount: 0, activeCount: 0 };
+  const { visibleOrders, hasMoreHistory, terminalCount, activeCount, totalOrderCount, needsInvoicingCount } = useMemo(() => {
+    if (!data) return { visibleOrders: [], hasMoreHistory: false, terminalCount: 0, activeCount: 0, totalOrderCount: 0, needsInvoicingCount: 0 };
     
     const now = new Date();
     const cutoffDate = startOfDay(subDays(now, historyDays));
+    
+    // Count orders needing invoicing (shipped but not invoiced)
+    const invoicingBacklog = data.filter(o => o.shipped_or_ready && !o.invoiced);
+    
+    // If "needs invoicing" filter is active, show only those orders
+    if (needsInvoicingFilter) {
+      const sorted = [...invoicingBacklog].sort((a, b) => {
+        const aRef = getAgeReference(a).getTime();
+        const bRef = getAgeReference(b).getTime();
+        return bRef - aRef; // Newest first
+      });
+      return {
+        visibleOrders: sorted,
+        hasMoreHistory: false,
+        terminalCount: sorted.length,
+        activeCount: 0,
+        totalOrderCount: data.length,
+        needsInvoicingCount: invoicingBacklog.length,
+      };
+    }
     
     // Separate active and terminal (shipped/cancelled)
     const active: typeof data = [];
@@ -186,8 +209,10 @@ export default function Orders() {
       hasMoreHistory: hiddenTerminalCount > 0,
       terminalCount: terminal.length,
       activeCount: active.length,
+      totalOrderCount: data.length,
+      needsInvoicingCount: invoicingBacklog.length,
     };
-  }, [data, historyDays, deadlineSortDir]);
+  }, [data, historyDays, deadlineSortDir, needsInvoicingFilter]);
 
   const toggleDeadlineSort = () => {
     setDeadlineSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -221,7 +246,20 @@ export default function Orders() {
       </div>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Orders</CardTitle>
+          <div className="flex items-center gap-3">
+            <CardTitle>Orders</CardTitle>
+            {/* Needs invoicing filter chip */}
+            {needsInvoicingCount > 0 && (
+              <Button
+                variant={needsInvoicingFilter ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setNeedsInvoicingFilter(!needsInvoicingFilter)}
+              >
+                Needs invoicing ({needsInvoicingCount})
+              </Button>
+            )}
+          </div>
           <span className="text-xs text-muted-foreground">{visibilityLabel}</span>
         </CardHeader>
         <CardContent>
@@ -230,7 +268,27 @@ export default function Orders() {
           ) : error ? (
             <p className="text-destructive">Failed to load: {error instanceof Error ? error.message : String(error)}</p>
           ) : visibleOrders.length === 0 ? (
-            <p className="text-muted-foreground">No orders found.</p>
+            <div className="space-y-4">
+              <p className="text-muted-foreground">
+                {needsInvoicingFilter 
+                  ? "No orders awaiting invoicing."
+                  : `No orders in the last ${historyDays} days.`}
+              </p>
+              {/* Always show load more when there may be older orders */}
+              {!needsInvoicingFilter && totalOrderCount > 0 && historyDays < 90 && (
+                <div className="flex justify-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={loadMoreHistory}
+                  >
+                    <ChevronDown className="h-3 w-3 mr-1" />
+                    Load 7 more days to view older orders
+                  </Button>
+                </div>
+              )}
+            </div>
           ) : (
             <div className="space-y-1">
               {/* Header row */}
@@ -378,8 +436,8 @@ export default function Orders() {
                 );
               })}
 
-              {/* Load more history control */}
-              {hasMoreHistory && (
+              {/* Load more history control - show if there are hidden orders OR if we might have more */}
+              {!needsInvoicingFilter && historyDays < 90 && (hasMoreHistory || totalOrderCount > visibleOrders.length) && (
                 <div className="pt-4 flex justify-center">
                   <Button
                     variant="ghost"
