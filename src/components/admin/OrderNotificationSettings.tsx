@@ -2,22 +2,19 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, Mail, Plus, X, Send, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Loader2, Bell, Send, CheckCircle2, Info } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface NotificationSettings {
   enabled: boolean;
-  emails: string[];
 }
 
 export function OrderNotificationSettings() {
   const queryClient = useQueryClient();
-  const [newEmail, setNewEmail] = useState('');
   const [isTesting, setIsTesting] = useState(false);
 
   // Fetch current settings
@@ -32,7 +29,7 @@ export function OrderNotificationSettings() {
 
       if (error) throw error;
       const json = data?.value_json as unknown as NotificationSettings | null;
-      return json || { enabled: true, emails: [] };
+      return json || { enabled: true };
     },
   });
 
@@ -40,14 +37,13 @@ export function OrderNotificationSettings() {
   const saveMutation = useMutation({
     mutationFn: async (newSettings: NotificationSettings) => {
       const { data: user } = await supabase.auth.getUser();
-      // Use raw update to avoid type issues with JSONB
       const { error } = await supabase
         .from('app_settings')
         .update({
           value_json: newSettings,
           updated_at: new Date().toISOString(),
           updated_by: user.user?.id || null,
-        } as any)
+        } as Record<string, unknown>)
         .eq('key', 'order_submit_notification');
       if (error) throw error;
       return newSettings;
@@ -66,48 +62,7 @@ export function OrderNotificationSettings() {
     saveMutation.mutate({ ...settings, enabled: !settings.enabled });
   };
 
-  const isValidEmail = (email: string) => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  };
-
-  const handleAddEmail = () => {
-    const email = newEmail.trim().toLowerCase();
-    if (!email) return;
-
-    if (!isValidEmail(email)) {
-      toast.error('Please enter a valid email address');
-      return;
-    }
-
-    if (settings?.emails.includes(email)) {
-      toast.error('This email is already in the list');
-      return;
-    }
-
-    const newEmails = [...(settings?.emails || []), email];
-    saveMutation.mutate({ enabled: settings?.enabled ?? true, emails: newEmails });
-    setNewEmail('');
-  };
-
-  const handleRemoveEmail = (emailToRemove: string) => {
-    if (!settings) return;
-    const newEmails = settings.emails.filter((e) => e !== emailToRemove);
-    saveMutation.mutate({ ...settings, emails: newEmails });
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleAddEmail();
-    }
-  };
-
   const handleSendTest = async () => {
-    if (!settings?.emails?.length) {
-      toast.error('Add at least one email recipient first');
-      return;
-    }
-
     setIsTesting(true);
     try {
       // Find a recent order to use as test
@@ -129,16 +84,15 @@ export function OrderNotificationSettings() {
 
       if (error) throw error;
 
-      if (data?.ok && data?.email_sent) {
-        toast.success(`Test notification sent to ${data.recipients} recipient(s)`);
-      } else if (data?.skipped) {
-        toast.info(`Skipped: ${data.reason}`);
+      if (data?.ok) {
+        toast.success('Test notification sent! Check for a toast in the app.');
       } else {
         toast.error(data?.error || 'Unknown error');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to send test notification';
       console.error('Test notification failed:', err);
-      toast.error(err.message || 'Failed to send test notification');
+      toast.error(message);
     } finally {
       setIsTesting(false);
     }
@@ -149,7 +103,7 @@ export function OrderNotificationSettings() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
+            <Bell className="h-5 w-5" />
             Order Submit Notifications
           </CardTitle>
         </CardHeader>
@@ -168,11 +122,11 @@ export function OrderNotificationSettings() {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <Mail className="h-5 w-5" />
+              <Bell className="h-5 w-5" />
               Order Submit Notifications
             </CardTitle>
             <CardDescription>
-              Send email notifications when clients submit new orders
+              Get notified when clients submit new orders
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -189,67 +143,25 @@ export function OrderNotificationSettings() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Email recipients */}
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">Email Recipients</Label>
-          <div className="flex flex-wrap gap-2 min-h-[32px]">
-            {settings?.emails?.length === 0 ? (
-              <span className="text-sm text-muted-foreground italic">No recipients configured</span>
-            ) : (
-              settings?.emails?.map((email) => (
-                <Badge key={email} variant="secondary" className="gap-1 pr-1">
-                  {email}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveEmail(email)}
-                    className="ml-1 rounded-full p-0.5 hover:bg-destructive/20"
-                    disabled={saveMutation.isPending}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))
-            )}
-          </div>
-        </div>
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            When enabled, all logged-in OPS and ADMIN users will see an in-app notification 
+            whenever a client submits a new order. The notification appears as a toast with 
+            a link to view the order.
+          </AlertDescription>
+        </Alert>
 
-        {/* Add email input */}
-        <div className="flex gap-2">
-          <Input
-            type="email"
-            placeholder="Add email address..."
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={saveMutation.isPending}
-            className="flex-1"
-          />
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleAddEmail}
-            disabled={!newEmail.trim() || saveMutation.isPending}
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Add
-          </Button>
-        </div>
-
-        {/* Status indicators */}
-        <div className="flex items-center gap-4 pt-2 text-sm">
-          {settings?.enabled && settings?.emails?.length > 0 ? (
-            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+        {/* Status indicator */}
+        <div className="flex items-center gap-2 pt-2 text-sm">
+        {settings?.enabled ? (
+            <span className="flex items-center gap-1 text-primary">
               <CheckCircle2 className="h-4 w-4" />
-              Ready to send notifications
-            </span>
-          ) : settings?.enabled && settings?.emails?.length === 0 ? (
-            <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-              <AlertCircle className="h-4 w-4" />
-              Add recipients to enable notifications
+              In-app notifications are active
             </span>
           ) : (
             <span className="flex items-center gap-1 text-muted-foreground">
-              <AlertCircle className="h-4 w-4" />
+              <Bell className="h-4 w-4" />
               Notifications are disabled
             </span>
           )}
@@ -261,7 +173,7 @@ export function OrderNotificationSettings() {
             variant="outline"
             size="sm"
             onClick={handleSendTest}
-            disabled={isTesting || !settings?.enabled || !settings?.emails?.length}
+            disabled={isTesting || !settings?.enabled}
           >
             {isTesting ? (
               <>
@@ -276,7 +188,7 @@ export function OrderNotificationSettings() {
             )}
           </Button>
           <p className="text-xs text-muted-foreground mt-2">
-            Sends a test email using the most recent order
+            Sends a test notification using the most recent order. You'll see it as a toast.
           </p>
         </div>
       </CardContent>

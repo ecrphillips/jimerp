@@ -2,6 +2,7 @@ import React from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+import { useOrderNotifications } from '@/hooks/useOrderNotifications';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -56,6 +57,9 @@ export function InternalLayout({ children }: InternalLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  
+  // Subscribe to real-time order notifications for OPS/ADMIN users
+  useOrderNotifications();
   
   // Production section is open if we're on a production route
   const isProductionRoute = location.pathname.startsWith('/production') || location.pathname === '/boards';
