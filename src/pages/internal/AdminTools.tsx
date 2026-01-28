@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertTriangle, Trash2, Sparkles, RotateCcw, Bomb } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { OrderNotificationSettings } from '@/components/admin/OrderNotificationSettings';
 
 // Check if we're in development mode
 const isDev = import.meta.env.DEV;
@@ -152,6 +153,9 @@ export default function AdminTools() {
           Administrative utilities for development and testing
         </p>
       </div>
+
+      {/* Order Submit Notifications */}
+      <OrderNotificationSettings />
 
       {/* Dev/Test Reset Card */}
       <Card className="border-destructive/50">

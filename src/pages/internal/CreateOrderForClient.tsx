@@ -271,6 +271,19 @@ export default function CreateOrderForClient() {
       const { error: lineError } = await supabase.from('order_line_items').insert(lineItemsData);
       if (lineError) throw lineError;
 
+      // Trigger notification email (fire-and-forget for admin-created orders too)
+      supabase.functions.invoke('notify-new-order', {
+        body: { order_id: order.id },
+      }).then(({ data, error }) => {
+        if (error) {
+          console.warn('[notify-new-order] Failed to send notification:', error);
+        } else {
+          console.log('[notify-new-order] Notification result:', data);
+        }
+      }).catch((err) => {
+        console.warn('[notify-new-order] Notification error:', err);
+      });
+
       toast.success(`Order ${order.order_number} created!`);
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       navigate('/orders');
