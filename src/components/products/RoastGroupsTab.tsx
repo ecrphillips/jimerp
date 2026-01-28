@@ -8,11 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Loader2, AlertCircle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, AlertCircle, Bug } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 import { SafeDeleteModal } from '@/components/SafeDeleteModal';
+import { useAuth } from '@/contexts/AuthContext';
 
 type DefaultRoaster = Database['public']['Enums']['default_roaster'];
 
@@ -37,9 +39,11 @@ const ROASTERS: DefaultRoaster[] = ['SAMIAC', 'LORING', 'EITHER'];
 
 export function RoastGroupsTab() {
   const queryClient = useQueryClient();
+  const { authUser } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<RoastGroup | null>(null);
   const [showInactive, setShowInactive] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
   
   // Delete modal state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -436,8 +440,74 @@ export function RoastGroupsTab() {
     }
   };
 
+  // Debug info for ADMIN/OPS
+  const isAdminOrOps = authUser?.role === 'ADMIN' || authUser?.role === 'OPS';
+  const isDev = import.meta.env.DEV;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  const supabaseProjectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1] || 'unknown';
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isPreview = hostname.includes('preview') || hostname.includes('localhost');
+  const totalCount = roastGroups?.length ?? 0;
+  const activeCount = roastGroups?.filter(g => g.is_active).length ?? 0;
+
   return (
     <div className="space-y-4">
+      {/* Debug Panel for ADMIN/OPS - shown in DEV, collapsed in PROD */}
+      {isAdminOrOps && (
+        <Alert variant="default" className="border-amber-500/50 bg-amber-500/5">
+          <Bug className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="flex items-center justify-between">
+            <span>Debug Info {isDev ? '(DEV)' : ''}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowDebug(!showDebug)}
+              className="h-6 text-xs"
+            >
+              {showDebug ? 'Hide' : 'Show'}
+            </Button>
+          </AlertTitle>
+          {showDebug && (
+            <AlertDescription className="mt-2 space-y-2 font-mono text-xs">
+              <div><strong>Origin:</strong> {typeof window !== 'undefined' ? window.location.origin : 'N/A'}</div>
+              <div><strong>Hostname:</strong> {hostname}</div>
+              <div><strong>Environment:</strong> {isPreview ? '⚠️ PREVIEW' : '✓ PUBLISHED'}</div>
+              <div><strong>Supabase Project:</strong> {supabaseProjectRef}</div>
+              <div><strong>Roast Groups:</strong> {totalCount} total, {activeCount} active, {totalCount - activeCount} inactive</div>
+              <div className="pt-2 text-muted-foreground">
+                Note: Delete performs a <strong>hard DELETE</strong> (not soft-delete). 
+                "Set Inactive" is a separate action.
+              </div>
+              <div className="pt-2 flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    queryClient.invalidateQueries({ queryKey: ['all-roast-groups'] });
+                    toast.info('Refreshed roast groups from database');
+                  }}
+                >
+                  Force Refresh Data
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    window.location.reload();
+                  }}
+                >
+                  Clear Cache + Reload
+                </Button>
+              </div>
+            </AlertDescription>
+          )}
+        </Alert>
+      )}
+
       <div className="flex items-center justify-between">
         <div />
         <Button onClick={openNew} className="gap-2">
@@ -449,15 +519,17 @@ export function RoastGroupsTab() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Roast Groups</CardTitle>
-          {inactiveCount > 0 && (
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <Checkbox
-                checked={showInactive}
-                onCheckedChange={(checked) => setShowInactive(!!checked)}
-              />
-              Show inactive ({inactiveCount})
-            </label>
-          )}
+          <div className="flex items-center gap-4">
+            {inactiveCount > 0 && (
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox
+                  checked={showInactive}
+                  onCheckedChange={(checked) => setShowInactive(!!checked)}
+                />
+                Show inactive ({inactiveCount})
+              </label>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
