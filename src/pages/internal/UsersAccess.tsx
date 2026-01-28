@@ -343,6 +343,56 @@ export default function UsersAccess() {
     }
   };
 
+  // DEV: Copy reset link with full debug info
+  const handleCopyResetLinkDebug = async (user: UserWithDetails) => {
+    try {
+      const response = await supabase.functions.invoke('resend-invite', {
+        body: { user_id: user.user_id, generate_link_only: true, debug_mode: true },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      const data = response.data;
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      if (data?.link) {
+        await navigator.clipboard.writeText(data.link);
+        
+        // Show debug info in console
+        console.log('=== AUTH LINK DEBUG ===');
+        console.log('Link:', data.link);
+        if (data.debug) {
+          console.log('SITE_URL:', data.debug.site_url);
+          console.log('redirectTo requested:', data.debug.redirect_to_requested);
+          console.log('Supabase URL:', data.debug.supabase_url);
+          console.log('Link host:', data.debug.link_host);
+          console.log('Link redirect_to param:', data.debug.link_redirect_to);
+        }
+        console.log('=======================');
+        
+        // Show debug in toast
+        const debugInfo = data.debug 
+          ? `Site: ${data.debug.site_url}\nRedirectTo: ${data.debug.link_redirect_to || 'NOT SET'}`
+          : 'No debug info';
+        
+        toast.success('Reset link copied (debug mode)', {
+          description: debugInfo,
+          duration: 10000,
+        });
+      } else {
+        toast.error('No link returned from server');
+      }
+    } catch (error: any) {
+      console.error('Copy reset link debug error:', error);
+      toast.error(error.message || 'Failed to generate reset link');
+    }
+  };
+
   const resetInviteForm = () => {
     setInviteEmail('');
     setInviteName('');
@@ -480,7 +530,11 @@ export default function UsersAccess() {
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleCopyInviteLink(user)} className="text-muted-foreground">
                             <Copy className="h-4 w-4 mr-2" />
-                            Copy Link (debug)
+                            Copy Invite Link
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleCopyResetLinkDebug(user)} className="text-muted-foreground">
+                            <Link2 className="h-4 w-4 mr-2" />
+                            Copy Reset Link (debug)
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
