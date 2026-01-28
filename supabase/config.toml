@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.resend-invite]
 verify_jwt = false
+
+[functions.notify-new-order]
+verify_jwt = false

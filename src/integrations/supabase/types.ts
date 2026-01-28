@@ -55,6 +55,27 @@ export type Database = {
           },
         ]
       }
+      app_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value_json: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value_json?: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value_json?: Json
+        }
+        Relationships: []
+      }
       client_locations: {
         Row: {
           client_id: string
@@ -445,6 +466,8 @@ export type Database = {
           invoiced: boolean
           location_id: string | null
           manually_deprioritized: boolean
+          notify_email_error: string | null
+          notify_email_sent_at: string | null
           order_number: string
           packed: boolean
           requested_ship_date: string | null
@@ -469,6 +492,8 @@ export type Database = {
           invoiced?: boolean
           location_id?: string | null
           manually_deprioritized?: boolean
+          notify_email_error?: string | null
+          notify_email_sent_at?: string | null
           order_number: string
           packed?: boolean
           requested_ship_date?: string | null
@@ -493,6 +518,8 @@ export type Database = {
           invoiced?: boolean
           location_id?: string | null
           manually_deprioritized?: boolean
+          notify_email_error?: string | null
+          notify_email_sent_at?: string | null
           order_number?: string
           packed?: boolean
           requested_ship_date?: string | null
