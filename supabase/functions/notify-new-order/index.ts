@@ -28,7 +28,11 @@ serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    let resendApiKey = (Deno.env.get("RESEND_API_KEY") ?? "").trim();
+    // Common copy/paste mistake: user pastes `Bearer re_...` from examples
+    if (resendApiKey.toLowerCase().startsWith("bearer ")) {
+      resendApiKey = resendApiKey.slice("bearer ".length).trim();
+    }
 
     if (!resendApiKey) {
       console.error("[notify-new-order] RESEND_API_KEY not configured");
@@ -36,6 +40,10 @@ serve(async (req: Request) => {
         JSON.stringify({ ok: false, error: "Email service not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    if (!resendApiKey.startsWith("re_")) {
+      console.error("[notify-new-order] RESEND_API_KEY appears malformed (expected prefix re_)");
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
