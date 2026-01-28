@@ -10,6 +10,8 @@ import { ClientLayout } from "@/components/layout/ClientLayout";
 
 // Pages
 import Auth from "@/pages/Auth";
+import AuthCallback from "@/pages/AuthCallback";
+import SetPassword from "@/pages/SetPassword";
 import Dashboard from "@/pages/internal/Dashboard";
 import Orders from "@/pages/internal/Orders";
 import OrderDetail from "@/pages/internal/OrderDetail";
@@ -25,6 +27,7 @@ import Inventory from "@/pages/internal/Inventory";
 import InventoryLedger from "@/pages/internal/InventoryLedger";
 import AdminTools from "@/pages/internal/AdminTools";
 import UsersAccess from "@/pages/internal/UsersAccess";
+import Portal from "@/pages/client/Portal";
 import NewOrder from "@/pages/client/NewOrder";
 import OrderHistory from "@/pages/client/OrderHistory";
 import Account from "@/pages/client/Account";
@@ -40,8 +43,10 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            {/* Public */}
+            {/* Public auth routes */}
             <Route path="/auth" element={<Auth />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/auth/set-password" element={<SetPassword />} />
             <Route path="/" element={<Navigate to="/auth" replace />} />
 
             {/* Internal (Admin/Ops) */}
@@ -138,6 +143,11 @@ const App = () => (
             } />
 
             {/* Client Portal */}
+            <Route path="/portal" element={
+              <ProtectedRoute allowedRoles={['CLIENT']}>
+                <ClientLayout><Portal /></ClientLayout>
+              </ProtectedRoute>
+            } />
             <Route path="/portal/new-order" element={
               <ProtectedRoute allowedRoles={['CLIENT']}>
                 <ClientLayout><NewOrder /></ClientLayout>

@@ -146,12 +146,17 @@ Deno.serve(async (req) => {
 
     // NEW USER - send invitation email
     // inviteUserByEmail creates the user AND sends the invite email
+    // redirectTo points to our app's auth callback which handles the token
     console.log('[invite-user] Attempting to send invitation email to:', email);
     console.log('[invite-user] Supabase URL:', supabaseUrl);
     
+    // Get the app URL from the request origin or use a known base URL
+    const appUrl = req.headers.get('origin') || 'https://id-preview--3db16675-5a7a-40ca-b657-6ccdc5ce15e4.lovable.app';
+    console.log('[invite-user] App URL for redirect:', appUrl);
+    
     const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
       data: { name: name || email.split('@')[0] },
-      redirectTo: `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.supabase.co')}/auth/v1/verify`
+      redirectTo: `${appUrl}/auth/callback`
     });
 
     if (inviteError) {
