@@ -1,44 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Coffee, AlertCircle } from 'lucide-react';
+import { Coffee, AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 import { z } from 'zod';
+import { supabase } from '@/integrations/supabase/client';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-const signupSchema = loginSchema.extend({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ['confirmPassword'],
+const emailSchema = z.object({
+  email: z.string().email('Please enter a valid email'),
 });
 
 export default function Auth() {
-  const { user, authUser, signIn, signUp, loading } = useAuth();
+  const { user, authUser, signIn, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [showForgotPassword, setShowForgotPassword] = useState(searchParams.get('forgot') === 'true');
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  // Signup form state
-  const [signupName, setSignupName] = useState('');
-  const [signupEmail, setSignupEmail] = useState('');
-  const [signupPassword, setSignupPassword] = useState('');
-  const [signupConfirmPassword, setSignupConfirmPassword] = useState('');
+  // Forgot password state
+  const [resetEmail, setResetEmail] = useState('');
 
   // Redirect if already logged in
   useEffect(() => {
@@ -47,9 +43,9 @@ export default function Auth() {
       if (from) {
         navigate(from, { replace: true });
       } else if (authUser.role === 'CLIENT') {
-        navigate('/portal/new-order', { replace: true });
+        navigate('/portal', { replace: true });
       } else {
-        navigate('/dashboard', { replace: true });
+        navigate('/production', { replace: true });
       }
     }
   }, [user, authUser, navigate, location]);
@@ -82,39 +78,29 @@ export default function Auth() {
     }
   };
 
-  const handleSignup = async (e: React.FormEvent) => {
+  const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
     setIsSubmitting(true);
 
     try {
-      const validation = signupSchema.safeParse({
-        name: signupName,
-        email: signupEmail,
-        password: signupPassword,
-        confirmPassword: signupConfirmPassword,
-      });
-      
+      const validation = emailSchema.safeParse({ email: resetEmail });
       if (!validation.success) {
         setError(validation.error.errors[0].message);
         setIsSubmitting(false);
         return;
       }
 
-      const { error } = await signUp(signupEmail, signupPassword, signupName);
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      });
+
       if (error) {
-        if (error.message.includes('already registered')) {
-          setError('This email is already registered. Please log in instead.');
-        } else {
-          setError(error.message);
-        }
+        setError(error.message);
       } else {
-        setSuccess('Account created! You can now log in. Note: An administrator will need to assign your role.');
-        setSignupName('');
-        setSignupEmail('');
-        setSignupPassword('');
-        setSignupConfirmPassword('');
+        setSuccess('Password reset link sent! Check your email inbox.');
+        setResetEmail('');
       }
     } catch (err) {
       setError('An unexpected error occurred');
@@ -139,34 +125,84 @@ export default function Auth() {
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary">
             <Coffee className="h-8 w-8 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold">Lite ERP</h1>
-          <p className="text-muted-foreground">Coffee Roasting Management</p>
+          <h1 className="text-2xl font-bold">JIM</h1>
+          <p className="text-muted-foreground">by Home Island Software</p>
         </div>
 
         <Card>
-          <Tabs defaultValue="login">
-            <CardHeader className="pb-4">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="login">Log In</TabsTrigger>
-                <TabsTrigger value="signup">Sign Up</TabsTrigger>
-              </TabsList>
-            </CardHeader>
-
-            <CardContent>
-              {error && (
-                <div className="mb-4 flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  {error}
+          <CardHeader className="pb-4">
+            {showForgotPassword ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8"
+                    onClick={() => {
+                      setShowForgotPassword(false);
+                      setError(null);
+                      setSuccess(null);
+                    }}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  <CardTitle>Reset Password</CardTitle>
                 </div>
-              )}
+                <CardDescription>
+                  Enter your email to receive a password reset link.
+                </CardDescription>
+              </>
+            ) : (
+              <>
+                <CardTitle>Welcome Back</CardTitle>
+                <CardDescription>
+                  Sign in to your account to continue.
+                </CardDescription>
+              </>
+            )}
+          </CardHeader>
 
-              {success && (
-                <div className="mb-4 rounded-md bg-success/10 p-3 text-sm text-success">
-                  {success}
+          <CardContent>
+            {error && (
+              <div className="mb-4 flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {error}
+              </div>
+            )}
+
+            {success && (
+              <div className="mb-4 rounded-md bg-green-50 p-3 text-sm text-green-800">
+                {success}
+              </div>
+            )}
+
+            {showForgotPassword ? (
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reset-email">Email</Label>
+                  <Input
+                    id="reset-email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    disabled={isSubmitting}
+                    required
+                  />
                 </div>
-              )}
-
-              <TabsContent value="login" className="mt-0">
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    'Send Reset Link'
+                  )}
+                </Button>
+              </form>
+            ) : (
+              <>
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="login-email">Email</Label>
@@ -193,71 +229,40 @@ export default function Auth() {
                     />
                   </div>
                   <Button type="submit" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? 'Logging in...' : 'Log In'}
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Signing in...
+                      </>
+                    ) : (
+                      'Sign In'
+                    )}
                   </Button>
                 </form>
-              </TabsContent>
 
-              <TabsContent value="signup" className="mt-0">
-                <form onSubmit={handleSignup} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-name">Full Name</Label>
-                    <Input
-                      id="signup-name"
-                      type="text"
-                      placeholder="John Doe"
-                      value={signupName}
-                      onChange={(e) => setSignupName(e.target.value)}
-                      disabled={isSubmitting}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input
-                      id="signup-email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={signupEmail}
-                      onChange={(e) => setSignupEmail(e.target.value)}
-                      disabled={isSubmitting}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={signupPassword}
-                      onChange={(e) => setSignupPassword(e.target.value)}
-                      disabled={isSubmitting}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-confirm-password">Confirm Password</Label>
-                    <Input
-                      id="signup-confirm-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={signupConfirmPassword}
-                      onChange={(e) => setSignupConfirmPassword(e.target.value)}
-                      disabled={isSubmitting}
-                      required
-                    />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? 'Creating account...' : 'Create Account'}
-                  </Button>
-                </form>
-                <p className="mt-4 text-center text-xs text-muted-foreground">
-                  After signing up, an administrator will assign your role and permissions.
-                </p>
-              </TabsContent>
-            </CardContent>
-          </Tabs>
+                <div className="mt-4 text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForgotPassword(true);
+                      setError(null);
+                    }}
+                    className="text-sm text-muted-foreground hover:text-primary hover:underline"
+                  >
+                    Forgot your password?
+                  </button>
+                </div>
+
+                <div className="mt-6 rounded-md bg-muted p-4">
+                  <p className="text-center text-sm text-muted-foreground">
+                    <strong>Don't have an account?</strong>
+                    <br />
+                    Accounts are created by Home Island. Check your email for an invite link.
+                  </p>
+                </div>
+              </>
+            )}
+          </CardContent>
         </Card>
       </div>
     </div>

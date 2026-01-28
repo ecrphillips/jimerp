@@ -18,7 +18,6 @@ interface AuthContextType {
   authUser: AuthUser | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, name: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isOps: boolean;
@@ -119,38 +118,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error as Error | null };
   };
 
-  const signUp = async (email: string, password: string, name: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: { name }
-      }
-    });
-
-    if (error) return { error: error as Error };
-
-    // Create profile for new user
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          user_id: data.user.id,
-          name,
-          email,
-        });
-
-      if (profileError) {
-        console.error('Error creating profile:', profileError);
-      }
-    }
-
-    return { error: null };
-  };
-
   const signOut = async () => {
     await supabase.auth.signOut();
     setAuthUser(null);
@@ -168,7 +135,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authUser,
       loading,
       signIn,
-      signUp,
       signOut,
       isAdmin,
       isOps,

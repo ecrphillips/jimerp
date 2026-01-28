@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import {
+  Home,
   PlusCircle,
   ClipboardList,
   User,
@@ -19,6 +20,7 @@ interface ClientLayoutProps {
 
 // Client-only navigation items
 const navItems = [
+  { to: '/portal', label: 'Home', icon: Home, end: true },
   { to: '/portal/new-order', label: 'New Order', icon: PlusCircle },
   { to: '/portal/orders', label: 'Order History', icon: ClipboardList },
   { to: '/portal/account', label: 'Account', icon: User },
@@ -66,6 +68,7 @@ export function ClientLayout({ children }: ClientLayoutProps) {
                 <li key={item.to}>
                   <NavLink
                     to={item.to}
+                    end={'end' in item ? item.end : false}
                     onClick={() => setSidebarOpen(false)}
                     className={({ isActive }) => cn(
                       "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
