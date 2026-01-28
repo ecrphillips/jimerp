@@ -859,6 +859,48 @@ export type Database = {
           },
         ]
       }
+      roast_group_components: {
+        Row: {
+          component_roast_group: string
+          created_at: string
+          display_order: number
+          id: string
+          parent_roast_group: string
+          pct: number
+        }
+        Insert: {
+          component_roast_group: string
+          created_at?: string
+          display_order?: number
+          id?: string
+          parent_roast_group: string
+          pct: number
+        }
+        Update: {
+          component_roast_group?: string
+          created_at?: string
+          display_order?: number
+          id?: string
+          parent_roast_group?: string
+          pct?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roast_group_components_component_roast_group_fkey"
+            columns: ["component_roast_group"]
+            isOneToOne: false
+            referencedRelation: "roast_groups"
+            referencedColumns: ["roast_group"]
+          },
+          {
+            foreignKeyName: "roast_group_components_parent_roast_group_fkey"
+            columns: ["parent_roast_group"]
+            isOneToOne: false
+            referencedRelation: "roast_groups"
+            referencedColumns: ["roast_group"]
+          },
+        ]
+      }
       roast_group_inventory_levels: {
         Row: {
           fg_kg: number
@@ -956,6 +998,7 @@ export type Database = {
           cropster_batch_id: string | null
           id: string
           notes: string | null
+          planned_for_blend_roast_group: string | null
           planned_output_kg: number | null
           roast_group: string
           status: Database["public"]["Enums"]["roasted_batch_status"]
@@ -972,6 +1015,7 @@ export type Database = {
           cropster_batch_id?: string | null
           id?: string
           notes?: string | null
+          planned_for_blend_roast_group?: string | null
           planned_output_kg?: number | null
           roast_group: string
           status?: Database["public"]["Enums"]["roasted_batch_status"]
@@ -988,13 +1032,22 @@ export type Database = {
           cropster_batch_id?: string | null
           id?: string
           notes?: string | null
+          planned_for_blend_roast_group?: string | null
           planned_output_kg?: number | null
           roast_group?: string
           status?: Database["public"]["Enums"]["roasted_batch_status"]
           target_date?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "roasted_batches_planned_for_blend_roast_group_fkey"
+            columns: ["planned_for_blend_roast_group"]
+            isOneToOne: false
+            referencedRelation: "roast_groups"
+            referencedColumns: ["roast_group"]
+          },
+        ]
       }
       ship_picks: {
         Row: {

@@ -272,6 +272,27 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
         throw new Error('Could not create roast group after 50 attempts');
       }
       
+      // Save blend components to roast_group_components table
+      const componentInserts = components
+        .filter(c => c.roastGroup) // Only include components with selected roast groups
+        .map((c, idx) => ({
+          parent_roast_group: finalRoastGroupKey,
+          component_roast_group: c.roastGroup,
+          pct: c.percentage,
+          display_order: idx,
+        }));
+      
+      if (componentInserts.length > 0) {
+        const { error: componentsError } = await supabase
+          .from('roast_group_components')
+          .insert(componentInserts);
+        
+        if (componentsError) {
+          console.error('Failed to save blend components:', componentsError);
+          // Don't throw - the roast group was created, just log the error
+        }
+      }
+      
       // Create products for each variant using auto-dedupe
       const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
       const hasPrice = !isNaN(priceValue);

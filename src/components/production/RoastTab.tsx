@@ -21,9 +21,10 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Flame, Plus, Check, Zap, Clock, Settings, Sparkles, Package } from 'lucide-react';
+import { Flame, Plus, Check, Zap, Clock, Settings, Sparkles, Package, Layers } from 'lucide-react';
 import { RoastGroupDrawer } from './RoastGroupDrawer';
 import { WipFgAdjustModal } from './WipFgAdjustModal';
+import { PlanBlendBatchesModal } from './PlanBlendBatchesModal';
 import {
   DndContext,
   closestCenter,
@@ -69,6 +70,7 @@ interface RoastGroupConfig {
   default_roaster: DefaultRoaster;
   expected_yield_loss_pct: number;
   is_active: boolean;
+  is_blend: boolean;
   notes: string | null;
   display_order: number | null;
   display_name: string | null;
@@ -109,8 +111,14 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   
   // WIP/FG adjustment modal state
   const [wipFgModalGroup, setWipFgModalGroup] = useState<string | null>(null);
-
-  // Fetch roast_groups config (with display_order)
+  
+  // Blend planning modal state
+  const [blendPlanModal, setBlendPlanModal] = useState<{
+    roastGroup: string;
+    displayName: string;
+    demandKg: number;
+    netDemandKg: number;
+  } | null>(null);
   const { data: roastGroupsConfig } = useQuery({
     queryKey: ['roast-groups-config'],
     queryFn: async () => {
@@ -745,6 +753,13 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                             onOpenConfig={openConfigDialog}
                             onEditingChange={(isEditing) => handleEditingChange(group.roast_group, isEditing)}
                             onAdjustWipFg={(rg) => setWipFgModalGroup(rg)}
+                            isBlend={config?.is_blend ?? false}
+                            onPlanBlendBatches={() => setBlendPlanModal({
+                              roastGroup: group.roast_group,
+                              displayName: config?.display_name?.trim() || group.roast_group.replace(/_/g, ' '),
+                              demandKg: group.total_kg,
+                              netDemandKg: group.net_demand_kg,
+                            })}
                           />
                           
                           {/* Quick batch suggestion row (shown below collapsed row if there's demand and no batches visible) */}
@@ -884,6 +899,13 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                         onOpenConfig={openConfigDialog}
                         onEditingChange={(isEditing) => handleEditingChange(roastGroup, isEditing)}
                         onAdjustWipFg={(rg) => setWipFgModalGroup(rg)}
+                        isBlend={config?.is_blend ?? false}
+                        onPlanBlendBatches={() => setBlendPlanModal({
+                          roastGroup: roastGroup,
+                          displayName: config?.display_name?.trim() || roastGroup.replace(/_/g, ' '),
+                          demandKg: 0,
+                          netDemandKg: 0,
+                        })}
                       />
                     );
                   })}
@@ -999,6 +1021,19 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
           roastGroup={wipFgModalGroup}
           currentWipKg={inventoryLevelsByGroup[wipFgModalGroup]?.wip_kg ?? 0}
           currentFgKg={inventoryLevelsByGroup[wipFgModalGroup]?.fg_kg ?? 0}
+        />
+      )}
+      
+      {/* Blend Planning Modal */}
+      {blendPlanModal && (
+        <PlanBlendBatchesModal
+          open={!!blendPlanModal}
+          onOpenChange={(open) => !open && setBlendPlanModal(null)}
+          blendRoastGroup={blendPlanModal.roastGroup}
+          blendDisplayName={blendPlanModal.displayName}
+          blendDemandKg={blendPlanModal.demandKg}
+          blendNetDemandKg={blendPlanModal.netDemandKg}
+          today={today}
         />
       )}
     </div>
