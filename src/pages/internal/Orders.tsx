@@ -316,6 +316,9 @@ export default function Orders() {
                 const isTerminal = isTerminalStatus(o.status);
                 const packedComplete = getPackedComplete(o);
                 
+                // Check if order needs invoicing (shipped but not invoiced) - highlight in blue
+                const needsInvoicing = o.shipped_or_ready && !o.invoiced;
+                
                 // Build progress data
                 const isConfirmed = !!o.work_deadline_at && ['CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'].includes(o.status);
                 
@@ -324,7 +327,10 @@ export default function Orders() {
                     key={o.id}
                     className={cn(
                       "flex items-center gap-4 px-2 py-2 rounded cursor-pointer hover:bg-muted/50 border-b last:border-0",
-                      isTerminal && 'opacity-50',
+                      // Blue highlight for needs invoicing (shipped but not invoiced) - NOT grayed out
+                      needsInvoicing && 'bg-blue-50 border-l-2 border-l-blue-400',
+                      // Gray out only cancelled orders, NOT shipped awaiting invoice
+                      o.status === 'CANCELLED' && 'opacity-50',
                       isSubmittedNoDeadline && 'bg-warning/5'
                     )}
                   >

@@ -13,6 +13,8 @@ interface PackingRun {
   notes: string | null;
 }
 
+export type WipStatus = 'full' | 'partial' | 'none';
+
 interface PackRowDrawerProps {
   productId: string;
   productName: string;
@@ -22,7 +24,7 @@ interface PackRowDrawerProps {
   unblocksOrders: number;
   wipAvailableKg: number;
   requiredKg: number;
-  hasWipAvailable: boolean;
+  wipStatus: WipStatus; // 'full' = green, 'partial' = amber, 'none' = no color
 }
 
 export function PackRowDrawer({
@@ -34,7 +36,7 @@ export function PackRowDrawer({
   unblocksOrders,
   wipAvailableKg,
   requiredKg,
-  hasWipAvailable,
+  wipStatus,
 }: PackRowDrawerProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -46,25 +48,37 @@ export function PackRowDrawer({
 
   return (
     <tr
-      className={`border-l-2 ${hasWipAvailable
-        ? 'bg-success/5 border-l-success'
-        : 'bg-muted/30 border-l-border'}`}
+      className={`border-l-2 ${
+        wipStatus === 'full'
+          ? 'bg-success/5 border-l-success'
+          : wipStatus === 'partial'
+            ? 'bg-warning/5 border-l-warning'
+            : 'bg-muted/30 border-l-border'
+      }`}
     >
       <td colSpan={6} className="py-3 px-4 pl-6">
         {/* WIP Status Banner */}
         {roastGroup && (
           <div
-            className={`mb-3 p-2 rounded-md text-sm ${hasWipAvailable
-              ? 'bg-success/15 text-success'
-              : 'bg-muted text-muted-foreground'}`}
+            className={`mb-3 p-2 rounded-md text-sm ${
+              wipStatus === 'full'
+                ? 'bg-success/15 text-success'
+                : wipStatus === 'partial'
+                  ? 'bg-warning/15 text-warning'
+                  : 'bg-muted text-muted-foreground'
+            }`}
           >
-            {hasWipAvailable ? (
+            {wipStatus === 'full' ? (
               <span className="font-medium">
                 ✓ WIP available for {roastGroup}: {wipAvailableKg.toFixed(2)} kg • This row needs: {requiredKg.toFixed(2)} kg
               </span>
+            ) : wipStatus === 'partial' ? (
+              <span className="font-medium">
+                ⚠ WIP partial for {roastGroup}: {wipAvailableKg.toFixed(2)} kg available • This row needs: {requiredKg.toFixed(2)} kg
+              </span>
             ) : requiredKg > 0 ? (
               <span>
-                WIP short for {roastGroup}: {wipAvailableKg.toFixed(2)} kg available • This row needs: {requiredKg.toFixed(2)} kg
+                WIP empty for {roastGroup}: {wipAvailableKg.toFixed(2)} kg available • This row needs: {requiredKg.toFixed(2)} kg
               </span>
             ) : (
               <span>No remaining demand for this SKU</span>

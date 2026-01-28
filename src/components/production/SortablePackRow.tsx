@@ -2,7 +2,7 @@ import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, ChevronRight, Check, AlertTriangle, Clock, ShoppingCart, CheckCircle, GripVertical } from 'lucide-react';
+import { ChevronDown, ChevronRight, Check, AlertTriangle, Clock, ShoppingCart, CheckCircle, AlertCircle, GripVertical } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { InlinePackingControl } from './InlinePackingControl';
 import { PackRowDrawer } from './PackRowDrawer';
@@ -16,6 +16,8 @@ interface PackingRun {
   notes: string | null;
 }
 
+export type WipStatus = 'full' | 'partial' | 'none';
+
 interface SortablePackRowProps {
   productId: string;
   productName: string;
@@ -26,7 +28,7 @@ interface SortablePackRowProps {
   demandedUnits: number;
   packedUnits: number;
   hasTimeSensitive: boolean;
-  hasWipAvailable: boolean;
+  wipStatus: WipStatus; // 'full' = green, 'partial' = amber, 'none' = no color
   unblocksOrders: number;
   wipAvailableKg: number;
   requiredKg: number;
@@ -47,7 +49,7 @@ export function SortablePackRow({
   demandedUnits,
   packedUnits,
   hasTimeSensitive,
-  hasWipAvailable,
+  wipStatus,
   unblocksOrders,
   wipAvailableKg,
   requiredKg,
@@ -72,21 +74,42 @@ export function SortablePackRow({
 
   const isComplete = packedUnits >= demandedUnits;
 
+  // Determine row styling based on wipStatus
+  // - 'full': GREEN - enough WIP to complete entire row
+  // - 'partial': AMBER - some WIP available but not enough
+  // - 'none': NO COLOR - no WIP at all
+  const getRowClasses = () => {
+    const baseClasses = 'border-b last:border-0 cursor-pointer transition-colors';
+    
+    if (hasTimeSensitive) {
+      // Urgent items keep their destructive background but can have WIP indicator
+      if (wipStatus === 'full') {
+        return `${baseClasses} bg-destructive/5 border-l-2 border-l-success`;
+      }
+      if (wipStatus === 'partial') {
+        return `${baseClasses} bg-destructive/5 border-l-2 border-l-warning`;
+      }
+      return `${baseClasses} bg-destructive/5`;
+    }
+    
+    if (wipStatus === 'full') {
+      return `${baseClasses} ${isExpanded ? 'bg-success/15' : 'bg-success/10'} border-l-2 border-l-success`;
+    }
+    
+    if (wipStatus === 'partial') {
+      return `${baseClasses} ${isExpanded ? 'bg-warning/15' : 'bg-warning/10'} border-l-2 border-l-warning`;
+    }
+    
+    // None - no color
+    return `${baseClasses} ${isExpanded ? 'bg-muted/40 border-l-2 border-l-border' : 'hover:bg-muted/50'}`;
+  };
+
   return (
     <React.Fragment>
       <tr
         ref={setNodeRef}
         style={style}
-        className={`border-b last:border-0 cursor-pointer transition-colors 
-          ${hasTimeSensitive ? 'bg-destructive/5' : ''} 
-          ${hasWipAvailable
-            ? (isExpanded
-                ? 'bg-success/15 border-l-2 border-l-success'
-                : 'bg-success/10 border-l-2 border-l-success')
-            : isExpanded
-              ? 'bg-muted/40 border-l-2 border-l-border'
-              : 'hover:bg-muted/50'}
-        `}
+        className={getRowClasses()}
         onClick={onToggleExpand}
       >
         {/* Drag handle */}
@@ -121,13 +144,23 @@ export function SortablePackRow({
                 Unblocks: {unblocksOrders} order{unblocksOrders !== 1 ? 's' : ''}
               </Badge>
             )}
-            {hasWipAvailable && (
+            {/* WIP status badges */}
+            {wipStatus === 'full' && (
               <Badge
                 variant="outline"
                 className="text-xs bg-success/15 text-success border-success/30"
               >
                 <CheckCircle className="h-3 w-3 mr-1 text-success" />
                 WIP ready
+              </Badge>
+            )}
+            {wipStatus === 'partial' && (
+              <Badge
+                variant="outline"
+                className="text-xs bg-warning/15 text-warning border-warning/30"
+              >
+                <AlertCircle className="h-3 w-3 mr-1 text-warning" />
+                WIP partial
               </Badge>
             )}
           </div>
@@ -182,7 +215,7 @@ export function SortablePackRow({
           unblocksOrders={unblocksOrders}
           wipAvailableKg={wipAvailableKg}
           requiredKg={requiredKg}
-          hasWipAvailable={hasWipAvailable}
+          wipStatus={wipStatus}
         />
       )}
     </React.Fragment>

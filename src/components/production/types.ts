@@ -4,12 +4,13 @@ export type DateFilterMode = 'today' | 'tomorrow' | 'all';
 
 export interface DateFilterConfigToday {
   mode: 'today';
-  maxDate: string; // work_deadline <= this date (end of next business day)
+  maxDate: string; // work_deadline <= this datetime (tomorrow at 13:00)
 }
 
 export interface DateFilterConfigTomorrow {
   mode: 'tomorrow';
-  exactDate: string; // work_deadline == this date OR manually_deprioritized = true
+  minDate: string; // work_deadline > this datetime (tomorrow at 13:00)
+  maxDate: string; // work_deadline <= this datetime (day after tomorrow at 13:00)
 }
 
 export interface DateFilterConfigAll {

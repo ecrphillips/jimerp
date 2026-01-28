@@ -55,7 +55,7 @@ interface ProductDemand {
   hasTimeSensitive: boolean;
   wipAvailableKg: number;
   requiredKg: number;
-  isReadyToPack: boolean;
+  wipStatus: 'full' | 'partial' | 'none'; // NEW: WIP status for color coding
   earliestShipDate: string | null;
   shortage: number;
   unblocksOrders: number;
@@ -112,11 +112,16 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
       
-      // Apply date filter based on mode - using work_deadline
+      // Apply date filter based on mode - using work_deadline with 13:00 rule
       if (dateFilterConfig.mode === 'today') {
+        // TODAY: work_deadline <= tomorrow at 13:00
         query = query.lte('order.work_deadline', dateFilterConfig.maxDate);
       } else if (dateFilterConfig.mode === 'tomorrow') {
-        query = query.or(`work_deadline.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`, { referencedTable: 'orders' });
+        // TOMORROW: (work_deadline > tomorrow 13:00 AND <= day after tomorrow 13:00) OR manually_deprioritized
+        query = query.or(
+          `and(work_deadline.gt.${dateFilterConfig.minDate},work_deadline.lte.${dateFilterConfig.maxDate}),manually_deprioritized.eq.true`, 
+          { referencedTable: 'orders' }
+        );
       }
       // ALL mode: no date filter
       
@@ -201,7 +206,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
           shipDates: [],
           wipAvailableKg: 0,
           requiredKg: 0,
-          isReadyToPack: false,
+          wipStatus: 'none' as const, // NEW: WIP status for color coding
         };
       }
       productMap[li.product_id].demanded_units += li.quantity_units;
@@ -252,12 +257,24 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       
       product.wipAvailableKg = wipAvailableKg;
       product.requiredKg = requiredKg;
-      // Only show as ready if WIP > 0 and there are remaining units to pack
-      product.isReadyToPack = wipAvailableKg > 0 && remainingUnits > 0;
+      
+      // NEW: WIP status for color coding
+      // - 'full': enough WIP to complete entire row (wipAvailable >= requiredKg)
+      // - 'partial': some WIP available but not enough (0 < wipAvailable < requiredKg)
+      // - 'none': no WIP available or no remaining demand
+      if (remainingUnits === 0) {
+        product.wipStatus = 'none'; // No remaining work = no color needed
+      } else if (wipAvailableKg >= requiredKg) {
+        product.wipStatus = 'full'; // GREEN: can complete entire row
+      } else if (wipAvailableKg > 0) {
+        product.wipStatus = 'partial'; // AMBER: some but not enough
+      } else {
+        product.wipStatus = 'none'; // NO COLOR: no WIP at all
+      }
     }
 
     return Object.values(productMap).map(({ orderIds, shipDates, ...rest }) => rest);
-  }, [orderLineItems, checkmarks, packingByProductUnits, roastedInventory]);
+  }, [orderLineItems, checkmarks, packingByProductUnits, roastedInventory, products]);
 
   // Sort products by pack_display_order only (manual ordering)
   // NO automatic reprioritization - order is strictly user-controlled
@@ -508,7 +525,17 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
         </CardHeader>
         <CardContent>
           {sortedProducts.length === 0 ? (
-            <p className="text-muted-foreground py-4">No products demanded for selected dates.</p>
+            <div className="py-8 text-center">
+              <div className="text-4xl mb-3">🎉</div>
+              <p className="text-lg font-medium text-foreground mb-1">All caught up!</p>
+              <p className="text-muted-foreground text-sm">
+                {dateFilterConfig.mode === 'today' 
+                  ? "No packing work for today. Check 'Tomorrow' or 'All' for future demand."
+                  : dateFilterConfig.mode === 'tomorrow'
+                    ? "No packing work for tomorrow. Check 'All' for future demand."
+                    : "No products demanded across all dates."}
+              </p>
+            </div>
           ) : (
             <DndContext
               sensors={sensors}
@@ -536,7 +563,6 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                       const packing = packingByProduct[product.product_id];
                       const packed = packing?.units_packed ?? 0;
                       const isExpanded = expandedProductId === product.product_id;
-                      const hasWipAvailable = product.isReadyToPack;
                       
                       return (
                         <SortablePackRow
@@ -550,7 +576,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                           demandedUnits={product.demanded_units}
                           packedUnits={packed}
                           hasTimeSensitive={product.hasTimeSensitive}
-                          hasWipAvailable={hasWipAvailable}
+                          wipStatus={product.wipStatus}
                           unblocksOrders={product.unblocksOrders}
                           wipAvailableKg={product.wipAvailableKg}
                           requiredKg={product.requiredKg}

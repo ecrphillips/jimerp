@@ -132,13 +132,16 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
       
-      // Apply date filter based on mode - using work_deadline
+      // Apply date filter based on mode - using work_deadline with 13:00 rule
       if (dateFilterConfig.mode === 'today') {
-        // TODAY: work_deadline <= maxDate
+        // TODAY: work_deadline <= tomorrow at 13:00
         query = query.lte('order.work_deadline', dateFilterConfig.maxDate);
       } else if (dateFilterConfig.mode === 'tomorrow') {
-        // TOMORROW: work_deadline == exactDate OR manually_deprioritized = true
-        query = query.or(`work_deadline.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`, { referencedTable: 'orders' });
+        // TOMORROW: (work_deadline > tomorrow 13:00 AND <= day after tomorrow 13:00) OR manually_deprioritized
+        query = query.or(
+          `and(work_deadline.gt.${dateFilterConfig.minDate},work_deadline.lte.${dateFilterConfig.maxDate}),manually_deprioritized.eq.true`, 
+          { referencedTable: 'orders' }
+        );
       }
       // ALL mode: no date filter
       
@@ -190,11 +193,15 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         .order('ship_display_order', { ascending: true, nullsFirst: false })
         .order('order_number', { ascending: true });
       
-      // Apply date filter based on mode - using work_deadline
+      // Apply date filter based on mode - using work_deadline with 13:00 rule
       if (dateFilterConfig.mode === 'today') {
+        // TODAY: work_deadline <= tomorrow at 13:00
         query = query.lte('work_deadline', dateFilterConfig.maxDate);
       } else if (dateFilterConfig.mode === 'tomorrow') {
-        query = query.or(`work_deadline.eq.${dateFilterConfig.exactDate},manually_deprioritized.eq.true`);
+        // TOMORROW: (work_deadline > tomorrow 13:00 AND <= day after tomorrow 13:00) OR manually_deprioritized
+        query = query.or(
+          `and(work_deadline.gt.${dateFilterConfig.minDate},work_deadline.lte.${dateFilterConfig.maxDate}),manually_deprioritized.eq.true`
+        );
       }
       // ALL mode: no date filter
       
@@ -362,42 +369,78 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
   const shippableOrders = useMemo(() => allOrdersWithMetrics.filter(o => o.allLineItemsPacked), [allOrdersWithMetrics]);
   const notYetShippableOrders = useMemo(() => allOrdersWithMetrics.filter(o => !o.allLineItemsPacked), [allOrdersWithMetrics]);
 
-  // Short list calculation - now uses FG inventory from ledger
+  // Fetch all ship_picks for short list calculation
+  const { data: allShipPicks } = useQuery({
+    queryKey: ['all-ship-picks'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ship_picks')
+        .select('order_line_item_id, units_picked, order_id');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Map ship_picks by order_line_item_id
+  const pickedByLineItem = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const pick of allShipPicks ?? []) {
+      map[pick.order_line_item_id] = pick.units_picked;
+    }
+    return map;
+  }, [allShipPicks]);
+
+  // Short list calculation - accounts for picked items
+  // Short list shows SKUs where FG < UNPICKED demand (demand - already picked)
   const shortList = useMemo((): ShortListItem[] => {
-    const demandMap: Record<string, { product_name: string; bag_size_g: number; packaging_variant: PackagingVariant | null; demanded: number }> = {};
+    const demandMap: Record<string, { 
+      product_name: string; 
+      bag_size_g: number; 
+      packaging_variant: PackagingVariant | null; 
+      totalDemanded: number;
+      totalPicked: number; // Already picked/allocated
+    }> = {};
     
     for (const li of orderLineItems ?? []) {
       if (!li.product) continue;
       const key = li.product_id;
+      const picked = pickedByLineItem[li.id] ?? 0;
+      
       if (!demandMap[key]) {
         demandMap[key] = {
           product_name: li.product.product_name,
           bag_size_g: li.product.bag_size_g,
           packaging_variant: li.product.packaging_variant as PackagingVariant | null,
-          demanded: 0,
+          totalDemanded: 0,
+          totalPicked: 0,
         };
       }
-      demandMap[key].demanded += li.quantity_units;
+      demandMap[key].totalDemanded += li.quantity_units;
+      demandMap[key].totalPicked += picked;
     }
 
     const shortItems: ShortListItem[] = [];
     for (const [productId, data] of Object.entries(demandMap)) {
       const fgAvailable = fgInventoryMap[productId] ?? 0;
-      if (fgAvailable < data.demanded) {
+      // UNPICKED demand = total demanded - already picked
+      const unPickedDemand = data.totalDemanded - data.totalPicked;
+      
+      // Only show shortage if FG < unpicked demand
+      if (fgAvailable < unPickedDemand && unPickedDemand > 0) {
         shortItems.push({
           product_id: productId,
           product_name: data.product_name,
           bag_size_g: data.bag_size_g,
           packaging_variant: data.packaging_variant,
-          demanded_units: data.demanded,
+          demanded_units: unPickedDemand, // Show unpicked demand, not total
           packed_units: fgAvailable,
-          shortage: data.demanded - fgAvailable,
+          shortage: unPickedDemand - fgAvailable,
         });
       }
     }
 
     return shortItems.sort((a, b) => b.shortage - a.shortage);
-  }, [orderLineItems, fgInventoryMap]);
+  }, [orderLineItems, fgInventoryMap, pickedByLineItem]);
 
   const priorityMutation = useMutation({
     mutationFn: async ({ productId, bagSize, priority, existingCheckmark }: { productId: string; bagSize: number; priority: ShipPriority; existingCheckmark: Checkmark | null }) => {
@@ -643,9 +686,17 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         </CardHeader>
         <CardContent>
           {displayOrders.length === 0 ? (
-            <p className="text-muted-foreground py-8 text-center">
-              No orders for the selected date window.
-            </p>
+            <div className="py-8 text-center">
+              <div className="text-4xl mb-3">🎉</div>
+              <p className="text-lg font-medium text-foreground mb-1">All caught up!</p>
+              <p className="text-muted-foreground text-sm">
+                {dateFilterConfig.mode === 'today' 
+                  ? "No shipping work for today. Check 'Tomorrow' or 'All' for future orders."
+                  : dateFilterConfig.mode === 'tomorrow'
+                    ? "No shipping work for tomorrow. Check 'All' for future orders."
+                    : "No orders to ship across all dates."}
+              </p>
+            </div>
           ) : (
             <DndContext
               sensors={sensors}
