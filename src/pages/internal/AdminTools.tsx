@@ -10,6 +10,7 @@ import { AlertTriangle, Trash2, Sparkles, RotateCcw, Bomb } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { OrderNotificationSettings } from '@/components/admin/OrderNotificationSettings';
+import { BuildInfoPanel } from '@/components/admin/BuildInfoPanel';
 
 // Check if we're in development mode
 const isDev = import.meta.env.DEV;
@@ -153,6 +154,9 @@ export default function AdminTools() {
           Administrative utilities for development and testing
         </p>
       </div>
+
+      {/* Build Info Panel - DEV diagnostics */}
+      <BuildInfoPanel />
 
       {/* Order Submit Notifications */}
       <OrderNotificationSettings />
