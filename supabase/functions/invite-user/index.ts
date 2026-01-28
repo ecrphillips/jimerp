@@ -131,16 +131,63 @@ Deno.serve(async (req) => {
         );
       }
 
-      // User exists in auth but has no role - this is a broken state
-      // Still require explicit action rather than silent fix
-      console.log('[invite-user] User exists in auth but has no role - broken state:', existingUser.id);
+      // User exists in auth but has no role - fix this broken state
+      console.log('[invite-user] User exists in auth but has no role - fixing:', existingUser.id);
+      
+      // Create the missing role
+      const { error: roleInsertError } = await adminClient
+        .from('user_roles')
+        .insert({
+          user_id: existingUser.id,
+          role: role,
+          client_id: role === 'CLIENT' ? client_id : null
+        });
+
+      if (roleInsertError) {
+        console.error('[invite-user] Failed to create role for existing user:', roleInsertError.message);
+        return new Response(
+          JSON.stringify({ error: `Failed to assign role: ${roleInsertError.message}` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Create profile if missing
+      const { data: existingProfile } = await adminClient
+        .from('profiles')
+        .select('id')
+        .eq('user_id', existingUser.id)
+        .maybeSingle();
+
+      if (!existingProfile) {
+        await adminClient.from('profiles').insert({
+          user_id: existingUser.id,
+          email: email.toLowerCase(),
+          name: name || email.split('@')[0],
+          is_active: true
+        });
+      }
+
+      // Send password recovery so they can set their password
+      const appUrl = req.headers.get('origin') || 'https://id-preview--3db16675-5a7a-40ca-b657-6ccdc5ce15e4.lovable.app';
+      const { error: resetError } = await adminClient.auth.admin.generateLink({
+        type: 'recovery',
+        email: email,
+        options: { redirectTo: `${appUrl}/auth/callback` }
+      });
+
+      if (resetError) {
+        console.error('[invite-user] Failed to send recovery email:', resetError.message);
+      }
+
+      console.log('[invite-user] Fixed broken state for user:', existingUser.id);
       return new Response(
         JSON.stringify({ 
-          error: 'USER_EXISTS_NO_ROLE',
-          message: 'User exists in auth but has no role. Use "Resend Invite" to complete their setup.',
-          user_id: existingUser.id
+          success: true, 
+          message: `User setup completed. Password reset email sent to ${email}.`,
+          user_id: existingUser.id,
+          email_sent: !resetError
         }),
-        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
