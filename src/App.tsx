@@ -24,6 +24,7 @@ import BulkProducts from "@/pages/internal/BulkProducts";
 import Inventory from "@/pages/internal/Inventory";
 import InventoryLedger from "@/pages/internal/InventoryLedger";
 import AdminTools from "@/pages/internal/AdminTools";
+import UsersAccess from "@/pages/internal/UsersAccess";
 import NewOrder from "@/pages/client/NewOrder";
 import OrderHistory from "@/pages/client/OrderHistory";
 import Account from "@/pages/client/Account";
@@ -128,6 +129,11 @@ const App = () => (
             <Route path="/admin-tools" element={
               <ProtectedRoute allowedRoles={['ADMIN']}>
                 <InternalLayout><AdminTools /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/users" element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <InternalLayout><UsersAccess /></InternalLayout>
               </ProtectedRoute>
             } />
 

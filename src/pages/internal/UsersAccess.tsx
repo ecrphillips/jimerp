@@ -1,0 +1,559 @@
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { UserPlus, MoreHorizontal, Mail, Edit, Ban, CheckCircle, Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import type { AppRole } from '@/types/database';
+
+interface UserWithDetails {
+  user_id: string;
+  email: string;
+  name: string | null;
+  role: AppRole;
+  client_id: string | null;
+  client_name: string | null;
+  is_active: boolean;
+  created_at: string;
+  last_sign_in: string | null;
+}
+
+export default function UsersAccess() {
+  const queryClient = useQueryClient();
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserWithDetails | null>(null);
+  
+  // Invite form state
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteRole, setInviteRole] = useState<AppRole>('OPS');
+  const [inviteClientId, setInviteClientId] = useState<string>('');
+  const [isInviting, setIsInviting] = useState(false);
+
+  // Edit form state
+  const [editRole, setEditRole] = useState<AppRole>('OPS');
+  const [editClientId, setEditClientId] = useState<string>('');
+  const [editName, setEditName] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Fetch users with roles and profiles
+  const { data: users, isLoading: usersLoading } = useQuery({
+    queryKey: ['admin-users'],
+    queryFn: async () => {
+      // Get user_roles with profiles
+      const { data: roles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select(`
+          user_id,
+          role,
+          client_id,
+          clients:client_id (name)
+        `);
+
+      if (rolesError) throw rolesError;
+
+      // Get profiles
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('user_id, name, email, is_active, created_at');
+
+      if (profilesError) throw profilesError;
+
+      // Merge data
+      const userMap = new Map<string, UserWithDetails>();
+
+      for (const role of roles || []) {
+        const profile = profiles?.find(p => p.user_id === role.user_id);
+        userMap.set(role.user_id, {
+          user_id: role.user_id,
+          email: profile?.email || 'Unknown',
+          name: profile?.name || null,
+          role: role.role as AppRole,
+          client_id: role.client_id,
+          client_name: (role.clients as any)?.name || null,
+          is_active: profile?.is_active ?? true,
+          created_at: profile?.created_at || new Date().toISOString(),
+          last_sign_in: null, // Would need auth admin API
+        });
+      }
+
+      return Array.from(userMap.values()).sort((a, b) => {
+        // Sort by role (ADMIN first, then OPS, then CLIENT)
+        const roleOrder = { ADMIN: 0, OPS: 1, CLIENT: 2 };
+        return roleOrder[a.role] - roleOrder[b.role];
+      });
+    },
+  });
+
+  // Fetch clients for dropdown
+  const { data: clients } = useQuery({
+    queryKey: ['admin-clients-list'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const handleInvite = async () => {
+    if (!inviteEmail || !inviteRole) {
+      toast.error('Email and role are required');
+      return;
+    }
+
+    if (inviteRole === 'CLIENT' && !inviteClientId) {
+      toast.error('Please select a client for CLIENT role');
+      return;
+    }
+
+    setIsInviting(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) {
+        toast.error('Not authenticated');
+        return;
+      }
+
+      const response = await supabase.functions.invoke('invite-user', {
+        body: {
+          email: inviteEmail,
+          role: inviteRole,
+          client_id: inviteRole === 'CLIENT' ? inviteClientId : undefined,
+          name: inviteName || undefined,
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Failed to invite user');
+      }
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      toast.success(response.data?.message || 'User invited successfully');
+      setShowInviteModal(false);
+      resetInviteForm();
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    } catch (error: any) {
+      console.error('Invite error:', error);
+      toast.error(error.message || 'Failed to invite user');
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
+  const handleEdit = async () => {
+    if (!selectedUser) return;
+
+    if (editRole === 'CLIENT' && !editClientId) {
+      toast.error('Please select a client for CLIENT role');
+      return;
+    }
+
+    setIsEditing(true);
+    try {
+      const response = await supabase.functions.invoke('update-user', {
+        body: {
+          user_id: selectedUser.user_id,
+          role: editRole,
+          client_id: editRole === 'CLIENT' ? editClientId : null,
+          name: editName || undefined,
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Failed to update user');
+      }
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      toast.success('User updated successfully');
+      setShowEditModal(false);
+      setSelectedUser(null);
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    } catch (error: any) {
+      console.error('Update error:', error);
+      toast.error(error.message || 'Failed to update user');
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
+  const handleToggleActive = async (user: UserWithDetails) => {
+    try {
+      const response = await supabase.functions.invoke('update-user', {
+        body: {
+          user_id: user.user_id,
+          is_active: !user.is_active,
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      toast.success(user.is_active ? 'User disabled' : 'User enabled');
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update user');
+    }
+  };
+
+  const handleResendInvite = async (user: UserWithDetails) => {
+    try {
+      const response = await supabase.functions.invoke('resend-invite', {
+        body: { user_id: user.user_id },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      toast.success('Invite resent');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to resend invite');
+    }
+  };
+
+  const resetInviteForm = () => {
+    setInviteEmail('');
+    setInviteName('');
+    setInviteRole('OPS');
+    setInviteClientId('');
+  };
+
+  const openEditModal = (user: UserWithDetails) => {
+    setSelectedUser(user);
+    setEditRole(user.role);
+    setEditClientId(user.client_id || '');
+    setEditName(user.name || '');
+    setShowEditModal(true);
+  };
+
+  const getRoleBadgeVariant = (role: AppRole) => {
+    switch (role) {
+      case 'ADMIN': return 'destructive';
+      case 'OPS': return 'default';
+      case 'CLIENT': return 'secondary';
+      default: return 'outline';
+    }
+  };
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Users & Access</h1>
+          <p className="text-muted-foreground">
+            Manage user accounts and access permissions
+          </p>
+        </div>
+        <Button onClick={() => setShowInviteModal(true)} className="gap-2">
+          <UserPlus className="h-4 w-4" />
+          Invite User
+        </Button>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>All Users</CardTitle>
+          <CardDescription>
+            {users?.length || 0} users in the system
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {usersLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="w-12"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users?.map((user) => (
+                  <TableRow key={user.user_id} className={!user.is_active ? 'opacity-50' : ''}>
+                    <TableCell className="font-medium">{user.email}</TableCell>
+                    <TableCell>{user.name || '—'}</TableCell>
+                    <TableCell>
+                      <Badge variant={getRoleBadgeVariant(user.role)}>
+                        {user.role}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {user.client_name || (user.role === 'CLIENT' ? <span className="text-destructive">Not assigned</span> : '—')}
+                    </TableCell>
+                    <TableCell>
+                      {user.is_active ? (
+                        <Badge variant="outline" className="text-primary border-primary">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Active
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">
+                          <Ban className="h-3 w-3 mr-1" />
+                          Disabled
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {new Date(user.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEditModal(user)}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleResendInvite(user)}>
+                            <Mail className="h-4 w-4 mr-2" />
+                            Resend Invite
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => handleToggleActive(user)}
+                            className={user.is_active ? 'text-destructive' : ''}
+                          >
+                            {user.is_active ? (
+                              <>
+                                <Ban className="h-4 w-4 mr-2" />
+                                Disable
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle className="h-4 w-4 mr-2" />
+                                Enable
+                              </>
+                            )}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {!users?.length && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                      No users found
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Invite User Modal */}
+      <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Invite User</DialogTitle>
+            <DialogDescription>
+              Send an invitation email to add a new user to the system.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="invite-email">Email *</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                placeholder="user@example.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invite-name">Name</Label>
+              <Input
+                id="invite-name"
+                placeholder="John Doe"
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invite-role">Role *</Label>
+              <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as AppRole)}>
+                <SelectTrigger id="invite-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ADMIN">Admin (full access)</SelectItem>
+                  <SelectItem value="OPS">Ops (operational access)</SelectItem>
+                  <SelectItem value="CLIENT">Client (portal access only)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {inviteRole === 'CLIENT' && (
+              <div className="space-y-2">
+                <Label htmlFor="invite-client">Client *</Label>
+                <Select value={inviteClientId} onValueChange={setInviteClientId}>
+                  <SelectTrigger id="invite-client">
+                    <SelectValue placeholder="Select a client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients?.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowInviteModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleInvite} disabled={isInviting}>
+              {isInviting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Inviting...
+                </>
+              ) : (
+                'Send Invite'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit User Modal */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription>
+              Update user role and permissions for {selectedUser?.email}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-role">Role</Label>
+              <Select value={editRole} onValueChange={(v) => setEditRole(v as AppRole)}>
+                <SelectTrigger id="edit-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ADMIN">Admin (full access)</SelectItem>
+                  <SelectItem value="OPS">Ops (operational access)</SelectItem>
+                  <SelectItem value="CLIENT">Client (portal access only)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {editRole === 'CLIENT' && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-client">Client</Label>
+                <Select value={editClientId} onValueChange={setEditClientId}>
+                  <SelectTrigger id="edit-client">
+                    <SelectValue placeholder="Select a client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients?.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleEdit} disabled={isEditing}>
+              {isEditing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Changes'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
