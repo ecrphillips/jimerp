@@ -43,26 +43,73 @@ serve(async (req) => {
   }
 
   try {
-    // Create admin client
+    // Create admin client for auth operations
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
+    // ========== AUTHENTICATION ==========
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.error('[seed-demo-users] Missing authorization header');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+    if (authError || !user) {
+      console.error('[seed-demo-users] Invalid token:', authError?.message);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========== AUTHORIZATION: ADMIN ONLY ==========
+    const { data: roleData, error: roleError } = await supabaseAdmin
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single();
+
+    if (roleError || !roleData) {
+      console.error('[seed-demo-users] No role found for user:', user.id);
+      return new Response(
+        JSON.stringify({ success: false, error: 'No role assigned' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (roleData.role !== 'ADMIN') {
+      console.error('[seed-demo-users] Non-ADMIN user attempted access:', user.id, roleData.role);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Forbidden - ADMIN role required' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('[seed-demo-users] Authorized ADMIN user:', user.id);
+
+    // ========== SEED DEMO USERS ==========
     const results: UserResult[] = [];
 
-    for (const user of demoUsers) {
+    for (const demoUser of demoUsers) {
       const userResult: UserResult = {
-        email: user.email,
+        email: demoUser.email,
         status: 'error',
         steps: []
       };
 
       try {
         // Step 1: Validate CLIENT role constraints
-        if (user.role === 'CLIENT') {
-          if (!user.clientId) {
+        if (demoUser.role === 'CLIENT') {
+          if (!demoUser.clientId) {
             userResult.error = 'CLIENT role requires clientId in seed config';
             userResult.steps.push({ step: 'validate_client', status: 'error', detail: 'Missing clientId in config' });
             results.push(userResult);
@@ -73,7 +120,7 @@ serve(async (req) => {
           const { data: clientData, error: clientError } = await supabaseAdmin
             .from('clients')
             .select('id, name')
-            .eq('id', user.clientId)
+            .eq('id', demoUser.clientId)
             .maybeSingle();
 
           if (clientError) {
@@ -84,8 +131,8 @@ serve(async (req) => {
           }
 
           if (!clientData) {
-            userResult.error = `client_id not found — update seed config to a valid clients.id (${user.clientId})`;
-            userResult.steps.push({ step: 'validate_client', status: 'error', detail: `Client ${user.clientId} does not exist` });
+            userResult.error = `client_id not found — update seed config to a valid clients.id (${demoUser.clientId})`;
+            userResult.steps.push({ step: 'validate_client', status: 'error', detail: `Client ${demoUser.clientId} does not exist` });
             results.push(userResult);
             continue;
           }
@@ -95,16 +142,14 @@ serve(async (req) => {
           userResult.steps.push({ step: 'validate_client', status: 'skipped', detail: 'Not a CLIENT role' });
         }
 
-        // Step 2: Check if user exists using getUserByEmail (not listUsers)
+        // Step 2: Check if user exists
         let userId: string;
         let isNewUser = false;
 
-        // Try to get user by email - this is the efficient approach
-        const { data: existingUserData, error: getUserError } = await supabaseAdmin.auth.admin
+        const { data: existingUserData } = await supabaseAdmin.auth.admin
           .listUsers({ page: 1, perPage: 1000 });
         
-        // Find user by email in the list (since getUserByEmail doesn't exist in this API version)
-        const existingUser = existingUserData?.users?.find(u => u.email?.toLowerCase() === user.email.toLowerCase());
+        const existingUser = existingUserData?.users?.find(u => u.email?.toLowerCase() === demoUser.email.toLowerCase());
 
         if (existingUser) {
           userId = existingUser.id;
@@ -113,7 +158,7 @@ serve(async (req) => {
 
           // Update user metadata (but NOT password for existing users)
           const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-            user_metadata: { name: user.name }
+            user_metadata: { name: demoUser.name }
           });
 
           if (updateError) {
@@ -124,10 +169,10 @@ serve(async (req) => {
         } else {
           // Create new user
           const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-            email: user.email,
-            password: user.password,
+            email: demoUser.email,
+            password: demoUser.password,
             email_confirm: true,
-            user_metadata: { name: user.name }
+            user_metadata: { name: demoUser.name }
           });
 
           if (authError) {
@@ -144,11 +189,11 @@ serve(async (req) => {
 
         userResult.userId = userId;
 
-        // Step 3: Upsert profile (using 'profiles' table based on codebase)
+        // Step 3: Upsert profile
         const profileData = {
           user_id: userId,
-          name: user.name,
-          email: user.email.toLowerCase(),
+          name: demoUser.name,
+          email: demoUser.email.toLowerCase(),
           is_active: true,
           updated_at: new Date().toISOString()
         };
@@ -158,22 +203,19 @@ serve(async (req) => {
           .upsert(profileData, { onConflict: 'user_id' });
 
         if (profileError) {
-          // Check if it's a column/table mismatch
           const errorDetail = profileError.message + (profileError.details ? ` | ${profileError.details}` : '') + (profileError.hint ? ` | Hint: ${profileError.hint}` : '');
           userResult.steps.push({ step: 'upsert_profile', status: 'error', detail: errorDetail });
-          // Continue anyway to try role assignment
         } else {
           userResult.steps.push({ step: 'upsert_profile', status: 'success', detail: 'Profile upserted' });
         }
 
         // Step 4: Upsert user_roles
-        const roleData = {
+        const roleDataToInsert = {
           user_id: userId,
-          role: user.role,
-          client_id: user.role === 'CLIENT' ? user.clientId : null
+          role: demoUser.role,
+          client_id: demoUser.role === 'CLIENT' ? demoUser.clientId : null
         };
 
-        // First check if role exists
         const { data: existingRole, error: roleCheckError } = await supabaseAdmin
           .from('user_roles')
           .select('id, role, client_id')
@@ -185,35 +227,33 @@ serve(async (req) => {
         }
 
         if (existingRole) {
-          // Update if different
-          const needsUpdate = existingRole.role !== user.role || existingRole.client_id !== (user.clientId || null);
+          const needsUpdate = existingRole.role !== demoUser.role || existingRole.client_id !== (demoUser.clientId || null);
           
           if (needsUpdate) {
             const { error: roleUpdateError } = await supabaseAdmin
               .from('user_roles')
-              .update({ role: user.role, client_id: user.role === 'CLIENT' ? user.clientId : null })
+              .update({ role: demoUser.role, client_id: demoUser.role === 'CLIENT' ? demoUser.clientId : null })
               .eq('user_id', userId);
 
             if (roleUpdateError) {
               const errorDetail = roleUpdateError.message + (roleUpdateError.details ? ` | ${roleUpdateError.details}` : '');
               userResult.steps.push({ step: 'update_role', status: 'error', detail: errorDetail });
             } else {
-              userResult.steps.push({ step: 'update_role', status: 'success', detail: `Updated role from ${existingRole.role} to ${user.role}` });
+              userResult.steps.push({ step: 'update_role', status: 'success', detail: `Updated role from ${existingRole.role} to ${demoUser.role}` });
             }
           } else {
             userResult.steps.push({ step: 'update_role', status: 'skipped', detail: 'Role already correct' });
           }
         } else {
-          // Insert new role
           const { error: roleInsertError } = await supabaseAdmin
             .from('user_roles')
-            .insert(roleData);
+            .insert(roleDataToInsert);
 
           if (roleInsertError) {
             const errorDetail = roleInsertError.message + (roleInsertError.details ? ` | ${roleInsertError.details}` : '') + (roleInsertError.hint ? ` | Hint: ${roleInsertError.hint}` : '');
             userResult.steps.push({ step: 'insert_role', status: 'error', detail: errorDetail });
           } else {
-            userResult.steps.push({ step: 'insert_role', status: 'success', detail: `Inserted role: ${user.role}` });
+            userResult.steps.push({ step: 'insert_role', status: 'success', detail: `Inserted role: ${demoUser.role}` });
           }
         }
 
