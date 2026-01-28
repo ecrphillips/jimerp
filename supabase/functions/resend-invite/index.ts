@@ -6,6 +6,7 @@ const corsHeaders = {
 };
 
 // Canonical app URL - this is the JIM app, NOT the Supabase dashboard
+// CRITICAL: This must match the Site URL configured in Supabase Auth settings
 const SITE_URL = 'https://id-preview--3db16675-5a7a-40ca-b657-6ccdc5ce15e4.lovable.app';
 
 interface ResendRequest {
@@ -13,6 +14,7 @@ interface ResendRequest {
   role?: 'ADMIN' | 'OPS' | 'CLIENT';
   client_id?: string;
   generate_link_only?: boolean; // DEV: return link instead of sending email
+  debug_mode?: boolean; // DEV: return full debug info about URLs
 }
 
 Deno.serve(async (req) => {
@@ -64,7 +66,7 @@ Deno.serve(async (req) => {
     }
 
     const body: ResendRequest = await req.json();
-    const { user_id, role, client_id, generate_link_only = false } = body;
+    const { user_id, role, client_id, generate_link_only = false, debug_mode = false } = body;
 
     if (!user_id) {
       return new Response(
@@ -73,11 +75,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('[resend-invite] Resend requested for user_id:', user_id, 'generate_link_only:', generate_link_only);
+    console.log('[resend-invite] Resend requested for user_id:', user_id, 'generate_link_only:', generate_link_only, 'debug_mode:', debug_mode);
 
     // The redirect URL - ALWAYS point to JIM app's auth callback
     const redirectTo = `${SITE_URL}/auth/callback`;
-    console.log('[resend-invite] Using redirect URL:', redirectTo);
+    console.log('[resend-invite] SITE_URL:', SITE_URL);
+    console.log('[resend-invite] redirectTo:', redirectTo);
+    console.log('[resend-invite] supabaseUrl:', supabaseUrl);
 
     // Get user email from auth
     const { data: { user }, error: getUserError } = await adminClient.auth.admin.getUserById(user_id);
@@ -169,14 +173,29 @@ Deno.serve(async (req) => {
             );
           }
 
-          console.log('[resend-invite] Generated recovery link (not emailed)');
+          const generatedLink = linkData.properties?.action_link || '';
+          console.log('[resend-invite] Generated recovery link (not emailed):', generatedLink);
+          
+          // Log analysis of the generated link
+          const linkUrl = new URL(generatedLink);
+          console.log('[resend-invite] Link host:', linkUrl.host);
+          console.log('[resend-invite] Link redirect_to param:', linkUrl.searchParams.get('redirect_to'));
+          
           return new Response(
             JSON.stringify({ 
               success: true, 
               message: 'Password reset link generated (not emailed)',
-              link: linkData.properties?.action_link,
+              link: generatedLink,
               email_sent: false,
-              type: 'password_reset'
+              type: 'password_reset',
+              debug: debug_mode ? {
+                site_url: SITE_URL,
+                redirect_to_requested: redirectTo,
+                supabase_url: supabaseUrl,
+                link_host: linkUrl.host,
+                link_redirect_to: linkUrl.searchParams.get('redirect_to'),
+                full_link: generatedLink
+              } : undefined
             }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
