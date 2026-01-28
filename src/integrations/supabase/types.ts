@@ -452,6 +452,44 @@ export type Database = {
           },
         ]
       }
+      order_notifications: {
+        Row: {
+          client_name: string
+          created_at: string
+          id: string
+          order_id: string
+          order_number: string
+          read_by: string[] | null
+          work_deadline: string | null
+        }
+        Insert: {
+          client_name: string
+          created_at?: string
+          id?: string
+          order_id: string
+          order_number: string
+          read_by?: string[] | null
+          work_deadline?: string | null
+        }
+        Update: {
+          client_name?: string
+          created_at?: string
+          id?: string
+          order_id?: string
+          order_number?: string
+          read_by?: string[] | null
+          work_deadline?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_notifications_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           client_id: string
