@@ -5,11 +5,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Canonical app URL - this is the JIM app, NOT the Supabase dashboard
+const SITE_URL = 'https://id-preview--3db16675-5a7a-40ca-b657-6ccdc5ce15e4.lovable.app';
+
 interface InviteRequest {
   email: string;
   role: 'ADMIN' | 'OPS' | 'CLIENT';
   client_id?: string;
   name?: string;
+  generate_link_only?: boolean; // DEV: return link instead of sending email
 }
 
 Deno.serve(async (req) => {
@@ -62,9 +66,9 @@ Deno.serve(async (req) => {
 
     // Parse request
     const body: InviteRequest = await req.json();
-    const { email, role, client_id, name } = body;
+    const { email, role, client_id, name, generate_link_only = false } = body;
 
-    console.log('[invite-user] Invite requested for:', email, 'role:', role);
+    console.log('[invite-user] Invite requested for:', email, 'role:', role, 'generate_link_only:', generate_link_only);
 
     // Validate input
     if (!email || !role) {
@@ -105,6 +109,10 @@ Deno.serve(async (req) => {
       }
     }
 
+    // The redirect URL - ALWAYS point to JIM app's auth callback
+    const redirectTo = `${SITE_URL}/auth/callback`;
+    console.log('[invite-user] Using redirect URL:', redirectTo);
+
     // Check if user already exists in auth
     const { data: existingUsers } = await adminClient.auth.admin.listUsers();
     const existingUser = existingUsers?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
@@ -118,8 +126,7 @@ Deno.serve(async (req) => {
         .single();
 
       if (existingRole) {
-        // User exists AND has a role - do NOT silently assign
-        // Return specific error requiring explicit resend action
+        // User exists AND has a role - require explicit resend action
         console.log('[invite-user] User already exists with role:', existingUser.id);
         return new Response(
           JSON.stringify({ 
@@ -167,12 +174,38 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Send password recovery so they can set their password
-      const appUrl = req.headers.get('origin') || 'https://id-preview--3db16675-5a7a-40ca-b657-6ccdc5ce15e4.lovable.app';
-      const { error: resetError } = await adminClient.auth.admin.generateLink({
-        type: 'recovery',
-        email: email,
-        options: { redirectTo: `${appUrl}/auth/callback` }
+      // Generate or send password recovery
+      if (generate_link_only) {
+        const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+          type: 'recovery',
+          email: email,
+          options: { redirectTo }
+        });
+
+        if (linkError) {
+          console.error('[invite-user] Failed to generate recovery link:', linkError.message);
+          return new Response(
+            JSON.stringify({ error: `Failed to generate link: ${linkError.message}` }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('[invite-user] Generated recovery link for existing user');
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: 'Recovery link generated (not emailed)',
+            user_id: existingUser.id,
+            link: linkData.properties?.action_link,
+            email_sent: false
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Send password recovery email
+      const { error: resetError } = await adminClient.auth.resetPasswordForEmail(email, {
+        redirectTo
       });
 
       if (resetError) {
@@ -191,19 +224,80 @@ Deno.serve(async (req) => {
       );
     }
 
-    // NEW USER - send invitation email
-    // inviteUserByEmail creates the user AND sends the invite email
-    // redirectTo points to our app's auth callback which handles the token
-    console.log('[invite-user] Attempting to send invitation email to:', email);
-    console.log('[invite-user] Supabase URL:', supabaseUrl);
-    
-    // Get the app URL from the request origin or use a known base URL
-    const appUrl = req.headers.get('origin') || 'https://id-preview--3db16675-5a7a-40ca-b657-6ccdc5ce15e4.lovable.app';
-    console.log('[invite-user] App URL for redirect:', appUrl);
+    // NEW USER
+    if (generate_link_only) {
+      // Generate invite link without sending email (DEV debugging)
+      console.log('[invite-user] Generating invite link (not sending email)');
+      
+      const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+        type: 'invite',
+        email: email,
+        options: { 
+          data: { name: name || email.split('@')[0] },
+          redirectTo 
+        }
+      });
+
+      if (linkError) {
+        console.error('[invite-user] Failed to generate invite link:', linkError.message);
+        return new Response(
+          JSON.stringify({ error: `Failed to generate link: ${linkError.message}` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!linkData.user) {
+        return new Response(
+          JSON.stringify({ error: 'Failed to create user for link generation' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Create user role
+      const { error: roleInsertError } = await adminClient
+        .from('user_roles')
+        .insert({
+          user_id: linkData.user.id,
+          role: role,
+          client_id: role === 'CLIENT' ? client_id : null
+        });
+
+      if (roleInsertError) {
+        console.error('[invite-user] Role insert error:', roleInsertError.message);
+        await adminClient.auth.admin.deleteUser(linkData.user.id);
+        return new Response(
+          JSON.stringify({ error: `Failed to assign role: ${roleInsertError.message}` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Create profile
+      await adminClient.from('profiles').insert({
+        user_id: linkData.user.id,
+        email: email.toLowerCase(),
+        name: name || email.split('@')[0],
+        is_active: true
+      });
+
+      console.log('[invite-user] Generated invite link for new user:', linkData.user.id);
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Invite link generated (not emailed)',
+          user_id: linkData.user.id,
+          link: linkData.properties?.action_link,
+          email_sent: false
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Send invitation email normally
+    console.log('[invite-user] Sending invitation email to:', email);
     
     const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
       data: { name: name || email.split('@')[0] },
-      redirectTo: `${appUrl}/auth/callback`
+      redirectTo
     });
 
     if (inviteError) {
@@ -214,7 +308,6 @@ Deno.serve(async (req) => {
         name: inviteError.name
       });
       
-      // Check for common email delivery issues
       if (inviteError.message.includes('rate limit')) {
         return new Response(
           JSON.stringify({ 
@@ -247,28 +340,22 @@ Deno.serve(async (req) => {
     }
 
     if (!inviteData.user) {
-      console.error('[invite-user] Invite API returned success but no user object - email may not have been sent');
+      console.error('[invite-user] Invite API returned success but no user object');
       return new Response(
         JSON.stringify({ 
-          error: 'Invitation failed - no user created. Email was NOT sent. Check email provider configuration.',
+          error: 'Invitation failed - no user created. Email was NOT sent.',
           email_sent: false
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
-    // Log confirmation that invite was processed
     console.log('[invite-user] Invite API success - user created:', inviteData.user.id);
-    console.log('[invite-user] User confirmation_sent_at:', inviteData.user.confirmation_sent_at);
-    console.log('[invite-user] User email_confirmed_at:', inviteData.user.email_confirmed_at);
     
-    // Verify email was actually queued
     const emailWasSent = !!inviteData.user.confirmation_sent_at;
     if (!emailWasSent) {
       console.warn('[invite-user] WARNING: confirmation_sent_at is null - email may not have been sent!');
     }
-
-    console.log('[invite-user] Invitation email sent, user created:', inviteData.user.id);
 
     // Create user role
     const { error: roleInsertError } = await adminClient
@@ -281,7 +368,6 @@ Deno.serve(async (req) => {
 
     if (roleInsertError) {
       console.error('[invite-user] Role insert error:', roleInsertError.message);
-      // Clean up the invited user since we couldn't complete setup
       await adminClient.auth.admin.deleteUser(inviteData.user.id);
       return new Response(
         JSON.stringify({ error: `Failed to assign role: ${roleInsertError.message}` }),
@@ -303,7 +389,7 @@ Deno.serve(async (req) => {
       console.error('[invite-user] Profile insert error (non-fatal):', profileError.message);
     }
 
-    console.log('[invite-user] SUCCESS - User invited:', inviteData.user.id, 'Email queued for:', email, 'email_sent:', emailWasSent);
+    console.log('[invite-user] SUCCESS - User invited:', inviteData.user.id, 'email_sent:', emailWasSent);
 
     return new Response(
       JSON.stringify({ 
@@ -313,6 +399,7 @@ Deno.serve(async (req) => {
           : `User created but email delivery uncertain. Check ${email}'s inbox or resend invite.`,
         user_id: inviteData.user.id,
         email_sent: emailWasSent,
+        redirect_to: redirectTo,
         debug: {
           confirmation_sent_at: inviteData.user.confirmation_sent_at,
           email_confirmed_at: inviteData.user.email_confirmed_at

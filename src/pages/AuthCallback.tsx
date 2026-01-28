@@ -1,12 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Coffee, Loader2 } from 'lucide-react';
+import { Coffee, Loader2, AlertTriangle, LogOut } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export default function AuthCallback() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  const [noRole, setNoRole] = useState(false);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate('/auth', { replace: true });
+  };
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -48,13 +55,19 @@ export default function AuthCallback() {
 
           // Regular login flow - check user role and redirect appropriately
           if (data.user) {
-            const { data: roleData } = await supabase
+            const { data: roleData, error: roleError } = await supabase
               .from('user_roles')
               .select('role')
               .eq('user_id', data.user.id)
               .single();
 
-            if (roleData?.role === 'CLIENT') {
+            if (roleError || !roleData) {
+              console.error('[AuthCallback] No role found for user:', data.user.id);
+              setNoRole(true);
+              return;
+            }
+
+            if (roleData.role === 'CLIENT') {
               navigate('/portal', { replace: true });
             } else {
               navigate('/production', { replace: true });
@@ -66,13 +79,19 @@ export default function AuthCallback() {
         // No tokens - check if already logged in
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
-          const { data: roleData } = await supabase
+          const { data: roleData, error: roleError } = await supabase
             .from('user_roles')
             .select('role')
             .eq('user_id', session.user.id)
             .single();
 
-          if (roleData?.role === 'CLIENT') {
+          if (roleError || !roleData) {
+            console.error('[AuthCallback] No role found for session user:', session.user.id);
+            setNoRole(true);
+            return;
+          }
+
+          if (roleData.role === 'CLIENT') {
             navigate('/portal', { replace: true });
           } else {
             navigate('/production', { replace: true });
@@ -90,6 +109,35 @@ export default function AuthCallback() {
 
     handleCallback();
   }, [navigate, searchParams]);
+
+  if (noRole) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <div className="w-full max-w-md text-center">
+          <div className="mb-8 flex flex-col items-center">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
+              <AlertTriangle className="h-8 w-8 text-destructive" />
+            </div>
+            <h1 className="text-2xl font-bold text-destructive">No Role Assigned</h1>
+            <p className="mt-2 text-muted-foreground">
+              Your account exists but has no role assigned.
+            </p>
+            <p className="mt-4 text-sm text-muted-foreground">
+              Please contact your administrator to complete your account setup.
+            </p>
+            <Button
+              onClick={handleSignOut}
+              variant="outline"
+              className="mt-6 gap-2"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign Out
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (error) {
     return (
