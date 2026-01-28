@@ -1258,6 +1258,10 @@ export type Database = {
         Args: { p_client_id: string; p_force?: boolean }
         Returns: Json
       }
+      delete_order_safe: {
+        Args: { p_force?: boolean; p_order_id: string }
+        Returns: Json
+      }
       delete_product_safe: {
         Args: { p_force?: boolean; p_product_id: string }
         Returns: Json
@@ -1272,6 +1276,10 @@ export type Database = {
       dev_test_seed_minimal: { Args: never; Returns: undefined }
       get_client_delete_preflight: {
         Args: { p_client_id: string }
+        Returns: Json
+      }
+      get_order_delete_preflight: {
+        Args: { p_order_id: string }
         Returns: Json
       }
       get_product_delete_preflight: {

@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock, FileText, Clock } from 'lucide-react';
+import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock, FileText, Clock, Trash2 } from 'lucide-react';
 import { LocationBadge } from '@/components/orders/LocationSelect';
 import { toast } from 'sonner';
 import { HistoricalEditWarningModal } from '@/components/internal/HistoricalEditWarningModal';
@@ -19,6 +19,7 @@ import { StatusChangeModal } from '@/components/internal/StatusChangeModal';
 import { OrderEditModal } from '@/components/internal/OrderEditModal';
 import { OrderDateAuditHistory } from '@/components/internal/OrderDateAuditHistory';
 import { WorkDeadlinePicker } from '@/components/orders/WorkDeadlinePicker';
+import { OrderDeleteModal } from '@/components/internal/OrderDeleteModal';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -78,8 +79,9 @@ export default function OrderDetail() {
 
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
-
-  // Fetch line items with product details including roast_group
+  
+  // Delete modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const { data: lineItems } = useQuery({
     queryKey: ['order-line-items', id],
     queryFn: async () => {
@@ -516,6 +518,16 @@ export default function OrderDetail() {
           <LocationBadge locationId={(order as any).location_id} />
         </div>
         <div className="flex items-center gap-2">
+          {/* Delete Order button - destructive action */}
+          <Button 
+            variant="outline" 
+            onClick={() => setShowDeleteModal(true)} 
+            className="gap-2 text-destructive border-destructive/50 hover:bg-destructive/10 hover:border-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </Button>
+          
           {/* Edit Order button */}
           <Button variant="outline" onClick={() => setShowEditModal(true)} className="gap-2">
             <PenSquare className="h-4 w-4" />
@@ -863,6 +875,16 @@ export default function OrderDetail() {
             unit_price_locked: li.unit_price_locked,
           }))}
           clientId={(order as any).client_id}
+        />
+      )}
+
+      {/* Order Delete Modal */}
+      {order && (
+        <OrderDeleteModal
+          open={showDeleteModal}
+          onOpenChange={setShowDeleteModal}
+          orderId={order.id}
+          orderNumber={order.order_number}
         />
       )}
     </div>
