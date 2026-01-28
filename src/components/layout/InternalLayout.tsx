@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { useOrderNotifications } from '@/hooks/useOrderNotifications';
 import { AccountSheet } from '@/components/account/AccountSheet';
+import { EnvironmentFooter } from '@/components/admin/EnvironmentFooter';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -326,10 +327,13 @@ export function InternalLayout({ children }: InternalLayoutProps) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto pb-10">
           {children}
         </main>
       </div>
+
+      {/* Environment Footer for ADMIN/OPS */}
+      <EnvironmentFooter />
     </div>
   );
 }
