@@ -167,11 +167,35 @@ export default function UsersAccess() {
         throw new Error(response.error.message || 'Failed to invite user');
       }
 
-      if (response.data?.error) {
-        throw new Error(response.data.error);
+      const data = response.data;
+
+      // Handle specific error codes
+      if (data?.error === 'USER_EXISTS_WITH_ROLE' || data?.error === 'USER_EXISTS_NO_ROLE') {
+        toast.error(data.message, {
+          action: {
+            label: 'Resend Invite',
+            onClick: () => {
+              if (data.user_id) {
+                handleResendInviteById(data.user_id);
+              }
+            }
+          },
+          duration: 10000,
+        });
+        return;
       }
 
-      toast.success(response.data?.message || 'User invited successfully');
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      // Verify email was actually sent
+      if (!data?.email_sent) {
+        toast.warning('User created but invitation email may not have been sent. Check email configuration.');
+      } else {
+        toast.success(data?.message || 'Invitation email sent successfully');
+      }
+      
       setShowInviteModal(false);
       resetInviteForm();
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
@@ -247,21 +271,32 @@ export default function UsersAccess() {
   };
 
   const handleResendInvite = async (user: UserWithDetails) => {
+    await handleResendInviteById(user.user_id);
+  };
+
+  const handleResendInviteById = async (userId: string) => {
     try {
       const response = await supabase.functions.invoke('resend-invite', {
-        body: { user_id: user.user_id },
+        body: { user_id: userId },
       });
 
       if (response.error) {
         throw new Error(response.error.message);
       }
 
-      if (response.data?.error) {
-        throw new Error(response.data.error);
+      const data = response.data;
+
+      if (data?.error) {
+        throw new Error(data.error);
       }
 
-      toast.success('Invite resent');
+      if (!data?.email_sent) {
+        toast.warning('Resend attempted but email may not have been sent.');
+      } else {
+        toast.success(data?.message || 'Invitation email sent');
+      }
     } catch (error: any) {
+      console.error('Resend invite error:', error);
       toast.error(error.message || 'Failed to resend invite');
     }
   };
