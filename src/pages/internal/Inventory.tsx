@@ -79,33 +79,21 @@ export default function Inventory() {
     },
   });
   
-  // Fetch roasted batches (ROASTED status only)
-  // EXCLUDE component batches (those with planned_for_blend_roast_group set)
-  const { data: roastedBatches } = useQuery({
-    queryKey: ['roasted-batches-inventory'],
+  // Fetch ALL inventory transactions for WIP calculation (ledger-based source of truth)
+  const { data: inventoryTransactions } = useQuery({
+    queryKey: ['inventory-transactions-wip'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('roasted_batches')
-        .select('roast_group, actual_output_kg, planned_for_blend_roast_group, consumed_by_blend_at')
-        .eq('status', 'ROASTED');
+        .from('inventory_transactions')
+        .select('roast_group, quantity_kg, notes, transaction_type')
+        .not('roast_group', 'is', null)
+        .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'ADJUSTMENT', 'LOSS']);
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  // Fetch packing runs (kg consumed)
-  const { data: packingRuns } = useQuery({
-    queryKey: ['packing-runs-inventory'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('packing_runs')
-        .select('product_id, kg_consumed, product:products(roast_group)');
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-
-  // Fetch WIP adjustments from wip_adjustments table (manual adjustments)
+  // Fetch WIP adjustments from wip_adjustments table (manual adjustments ONLY)
   const { data: wipAdjustments } = useQuery({
     queryKey: ['wip-adjustments'],
     queryFn: async () => {
@@ -113,20 +101,6 @@ export default function Inventory() {
         .from('wip_adjustments')
         .select('*')
         .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-  
-  // Fetch ledger ADJUSTMENT transactions (blend outputs, etc.)
-  const { data: ledgerAdjustments } = useQuery({
-    queryKey: ['ledger-adjustments-inventory'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('inventory_transactions')
-        .select('roast_group, quantity_kg, notes')
-        .in('transaction_type', ['ADJUSTMENT', 'LOSS'])
-        .not('roast_group', 'is', null);
       if (error) throw error;
       return data ?? [];
     },
@@ -145,11 +119,21 @@ export default function Inventory() {
     },
   });
 
-  // Calculate WIP by roast group using ledger-based logic
-  // For blends: WIP = ledger adjustments (blend credits) - packing consumed
-  // For single origins: WIP = roasted output - packing consumed + manual adjustments + ledger adjustments
+  // Calculate WIP by roast group for DISPLAY purposes
+  // This shows the full picture: what was roasted, what was consumed, what was manually adjusted
+  // 
+  // All calculations are based on the inventory_transactions ledger (source of truth):
+  // - "Roasted/Blended" = ROAST_OUTPUT + blend credits ("Created blend" ADJUSTMENT)
+  // - "Consumed" = PACK_CONSUME_WIP + blend consumption ("Blended into" ADJUSTMENT)
+  // - "Adjustments" = ONLY manual adjustments from wip_adjustments table
   const wipByRoastGroup = useMemo((): WipByRoastGroup[] => {
-    const groupMap: Record<string, { roasted: number; consumed: number; adjusted: number; ledgerAdj: number }> = {};
+    const groupMap: Record<string, { 
+      roasted: number;      // From ROAST_OUTPUT transactions
+      blendCredit: number;  // Blend output credits (for parent blends, from ADJUSTMENT "Created blend")
+      packConsumed: number; // From PACK_CONSUME_WIP transactions (negative values)
+      blendConsumed: number;// Blend consumption (for components, from ADJUSTMENT "Blended into")
+      manualAdj: number;    // Manual adjustments from wip_adjustments table
+    }> = {};
     
     // Identify blend roast groups
     const blendGroups = new Set<string>();
@@ -159,66 +143,95 @@ export default function Inventory() {
       }
     }
 
-    // Sum roasted output - EXCLUDE component batches (they don't count as WIP)
-    for (const batch of roastedBatches ?? []) {
-      // Skip component batches - they go into "staged for blend", not WIP
-      if (batch.planned_for_blend_roast_group) {
-        continue;
+    // Process all inventory transactions from the ledger
+    for (const tx of inventoryTransactions ?? []) {
+      if (!tx.roast_group) continue;
+      
+      if (!groupMap[tx.roast_group]) {
+        groupMap[tx.roast_group] = { roasted: 0, blendCredit: 0, packConsumed: 0, blendConsumed: 0, manualAdj: 0 };
       }
-      if (!groupMap[batch.roast_group]) {
-        groupMap[batch.roast_group] = { roasted: 0, consumed: 0, adjusted: 0, ledgerAdj: 0 };
+      
+      const kg = Number(tx.quantity_kg) || 0;
+      const notes = tx.notes || '';
+      
+      switch (tx.transaction_type) {
+        case 'ROAST_OUTPUT':
+          // Direct roast output
+          groupMap[tx.roast_group].roasted += kg;
+          break;
+          
+        case 'PACK_CONSUME_WIP':
+          // Packing consumption: negative kg = consumed, positive kg = reversal
+          if (kg < 0) {
+            groupMap[tx.roast_group].packConsumed += Math.abs(kg);
+          } else {
+            // Reversal - subtract from consumed
+            groupMap[tx.roast_group].packConsumed -= kg;
+          }
+          break;
+          
+        case 'ADJUSTMENT':
+          // Categorize adjustment by notes content
+          if (notes.includes('Blended into') && kg < 0) {
+            // Component consumed by blend
+            groupMap[tx.roast_group].blendConsumed += Math.abs(kg);
+          } else if (notes.includes('Created blend') && kg > 0) {
+            // Parent blend output credit
+            groupMap[tx.roast_group].blendCredit += kg;
+          } else if (notes.includes('Reverted batch') && kg < 0) {
+            // Roast reversal - subtract from roasted output
+            groupMap[tx.roast_group].roasted += kg; // kg is negative
+          } else if (notes.includes('Reversed') && kg > 0) {
+            // Pack reversal - subtract from consumed
+            groupMap[tx.roast_group].packConsumed -= kg;
+          } else {
+            // Other adjustments - treat as manual (shouldn't happen often)
+            // Skip here - manual adjustments come from wip_adjustments table
+          }
+          break;
+          
+        case 'LOSS':
+          // Loss transactions count as consumption
+          groupMap[tx.roast_group].packConsumed += Math.abs(kg);
+          break;
       }
-      groupMap[batch.roast_group].roasted += Number(batch.actual_output_kg) || 0;
     }
 
-    // Sum consumed kg from packing runs (grouped by roast_group via product)
-    for (const run of packingRuns ?? []) {
-      const roastGroup = (run.product as any)?.roast_group;
-      if (!roastGroup) continue;
-      if (!groupMap[roastGroup]) {
-        groupMap[roastGroup] = { roasted: 0, consumed: 0, adjusted: 0, ledgerAdj: 0 };
-      }
-      groupMap[roastGroup].consumed += Number(run.kg_consumed) || 0;
-    }
-
-    // Sum manual WIP adjustments (from wip_adjustments table)
+    // Add manual WIP adjustments (from wip_adjustments table ONLY)
     for (const adj of wipAdjustments ?? []) {
       if (!groupMap[adj.roast_group]) {
-        groupMap[adj.roast_group] = { roasted: 0, consumed: 0, adjusted: 0, ledgerAdj: 0 };
+        groupMap[adj.roast_group] = { roasted: 0, blendCredit: 0, packConsumed: 0, blendConsumed: 0, manualAdj: 0 };
       }
-      groupMap[adj.roast_group].adjusted += Number(adj.kg_delta) || 0;
-    }
-    
-    // Sum ledger adjustments (ADJUSTMENT/LOSS transactions) - includes blend outputs
-    for (const adj of ledgerAdjustments ?? []) {
-      if (!adj.roast_group) continue;
-      if (!groupMap[adj.roast_group]) {
-        groupMap[adj.roast_group] = { roasted: 0, consumed: 0, adjusted: 0, ledgerAdj: 0 };
-      }
-      groupMap[adj.roast_group].ledgerAdj += Number(adj.quantity_kg) || 0;
+      groupMap[adj.roast_group].manualAdj += Number(adj.kg_delta) || 0;
     }
 
     return Object.entries(groupMap)
       .map(([roast_group, data]) => {
         const isBlend = blendGroups.has(roast_group);
         
-        // For blends: WIP = ledger adjustments (blend credits) - packing consumed
-        // (no direct roasted output for blends)
-        // For single origins: WIP = roasted - consumed + manual adj + ledger adj
-        const netWip = isBlend
-          ? data.ledgerAdj - data.consumed + data.adjusted
-          : data.roasted - data.consumed + data.adjusted + data.ledgerAdj;
+        // Roasted/Blended column:
+        // - For blends: show blend credit (from "Created blend" ADJUSTMENT)
+        // - For single origins: show direct roast output from ROAST_OUTPUT transactions
+        const roastedDisplay = isBlend ? data.blendCredit : data.roasted;
+        
+        // Consumed column:
+        // - Packing consumption + blend consumption (for components)
+        const consumedDisplay = data.packConsumed + data.blendConsumed;
+        
+        // Net WIP = Roasted - Consumed + Manual Adjustments
+        const netWip = roastedDisplay - consumedDisplay + data.manualAdj;
         
         return {
           roast_group,
-          roasted_kg: isBlend ? data.ledgerAdj : data.roasted, // Show blend credits as "roasted" for display
-          consumed_kg: data.consumed,
-          adjusted_kg: isBlend ? data.adjusted : (data.adjusted + data.ledgerAdj),
+          roasted_kg: roastedDisplay,
+          consumed_kg: consumedDisplay,
+          adjusted_kg: data.manualAdj,
           net_wip_kg: netWip,
         };
       })
+      .filter(row => row.roasted_kg !== 0 || row.consumed_kg !== 0 || row.adjusted_kg !== 0)
       .sort((a, b) => a.roast_group.localeCompare(b.roast_group));
-  }, [roastedBatches, packingRuns, wipAdjustments, ledgerAdjustments, roastGroupsInfo]);
+  }, [inventoryTransactions, wipAdjustments, roastGroupsInfo]);
 
   // WIP adjustment mutation
   const createWipAdjustment = useMutation({
