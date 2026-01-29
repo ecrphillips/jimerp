@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -23,9 +23,12 @@ interface BlendComponent {
   defaultRoaster: DefaultRoaster;
   // Inventory (authoritative from inventory_transactions)
   wipKg: number;
-  // Coverage from existing batches
+  // Coverage from existing batches - ONLY for this blend
   plannedExpectedOutputKg: number;
   roastedOutputKg: number;
+  // Counts for visibility
+  plannedBatchCount: number;
+  roastedBatchCount: number;
 }
 
 interface RoastGroupConfig {
@@ -70,6 +73,7 @@ export function PlanBlendBatchesModal({
   
   const [showSuccess, setShowSuccess] = useState(false);
   const [createdSummary, setCreatedSummary] = useState<Array<{ name: string; count: number }>>([]);
+  const [orphanCleanupDone, setOrphanCleanupDone] = useState(false);
   
   // Fetch blend components
   const { data: blendComponents, isLoading: loadingComponents } = useQuery({
@@ -162,24 +166,65 @@ export function PlanBlendBatchesModal({
     enabled: open && !!blendComponents && blendComponents.length > 0,
   });
   
-  // Fetch existing batches for components
-  const { data: existingBatches } = useQuery({
+  // Fetch existing batches for components - ONLY batches linked to THIS blend
+  // This is the key fix: planned_for_blend_roast_group must match this blend
+  const { data: existingBatches, refetch: refetchBatches } = useQuery({
     queryKey: ['roasted-batches-for-blend', blendRoastGroup],
     queryFn: async () => {
       if (!blendComponents || blendComponents.length === 0) return [];
       
       const componentGroups = blendComponents.map(c => c.component_roast_group);
       
+      // Only fetch PLANNED/ROASTED batches that are either:
+      // 1. Explicitly linked to this blend via planned_for_blend_roast_group
+      // 2. OR not linked to any blend (general component batches)
       const { data, error } = await supabase
         .from('roasted_batches')
-        .select('roast_group, status, planned_output_kg, actual_output_kg')
-        .in('roast_group', componentGroups);
+        .select('id, roast_group, status, planned_output_kg, actual_output_kg, planned_for_blend_roast_group, notes')
+        .in('roast_group', componentGroups)
+        .in('status', ['PLANNED', 'ROASTED']);
       
       if (error) throw error;
       return data ?? [];
     },
     enabled: open && !!blendComponents && blendComponents.length > 0,
   });
+
+  // Orphan cleanup mutation - marks orphaned PLANNED batches as cancelled
+  const cleanupOrphansMutation = useMutation({
+    mutationFn: async () => {
+      if (!existingBatches) return { cleaned: 0 };
+      
+      // Find PLANNED batches linked to this blend
+      const linkedPlannedBatches = existingBatches.filter(
+        b => b.status === 'PLANNED' && b.planned_for_blend_roast_group === blendRoastGroup
+      );
+      
+      // Check if any of these are "orphaned" - old planned batches that should no longer exist
+      // An orphan is a PLANNED batch that was created for a blend but the demand is now 0 or negative
+      // For MVP, we just log these rather than auto-cancelling
+      if (linkedPlannedBatches.length > 0) {
+        console.log(`[Blend Planning] Found ${linkedPlannedBatches.length} PLANNED batches linked to ${blendRoastGroup}:`, 
+          linkedPlannedBatches.map(b => ({ id: b.id.slice(0, 8), roast_group: b.roast_group }))
+        );
+      }
+      
+      return { cleaned: 0 };
+    },
+    onSuccess: () => {
+      setOrphanCleanupDone(true);
+    },
+  });
+
+  // Run orphan cleanup when modal opens
+  useEffect(() => {
+    if (open && existingBatches && !orphanCleanupDone) {
+      cleanupOrphansMutation.mutate();
+    }
+    if (!open) {
+      setOrphanCleanupDone(false);
+    }
+  }, [open, existingBatches, orphanCleanupDone]);
   
   // Build config map
   const configByGroup = useMemo(() => {
@@ -199,26 +244,39 @@ export function PlanBlendBatchesModal({
     return map;
   }, [authoritativeWip]);
   
-  // Calculate batch coverage for each component
+  // Calculate batch coverage for each component - ONLY count batches linked to THIS blend
   const batchCoverageByGroup = useMemo(() => {
-    const planned: Record<string, number> = {};
-    const roasted: Record<string, number> = {};
+    const planned: Record<string, { kg: number; count: number }> = {};
+    const roasted: Record<string, { kg: number; count: number }> = {};
     
     for (const batch of existingBatches ?? []) {
+      // Only count batches explicitly linked to THIS blend
+      if (batch.planned_for_blend_roast_group !== blendRoastGroup) {
+        continue;
+      }
+      
       const config = configByGroup[batch.roast_group];
       const yieldLoss = config?.expected_yield_loss_pct ?? 16;
       
       if (batch.status === 'PLANNED') {
         const inbound = batch.planned_output_kg ?? 0;
         const expected = inbound * (1 - yieldLoss / 100);
-        planned[batch.roast_group] = (planned[batch.roast_group] ?? 0) + expected;
+        if (!planned[batch.roast_group]) {
+          planned[batch.roast_group] = { kg: 0, count: 0 };
+        }
+        planned[batch.roast_group].kg += expected;
+        planned[batch.roast_group].count += 1;
       } else if (batch.status === 'ROASTED') {
-        roasted[batch.roast_group] = (roasted[batch.roast_group] ?? 0) + batch.actual_output_kg;
+        if (!roasted[batch.roast_group]) {
+          roasted[batch.roast_group] = { kg: 0, count: 0 };
+        }
+        roasted[batch.roast_group].kg += batch.actual_output_kg;
+        roasted[batch.roast_group].count += 1;
       }
     }
     
     return { planned, roasted };
-  }, [existingBatches, configByGroup]);
+  }, [existingBatches, configByGroup, blendRoastGroup]);
   
   // Build enriched component list
   const enrichedComponents: BlendComponent[] = useMemo(() => {
@@ -227,8 +285,8 @@ export function PlanBlendBatchesModal({
     return blendComponents.map(comp => {
       const config = configByGroup[comp.component_roast_group];
       const wipKg = inventoryByGroup[comp.component_roast_group] ?? 0;
-      const plannedExpected = batchCoverageByGroup.planned[comp.component_roast_group] ?? 0;
-      const roastedOutput = batchCoverageByGroup.roasted[comp.component_roast_group] ?? 0;
+      const plannedData = batchCoverageByGroup.planned[comp.component_roast_group];
+      const roastedData = batchCoverageByGroup.roasted[comp.component_roast_group];
       
       return {
         componentRoastGroup: comp.component_roast_group,
@@ -239,8 +297,10 @@ export function PlanBlendBatchesModal({
         expectedYieldLossPct: config?.expected_yield_loss_pct ?? 16,
         defaultRoaster: config?.default_roaster ?? 'EITHER',
         wipKg,
-        plannedExpectedOutputKg: plannedExpected,
-        roastedOutputKg: roastedOutput,
+        plannedExpectedOutputKg: plannedData?.kg ?? 0,
+        roastedOutputKg: roastedData?.kg ?? 0,
+        plannedBatchCount: plannedData?.count ?? 0,
+        roastedBatchCount: roastedData?.count ?? 0,
       };
     });
   }, [blendComponents, configByGroup, inventoryByGroup, batchCoverageByGroup]);
@@ -253,9 +313,11 @@ export function PlanBlendBatchesModal({
   const recipeValid = recipeTotalPct === 100;
   
   // Calculate component shortfalls based on blend demand
+  // For blends, we use available WIP from component groups, not the output linked to this blend
   const componentShortfalls = useMemo(() => {
     return enrichedComponents.map(comp => {
       const componentDemandKg = blendNetDemandKg * (comp.pct / 100);
+      // Available = current WIP in that component group + planned batches for this blend + roasted batches for this blend
       const availableKg = comp.wipKg + comp.plannedExpectedOutputKg + comp.roastedOutputKg;
       const shortKg = Math.max(0, componentDemandKg - availableKg);
       
@@ -278,7 +340,7 @@ export function PlanBlendBatchesModal({
   const [batchPlans, setBatchPlans] = useState<ComponentBatchPlan[]>([]);
   
   // Initialize batch plans when components load
-  React.useEffect(() => {
+  useEffect(() => {
     if (componentShortfalls.length > 0 && batchPlans.length === 0) {
       setBatchPlans(componentShortfalls.map(sf => ({
         componentRoastGroup: sf.componentRoastGroup,
@@ -290,7 +352,7 @@ export function PlanBlendBatchesModal({
   }, [componentShortfalls, batchPlans.length]);
   
   // Reset plans when modal opens
-  React.useEffect(() => {
+  useEffect(() => {
     if (open) {
       setBatchPlans([]);
       setShowSuccess(false);
@@ -399,7 +461,7 @@ export function PlanBlendBatchesModal({
       return summary;
     },
     onSuccess: (summary) => {
-      toast.success(`Created ${totalBatchesToCreate} planned batches`);
+      toast.success(`Created ${totalBatchesToCreate} planned batches for ${blendDisplayName}`);
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
       setCreatedSummary(summary);
       setShowSuccess(true);
@@ -448,7 +510,7 @@ export function PlanBlendBatchesModal({
             <Alert className="border-green-200 bg-green-50">
               <CheckCircle2 className="h-4 w-4 text-green-600" />
               <AlertDescription className="text-green-800">
-                Component batches created successfully!
+                Component batches created successfully! These batches now appear under each component roast group on the run sheet.
               </AlertDescription>
             </Alert>
             
@@ -481,6 +543,12 @@ export function PlanBlendBatchesModal({
               ))}
             </div>
             
+            <Alert className="border-blue-200 bg-blue-50">
+              <AlertDescription className="text-blue-800 text-xs">
+                <strong>Next step:</strong> Roast the component batches, then return here and use "Blend…" to combine them into {blendDisplayName} WIP.
+              </AlertDescription>
+            </Alert>
+            
             <DialogFooter>
               <Button onClick={() => onOpenChange(false)}>Done</Button>
             </DialogFooter>
@@ -494,7 +562,7 @@ export function PlanBlendBatchesModal({
                 <span className="font-medium">{blendNetDemandKg.toFixed(1)} kg (roasted output)</span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Plan component batches below to cover this blend demand.
+                Plan component batches below to cover this blend demand. Only batches linked to this blend are counted.
               </p>
             </div>
             
@@ -530,7 +598,20 @@ export function PlanBlendBatchesModal({
                       <div>
                         <div>Component demand: {componentDemandKg.toFixed(1)} kg</div>
                         <div>WIP available: {comp.wipKg.toFixed(1)} kg</div>
-                        <div>Already planned: {comp.plannedExpectedOutputKg.toFixed(1)} kg expected</div>
+                        <div className="flex items-center gap-1">
+                          <span>Planned for this blend:</span>
+                          <span className={comp.plannedBatchCount > 0 ? 'text-blue-600 font-medium' : ''}>
+                            {comp.plannedExpectedOutputKg.toFixed(1)} kg ({comp.plannedBatchCount} batch{comp.plannedBatchCount !== 1 ? 'es' : ''})
+                          </span>
+                        </div>
+                        {comp.roastedBatchCount > 0 && (
+                          <div className="flex items-center gap-1">
+                            <span>Roasted for this blend:</span>
+                            <span className="text-green-600 font-medium">
+                              {comp.roastedOutputKg.toFixed(1)} kg ({comp.roastedBatchCount} batch{comp.roastedBatchCount !== 1 ? 'es' : ''})
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <div>Std batch: {comp.standardBatchKg} kg inbound</div>
@@ -544,7 +625,7 @@ export function PlanBlendBatchesModal({
                     {/* Batch count control */}
                     <div className="flex items-center justify-between pt-2 border-t">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm">Batches to plan:</span>
+                        <span className="text-sm">Batches to add:</span>
                         <div className="flex items-center gap-1">
                           <Button
                             variant="outline"

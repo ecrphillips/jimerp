@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -151,6 +151,65 @@ export function RoastGroupDrawer({
   
   // Track drawer open state to detect reopen
   const prevExpandedRef = React.useRef(isExpanded);
+  
+  // For blends: fetch component batches that are linked to this blend
+  const { data: componentBatches } = useQuery({
+    queryKey: ['component-batches-for-blend', roastGroup],
+    queryFn: async () => {
+      if (!isBlend) return [];
+      
+      // Get component roast groups from the components prop
+      const componentRoastGroups = components
+        .filter(c => c.parent_roast_group === roastGroup)
+        .map(c => c.component_roast_group);
+      
+      if (componentRoastGroups.length === 0) return [];
+      
+      // Fetch batches linked to this blend
+      const { data, error } = await supabase
+        .from('roasted_batches')
+        .select('*')
+        .eq('planned_for_blend_roast_group', roastGroup)
+        .in('status', ['PLANNED', 'ROASTED'])
+        .order('created_at', { ascending: true });
+      
+      if (error) throw error;
+      return (data ?? []) as RoastBatch[];
+    },
+    enabled: isBlend && isExpanded,
+  });
+  
+  // Group component batches by component roast group
+  const componentBatchesByGroup = useMemo(() => {
+    if (!componentBatches) return {};
+    
+    const grouped: Record<string, RoastBatch[]> = {};
+    for (const batch of componentBatches) {
+      if (!grouped[batch.roast_group]) {
+        grouped[batch.roast_group] = [];
+      }
+      grouped[batch.roast_group].push(batch);
+    }
+    return grouped;
+  }, [componentBatches]);
+  
+  // Get blend-specific components with display names
+  const blendComponentsWithNames = useMemo(() => {
+    if (!isBlend) return [];
+    
+    return components
+      .filter(c => c.parent_roast_group === roastGroup)
+      .map(c => {
+        const info = roastGroupsLookupMap.get(c.component_roast_group);
+        return {
+          roastGroup: c.component_roast_group,
+          displayName: info?.display_name?.trim() || c.component_roast_group.replace(/_/g, ' '),
+          pct: c.pct,
+          displayOrder: c.display_order,
+        };
+      })
+      .sort((a, b) => a.displayOrder - b.displayOrder);
+  }, [isBlend, components, roastGroup, roastGroupsLookupMap]);
 
   // Calculate stats
   const plannedBatches = batches.filter(b => b.status === 'PLANNED');
@@ -759,42 +818,158 @@ export function RoastGroupDrawer({
                 )}
               </div>
 
-              {/* Batch Queue */}
-              {sortedBatches.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-2">No batches queued.</p>
-              ) : (
-                <div className="space-y-2">
-                  {sortedBatches.map((batch) => (
-                    <BatchRow
-                      key={batch.id}
-                      batch={batch}
-                      expectedYieldLossPct={yieldLossPct}
-                      onMarkRoasted={(id, actual) => markRoastedMutation.mutate({ 
-                        id, 
-                        actual_output_kg: actual,
-                        roast_group: batch.roast_group,
-                        target_date: batch.target_date,
-                      })}
-                      onMarkRoastedWithLoss={(id, actual, lossKg, lossNote) => markRoastedWithLossMutation.mutate({
-                        id,
-                        actual_output_kg: actual,
-                        roast_group: batch.roast_group,
-                        target_date: batch.target_date,
-                        loss_kg: lossKg,
-                        loss_note: lossNote,
-                      })}
-                      onUndo={(id) => handleOpenUndoWorkflow(id)}
-                      onDelete={(id) => setDeleteConfirmBatchId(id)}
-                      onOhShit={(batch) => setOhShitBatch(batch)}
-                      onUpdate={(data) => updateBatchMutation.mutate(data)}
-                      onInputFocus={handleInputFocus}
-                      onInputBlur={handleInputBlur}
-                      onInputChange={handleInputChange}
-                      isUpdating={updateBatchMutation.isPending}
-                      getRoasterBadgeColor={getRoasterBadgeColor}
-                    />
-                  ))}
+              {/* Batch Queue - different display for blends vs single origins */}
+              {isBlend ? (
+                // For blends: show component batches grouped by component roast group
+                <div className="space-y-4">
+                  {/* Blend Demand Header */}
+                  <div className="bg-accent/50 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Layers className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">Blend Demand Summary</span>
+                      </div>
+                      <Badge variant="secondary">
+                        {netDemandKg.toFixed(1)} kg needed
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Component batches below will be combined via "Blend batches" to create {config?.display_name?.trim() || roastGroup.replace(/_/g, ' ')} WIP.
+                    </p>
+                  </div>
+                  
+                  {/* Component roast group sections */}
+                  {blendComponentsWithNames.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-2">
+                      No component recipe defined. Set up blend components in Products → Roast Groups.
+                    </p>
+                  ) : (
+                    blendComponentsWithNames.map(comp => {
+                      const compBatches = componentBatchesByGroup[comp.roastGroup] ?? [];
+                      const plannedKg = compBatches
+                        .filter(b => b.status === 'PLANNED')
+                        .reduce((sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - yieldLossPct / 100), 0);
+                      const roastedKg = compBatches
+                        .filter(b => b.status === 'ROASTED')
+                        .reduce((sum, b) => sum + b.actual_output_kg, 0);
+                      const componentDemandKg = netDemandKg * (comp.pct / 100);
+                      
+                      return (
+                        <div key={comp.roastGroup} className="border rounded-lg overflow-hidden">
+                          {/* Component header */}
+                          <div className="bg-muted/50 px-3 py-2 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Leaf className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">{comp.displayName}</span>
+                              <Badge variant="outline" className="text-xs">{comp.pct}%</Badge>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <span>Need: {componentDemandKg.toFixed(1)} kg</span>
+                              {plannedKg > 0 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {plannedKg.toFixed(1)} kg planned
+                                </Badge>
+                              )}
+                              {roastedKg > 0 && (
+                                <Badge variant="secondary" className="text-xs bg-primary/10 text-primary">
+                                  {roastedKg.toFixed(1)} kg roasted
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Component batches */}
+                          <div className="p-2 space-y-2">
+                            {compBatches.length === 0 ? (
+                              <p className="text-xs text-muted-foreground py-2 text-center">
+                                No batches planned for this component
+                              </p>
+                            ) : (
+                              compBatches.map((batch) => (
+                                <BatchRow
+                                  key={batch.id}
+                                  batch={batch}
+                                  expectedYieldLossPct={yieldLossPct}
+                                  onMarkRoasted={(id, actual) => markRoastedMutation.mutate({ 
+                                    id, 
+                                    actual_output_kg: actual,
+                                    roast_group: batch.roast_group,
+                                    target_date: batch.target_date,
+                                  })}
+                                  onMarkRoastedWithLoss={(id, actual, lossKg, lossNote) => markRoastedWithLossMutation.mutate({
+                                    id,
+                                    actual_output_kg: actual,
+                                    roast_group: batch.roast_group,
+                                    target_date: batch.target_date,
+                                    loss_kg: lossKg,
+                                    loss_note: lossNote,
+                                  })}
+                                  onUndo={(id) => handleOpenUndoWorkflow(id)}
+                                  onDelete={(id) => setDeleteConfirmBatchId(id)}
+                                  onOhShit={(batch) => setOhShitBatch(batch)}
+                                  onUpdate={(data) => updateBatchMutation.mutate(data)}
+                                  onInputFocus={handleInputFocus}
+                                  onInputBlur={handleInputBlur}
+                                  onInputChange={handleInputChange}
+                                  isUpdating={updateBatchMutation.isPending}
+                                  getRoasterBadgeColor={getRoasterBadgeColor}
+                                />
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                  
+                  {/* Show message if component batches exist but need blending */}
+                  {componentBatches && componentBatches.filter(b => b.status === 'ROASTED').length > 0 && (
+                    <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm">
+                      <p className="text-primary font-medium">Ready to blend!</p>
+                      <p className="text-muted-foreground text-xs mt-1">
+                        You have roasted component batches. Use "Blend batches" above to combine them into {config?.display_name?.trim() || roastGroup.replace(/_/g, ' ')} WIP.
+                      </p>
+                    </div>
+                  )}
                 </div>
+              ) : (
+                // For single origins: show batches directly
+                sortedBatches.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">No batches queued.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {sortedBatches.map((batch) => (
+                      <BatchRow
+                        key={batch.id}
+                        batch={batch}
+                        expectedYieldLossPct={yieldLossPct}
+                        onMarkRoasted={(id, actual) => markRoastedMutation.mutate({ 
+                          id, 
+                          actual_output_kg: actual,
+                          roast_group: batch.roast_group,
+                          target_date: batch.target_date,
+                        })}
+                        onMarkRoastedWithLoss={(id, actual, lossKg, lossNote) => markRoastedWithLossMutation.mutate({
+                          id,
+                          actual_output_kg: actual,
+                          roast_group: batch.roast_group,
+                          target_date: batch.target_date,
+                          loss_kg: lossKg,
+                          loss_note: lossNote,
+                        })}
+                        onUndo={(id) => handleOpenUndoWorkflow(id)}
+                        onDelete={(id) => setDeleteConfirmBatchId(id)}
+                        onOhShit={(batch) => setOhShitBatch(batch)}
+                        onUpdate={(data) => updateBatchMutation.mutate(data)}
+                        onInputFocus={handleInputFocus}
+                        onInputBlur={handleInputBlur}
+                        onInputChange={handleInputChange}
+                        isUpdating={updateBatchMutation.isPending}
+                        getRoasterBadgeColor={getRoasterBadgeColor}
+                      />
+                    ))}
+                  </div>
+                )
               )}
             </div>
           </td>
