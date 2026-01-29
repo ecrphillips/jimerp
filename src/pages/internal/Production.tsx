@@ -2,88 +2,42 @@ import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { format, addDays, setHours, setMinutes } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
 import { Flame, Package, Truck } from 'lucide-react';
 import { RoastTab } from '@/components/production/RoastTab';
 import { PackTab } from '@/components/production/PackTab';
 import { ShipTab } from '@/components/production/ShipTab';
+import { PacificTimeTicker } from '@/components/production/PacificTimeTicker';
+import { 
+  getVancouverDateString,
+  getVancouverNow,
+} from '@/lib/productionScheduling';
+import type { DateFilterConfig } from '@/components/production/types';
 
 type StationView = 'roast' | 'pack' | 'ship';
-
-// Helper: get YYYY-MM-DD in America/Vancouver timezone
-function getVancouverDate(daysOffset = 0): string {
-  const nowUtc = new Date();
-  const vancouverNow = toZonedTime(nowUtc, 'America/Vancouver');
-  const target = addDays(vancouverNow, daysOffset);
-  return format(target, 'yyyy-MM-dd');
-}
-
-// Helper: get the run-sheet cutoff datetime (13:00 Vancouver time)
-// Orders with work_deadline before 13:00 should appear on the PREVIOUS day's run sheet
-// So for "today's" run sheet, we include orders up to tomorrow at 13:00
-function getVancouverDateTimeAt13(daysOffset = 0): string {
-  const nowUtc = new Date();
-  const vancouverNow = toZonedTime(nowUtc, 'America/Vancouver');
-  const target = addDays(vancouverNow, daysOffset);
-  const at13 = setMinutes(setHours(target, 13), 0);
-  return format(at13, "yyyy-MM-dd'T'HH:mm:ss");
-}
+type DateFilterMode = 'today' | 'tomorrow' | 'all';
 
 export default function Production() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const today = getVancouverDate(0);
-  const todayPlusOne = getVancouverDate(1);
-  const todayPlusTwo = getVancouverDate(2);
+  const today = getVancouverDateString(0);
   
-  // Cutoff times for run-sheet timing rule:
-  // Orders before 13:00 on day X appear on day X-1's run sheet
-  // So "today's" run sheet shows orders with work_deadline <= tomorrow 13:00
-  const todayPlusOneAt13 = getVancouverDateTimeAt13(1); // Tomorrow at 13:00
-  const todayPlusTwoAt13 = getVancouverDateTimeAt13(2); // Day after tomorrow at 13:00
-
   // Date filter: 'today', 'tomorrow', or 'all'
-  type DateFilterMode = 'today' | 'tomorrow' | 'all';
   const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('today');
   
-  // WORK DEADLINE BUCKET LOGIC with 13:00 rule:
-  // - TODAY: work_deadline <= tomorrow at 13:00
-  //          (Orders with deadline before 13:00 tomorrow appear today)
-  // - TOMORROW: work_deadline > tomorrow at 13:00 AND <= day after tomorrow at 13:00
-  //             OR manually_deprioritized = true
-  // - ALL: show all open orders (no date filter)
-  // 
-  // All production prioritization keys off work_deadline, NOT requested_ship_date
-  const dateFilterConfig = useMemo(() => {
-    if (dateFilterMode === 'today') {
-      // TODAY bucket: work_deadline <= tomorrow at 13:00
-      return {
-        mode: 'today' as const,
-        maxDate: todayPlusOneAt13, // <= tomorrow 13:00
-      };
-    }
-    if (dateFilterMode === 'tomorrow') {
-      // TOMORROW bucket: work_deadline > tomorrow 13:00 AND <= day after tomorrow 13:00
-      // OR manually_deprioritized = true
-      return {
-        mode: 'tomorrow' as const,
-        minDate: todayPlusOneAt13, // > tomorrow 13:00
-        maxDate: todayPlusTwoAt13, // <= day after tomorrow 13:00
-      };
-    }
-    // ALL mode - no date filter
+  // Filter configuration is now simpler - actual filtering happens client-side
+  // based on computed work_start_at
+  const dateFilterConfig = useMemo((): DateFilterConfig => {
     return {
-      mode: 'all' as const,
-    };
-  }, [dateFilterMode, todayPlusOneAt13, todayPlusTwoAt13]);
+      mode: dateFilterMode,
+    } as DateFilterConfig;
+  }, [dateFilterMode]);
 
   // Helper text for filter buttons
   const filterHelperText = useMemo(() => {
     switch (dateFilterMode) {
       case 'today':
-        return 'Work deadline: tomorrow or sooner';
+        return 'Orders where work must start today';
       case 'tomorrow':
-        return 'Work deadline: day after tomorrow, or deferred';
+        return 'Orders where work must start tomorrow';
       case 'all':
         return 'All open orders';
       default:
@@ -106,11 +60,12 @@ export default function Production() {
   return (
     <div className="page-container">
       <div className="page-header">
-        <div>
+        <div className="space-y-1">
           <h1 className="page-title">Production</h1>
           <p className="text-sm text-muted-foreground">
             {filterHelperText}
           </p>
+          <PacificTimeTicker className="mt-1" />
         </div>
         <div className="flex items-center gap-4">
           <div className="flex gap-2">
