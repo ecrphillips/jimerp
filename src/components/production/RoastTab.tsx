@@ -25,7 +25,7 @@ import { Flame, Plus, Check, Zap, Clock, Settings, Sparkles, Package, Layers } f
 import { RoastGroupDrawer } from './RoastGroupDrawer';
 import { WipFgAdjustModal } from './WipFgAdjustModal';
 import { PlanBlendBatchesModal } from './PlanBlendBatchesModal';
-import { BlendBatchesModal } from './BlendBatchesModal';
+import { BlendExecuteModal } from './BlendExecuteModal';
 import {
   DndContext,
   closestCenter,
@@ -1092,7 +1092,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       
       {/* Blend Execution Modal (for actually blending component WIP into blend WIP) */}
       {blendExecuteModal && (
-        <BlendBatchesModal
+        <BlendExecuteModal
           open={!!blendExecuteModal}
           onOpenChange={(open) => !open && setBlendExecuteModal(null)}
           blendRoastGroup={blendExecuteModal.roastGroup}
