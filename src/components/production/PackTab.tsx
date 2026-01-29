@@ -443,6 +443,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     
     // Invalidate queries to refresh UI
     queryClient.invalidateQueries({ queryKey: ['packing-runs'] });
+    queryClient.invalidateQueries({ queryKey: ['authoritative-packing-runs'] });
     queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
     queryClient.invalidateQueries({ queryKey: ['inventory-ledger-fg'] });
   }, [today, user?.id, queryClient]);

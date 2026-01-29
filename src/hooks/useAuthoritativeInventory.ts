@@ -475,14 +475,22 @@ export function useAuthoritativeRoastDemand() {
 
 /**
  * Short list calculation - authoritative
- * Shows SKUs where FG < unpicked demand
+ * Shows SKUs where total FG (packed) is less than total demanded
+ * Picks are progress tracking, not shortage reduction
  */
 export function useAuthoritativeShortList() {
-  const { data: fg, isLoading: fgLoading } = useAuthoritativeFg();
+  const { data: packingRuns, isLoading: packingLoading } = usePackingRuns();
   const { data: demand, isLoading: demandLoading } = useAuthoritativeDemand();
+  const { data: products, isLoading: productsLoading } = useProductsWithRoastGroup();
   
   const shortList = useMemo(() => {
-    if (!fg || !demand) return [];
+    if (!packingRuns || !demand || !products) return [];
+    
+    // Calculate FG created (total packed) by product - no allocation subtraction
+    const fgCreatedByProduct: Record<string, number> = {};
+    for (const pr of packingRuns) {
+      fgCreatedByProduct[pr.product_id] = (fgCreatedByProduct[pr.product_id] ?? 0) + pr.units_packed;
+    }
     
     const items: Array<{
       product_id: string;
@@ -497,11 +505,10 @@ export function useAuthoritativeShortList() {
     }> = [];
     
     for (const [pid, d] of Object.entries(demand)) {
-      const fgData = fg[pid];
-      const fgAvailable = fgData?.fg_available_units ?? 0;
+      const fgCreated = fgCreatedByProduct[pid] ?? 0;
       
-      // Shortage = remaining unpicked demand - available FG
-      const shortage = d.remaining_units - fgAvailable;
+      // Shortage = total demanded - total FG created (picks don't affect shortage)
+      const shortage = d.demanded_units - fgCreated;
       
       if (shortage > 0) {
         items.push({
@@ -512,17 +519,17 @@ export function useAuthoritativeShortList() {
           demanded_units: d.demanded_units,
           picked_units: d.picked_units,
           remaining_units: d.remaining_units,
-          fg_available_units: fgAvailable,
+          fg_available_units: fgCreated,
           shortage,
         });
       }
     }
     
     return items.sort((a, b) => b.shortage - a.shortage);
-  }, [fg, demand]);
+  }, [packingRuns, demand, products]);
   
   return {
     data: shortList,
-    isLoading: fgLoading || demandLoading,
+    isLoading: packingLoading || demandLoading || productsLoading,
   };
 }
