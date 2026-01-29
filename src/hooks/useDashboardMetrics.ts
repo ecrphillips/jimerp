@@ -6,25 +6,21 @@ import { toZonedTime } from 'date-fns-tz';
 export type TimeHorizon = 'today' | 'tomorrow' | 'all';
 
 interface DashboardMetrics {
-  // Stage A: Green coffee equivalent needed for roast
-  greenKgRequired: number;
+  // Roast Demand: remaining roasting work (kg) for orders in window
+  roastDemandKg: number;
   
-  // Stage B: WIP (roasted, unpacked) kg
-  wipKg: number;
+  // WIP Buffer: only WIP needed for unpicked orders (kg)
+  wipBufferKg: number;
   
-  // Stage C: Finished goods ready to ship (kg)
-  fgReadyKg: number;
+  // FG Ready: only FG needed for unpicked orders (units)
+  fgReadyUnits: number;
   
-  // Stage D: Demand blocked by missing FG (kg)
-  blockedDemandKg: number;
+  // Blocked Demand: remaining units not yet picked (units)
+  blockedDemandUnits: number;
   
-  // Yield metrics
-  expectedYieldLossPct: number;
-  actualYieldLossPct: number | null;
-  
-  // Batch counts for context
-  plannedBatches: number;
-  completedBatches: number;
+  // Context counts
+  ordersInWindow: number;
+  lineItemsInWindow: number;
 }
 
 export function useDashboardMetrics(horizon: TimeHorizon) {
@@ -35,7 +31,7 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
   const tomorrow = addDays(today, 1);
   const dayAfter = addDays(today, 2);
 
-  // Build date filter based on horizon
+  // Build date filter based on horizon (matches Production page logic)
   const getDateFilter = () => {
     if (horizon === 'today') {
       return { gte: format(today, 'yyyy-MM-dd'), lte: format(tomorrow, 'yyyy-MM-dd') };
@@ -46,205 +42,278 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
   };
 
   return useQuery({
-    queryKey: ['dashboard-metrics', horizon],
+    queryKey: ['dashboard-metrics-v2', horizon],
     queryFn: async (): Promise<DashboardMetrics> => {
       const dateFilter = getDateFilter();
 
-      // 1. Get roast groups with their yield expectations
-      const { data: roastGroups } = await supabase
-        .from('roast_groups')
-        .select('roast_group, expected_yield_loss_pct, standard_batch_kg')
-        .eq('is_active', true);
-
-      const yieldByGroup = new Map(
-        (roastGroups || []).map(rg => [rg.roast_group, rg.expected_yield_loss_pct])
-      );
-
-      // 2. Get demand from orders (line items with products)
-      let demandQuery = supabase
-        .from('order_line_items')
+      // 1. Get open orders with line items in the selected window
+      let ordersQuery = supabase
+        .from('orders')
         .select(`
-          quantity_units,
-          product:products!inner(
-            bag_size_g,
-            roast_group
-          ),
-          order:orders!inner(
-            status,
-            work_deadline,
-            requested_ship_date
+          id,
+          work_deadline,
+          status,
+          order_line_items (
+            id,
+            product_id,
+            quantity_units
           )
         `)
-        .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
+        .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
 
       if (dateFilter) {
-        demandQuery = demandQuery
-          .gte('order.work_deadline', dateFilter.gte)
-          .lte('order.work_deadline', dateFilter.lte);
+        ordersQuery = ordersQuery
+          .gte('work_deadline', dateFilter.gte)
+          .lte('work_deadline', dateFilter.lte);
       }
 
-      const { data: orderDemand } = await demandQuery;
+      const { data: orders } = await ordersQuery;
 
-      // 3. Get external demand (andon boards)
-      let externalQuery = supabase
-        .from('external_demand')
-        .select(`
-          quantity_units,
-          target_date,
-          product:products!inner(
-            bag_size_g,
-            roast_group
-          )
-        `);
+      // 2. Get ship_picks to know what's already picked
+      const { data: shipPicks } = await supabase
+        .from('ship_picks')
+        .select('order_line_item_id, units_picked');
 
-      if (dateFilter) {
-        externalQuery = externalQuery
-          .gte('target_date', dateFilter.gte)
-          .lte('target_date', dateFilter.lte);
+      const picksByLineItem = new Map(
+        (shipPicks || []).map(p => [p.order_line_item_id, p.units_picked])
+      );
+
+      // 3. Get products with roast_group and bag_size_g
+      const { data: products } = await supabase
+        .from('products')
+        .select('id, bag_size_g, roast_group, grams_per_unit')
+        .eq('is_active', true);
+
+      const productInfo = new Map(
+        (products || []).map(p => [p.id, { 
+          bag_size_g: p.bag_size_g, 
+          roast_group: p.roast_group,
+          grams_per_unit: p.grams_per_unit || p.bag_size_g,
+        }])
+      );
+
+      // 4. Get roast groups to identify blends and their components
+      const { data: roastGroups } = await supabase
+        .from('roast_groups')
+        .select('roast_group, is_blend, is_active')
+        .eq('is_active', true);
+
+      const blendGroups = new Set(
+        (roastGroups || []).filter(rg => rg.is_blend).map(rg => rg.roast_group)
+      );
+
+      // 5. Get blend components to exclude component WIP from parent blend calculations
+      const { data: blendComponents } = await supabase
+        .from('roast_group_components')
+        .select('parent_roast_group, component_roast_group');
+
+      const componentGroups = new Set(
+        (blendComponents || []).map(c => c.component_roast_group)
+      );
+
+      // 6. Calculate remaining demand per product and per roast_group
+      // Remaining = ordered - picked
+      const remainingByProduct = new Map<string, number>(); // product_id -> remaining units
+      const remainingKgByRoastGroup = new Map<string, number>(); // roast_group -> remaining kg
+      let totalRemainingUnits = 0;
+      let lineItemCount = 0;
+      const orderIds = new Set<string>();
+
+      for (const order of orders || []) {
+        orderIds.add(order.id);
+        for (const item of order.order_line_items || []) {
+          const picked = picksByLineItem.get(item.id) || 0;
+          const remaining = Math.max(0, item.quantity_units - picked);
+          
+          if (remaining > 0) {
+            lineItemCount++;
+            totalRemainingUnits += remaining;
+            
+            // Aggregate by product
+            remainingByProduct.set(
+              item.product_id,
+              (remainingByProduct.get(item.product_id) || 0) + remaining
+            );
+            
+            // Aggregate by roast_group (convert to kg)
+            const info = productInfo.get(item.product_id);
+            if (info?.roast_group) {
+              const gramsNeeded = remaining * info.grams_per_unit;
+              const kgNeeded = gramsNeeded / 1000;
+              remainingKgByRoastGroup.set(
+                info.roast_group,
+                (remainingKgByRoastGroup.get(info.roast_group) || 0) + kgNeeded
+              );
+            }
+          }
+        }
       }
 
-      const { data: externalDemand } = await externalQuery;
-
-      // 4. Calculate total roasted kg demand by roast group
-      const demandByGroup = new Map<string, number>();
-
-      // From orders
-      (orderDemand || []).forEach(item => {
-        const product = item.product as any;
-        if (!product?.roast_group) return;
-        const kgNeeded = (item.quantity_units * product.bag_size_g) / 1000;
-        demandByGroup.set(
-          product.roast_group,
-          (demandByGroup.get(product.roast_group) || 0) + kgNeeded
-        );
-      });
-
-      // From external demand
-      (externalDemand || []).forEach(item => {
-        const product = item.product as any;
-        if (!product?.roast_group) return;
-        const kgNeeded = (item.quantity_units * product.bag_size_g) / 1000;
-        demandByGroup.set(
-          product.roast_group,
-          (demandByGroup.get(product.roast_group) || 0) + kgNeeded
-        );
-      });
-
-      // 5. Convert roasted demand to green coffee equivalent
-      let totalGreenKgRequired = 0;
-      let totalWeightedYield = 0;
-      let totalDemandWeight = 0;
-
-      demandByGroup.forEach((roastedKg, group) => {
-        const yieldLossPct = yieldByGroup.get(group) || 16;
-        const greenKg = roastedKg / (1 - yieldLossPct / 100);
-        totalGreenKgRequired += greenKg;
-        
-        // For weighted average yield calculation
-        totalWeightedYield += yieldLossPct * roastedKg;
-        totalDemandWeight += roastedKg;
-      });
-
-      const expectedYieldLossPct = totalDemandWeight > 0 
-        ? totalWeightedYield / totalDemandWeight 
-        : 16;
-
-      // 6. Get WIP from inventory_transactions ledger
-      const { data: wipTransactions } = await supabase
-        .from('inventory_transactions')
-        .select('roast_group, quantity_kg')
-        .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'ADJUSTMENT', 'LOSS'])
-        .not('roast_group', 'is', null);
-
-      let wipKg = 0;
-      (wipTransactions || []).forEach(tx => {
-        wipKg += Number(tx.quantity_kg) || 0;
-      });
-
-      // 7. Get FG from inventory_transactions ledger
+      // 7. Get FG inventory from inventory_transactions ledger
       const { data: fgTransactions } = await supabase
         .from('inventory_transactions')
         .select('product_id, quantity_units')
         .in('transaction_type', ['PACK_PRODUCE_FG', 'SHIP_CONSUME_FG'])
         .not('product_id', 'is', null);
 
-      // Get product bag sizes for FG kg conversion
-      const { data: products } = await supabase
-        .from('products')
-        .select('id, bag_size_g, roast_group')
-        .eq('is_active', true);
-
-      const productInfo = new Map(
-        (products || []).map(p => [p.id, { bag_size_g: p.bag_size_g, roast_group: p.roast_group }])
-      );
-
       // Aggregate FG by product
       const fgByProduct = new Map<string, number>();
-      (fgTransactions || []).forEach(tx => {
-        if (!tx.product_id) return;
-        fgByProduct.set(
-          tx.product_id,
-          (fgByProduct.get(tx.product_id) || 0) + (tx.quantity_units || 0)
-        );
-      });
-
-      // Convert FG units to kg
-      let fgReadyKg = 0;
-      fgByProduct.forEach((units, productId) => {
-        const info = productInfo.get(productId);
-        if (info && units > 0) {
-          fgReadyKg += (units * info.bag_size_g) / 1000;
+      for (const tx of fgTransactions || []) {
+        if (tx.product_id) {
+          fgByProduct.set(
+            tx.product_id,
+            (fgByProduct.get(tx.product_id) || 0) + (tx.quantity_units || 0)
+          );
         }
-      });
-
-      // 8. Calculate blocked demand (demand that can't be fulfilled from FG)
-      // This is total demand kg minus available FG kg, floored at 0
-      const totalDemandKg = Array.from(demandByGroup.values()).reduce((sum, kg) => sum + kg, 0);
-      const blockedDemandKg = Math.max(0, totalDemandKg - fgReadyKg - wipKg);
-
-      // 9. Get batch counts and actual yield for completed batches
-      let batchQuery = supabase
-        .from('roasted_batches')
-        .select('id, status, roast_group, planned_output_kg, actual_output_kg');
-
-      if (dateFilter) {
-        batchQuery = batchQuery
-          .gte('target_date', dateFilter.gte)
-          .lte('target_date', dateFilter.lte);
       }
 
-      const { data: batches } = await batchQuery;
+      // 8. Get WIP from roasted batches and packing runs (authoritative calculation)
+      // WIP = roasted output - packing consumed + adjustments
+      const { data: roastedBatches } = await supabase
+        .from('roasted_batches')
+        .select('roast_group, actual_output_kg, status, consumed_by_blend_at')
+        .eq('status', 'ROASTED');
 
-      const plannedBatches = (batches || []).filter(b => b.status === 'PLANNED').length;
-      const completedBatches = (batches || []).filter(b => b.status === 'ROASTED').length;
+      const { data: packingRuns } = await supabase
+        .from('packing_runs')
+        .select('product_id, kg_consumed');
 
-      // Calculate actual yield loss from completed batches
-      let totalPlannedOutput = 0;
-      let totalActualOutput = 0;
-      (batches || []).filter(b => b.status === 'ROASTED').forEach(batch => {
-        if (batch.planned_output_kg) {
-          totalPlannedOutput += Number(batch.planned_output_kg);
-          totalActualOutput += Number(batch.actual_output_kg);
+      const { data: wipAdjustments } = await supabase
+        .from('inventory_transactions')
+        .select('roast_group, quantity_kg')
+        .not('roast_group', 'is', null)
+        .in('transaction_type', ['ADJUSTMENT', 'LOSS']);
+
+      // Calculate roasted output by roast_group (excluding consumed-by-blend batches)
+      const roastedByGroup = new Map<string, number>();
+      for (const batch of roastedBatches || []) {
+        if (!batch.consumed_by_blend_at) {
+          roastedByGroup.set(
+            batch.roast_group,
+            (roastedByGroup.get(batch.roast_group) || 0) + Number(batch.actual_output_kg)
+          );
         }
-      });
+      }
 
-      const actualYieldLossPct = totalPlannedOutput > 0
-        ? ((totalPlannedOutput - totalActualOutput) / totalPlannedOutput) * 100
-        : null;
+      // Calculate packing consumed by roast_group
+      const consumedByGroup = new Map<string, number>();
+      for (const run of packingRuns || []) {
+        const info = productInfo.get(run.product_id);
+        if (info?.roast_group) {
+          consumedByGroup.set(
+            info.roast_group,
+            (consumedByGroup.get(info.roast_group) || 0) + Number(run.kg_consumed)
+          );
+        }
+      }
+
+      // Calculate adjustments by roast_group
+      const adjustmentsByGroup = new Map<string, number>();
+      for (const adj of wipAdjustments || []) {
+        if (adj.roast_group) {
+          adjustmentsByGroup.set(
+            adj.roast_group,
+            (adjustmentsByGroup.get(adj.roast_group) || 0) + Number(adj.quantity_kg ?? 0)
+          );
+        }
+      }
+
+      // Calculate net WIP by roast_group
+      const wipByGroup = new Map<string, number>();
+      const allWipGroups = new Set([
+        ...roastedByGroup.keys(),
+        ...consumedByGroup.keys(),
+        ...adjustmentsByGroup.keys(),
+      ]);
+
+      for (const rg of allWipGroups) {
+        const roasted = roastedByGroup.get(rg) || 0;
+        const consumed = consumedByGroup.get(rg) || 0;
+        const adjusted = adjustmentsByGroup.get(rg) || 0;
+        const netWip = Math.max(0, roasted - consumed + adjusted);
+        if (netWip > 0) {
+          wipByGroup.set(rg, netWip);
+        }
+      }
+
+      // 9. Calculate FG Ready (capped at what's needed)
+      // FG Ready = MIN(FG_on_hand, remaining_units_to_pick)
+      let fgReadyUnits = 0;
+      const fgUsedKgByRoastGroup = new Map<string, number>();
+
+      for (const [productId, fgOnHand] of fgByProduct) {
+        if (fgOnHand <= 0) continue;
+        
+        const remaining = remainingByProduct.get(productId) || 0;
+        const usable = Math.min(fgOnHand, remaining);
+        
+        if (usable > 0) {
+          fgReadyUnits += usable;
+          
+          // Track FG used by roast_group for WIP calculation offset
+          const info = productInfo.get(productId);
+          if (info?.roast_group) {
+            const kgUsed = (usable * info.grams_per_unit) / 1000;
+            fgUsedKgByRoastGroup.set(
+              info.roast_group,
+              (fgUsedKgByRoastGroup.get(info.roast_group) || 0) + kgUsed
+            );
+          }
+        }
+      }
+
+      // 10. Calculate WIP Buffer (capped at what's needed, after FG offset)
+      // WIP Buffer = MIN(net_WIP, remaining_requirement_after_FG_offset)
+      // Exclude component WIP for blends (component WIP should not inflate parent blend WIP buffer)
+      let wipBufferKg = 0;
+
+      for (const [roastGroup, wipAvailable] of wipByGroup) {
+        // Skip component groups - their WIP only counts when blended into parent
+        if (componentGroups.has(roastGroup) && !blendGroups.has(roastGroup)) {
+          // This is a pure component group (not itself a blend), skip it
+          // unless it's also required directly for orders
+          const directDemand = remainingKgByRoastGroup.get(roastGroup) || 0;
+          if (directDemand > 0) {
+            const fgOffset = fgUsedKgByRoastGroup.get(roastGroup) || 0;
+            const remainingAfterFg = Math.max(0, directDemand - fgOffset);
+            const usableWip = Math.min(wipAvailable, remainingAfterFg);
+            wipBufferKg += usableWip;
+          }
+          continue;
+        }
+        
+        const demand = remainingKgByRoastGroup.get(roastGroup) || 0;
+        const fgOffset = fgUsedKgByRoastGroup.get(roastGroup) || 0;
+        const remainingAfterFg = Math.max(0, demand - fgOffset);
+        const usableWip = Math.min(wipAvailable, remainingAfterFg);
+        wipBufferKg += usableWip;
+      }
+
+      // 11. Calculate Roast Demand
+      // Roast Demand = total kg requirement - WIP usable - FG usable (converted to kg)
+      let roastDemandKg = 0;
+
+      for (const [roastGroup, demandKg] of remainingKgByRoastGroup) {
+        const fgOffsetKg = fgUsedKgByRoastGroup.get(roastGroup) || 0;
+        const wipAvailable = wipByGroup.get(roastGroup) || 0;
+        const wipUsable = Math.min(wipAvailable, Math.max(0, demandKg - fgOffsetKg));
+        
+        const remainingRoastWork = Math.max(0, demandKg - fgOffsetKg - wipUsable);
+        roastDemandKg += remainingRoastWork;
+      }
+
+      // 12. Blocked Demand = total remaining units not picked
+      const blockedDemandUnits = totalRemainingUnits;
 
       return {
-        greenKgRequired: Math.round(totalGreenKgRequired * 10) / 10,
-        wipKg: Math.round(wipKg * 10) / 10,
-        fgReadyKg: Math.round(fgReadyKg * 10) / 10,
-        blockedDemandKg: Math.round(blockedDemandKg * 10) / 10,
-        expectedYieldLossPct: Math.round(expectedYieldLossPct * 10) / 10,
-        actualYieldLossPct: actualYieldLossPct !== null 
-          ? Math.round(actualYieldLossPct * 10) / 10 
-          : null,
-        plannedBatches,
-        completedBatches,
+        roastDemandKg: Math.round(roastDemandKg * 10) / 10,
+        wipBufferKg: Math.round(wipBufferKg * 10) / 10,
+        fgReadyUnits: Math.round(fgReadyUnits),
+        blockedDemandUnits: Math.round(blockedDemandUnits),
+        ordersInWindow: orderIds.size,
+        lineItemsInWindow: lineItemCount,
       };
     },
-    refetchInterval: 15000, // Refresh every 15 seconds
+    refetchInterval: 15000,
   });
 }
