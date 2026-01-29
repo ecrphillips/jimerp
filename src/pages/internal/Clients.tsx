@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { ClientLocations } from '@/components/clients/ClientLocations';
+import { ClientOrderingConstraints } from '@/components/clients/ClientOrderingConstraints';
 import { SafeDeleteModal } from '@/components/SafeDeleteModal';
 
 interface Client {
@@ -444,6 +445,8 @@ export default function Clients() {
                   <div className="mt-2">
                     <ClientLocations clientId={c.id} clientName={c.name} />
                   </div>
+                  {/* Ordering Constraints section */}
+                  <ClientOrderingConstraints clientId={c.id} clientName={c.name} />
                 </li>
               ))}
             </ul>

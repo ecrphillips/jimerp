@@ -8,11 +8,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Plus, Minus, Trash2, ArrowLeft } from 'lucide-react';
+import { Plus, Minus, Trash2, ArrowLeft, ShieldAlert } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
+import { useClientOrderingConstraints } from '@/hooks/useClientOrderingConstraints';
 import type { GrindOption } from '@/types/database';
 import type { Database } from '@/integrations/supabase/types';
 import { LocationSelect } from '@/components/orders/LocationSelect';
@@ -45,6 +47,31 @@ interface Product {
 interface Client {
   id: string;
   name: string;
+}
+
+// Info banner showing client constraints (for admin awareness)
+function ClientConstraintsInfo({ clientId }: { clientId: string }) {
+  const { constraints, hasConstraints } = useClientOrderingConstraints(clientId);
+  
+  if (!hasConstraints) return null;
+  
+  return (
+    <Alert className="mb-6">
+      <ShieldAlert className="h-4 w-4" />
+      <AlertDescription>
+        <strong>Client ordering constraints:</strong>{' '}
+        {constraints.caseOnly && constraints.caseSize && (
+          <span>Case-only ordering (case of {constraints.caseSize}). </span>
+        )}
+        {constraints.allowedProductIds && (
+          <span>Restricted to {constraints.allowedProductIds.length} allowed products. </span>
+        )}
+        <span className="text-muted-foreground">
+          Admin orders bypass these restrictions.
+        </span>
+      </AlertDescription>
+    </Alert>
+  );
 }
 
 export default function CreateOrderForClient() {
@@ -413,6 +440,10 @@ export default function CreateOrderForClient() {
           )}
         </CardContent>
       </Card>
+
+      {selectedClientId && (
+        <ClientConstraintsInfo clientId={selectedClientId} />
+      )}
 
       {selectedClientId && (
         <div className="grid gap-6 lg:grid-cols-[1fr,400px]">
