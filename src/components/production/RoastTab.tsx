@@ -963,6 +963,10 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                           demandKg: 0,
                           netDemandKg: 0,
                         })}
+                        onBlendBatches={() => setBlendExecuteModal({
+                          roastGroup: roastGroup,
+                          displayName: config?.display_name?.trim() || roastGroup.replace(/_/g, ' '),
+                        })}
                         components={roastGroupComponents ?? []}
                         roastGroupsLookupMap={roastGroupsLookupMap}
                       />
