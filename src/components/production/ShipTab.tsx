@@ -113,6 +113,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
 
   // Fetch ALL order line items for demand
   // Filtering by work_start_at happens client-side for accurate production window logic
+  // IMPORTANT: Uses work_deadline_at (timestamptz), NOT work_deadline (legacy text field)
   const { data: allOrderLineItems } = useQuery({
     queryKey: ['ship-demand-all'],
     queryFn: async () => {
@@ -122,7 +123,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           id,
           product_id,
           quantity_units,
-          order:orders!inner(status, work_deadline, manually_deprioritized),
+          order:orders!inner(status, work_deadline_at, manually_deprioritized),
           product:products(id, product_name, bag_size_g, packaging_variant)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
@@ -133,14 +134,15 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
   });
   
   // Client-side filter using work_start_at calculation
+  // Uses work_deadline_at field for accurate timestamptz-based scheduling
   const orderLineItems = useMemo(() => {
     if (!allOrderLineItems) return [];
     if (dateFilterConfig.mode === 'all') return allOrderLineItems;
     
     return allOrderLineItems.filter(li => {
-      const workDeadline = li.order?.work_deadline ?? null;
+      const workDeadlineAt = li.order?.work_deadline_at ?? null;
       const manuallyDeprioritized = li.order?.manually_deprioritized ?? false;
-      return filterOrderByWorkStart(workDeadline, manuallyDeprioritized, dateFilterConfig.mode);
+      return filterOrderByWorkStart(workDeadlineAt, manuallyDeprioritized, dateFilterConfig.mode);
     });
   }, [allOrderLineItems, dateFilterConfig.mode]);
 
@@ -160,6 +162,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
 
   // Fetch orders for shippable view (including ship_display_order)
   // Fetch ALL orders for shippable view - filtering happens client-side
+  // IMPORTANT: Uses work_deadline_at (timestamptz), NOT work_deadline (legacy text field)
   const { data: allOrdersForShipping } = useQuery({
     queryKey: ['shippable-orders-all'],
     queryFn: async () => {
@@ -169,7 +172,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           id,
           order_number,
           requested_ship_date,
-          work_deadline,
+          work_deadline_at,
           delivery_method,
           client_notes,
           internal_ops_notes,
@@ -199,14 +202,15 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
   });
   
   // Client-side filter using work_start_at calculation
+  // Uses work_deadline_at field for accurate timestamptz-based scheduling
   const ordersForShipping = useMemo(() => {
     if (!allOrdersForShipping) return [];
     if (dateFilterConfig.mode === 'all') return allOrdersForShipping;
     
     return allOrdersForShipping.filter(order => {
-      const workDeadline = (order as any).work_deadline ?? null;
-      const manuallyDeprioritized = (order as any).manually_deprioritized ?? false;
-      return filterOrderByWorkStart(workDeadline, manuallyDeprioritized, dateFilterConfig.mode);
+      const workDeadlineAt = order.work_deadline_at ?? null;
+      const manuallyDeprioritized = order.manually_deprioritized ?? false;
+      return filterOrderByWorkStart(workDeadlineAt, manuallyDeprioritized, dateFilterConfig.mode);
     });
   }, [allOrdersForShipping, dateFilterConfig.mode]);
 
@@ -315,7 +319,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         order_number: order.order_number,
         client_name: order.client?.name ?? 'Unknown',
         requested_ship_date: order.requested_ship_date,
-        work_deadline: (order as any).work_deadline ?? null,
+        work_deadline: order.work_deadline_at ?? null, // Map work_deadline_at to work_deadline for display
         delivery_method: order.delivery_method,
         client_notes: order.client_notes,
         internal_ops_notes: order.internal_ops_notes,
@@ -330,8 +334,8 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         totalUnits,
         missingSkuCount,
         missingUnitsTotal,
-        ship_display_order: (order as any).ship_display_order ?? null,
-        manually_deprioritized: (order as any).manually_deprioritized ?? false,
+        ship_display_order: order.ship_display_order ?? null,
+        manually_deprioritized: order.manually_deprioritized ?? false,
       });
     }
 
@@ -659,7 +663,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
                 strategy={verticalListSortingStrategy}
               >
                 <div className="space-y-3">
-                  {displayOrders.map((order) => (
+                {displayOrders.map((order) => (
                     <SortableShipCard
                       key={order.id}
                       order={order}
@@ -667,9 +671,6 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
                       onTogglePriority={toggleOrderPriority}
                       onMarkShipped={handleMarkOrderShipped}
                       isShipping={markOrderShippedMutation.isPending}
-                      onDoThisLater={handleDoThisLater}
-                      onDoThisToday={handleDoThisToday}
-                      todayPlusOne={todayPlusOne}
                     />
                   ))}
                 </div>

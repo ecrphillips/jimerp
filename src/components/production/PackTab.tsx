@@ -100,6 +100,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
 
   // Fetch ALL order line items for demand
   // Filtering by work_start_at happens client-side for accurate production window logic
+  // IMPORTANT: Uses work_deadline_at (timestamptz), NOT work_deadline (legacy text field)
   const { data: allOrderLineItems } = useQuery({
     queryKey: ['pack-demand-all'],
     queryFn: async () => {
@@ -110,7 +111,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
           product_id,
           quantity_units,
           order_id,
-          order:orders!inner(id, status, work_deadline, manually_deprioritized),
+          order:orders!inner(id, status, work_deadline_at, manually_deprioritized),
           product:products(id, product_name, sku, bag_size_g, packaging_variant, roast_group)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
@@ -121,14 +122,15 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   });
   
   // Client-side filter using work_start_at calculation
+  // Uses work_deadline_at field for accurate timestamptz-based scheduling
   const orderLineItems = useMemo(() => {
     if (!allOrderLineItems) return [];
     if (dateFilterConfig.mode === 'all') return allOrderLineItems;
     
     return allOrderLineItems.filter(li => {
-      const workDeadline = li.order?.work_deadline ?? null;
+      const workDeadlineAt = li.order?.work_deadline_at ?? null;
       const manuallyDeprioritized = li.order?.manually_deprioritized ?? false;
-      return filterOrderByWorkStart(workDeadline, manuallyDeprioritized, dateFilterConfig.mode);
+      return filterOrderByWorkStart(workDeadlineAt, manuallyDeprioritized, dateFilterConfig.mode);
     });
   }, [allOrderLineItems, dateFilterConfig.mode]);
 
@@ -215,10 +217,10 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       productMap[li.product_id].demanded_kg += (li.quantity_units * li.product.bag_size_g) / 1000;
       productMap[li.product_id].orderIds.add(li.order_id);
       
-      // Track work_deadline for urgency calculation
-      const workDeadline = li.order?.work_deadline;
-      if (workDeadline) {
-        productMap[li.product_id].shipDates.push(workDeadline);
+      // Track work_deadline_at for urgency calculation (timestamptz field)
+      const workDeadlineAt = li.order?.work_deadline_at;
+      if (workDeadlineAt) {
+        productMap[li.product_id].shipDates.push(workDeadlineAt);
       }
       
       // Check for TIME_SENSITIVE from checkmarks

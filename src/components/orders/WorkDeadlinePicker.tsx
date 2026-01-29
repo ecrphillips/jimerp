@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { format, setHours, setMinutes, parseISO, isValid as isValidDate, startOfDay, isSameDay } from 'date-fns';
+import { format, setHours, setMinutes, parseISO, isValid as isValidDate, startOfDay, isSameDay, isWeekend, nextMonday, isBefore, addDays } from 'date-fns';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
@@ -15,23 +15,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { CalendarIcon, Clock } from 'lucide-react';
+import { CalendarIcon, Clock, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const TIMEZONE = 'America/Vancouver';
+import { 
+  TIMEZONE, 
+  PRODUCTION_WINDOW_START, 
+  PRODUCTION_WINDOW_END,
+  isBusinessDay,
+  getNextBusinessDay,
+} from '@/lib/productionScheduling';
 
 // Time options from 08:00 to 16:00 in 1-hour increments
-const TIME_OPTIONS = [
-  { value: '08:00', label: '08:00' },
-  { value: '09:00', label: '09:00' },
-  { value: '10:00', label: '10:00' },
-  { value: '11:00', label: '11:00' },
-  { value: '12:00', label: '12:00' },
-  { value: '13:00', label: '13:00' },
-  { value: '14:00', label: '14:00' },
-  { value: '15:00', label: '15:00' },
-  { value: '16:00', label: '16:00' },
-];
+// Matches the production window exactly
+const TIME_OPTIONS = Array.from({ length: PRODUCTION_WINDOW_END - PRODUCTION_WINDOW_START + 1 }, (_, i) => {
+  const hour = PRODUCTION_WINDOW_START + i;
+  const value = `${hour.toString().padStart(2, '0')}:00`;
+  return { value, label: value };
+});
 
 /**
  * Normalize a Date to midnight in local browser time.
@@ -51,6 +51,16 @@ function toCalendarDate(zonedDate: Date): Date {
   const month = zonedDate.getMonth();
   const day = zonedDate.getDate();
   return new Date(year, month, day, 0, 0, 0, 0);
+}
+
+/**
+ * Check if a date should be disabled in the calendar
+ * Disables weekends and past dates
+ */
+function isDateDisabled(date: Date): boolean {
+  const today = normalizeToLocalMidnight(new Date());
+  // Disable past dates and weekends
+  return isBefore(date, today) || isWeekend(date);
 }
 
 interface WorkDeadlinePickerProps {
@@ -164,8 +174,12 @@ export function WorkDeadlinePicker({
   const handleDateSelect = (date: Date | undefined) => {
     setHasInteracted(true);
     if (date) {
-      // Normalize to midnight to avoid time component issues
-      setSelectedDate(normalizeToLocalMidnight(date));
+      // Auto-bump weekend dates to next Monday
+      let validDate = normalizeToLocalMidnight(date);
+      if (isWeekend(validDate)) {
+        validDate = nextMonday(validDate);
+      }
+      setSelectedDate(validDate);
     } else {
       setSelectedDate(undefined);
     }
@@ -211,9 +225,14 @@ export function WorkDeadlinePicker({
               mode="single"
               selected={selectedDate}
               onSelect={handleDateSelect}
+              disabled={isDateDisabled}
               initialFocus
               className="p-3 pointer-events-auto"
             />
+            <p className="text-xs text-muted-foreground px-3 pb-2">
+              <AlertCircle className="h-3 w-3 inline mr-1" />
+              Mon–Fri only (08:00–16:00 Pacific)
+            </p>
           </PopoverContent>
         </Popover>
 

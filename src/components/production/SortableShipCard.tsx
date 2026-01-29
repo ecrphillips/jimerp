@@ -7,8 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ShipPickInput } from './ShipPickInput';
+import { NudgeScheduleButtons } from './NudgeScheduleButtons';
 import { format, parseISO } from 'date-fns';
-import { Truck, Clock, ChevronDown, ChevronRight, MessageSquare, AlertTriangle, ExternalLink, Layers, CheckCircle2, GripVertical, CalendarPlus, CalendarMinus } from 'lucide-react';
+import { toZonedTime } from 'date-fns-tz';
+import { TIMEZONE } from '@/lib/productionScheduling';
+import { Truck, Clock, ChevronDown, ChevronRight, MessageSquare, AlertTriangle, ExternalLink, Layers, CheckCircle2, GripVertical } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -61,9 +64,6 @@ interface SortableShipCardProps {
   onTogglePriority: (order: ShippableOrder) => void;
   onMarkShipped: (order: ShippableOrder) => void;
   isShipping: boolean;
-  onDoThisLater: (order: ShippableOrder) => void;
-  onDoThisToday: (order: ShippableOrder) => void;
-  todayPlusOne: string;
 }
 
 export function SortableShipCard({
@@ -72,9 +72,6 @@ export function SortableShipCard({
   onTogglePriority,
   onMarkShipped,
   isShipping,
-  onDoThisLater,
-  onDoThisToday,
-  todayPlusOne,
 }: SortableShipCardProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -206,11 +203,10 @@ export function SortableShipCard({
   const hasOpsNotes = !!order.internal_ops_notes;
   const isShippable = allItemsFullyPicked;
   
-  // Determine if "Do this today" should be visible
-  // Only show if work_deadline > todayPlusOne
-  const canDoThisToday = order.work_deadline 
-    ? order.work_deadline > todayPlusOne 
-    : false;
+  // Format work_deadline for display in Vancouver time
+  const formattedDeadline = order.work_deadline
+    ? format(toZonedTime(parseISO(order.work_deadline), TIMEZONE), 'EEE MMM d, HH:mm')
+    : 'Not set';
 
   return (
     <div
@@ -281,9 +277,7 @@ export function SortableShipCard({
           {/* Metrics row - show work_deadline as primary, ship date as secondary */}
           <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground flex-wrap">
             <span className="font-medium text-foreground">
-              Deadline: {order.work_deadline 
-                ? format(parseISO(order.work_deadline), 'MMM d')
-                : 'Not set'}
+              Deadline: {formattedDeadline}
             </span>
             <span className="text-xs">
               (Ship: {order.requested_ship_date 
@@ -307,32 +301,17 @@ export function SortableShipCard({
                 </span>
               </>
             )}
+            
+            {/* Nudge controls - inline compact version */}
+            <NudgeScheduleButtons
+              orderId={order.id}
+              currentDeadline={order.work_deadline}
+              compact
+            />
           </div>
         </div>
         
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Deprioritization buttons */}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onDoThisLater(order)}
-            title="Push this order to tomorrow (+1 day)"
-          >
-            <CalendarPlus className="h-4 w-4 mr-1" />
-            Later
-          </Button>
-          {canDoThisToday && (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => onDoThisToday(order)}
-              title="Pull this order into today's bucket"
-            >
-              <CalendarMinus className="h-4 w-4 mr-1" />
-              Today
-            </Button>
-          )}
-          
           <Button
             size="sm"
             variant="outline"
