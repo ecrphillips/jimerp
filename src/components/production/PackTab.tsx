@@ -532,14 +532,14 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
         <CardContent>
           {sortedProducts.length === 0 ? (
             <div className="py-8 text-center">
-              <div className="text-4xl mb-3">🎉</div>
-              <p className="text-lg font-medium text-foreground mb-1">All caught up!</p>
+              <div className="text-4xl mb-3">📦</div>
+              <p className="text-lg font-medium text-foreground mb-1">No packing demand right now</p>
               <p className="text-muted-foreground text-sm">
                 {dateFilterConfig.mode === 'today' 
-                  ? "No packing work for today. Check 'Tomorrow' or 'All' for future demand."
+                  ? "Check 'Tomorrow' or 'All' for future orders, or enjoy being caught up!"
                   : dateFilterConfig.mode === 'tomorrow'
-                    ? "No packing work for tomorrow. Check 'All' for future demand."
-                    : "No products demanded across all dates."}
+                    ? "Check 'All' for future orders, or enjoy being caught up!"
+                    : "No packing demand across all dates — enjoy being caught up!"}
               </p>
             </div>
           ) : (

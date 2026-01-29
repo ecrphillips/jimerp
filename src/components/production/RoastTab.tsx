@@ -730,14 +730,14 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
             </p>
           ) : sortedGroups.length === 0 ? (
             <div className="py-8 text-center">
-              <div className="text-4xl mb-3">🎉</div>
-              <p className="text-lg font-medium text-foreground mb-1">All caught up!</p>
+              <div className="text-4xl mb-3">☕</div>
+              <p className="text-lg font-medium text-foreground mb-1">No roast demand right now</p>
               <p className="text-muted-foreground text-sm">
                 {dateFilterConfig.mode === 'today' 
-                  ? "No roast demand for today. Check 'Tomorrow' or 'All' for future demand."
+                  ? "Check 'Tomorrow' or 'All' for future orders, or enjoy being caught up!"
                   : dateFilterConfig.mode === 'tomorrow'
-                    ? "No roast demand for tomorrow. Check 'All' for future demand."
-                    : "No roast demand across all dates."}
+                    ? "Check 'All' for future orders, or enjoy being caught up!"
+                    : "No roast demand across all dates — enjoy being caught up!"}
               </p>
             </div>
           ) : (
