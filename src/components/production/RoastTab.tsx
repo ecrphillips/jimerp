@@ -901,40 +901,43 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
         </CardContent>
       </Card>
 
-      {/* Completed Batches - roast groups without current demand but with batches */}
-      {allRoastGroups
-        .filter((g) => !demandByRoastGroup.find((d) => d.roast_group === g))
-        .filter((g) => batchesByGroup[g]?.length > 0)
-        .filter((g) => groupMatchesRoasterFilter(g))
-        .length > 0 && (
-        <Card className="opacity-70">
-          <CardHeader>
-            <CardTitle className="text-base">Completed Batches</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Roast groups with completed batches but no current demand.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left">
-                  <th className="pb-2 w-8"></th>
-                  <th className="pb-2">Roast Group</th>
-                  <th className="pb-2 text-right">Demand</th>
-                  <th className="pb-2 text-right">Planned</th>
-                  <th className="pb-2 text-right">Roasted</th>
-                  <th className="pb-2 text-right">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allRoastGroups
-                  .filter((g) => !demandByRoastGroup.find((d) => d.roast_group === g))
-                  .filter((g) => batchesByGroup[g]?.length > 0)
-                  .filter((g) => groupMatchesRoasterFilter(g))
-                  .map((roastGroup) => {
+      {/* Completed Batches - roast groups with ROASTED batches but no current demand */}
+      {(() => {
+        // Only include roast groups that have at least one ROASTED batch
+        const completedGroups = allRoastGroups
+          .filter((g) => !demandByRoastGroup.find((d) => d.roast_group === g))
+          .filter((g) => (batchesByGroup[g] ?? []).some(b => b.status === 'ROASTED'))
+          .filter((g) => groupMatchesRoasterFilter(g));
+        
+        if (completedGroups.length === 0) return null;
+        
+        return (
+          <Card className="opacity-70">
+            <CardHeader>
+              <CardTitle className="text-base">Completed Batches</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Roast groups with roasted inventory but no demand in the current view.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="pb-2 w-8"></th>
+                    <th className="pb-2">Roast Group</th>
+                    <th className="pb-2 text-right">WIP On Hand</th>
+                    <th className="pb-2 text-right">FG (Unalloc)</th>
+                    <th className="pb-2 text-right">Roasted (Actual)</th>
+                    <th className="pb-2 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {completedGroups.map((roastGroup) => {
                     const groupBatches = batchesByGroup[roastGroup] ?? [];
                     const config = configByGroup[roastGroup];
                     const roastedTotal = roastedInventory[roastGroup] ?? 0;
+                    const wipKg = inventoryLevelsByGroup[roastGroup]?.wip_kg ?? 0;
+                    const fgKg = inventoryLevelsByGroup[roastGroup]?.fg_kg ?? 0;
                     
                     return (
                       <RoastGroupDrawer
@@ -942,8 +945,8 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                         roastGroup={roastGroup}
                         demandKg={0}
                         netDemandKg={0}
-                        wipKg={inventoryLevelsByGroup[roastGroup]?.wip_kg ?? 0}
-                        fgKg={inventoryLevelsByGroup[roastGroup]?.fg_kg ?? 0}
+                        wipKg={wipKg}
+                        fgKg={fgKg}
                         hasTimeSensitive={false}
                         batches={groupBatches}
                         config={config}
@@ -965,11 +968,90 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                       />
                     );
                   })}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
-      )}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        );
+      })()}
+      
+      {/* Planned Batches (No Current Demand) - roast groups with ONLY planned batches but no demand */}
+      {(() => {
+        // Only include roast groups that have planned batches but NO roasted batches and no demand
+        const plannedOnlyGroups = allRoastGroups
+          .filter((g) => !demandByRoastGroup.find((d) => d.roast_group === g))
+          .filter((g) => {
+            const groupBatches = batchesByGroup[g] ?? [];
+            const hasPlanned = groupBatches.some(b => b.status === 'PLANNED');
+            const hasRoasted = groupBatches.some(b => b.status === 'ROASTED');
+            return hasPlanned && !hasRoasted;
+          })
+          .filter((g) => groupMatchesRoasterFilter(g));
+        
+        if (plannedOnlyGroups.length === 0) return null;
+        
+        return (
+          <Card className="opacity-50 border-dashed">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Planned Batches (No Current Demand)
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Batches planned but not yet roasted, with no demand in the current view.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="pb-2 w-8"></th>
+                    <th className="pb-2">Roast Group</th>
+                    <th className="pb-2 text-right">Planned Batches</th>
+                    <th className="pb-2 text-right">Expected Output</th>
+                    <th className="pb-2 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plannedOnlyGroups.map((roastGroup) => {
+                    const groupBatches = batchesByGroup[roastGroup] ?? [];
+                    const config = configByGroup[roastGroup];
+                    const plannedBatches = groupBatches.filter(b => b.status === 'PLANNED');
+                    const yieldLossPct = config?.expected_yield_loss_pct ?? 16;
+                    const expectedOutput = plannedBatches.reduce(
+                      (sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - yieldLossPct / 100), 0
+                    );
+                    const displayName = config?.display_name?.trim() || roastGroup.replace(/_/g, ' ');
+                    
+                    return (
+                      <tr key={roastGroup} className="border-b hover:bg-muted/30">
+                        <td className="py-2 px-2">
+                          <Clock className="h-4 w-4 text-muted-foreground" />
+                        </td>
+                        <td className="py-2">
+                          <span className="font-medium">{displayName}</span>
+                          <span className="text-muted-foreground text-xs ml-2">({roastGroup})</span>
+                        </td>
+                        <td className="py-2 text-right font-mono">
+                          {plannedBatches.length} batch{plannedBatches.length !== 1 ? 'es' : ''}
+                        </td>
+                        <td className="py-2 text-right font-mono">
+                          {expectedOutput.toFixed(1)} kg
+                        </td>
+                        <td className="py-2 text-right">
+                          <Badge variant="secondary" className="text-xs">
+                            Awaiting demand
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Roast Group Config Dialog */}
       <Dialog open={showConfigDialog} onOpenChange={setShowConfigDialog}>
