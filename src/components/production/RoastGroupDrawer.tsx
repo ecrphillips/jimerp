@@ -26,6 +26,7 @@ import {
   GripVertical,
   Package,
   Layers,
+  Leaf,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -40,6 +41,7 @@ import {
 import { OhShitModal } from './OhShitModal';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { type RoastGroupComponent, getComponentBreakdown, type ComponentDisplay } from '@/hooks/useRoastGroupComponents';
 
 type RoasterMachine = 'SAMIAC' | 'LORING';
 type DefaultRoaster = 'SAMIAC' | 'LORING' | 'EITHER';
@@ -66,6 +68,7 @@ interface RoastGroupConfig {
   is_active: boolean;
   notes: string | null;
   display_name: string | null;
+  origin: string | null;
 }
 
 interface RoastGroupDrawerProps {
@@ -86,6 +89,8 @@ interface RoastGroupDrawerProps {
   isDragging?: boolean;
   isBlend?: boolean;
   onPlanBlendBatches?: () => void;
+  components: RoastGroupComponent[];
+  roastGroupsLookupMap: Map<string, { display_name: string | null; origin: string | null }>;
 }
 
 export function RoastGroupDrawer({
@@ -106,6 +111,8 @@ export function RoastGroupDrawer({
   isDragging = false,
   isBlend = false,
   onPlanBlendBatches,
+  components,
+  roastGroupsLookupMap,
 }: RoastGroupDrawerProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -157,6 +164,31 @@ export function RoastGroupDrawer({
   // Compare against NET demand (demand - WIP - FG)
   const totalCoverage = plannedExpectedOutput + roastedTotal;
   const coverageDelta = totalCoverage - netDemandKg;
+
+  // Calculate component breakdown for display
+  const componentBreakdown = useMemo(() => {
+    return getComponentBreakdown(
+      roastGroup,
+      isBlend,
+      config?.origin ?? null,
+      config?.display_name ?? null,
+      components,
+      roastGroupsLookupMap
+    );
+  }, [roastGroup, isBlend, config?.origin, config?.display_name, components, roastGroupsLookupMap]);
+
+  // Format component breakdown as a display string
+  const componentDisplayString = useMemo(() => {
+    if (componentBreakdown.length === 0) return null;
+    if (componentBreakdown.length === 1 && componentBreakdown[0].pct === 100) {
+      // Single origin: just show the origin/name
+      return `100% ${componentBreakdown[0].displayName}`;
+    }
+    // Blend: show all components with percentages
+    return componentBreakdown
+      .map(c => `${c.pct}% ${c.displayName}`)
+      .join(' · ');
+  }, [componentBreakdown]);
 
   // Sort batches helper function - STATIC ORDER by created_at only
   // No resorting by status - preserve user's "work down the list" flow
@@ -525,24 +557,33 @@ export function RoastGroupDrawer({
           <GripVertical className="h-4 w-4 text-muted-foreground" />
         </td>
         <td className="py-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold">{config?.display_name?.trim() || roastGroup.replace(/_/g, ' ')}</span>
-            {isBlend && (
-              <Badge variant="secondary" className="text-xs bg-violet-100 text-violet-800 border-violet-300">
-                <Layers className="h-3 w-3 mr-1" />
-                Blend
-              </Badge>
-            )}
-            {defaultRoaster !== 'EITHER' && (
-              <Badge variant="outline" className={`text-xs ${getRoasterBadgeColor(defaultRoaster)}`}>
-                {defaultRoaster}
-              </Badge>
-            )}
-            {hasTimeSensitive && (
-              <Badge variant="destructive" className="text-xs">
-                <Clock className="h-3 w-3 mr-1" />
-                Urgent
-              </Badge>
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold">{config?.display_name?.trim() || roastGroup.replace(/_/g, ' ')}</span>
+              {isBlend && (
+                <Badge variant="secondary" className="text-xs bg-accent text-accent-foreground border-border">
+                  <Layers className="h-3 w-3 mr-1" />
+                  Blend
+                </Badge>
+              )}
+              {defaultRoaster !== 'EITHER' && (
+                <Badge variant="outline" className={`text-xs ${getRoasterBadgeColor(defaultRoaster)}`}>
+                  {defaultRoaster}
+                </Badge>
+              )}
+              {hasTimeSensitive && (
+                <Badge variant="destructive" className="text-xs">
+                  <Clock className="h-3 w-3 mr-1" />
+                  Urgent
+                </Badge>
+              )}
+            </div>
+            {/* Component breakdown - what this roast group consists of */}
+            {componentDisplayString && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Leaf className="h-3 w-3 flex-shrink-0" />
+                <span className="truncate" title={componentDisplayString}>{componentDisplayString}</span>
+              </div>
             )}
           </div>
         </td>
