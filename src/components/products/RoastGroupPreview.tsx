@@ -12,7 +12,8 @@ interface RoastGroupPreviewProps {
 }
 
 /**
- * Resolves roast group key collisions and returns final key/code that would be saved
+ * Resolves roast group key collisions and returns final key/code that would be saved.
+ * This is purely for UI preview - actual collision resolution happens server-side.
  */
 export function resolveRoastGroupKeyCollisions(
   displayName: string,
@@ -23,16 +24,20 @@ export function resolveRoastGroupKeyCollisions(
   finalCode: string; 
   wasAdjusted: boolean 
 } {
-  const baseKey = displayName.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+  // Clean up the key the same way as roastGroupCreation.ts
+  const baseKey = displayName
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, ''); // Trim leading/trailing underscores
   const baseCode = generateShortCode(displayName, 6);
   
-  // Check if base key exists
+  // Check if base key is available
   if (!existingKeys.has(baseKey) && !existingCodes.has(baseCode.toUpperCase())) {
     return { finalKey: baseKey, finalCode: baseCode, wasAdjusted: false };
   }
   
-  // Try numeric suffixes: _2, _3, etc. for key, and append digit for code
-  for (let i = 2; i <= 50; i++) {
+  // Show what suffix would be applied (for preview only)
+  for (let i = 2; i <= 25; i++) {
     const candidateKey = `${baseKey}_${i}`;
     const candidateCode = `${baseCode}${i}`.substring(0, 6);
     
@@ -41,11 +46,10 @@ export function resolveRoastGroupKeyCollisions(
     }
   }
   
-  // Fallback (shouldn't happen in practice)
-  const suffix = Date.now() % 1000;
+  // Fallback preview (actual creation will handle this)
   return { 
-    finalKey: `${baseKey}_${suffix}`, 
-    finalCode: `${baseCode.substring(0, 3)}${suffix}`.substring(0, 6), 
+    finalKey: `${baseKey}_N`, 
+    finalCode: `${baseCode.substring(0, 5)}N`, 
     wasAdjusted: true 
   };
 }
