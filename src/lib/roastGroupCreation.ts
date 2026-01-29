@@ -112,12 +112,51 @@ export async function createOrReuseRoastGroup(
   const baseSystemKey = generateSystemKey(displayName);
   const baseCode = generateRoastGroupCode(displayName);
 
-  // Step 3: Try to insert, auto-suffixing on collision
-  const MAX_SUFFIX_ATTEMPTS = 25;
+  // Step 3: Single insert attempt - exact key collision gets auto-suffixed
+  // First try without suffix
+  const { error: firstError } = await supabase
+    .from('roast_groups')
+    .insert({
+      roast_group: baseSystemKey,
+      roast_group_code: baseCode,
+      display_name: displayName,
+      is_blend: params.isBlend,
+      origin: params.origin ?? null,
+      blend_name: params.blendName ?? null,
+      standard_batch_kg: 20,
+      expected_yield_loss_pct: 16,
+      default_roaster: 'EITHER',
+      is_active: true,
+      cropster_profile_ref: params.cropsterProfileRef ?? null,
+      notes: params.notes ?? null,
+    });
+
+  if (!firstError) {
+    console.log(`[RoastGroup] Created new roast group: ${baseSystemKey} (${displayName})`);
+    return {
+      roastGroupKey: baseSystemKey,
+      created: true,
+    };
+  }
+
+  // If not a unique constraint violation, fail fast with the actual error
+  if (firstError.code !== '23505') {
+    return {
+      roastGroupKey: '',
+      created: false,
+      error: firstError.message || 'Failed to create roast group',
+    };
+  }
+
+  // Unique constraint violation - try with numeric suffixes
+  console.log(`[RoastGroup] Key "${baseSystemKey}" exists, trying suffixes...`);
   
-  for (let attempt = 0; attempt < MAX_SUFFIX_ATTEMPTS; attempt++) {
-    const systemKey = attempt === 0 ? baseSystemKey : `${baseSystemKey}_${attempt + 1}`;
-    const code = attempt === 0 ? baseCode : `${baseCode}${attempt + 1}`.substring(0, 6);
+  for (let suffix = 2; suffix <= 50; suffix++) {
+    const systemKey = `${baseSystemKey}_${suffix}`;
+    // Properly truncate base code to make room for suffix digits
+    const suffixStr = String(suffix);
+    const maxBaseLen = 6 - suffixStr.length;
+    const code = `${baseCode.substring(0, maxBaseLen)}${suffixStr}`;
     
     const { error } = await supabase
       .from('roast_groups')
@@ -137,20 +176,15 @@ export async function createOrReuseRoastGroup(
       });
 
     if (!error) {
-      if (attempt > 0) {
-        console.log(`[RoastGroup] Created new roast group with suffix: ${systemKey} (${displayName})`);
-      } else {
-        console.log(`[RoastGroup] Created new roast group: ${systemKey} (${displayName})`);
-      }
+      console.log(`[RoastGroup] Created roast group with suffix: ${systemKey} (${displayName})`);
       return {
         roastGroupKey: systemKey,
         created: true,
       };
     }
 
-    // Check if it's a unique constraint violation - if so, try next suffix
+    // If it's still a constraint violation, continue to next suffix
     if (error.code === '23505') {
-      console.log(`[RoastGroup] Key collision on attempt ${attempt + 1}, trying suffix...`);
       continue;
     }
 
@@ -162,11 +196,11 @@ export async function createOrReuseRoastGroup(
     };
   }
 
-  // Exhausted all suffix attempts (very rare - would need 25+ roast groups with same base name)
+  // This should essentially never happen (would need 50+ roast groups with identical base key)
   return {
     roastGroupKey: '',
     created: false,
-    error: `Could not create roast group "${displayName}" - too many similar system keys exist. Please use a more distinct name.`,
+    error: `Unable to create roast group - system key "${baseSystemKey}" has too many variants. Contact support.`,
   };
 }
 
