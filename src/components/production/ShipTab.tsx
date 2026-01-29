@@ -28,7 +28,9 @@ import { SortableShipCard } from './SortableShipCard';
 import { format, addDays, parseISO } from 'date-fns';
 import type { Database } from '@/integrations/supabase/types';
 import type { DateFilterConfig } from './types';
-import { useFgInventory } from '@/hooks/useInventoryLedger';
+// Use AUTHORITATIVE inventory hooks - computed from source-of-truth tables
+import { useAuthoritativeFg, useAuthoritativeShortList } from '@/hooks/useAuthoritativeInventory';
+import { AuthoritativeSummaryPanel } from './AuthoritativeTotals';
 
 type ShipPriority = 'NORMAL' | 'TIME_SENSITIVE';
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -81,15 +83,7 @@ interface ShippableOrder {
   manually_deprioritized?: boolean;
 }
 
-interface ShortListItem {
-  product_id: string;
-  product_name: string;
-  bag_size_g: number;
-  packaging_variant: PackagingVariant | null;
-  demanded_units: number;
-  packed_units: number;
-  shortage: number;
-}
+// ShortListItem type now comes from useAuthoritativeShortList hook
 
 export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
   const { user } = useAuth();
@@ -151,14 +145,19 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     },
   });
 
-  // ========== LEDGER-BASED FG INVENTORY ==========
-  // FG inventory from ledger: sum(quantity_units) by product_id
-  const { data: fgInventory } = useFgInventory();
+  // ========== AUTHORITATIVE FG INVENTORY (from source-of-truth tables) ==========
+  // FG = sum(packing_runs.units_packed) - sum(ship_picks.units_picked for open orders)
+  const { data: authFg } = useAuthoritativeFg();
+  const { data: authShortList } = useAuthoritativeShortList();
   
-  // FG inventory as a record for easy lookup
+  // FG inventory as a record for easy lookup (use authoritative fg_available_units)
   const fgInventoryMap = useMemo(() => {
-    return fgInventory ?? {};
-  }, [fgInventory]);
+    const map: Record<string, number> = {};
+    for (const [pid, data] of Object.entries(authFg ?? {})) {
+      map[pid] = data.fg_available_units;
+    }
+    return map;
+  }, [authFg]);
 
   // Fetch orders for shippable view (including ship_display_order)
   // NOW FILTERS BY work_deadline instead of requested_ship_date
@@ -390,57 +389,8 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     return map;
   }, [allShipPicks]);
 
-  // Short list calculation - accounts for picked items
-  // Short list shows SKUs where FG < UNPICKED demand (demand - already picked)
-  const shortList = useMemo((): ShortListItem[] => {
-    const demandMap: Record<string, { 
-      product_name: string; 
-      bag_size_g: number; 
-      packaging_variant: PackagingVariant | null; 
-      totalDemanded: number;
-      totalPicked: number; // Already picked/allocated
-    }> = {};
-    
-    for (const li of orderLineItems ?? []) {
-      if (!li.product) continue;
-      const key = li.product_id;
-      const picked = pickedByLineItem[li.id] ?? 0;
-      
-      if (!demandMap[key]) {
-        demandMap[key] = {
-          product_name: li.product.product_name,
-          bag_size_g: li.product.bag_size_g,
-          packaging_variant: li.product.packaging_variant as PackagingVariant | null,
-          totalDemanded: 0,
-          totalPicked: 0,
-        };
-      }
-      demandMap[key].totalDemanded += li.quantity_units;
-      demandMap[key].totalPicked += picked;
-    }
-
-    const shortItems: ShortListItem[] = [];
-    for (const [productId, data] of Object.entries(demandMap)) {
-      const fgAvailable = fgInventoryMap[productId] ?? 0;
-      // UNPICKED demand = total demanded - already picked
-      const unPickedDemand = data.totalDemanded - data.totalPicked;
-      
-      // Only show shortage if FG < unpicked demand
-      if (fgAvailable < unPickedDemand && unPickedDemand > 0) {
-        shortItems.push({
-          product_id: productId,
-          product_name: data.product_name,
-          bag_size_g: data.bag_size_g,
-          packaging_variant: data.packaging_variant,
-          demanded_units: unPickedDemand, // Show unpicked demand, not total
-          packed_units: fgAvailable,
-          shortage: unPickedDemand - fgAvailable,
-        });
-      }
-    }
-
-    return shortItems.sort((a, b) => b.shortage - a.shortage);
-  }, [orderLineItems, fgInventoryMap, pickedByLineItem]);
+  // Short list now uses authoritative hook (authShortList)
+  // The old shortList calculation is removed - we use useAuthoritativeShortList instead
 
   const priorityMutation = useMutation({
     mutationFn: async ({ productId, bagSize, priority, existingCheckmark }: { productId: string; bagSize: number; priority: ShipPriority; existingCheckmark: Checkmark | null }) => {
@@ -670,6 +620,9 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
 
   return (
     <div className="space-y-4">
+      {/* Authoritative Totals Summary */}
+      <AuthoritativeSummaryPanel tab="ship" />
+      
       {/* All Orders - Unified List with Drag & Drop */}
       <Card>
         <CardHeader>
@@ -773,35 +726,34 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         </Card>
       )}
 
-      {/* Short List - at bottom */}
-      {shortList.length > 0 && (
+      {/* Short List - at bottom (uses AUTHORITATIVE shortList from hooks) */}
+      {authShortList && authShortList.length > 0 && (
         <Card className="border-warning/50 bg-warning/5">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-warning">
               <AlertTriangle className="h-5 w-5" />
               Short List
               <Badge variant="outline" className="ml-2 border-warning/50 text-warning">
-                {shortList.length} items
+                {authShortList.length} items
               </Badge>
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              SKUs where FG inventory is less than demanded.
+              SKUs where FG (unallocated) is less than remaining unpicked demand.
             </p>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {shortList.map((item) => (
+              {authShortList.map((item) => (
                 <div key={item.product_id} className="flex items-center justify-between p-2 bg-background rounded border border-warning/30">
                   <div className="flex items-center gap-2">
                     <Package className="h-4 w-4 text-warning" />
                     <span className="font-medium">{item.product_name}</span>
-                    <PackagingBadge variant={item.packaging_variant} />
                     <span className="text-xs text-muted-foreground">{item.bag_size_g}g</span>
                   </div>
-                  <div className="text-sm">
+                  <div className="text-sm font-mono">
                     <span className="text-warning font-medium">Short: {item.shortage}</span>
-                    <span className="text-muted-foreground ml-2">
-                      ({item.packed_units}/{item.demanded_units} FG)
+                    <span className="text-muted-foreground ml-3">
+                      Req: {item.demanded_units} | Picked: {item.picked_units} | FG: {item.fg_available_units} | Remain: {item.remaining_units}
                     </span>
                   </div>
                 </div>
