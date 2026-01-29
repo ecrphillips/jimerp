@@ -219,20 +219,46 @@ export function RoastGroupDrawer({
     prevExpandedRef.current = isExpanded;
   }, [isExpanded, batches, sortBatches]);
 
-  // Use frozen order while drawer is open, but update batch data values (not positions)
+  // Use frozen order while drawer is open, but include any NEW batches added
+  // This is the key fix: merge frozen order with new batches
   const sortedBatches = useMemo(() => {
+    if (!isExpanded) {
+      return sortBatches(batches);
+    }
+    
     if (frozenBatches && hasEditedSinceOpen) {
       // Keep frozen order but with updated data values
-      return frozenBatches
-        .map(frozen => {
-          const updated = batches.find(b => b.id === frozen.id);
-          return updated ?? frozen;
-        })
-        .filter(b => batches.some(batch => batch.id === b.id));
+      const frozenIds = new Set(frozenBatches.map(b => b.id));
+      
+      // Get batches that match frozen order (with updated data)
+      const frozenWithUpdates = frozenBatches
+        .map(frozen => batches.find(b => b.id === frozen.id))
+        .filter((b): b is RoastBatch => b !== undefined);
+      
+      // Find NEW batches that aren't in frozen order (added after drawer opened)
+      const newBatches = batches.filter(b => !frozenIds.has(b.id));
+      
+      // Append new batches at the end (sorted by created_at among themselves)
+      return [...frozenWithUpdates, ...sortBatches(newBatches)];
     }
+    
     // Not frozen or no edits yet - use live sorted order
+    // But still include any new batches
+    if (frozenBatches) {
+      const frozenIds = new Set(frozenBatches.map(b => b.id));
+      const newBatches = batches.filter(b => !frozenIds.has(b.id));
+      
+      if (newBatches.length > 0) {
+        // There are new batches - merge them in
+        const frozenWithUpdates = frozenBatches
+          .map(frozen => batches.find(b => b.id === frozen.id))
+          .filter((b): b is RoastBatch => b !== undefined);
+        return [...frozenWithUpdates, ...sortBatches(newBatches)];
+      }
+    }
+    
     return sortBatches(batches);
-  }, [frozenBatches, hasEditedSinceOpen, batches, sortBatches]);
+  }, [frozenBatches, hasEditedSinceOpen, batches, sortBatches, isExpanded]);
 
   // Refresh frozen batches (called after Mark Roasted to reflect new positions)
   const refreshFrozenBatches = useCallback(() => {
@@ -874,9 +900,14 @@ function BatchRow({
   const [pendingMarkRoasted, setPendingMarkRoasted] = useState<{ id: string; actualKg: number; inboundKg: number } | null>(null);
   
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  // Track if user is currently editing to prevent parent sync from overwriting input
+  const isEditingRef = useRef(false);
 
-  // Sync state when batch changes (after refetch)
+  // Sync state when batch changes (after refetch) - but NOT while user is editing
   useEffect(() => {
+    // Skip sync if user is currently editing to prevent cursor jump
+    if (isEditingRef.current) return;
+    
     setPlannedKg(batch.planned_output_kg?.toString() ?? '');
     setActualKg(batch.actual_output_kg?.toString() ?? '0');
     setCropsterId(batch.cropster_batch_id ?? '');
@@ -900,6 +931,20 @@ function BatchRow({
       }
     };
   }, []);
+
+  // Focus/blur handlers that track editing state
+  const handleLocalInputFocus = useCallback(() => {
+    isEditingRef.current = true;
+    onInputFocus();
+  }, [onInputFocus]);
+
+  const handleLocalInputBlur = useCallback(() => {
+    // Small delay to allow any pending updates to complete before allowing sync
+    setTimeout(() => {
+      isEditingRef.current = false;
+    }, 100);
+    onInputBlur();
+  }, [onInputBlur]);
 
   const handlePlannedKgChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -1033,8 +1078,8 @@ function BatchRow({
               className="w-16 h-7 text-sm px-2"
               value={plannedKg}
               onChange={handlePlannedKgChange}
-              onFocus={onInputFocus}
-              onBlur={onInputBlur}
+              onFocus={handleLocalInputFocus}
+              onBlur={handleLocalInputBlur}
               disabled={isUpdating}
             />
             <span className="text-xs text-muted-foreground">kg</span>
@@ -1066,8 +1111,8 @@ function BatchRow({
               className="w-16 h-7 text-sm px-2 text-center"
               value={actualKg}
               onChange={handleActualKgChange}
-              onFocus={onInputFocus}
-              onBlur={onInputBlur}
+              onFocus={handleLocalInputFocus}
+              onBlur={handleLocalInputBlur}
               disabled={isUpdating}
             />
             <Button
@@ -1096,8 +1141,8 @@ function BatchRow({
           >
             <SelectTrigger 
               className={`h-7 w-24 text-xs ${getRoasterBadgeColor(batch.assigned_roaster)}`}
-              onFocus={onInputFocus}
-              onBlur={onInputBlur}
+              onFocus={handleLocalInputFocus}
+              onBlur={handleLocalInputBlur}
             >
               <SelectValue placeholder="Roaster" />
             </SelectTrigger>
@@ -1116,8 +1161,8 @@ function BatchRow({
               className="w-20 h-7 text-sm px-2"
               value={cropsterId}
               onChange={handleCropsterIdChange}
-              onFocus={onInputFocus}
-              onBlur={onInputBlur}
+              onFocus={handleLocalInputFocus}
+              onBlur={handleLocalInputBlur}
               placeholder="—"
               disabled={isUpdating}
             />
@@ -1131,8 +1176,8 @@ function BatchRow({
               className="h-7 text-sm px-2 flex-1"
               value={notes}
               onChange={handleNotesChange}
-              onFocus={onInputFocus}
-              onBlur={onInputBlur}
+              onFocus={handleLocalInputFocus}
+              onBlur={handleLocalInputBlur}
               placeholder="—"
               disabled={isUpdating}
             />
