@@ -25,6 +25,7 @@ import { Flame, Plus, Check, Zap, Clock, Settings, Sparkles, Package, Layers } f
 import { RoastGroupDrawer } from './RoastGroupDrawer';
 import { WipFgAdjustModal } from './WipFgAdjustModal';
 import { PlanBlendBatchesModal } from './PlanBlendBatchesModal';
+import { BlendBatchesModal } from './BlendBatchesModal';
 import {
   DndContext,
   closestCenter,
@@ -123,6 +124,12 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     displayName: string;
     demandKg: number;
     netDemandKg: number;
+  } | null>(null);
+  
+  // Blend execution modal state (for executing the blend after component batches are roasted)
+  const [blendExecuteModal, setBlendExecuteModal] = useState<{
+    roastGroup: string;
+    displayName: string;
   } | null>(null);
   const { data: roastGroupsConfig } = useQuery({
     queryKey: ['roast-groups-config'],
@@ -800,6 +807,10 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                               demandKg: group.total_kg,
                               netDemandKg: group.net_demand_kg,
                             })}
+                            onBlendBatches={() => setBlendExecuteModal({
+                              roastGroup: group.roast_group,
+                              displayName: config?.display_name?.trim() || group.roast_group.replace(/_/g, ' '),
+                            })}
                             components={roastGroupComponents ?? []}
                             roastGroupsLookupMap={roastGroupsLookupMap}
                           />
@@ -1077,6 +1088,17 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
           blendDisplayName={blendPlanModal.displayName}
           blendDemandKg={blendPlanModal.demandKg}
           blendNetDemandKg={blendPlanModal.netDemandKg}
+          today={today}
+        />
+      )}
+      
+      {/* Blend Execution Modal (for actually blending component WIP into blend WIP) */}
+      {blendExecuteModal && (
+        <BlendBatchesModal
+          open={!!blendExecuteModal}
+          onOpenChange={(open) => !open && setBlendExecuteModal(null)}
+          blendRoastGroup={blendExecuteModal.roastGroup}
+          blendDisplayName={blendExecuteModal.displayName}
           today={today}
         />
       )}
