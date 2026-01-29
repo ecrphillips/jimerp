@@ -324,13 +324,13 @@ export function BlendExecuteModal({
   // Check if we can blend
   const canBlend = totalBlendOutput > 0 && proportionCheck.valid && recipeValid;
   
-  // Blend mutation
+  // Blend mutation with idempotency guard
   const blendMutation = useMutation({
     mutationFn: async () => {
       if (!canBlend) throw new Error('Cannot blend - check proportions and selections');
       
       const batchIdsToConsume: string[] = [];
-      const transactions: Array<{
+      const componentTransactions: Array<{
         transaction_type: 'ADJUSTMENT';
         roast_group: string;
         quantity_kg: number;
@@ -339,7 +339,7 @@ export function BlendExecuteModal({
         notes: string;
       }> = [];
       
-      // Decrement each component's WIP (consume from batches)
+      // Collect batch IDs and component decrements
       for (const [batchId, selection] of Object.entries(selectedBatches)) {
         if (selection.consumeKg <= 0) continue;
         
@@ -348,49 +348,55 @@ export function BlendExecuteModal({
         
         batchIdsToConsume.push(batchId);
         
-        transactions.push({
+        // Note: Component decrements are recorded for audit but NOT used for WIP calc
+        // since component batches are NOT in WIP (they're "staged_for_blend")
+        componentTransactions.push({
           transaction_type: 'ADJUSTMENT',
           roast_group: batch.roast_group,
-          quantity_kg: -selection.consumeKg, // Negative = decrement
+          quantity_kg: -selection.consumeKg, // Negative = decrement component staging
           is_system_generated: true,
           created_by: user?.id,
           notes: `Blended into ${blendDisplayName} (batch ${batchId.slice(0, 8)})`,
         });
       }
       
-      // Increment the blend's WIP
-      transactions.push({
-        transaction_type: 'ADJUSTMENT',
-        roast_group: blendRoastGroup,
-        quantity_kg: totalBlendOutput, // Positive = increment
-        is_system_generated: true,
-        created_by: user?.id,
-        notes: `Created blend from ${batchIdsToConsume.length} component batches`,
-      });
-      
-      // Step 1: Mark selected batches as consumed (prevents double-consumption)
-      // Use a WHERE clause to ensure we only consume batches that haven't been consumed yet
+      // Step 1: Atomically mark selected batches as consumed
+      // This is the idempotency guard - if any batch is already consumed, abort
       const now = new Date().toISOString();
       const { error: consumeError, data: consumedData } = await supabase
         .from('roasted_batches')
         .update({ consumed_by_blend_at: now })
         .in('id', batchIdsToConsume)
-        .is('consumed_by_blend_at', null)  // Only update if not already consumed
+        .is('consumed_by_blend_at', null)  // CRITICAL: Only update if not already consumed
         .select('id');
       
       if (consumeError) throw consumeError;
       
-      // Verify all batches were consumed (no race condition)
+      // Verify ALL batches were consumed (no partial success = no race condition)
       if (!consumedData || consumedData.length !== batchIdsToConsume.length) {
         const consumedIds = new Set(consumedData?.map(b => b.id) ?? []);
         const failedIds = batchIdsToConsume.filter(id => !consumedIds.has(id));
-        throw new Error(`Some batches were already consumed by another blend: ${failedIds.map(id => id.slice(0, 8)).join(', ')}`);
+        throw new Error(
+          `Blend aborted: ${failedIds.length} batch(es) were already consumed by another blend. ` +
+          `Please refresh and try again.`
+        );
       }
       
-      // Step 2: Insert inventory transactions
+      // Step 2: Create the blend output transaction (this is what adds to WIP)
+      const blendTransaction = {
+        transaction_type: 'ADJUSTMENT' as const,
+        roast_group: blendRoastGroup,
+        quantity_kg: totalBlendOutput, // Positive = increment parent blend WIP
+        is_system_generated: true,
+        created_by: user?.id,
+        notes: `Created blend from ${batchIdsToConsume.length} component batches`,
+      };
+      
+      // Insert ONLY the blend output transaction
+      // (Component decrements are NOT inserted since components aren't in WIP)
       const { error: txError } = await supabase
         .from('inventory_transactions')
-        .insert(transactions);
+        .insert([blendTransaction]);
       
       if (txError) {
         // Rollback: un-consume the batches if transaction insert failed
