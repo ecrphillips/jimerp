@@ -420,9 +420,13 @@ export function RoastGroupDrawer({
     },
     onSuccess: () => {
       toast.success('Batch marked as roasted');
+      // Invalidate all relevant queries for immediate UI update
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
       // Refresh frozen batch order to reflect new status positions
       refreshFrozenBatches();
     },
@@ -475,9 +479,13 @@ export function RoastGroupDrawer({
           ? `Batch reverted to planned (${batchDetails})`
           : 'Batch reverted to planned'
       );
+      // Invalidate all relevant queries for immediate UI update
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
       setUndoConfirmBatchId(null);
       // Refresh frozen batch order to reflect new status positions
       refreshFrozenBatches();
@@ -539,9 +547,13 @@ export function RoastGroupDrawer({
     },
     onSuccess: () => {
       toast.success('Batch marked as roasted with loss recorded');
+      // Invalidate all relevant queries for immediate UI update
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
       refreshFrozenBatches();
     },
     onError: (err) => {
