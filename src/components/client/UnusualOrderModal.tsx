@@ -9,15 +9,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
+import { GramPackagingBadge } from '@/components/GramPackagingBadge';
 
 export interface FlaggedItem {
   productName: string;
-  packagingVariant: PackagingVariant | null;
+  packagingTypeName: string | null;
+  gramsPerUnit: number | null;
   lastQty: number;
   currentQty: number;
   multiplier: number;
-  baselineLabel: string; // "last order", "typical for RETAIL_250G", "large absolute quantity"
+  baselineLabel: string; // "last order", "typical for Retail Bag", "large absolute quantity"
 }
 
 interface UnusualOrderModalProps {
@@ -58,7 +59,10 @@ export function UnusualOrderModal({
                     {flaggedItems.map((item, i) => (
                       <li key={i} className="border-b pb-2">
                         <div className="flex items-center gap-2 mb-1">
-                          <PackagingBadge variant={item.packagingVariant} />
+                          <GramPackagingBadge 
+                            packagingTypeName={item.packagingTypeName} 
+                            gramsPerUnit={item.gramsPerUnit} 
+                          />
                           <span className="font-medium truncate">{item.productName}</span>
                         </div>
                         <div className="flex justify-between text-muted-foreground">

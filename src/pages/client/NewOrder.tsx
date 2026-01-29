@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Plus, Minus, Trash2, Package } from 'lucide-react';
-import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
+import { GramPackagingBadge, formatGramsLabel } from '@/components/GramPackagingBadge';
 import { UnusualOrderModal, type FlaggedItem } from '@/components/client/UnusualOrderModal';
 import { LocationSelect } from '@/components/orders/LocationSelect';
 import { CaseQuantityInput } from '@/components/orders/CaseQuantityInput';
@@ -23,11 +23,13 @@ import type { GrindOption, DeliveryMethod } from '@/types/database';
 interface LineItem {
   productId: string;
   productName: string;
+  displayName: string;
   quantity: number;
   grind: GrindOption | null;
   grindOptions: GrindOption[];
   price: number | null;
-  packagingVariant: PackagingVariant | null;
+  packagingTypeName: string | null;
+  gramsPerUnit: number | null;
 }
 
 interface Product {
@@ -35,10 +37,21 @@ interface Product {
   product_name: string;
   sku: string | null;
   bag_size_g: number;
+  grams_per_unit: number | null;
   format: string;
   grind_options: GrindOption[];
   is_perennial: boolean;
-  packaging_variant: PackagingVariant | null;
+  packaging_type_id: string | null;
+  packaging_types: { name: string } | null;
+}
+
+// Helper to build display name with packaging info
+function buildDisplayName(productName: string, packagingTypeName: string | null, gramsPerUnit: number | null): string {
+  if (!packagingTypeName || !gramsPerUnit) {
+    return productName;
+  }
+  const sizeLabel = formatGramsLabel(gramsPerUnit);
+  return `${productName} — ${packagingTypeName} (${sizeLabel})`;
 }
 
 export default function NewOrder() {
@@ -48,7 +61,6 @@ export default function NewOrder() {
 
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string>('');
-  // Ship preference: 'SOONEST' or 'SPECIFIC'
   const [shipPreference, setShipPreference] = useState<'SOONEST' | 'SPECIFIC'>('SOONEST');
   const [requestedShipDate, setRequestedShipDate] = useState('');
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('PICKUP');
@@ -56,14 +68,12 @@ export default function NewOrder() {
   const [clientNotes, setClientNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Calculate minimum date for specific date option (today + 3 days)
   const minSpecificDate = useMemo(() => {
     const date = new Date();
     date.setDate(date.getDate() + 3);
     return date.toISOString().split('T')[0];
   }, []);
 
-  // Unusual order modal state
   const [showUnusualModal, setShowUnusualModal] = useState(false);
   const [flaggedItems, setFlaggedItems] = useState<FlaggedItem[]>([]);
   const [totalFlag, setTotalFlag] = useState<{
@@ -72,20 +82,18 @@ export default function NewOrder() {
     multiplier: number;
   } | null>(null);
 
-  // Fetch client ordering constraints (case_only, allowed products)
   const { constraints, isLoading: constraintsLoading } = useClientOrderingConstraints(authUser?.clientId);
 
-  // Fetch allowed products for this client if restricted
+  // Fetch allowed products with packaging type join
   const { data: products, isLoading: productsLoading } = useQuery({
     queryKey: ['client-products', authUser?.clientId, constraints.allowedProductIds],
     queryFn: async () => {
       let query = supabase
         .from('products')
-        .select('id, product_name, sku, bag_size_g, format, grind_options, is_perennial, packaging_variant')
+        .select('id, product_name, sku, bag_size_g, grams_per_unit, format, grind_options, is_perennial, packaging_type_id, packaging_types(name)')
         .eq('is_active', true)
         .order('product_name', { ascending: true });
 
-      // If client has allowed products restriction, filter to those only
       if (constraints.allowedProductIds && constraints.allowedProductIds.length > 0) {
         query = query.in('id', constraints.allowedProductIds);
       }
@@ -97,7 +105,6 @@ export default function NewOrder() {
     enabled: !constraintsLoading,
   });
 
-  // Fetch current prices for all products
   const { data: prices } = useQuery({
     queryKey: ['client-prices'],
     queryFn: async () => {
@@ -108,7 +115,6 @@ export default function NewOrder() {
 
       if (error) throw error;
 
-      // Build map of product_id -> latest price
       const priceMap: Record<string, number> = {};
       for (const p of data ?? []) {
         if (!priceMap[p.product_id]) {
@@ -119,21 +125,50 @@ export default function NewOrder() {
     },
   });
 
-  // Group products by perennial status
-  const { perennialProducts, seasonalProducts } = useMemo(() => {
+  // Group products by base product name, then by packaging variant
+  const { groupedProducts, perennialProducts, seasonalProducts } = useMemo(() => {
     const perennial: Product[] = [];
     const seasonal: Product[] = [];
+    const grouped: Map<string, Product[]> = new Map();
+
     for (const p of products ?? []) {
+      // Group by base product name
+      const baseName = p.product_name;
+      if (!grouped.has(baseName)) {
+        grouped.set(baseName, []);
+      }
+      grouped.get(baseName)!.push(p);
+
+      // Also sort by perennial/seasonal
       if (p.is_perennial) {
         perennial.push(p);
       } else {
         seasonal.push(p);
       }
     }
-    return { perennialProducts: perennial, seasonalProducts: seasonal };
+
+    return { groupedProducts: grouped, perennialProducts: perennial, seasonalProducts: seasonal };
   }, [products]);
 
   const getLineItem = (productId: string) => lineItems.find((li) => li.productId === productId);
+
+  const createLineItem = (product: Product, qty: number): LineItem => {
+    const grindOpts = (product.grind_options ?? []) as GrindOption[];
+    const packagingTypeName = product.packaging_types?.name ?? null;
+    const gramsPerUnit = product.grams_per_unit;
+    
+    return {
+      productId: product.id,
+      productName: product.product_name,
+      displayName: buildDisplayName(product.product_name, packagingTypeName, gramsPerUnit),
+      quantity: qty,
+      grind: grindOpts.length > 0 ? grindOpts[0] : null,
+      grindOptions: grindOpts,
+      price: prices?.[product.id] ?? null,
+      packagingTypeName,
+      gramsPerUnit,
+    };
+  };
 
   const addOrIncrementProduct = (productId: string) => {
     const existing = getLineItem(productId);
@@ -147,21 +182,8 @@ export default function NewOrder() {
     const product = products?.find((p) => p.id === productId);
     if (!product) return;
 
-    const grindOpts = (product.grind_options ?? []) as GrindOption[];
     const initialQty = constraints.caseOnly && constraints.caseSize ? constraints.caseSize : 1;
-    
-    setLineItems([
-      ...lineItems,
-      {
-        productId: product.id,
-        productName: product.product_name,
-        quantity: initialQty,
-        grind: grindOpts.length > 0 ? grindOpts[0] : null,
-        grindOptions: grindOpts,
-        price: prices?.[product.id] ?? null,
-        packagingVariant: product.packaging_variant,
-      },
-    ]);
+    setLineItems([...lineItems, createLineItem(product, initialQty)]);
   };
 
   const updateQuantity = (productId: string, qty: number) => {
@@ -188,12 +210,10 @@ export default function NewOrder() {
     return lineItems.reduce((sum, li) => sum + (li.price ?? 0) * li.quantity, 0);
   }, [lineItems]);
 
-  // Check for unusual order size against last order + packaging baseline
   const checkUnusualOrderSize = async (): Promise<boolean> => {
     if (!authUser?.clientId) return false;
 
     try {
-      // Fetch most recent prior order (not CANCELLED or DRAFT)
       const { data: lastOrder } = await supabase
         .from('orders')
         .select('id, order_line_items(product_id, quantity_units)')
@@ -203,7 +223,6 @@ export default function NewOrder() {
         .limit(1)
         .maybeSingle();
 
-      // Fetch recent orders (last 5) for packaging baseline
       const { data: recentOrders } = await supabase
         .from('orders')
         .select('id')
@@ -212,26 +231,23 @@ export default function NewOrder() {
         .order('created_at', { ascending: false })
         .limit(5);
 
-      // Fetch line items from recent orders with product packaging info
       let packagingBaselines: Record<string, number[]> = {};
       if (recentOrders && recentOrders.length > 0) {
         const orderIds = recentOrders.map((o) => o.id);
         const { data: recentLineItems } = await supabase
           .from('order_line_items')
-          .select('product_id, quantity_units, products(packaging_variant)')
+          .select('product_id, quantity_units, products(packaging_types(name), grams_per_unit)')
           .in('order_id', orderIds);
 
-        // Group quantities by packaging_variant
         for (const li of recentLineItems ?? []) {
-          const variant = (li.products as { packaging_variant: string } | null)?.packaging_variant;
-          if (variant) {
-            if (!packagingBaselines[variant]) packagingBaselines[variant] = [];
-            packagingBaselines[variant].push(li.quantity_units);
+          const typeName = (li.products as { packaging_types: { name: string } | null } | null)?.packaging_types?.name;
+          if (typeName) {
+            if (!packagingBaselines[typeName]) packagingBaselines[typeName] = [];
+            packagingBaselines[typeName].push(li.quantity_units);
           }
         }
       }
 
-      // Helper to compute median
       const median = (arr: number[]): number => {
         if (arr.length === 0) return 0;
         const sorted = [...arr].sort((a, b) => a - b);
@@ -239,7 +255,6 @@ export default function NewOrder() {
         return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
       };
 
-      // Build map of product_id -> last quantity
       const lastQtyMap: Record<string, number> = {};
       let lastTotalUnits = 0;
       if (lastOrder?.order_line_items) {
@@ -249,47 +264,42 @@ export default function NewOrder() {
         }
       }
 
-      // Calculate current totals
       const currentTotalUnits = lineItems.reduce((sum, li) => sum + li.quantity, 0);
 
-      // Check per-product thresholds
       const flagged: FlaggedItem[] = [];
       for (const li of lineItems) {
         const lastQty = lastQtyMap[li.productId] || 0;
 
-        // Rule A: If last_qty > 0: flag if draft_qty >= 10 × last_qty AND draft_qty >= 10
         if (lastQty > 0 && li.quantity >= 10 && li.quantity >= lastQty * 10) {
           flagged.push({
             productName: li.productName,
-            packagingVariant: li.packagingVariant,
+            packagingTypeName: li.packagingTypeName,
+            gramsPerUnit: li.gramsPerUnit,
             lastQty,
             currentQty: li.quantity,
             multiplier: li.quantity / lastQty,
             baselineLabel: 'last order',
           });
-        }
-        // Rule B: If last_qty is 0 or missing
-        else if (lastQty === 0) {
-          const variant = li.packagingVariant;
-          const baselineQtys = variant ? packagingBaselines[variant] : undefined;
+        } else if (lastQty === 0) {
+          const typeName = li.packagingTypeName;
+          const baselineQtys = typeName ? packagingBaselines[typeName] : undefined;
           const baselineQty = baselineQtys ? median(baselineQtys) : 0;
 
-          // B1: If packaging baseline exists: flag if draft_qty >= 3 × baseline AND draft_qty >= 10
           if (baselineQty > 0 && li.quantity >= 10 && li.quantity >= baselineQty * 3) {
             flagged.push({
               productName: li.productName,
-              packagingVariant: li.packagingVariant,
+              packagingTypeName: li.packagingTypeName,
+              gramsPerUnit: li.gramsPerUnit,
               lastQty: Math.round(baselineQty),
               currentQty: li.quantity,
               multiplier: li.quantity / baselineQty,
-              baselineLabel: `typical for ${variant?.replace('_', ' ')}`,
+              baselineLabel: `typical for ${typeName}`,
             });
-          }
-          // B2: No baseline - absolute guardrail: flag if draft_qty >= 50
-          else if (baselineQty === 0 && li.quantity >= 50) {
+          } else if (baselineQty === 0 && li.quantity >= 50) {
             flagged.push({
               productName: li.productName,
-              packagingVariant: li.packagingVariant,
+              packagingTypeName: li.packagingTypeName,
+              gramsPerUnit: li.gramsPerUnit,
               lastQty: 0,
               currentQty: li.quantity,
               multiplier: li.quantity,
@@ -299,7 +309,6 @@ export default function NewOrder() {
         }
       }
 
-      // Check total threshold: total draft >= 5 × last total AND total draft >= 50 AND last total > 0
       let totalFlagData: { lastTotal: number; currentTotal: number; multiplier: number } | null = null;
       if (lastTotalUnits > 0 && currentTotalUnits >= 50 && currentTotalUnits >= lastTotalUnits * 5) {
         totalFlagData = {
@@ -332,26 +341,23 @@ export default function NewOrder() {
       return;
     }
 
-    // Check all items have prices (null means no price_list row; 0 is valid)
     const missingPrice = lineItems.find((li) => li.price === null);
     if (missingPrice) {
-      toast.error(`"${missingPrice.productName}" has no price set. Ask ops to set a price.`);
+      toast.error(`"${missingPrice.displayName}" has no price set. Ask ops to set a price.`);
       return;
     }
 
-    // Validate case quantity constraints (client-side)
     if (constraints.caseOnly && constraints.caseSize) {
       const invalidItem = lineItems.find((li) => {
         const error = validateCaseQuantity(li.quantity, constraints.caseOnly, constraints.caseSize);
         return error !== null;
       });
       if (invalidItem) {
-        toast.error(`"${invalidItem.productName}" quantity must be a multiple of ${constraints.caseSize} (case size).`);
+        toast.error(`"${invalidItem.displayName}" quantity must be a multiple of ${constraints.caseSize} (case size).`);
         return;
       }
     }
 
-    // Check for unusual order size
     const isUnusual = await checkUnusualOrderSize();
     if (isUnusual) {
       setShowUnusualModal(true);
@@ -366,7 +372,6 @@ export default function NewOrder() {
 
     setSubmitting(true);
     try {
-      // Server-side validation of constraints
       const { data: validationResult, error: validationError } = await supabase.functions.invoke(
         'validate-order-constraints',
         {
@@ -395,14 +400,12 @@ export default function NewOrder() {
         return;
       }
 
-      // Create order (order_number is auto-generated by DB trigger)
-      // For 'SOONEST', we send null/empty and let Ops set the real date
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
           client_id: authUser.clientId,
           location_id: selectedLocationId || null,
-          order_number: '', // Trigger will replace with auto-generated value
+          order_number: '',
           status: 'SUBMITTED',
           requested_ship_date: shipPreference === 'SPECIFIC' && requestedShipDate ? requestedShipDate : null,
           delivery_method: deliveryMethod,
@@ -417,7 +420,6 @@ export default function NewOrder() {
 
       if (orderError) throw orderError;
 
-      // Create line items
       const lineItemsData = lineItems.map((li) => ({
         order_id: order.id,
         product_id: li.productId,
@@ -429,7 +431,6 @@ export default function NewOrder() {
       const { error: lineError } = await supabase.from('order_line_items').insert(lineItemsData);
       if (lineError) throw lineError;
 
-      // Trigger notification email (fire-and-forget, don't block submission)
       supabase.functions.invoke('notify-new-order', {
         body: { order_id: order.id },
       }).then(({ data, error }) => {
@@ -458,44 +459,32 @@ export default function NewOrder() {
     await submitOrder();
   };
 
-  // Handle quantity input change (typing)
   const handleQuantityInputChange = (productId: string, value: string) => {
-    // Remove non-numeric characters
     const numericValue = value.replace(/[^0-9]/g, '');
     const qty = numericValue === '' ? 0 : parseInt(numericValue, 10);
 
     if (qty <= 0) {
       removeLine(productId);
     } else {
-      // If product not in line items yet, add it first
       const existing = getLineItem(productId);
       if (!existing) {
         const product = products?.find((p) => p.id === productId);
         if (!product) return;
-        const grindOpts = (product.grind_options ?? []) as GrindOption[];
-        setLineItems([
-          ...lineItems,
-          {
-            productId: product.id,
-            productName: product.product_name,
-            quantity: qty,
-            grind: grindOpts.length > 0 ? grindOpts[0] : null,
-            grindOptions: grindOpts,
-            price: prices?.[product.id] ?? null,
-            packagingVariant: product.packaging_variant,
-          },
-        ]);
+        setLineItems([...lineItems, createLineItem(product, qty)]);
       } else {
         updateQuantity(productId, qty);
       }
     }
   };
 
+  // Render a single product SKU row
   const renderProductRow = (p: Product) => {
     const lineItem = getLineItem(p.id);
     const hasPrice = prices && p.id in prices;
     const price = prices?.[p.id];
     const isCaseOnly = constraints.caseOnly && constraints.caseSize;
+    const packagingTypeName = p.packaging_types?.name ?? null;
+    const gramsPerUnit = p.grams_per_unit;
 
     const handleQuantityChange = (qty: number) => {
       if (qty <= 0) {
@@ -504,21 +493,7 @@ export default function NewOrder() {
       }
       const existing = getLineItem(p.id);
       if (!existing) {
-        const product = products?.find((prod) => prod.id === p.id);
-        if (!product) return;
-        const grindOpts = (product.grind_options ?? []) as GrindOption[];
-        setLineItems([
-          ...lineItems,
-          {
-            productId: product.id,
-            productName: product.product_name,
-            quantity: qty,
-            grind: grindOpts.length > 0 ? grindOpts[0] : null,
-            grindOptions: grindOpts,
-            price: prices?.[product.id] ?? null,
-            packagingVariant: product.packaging_variant,
-          },
-        ]);
+        setLineItems([...lineItems, createLineItem(p, qty)]);
       } else {
         updateQuantity(p.id, qty);
       }
@@ -528,7 +503,7 @@ export default function NewOrder() {
       <li key={p.id} className="flex items-center justify-between py-2 border-b last:border-0">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className="font-medium truncate">{p.product_name}</span>
-          <PackagingBadge variant={p.packaging_variant} />
+          <GramPackagingBadge packagingTypeName={packagingTypeName} gramsPerUnit={gramsPerUnit} />
           {hasPrice ? (
             <span className="text-sm text-muted-foreground">${price!.toFixed(2)}</span>
           ) : (
@@ -576,6 +551,111 @@ export default function NewOrder() {
     );
   };
 
+  // Render product group (base product name as header, variants underneath)
+  const renderProductGroup = (baseName: string, variants: Product[]) => {
+    if (variants.length === 1) {
+      // Single variant - no grouping needed
+      return renderProductRow(variants[0]);
+    }
+
+    // Multiple variants - show as grouped section
+    return (
+      <div key={baseName} className="mb-3">
+        <p className="text-sm font-semibold text-foreground mb-1 pl-1">{baseName}</p>
+        <ul className="pl-2 border-l-2 border-muted">
+          {variants.map((variant) => {
+            const lineItem = getLineItem(variant.id);
+            const hasPrice = prices && variant.id in prices;
+            const price = prices?.[variant.id];
+            const isCaseOnly = constraints.caseOnly && constraints.caseSize;
+            const packagingTypeName = variant.packaging_types?.name ?? null;
+            const gramsPerUnit = variant.grams_per_unit;
+
+            const handleQuantityChange = (qty: number) => {
+              if (qty <= 0) {
+                removeLine(variant.id);
+                return;
+              }
+              const existing = getLineItem(variant.id);
+              if (!existing) {
+                setLineItems([...lineItems, createLineItem(variant, qty)]);
+              } else {
+                updateQuantity(variant.id, qty);
+              }
+            };
+
+            return (
+              <li key={variant.id} className="flex items-center justify-between py-1.5 border-b last:border-0">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <GramPackagingBadge packagingTypeName={packagingTypeName} gramsPerUnit={gramsPerUnit} />
+                  {hasPrice ? (
+                    <span className="text-sm text-muted-foreground">${price!.toFixed(2)}</span>
+                  ) : (
+                    <span className="text-xs text-destructive">No price</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {isCaseOnly ? (
+                    <CaseQuantityInput
+                      value={lineItem?.quantity ?? 0}
+                      onChange={handleQuantityChange}
+                      caseSize={constraints.caseSize!}
+                    />
+                  ) : (
+                    <>
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-7 w-7"
+                        onClick={() => updateQuantity(variant.id, (lineItem?.quantity ?? 0) - 1)}
+                        disabled={!lineItem}
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        className="w-14 h-7 text-center text-sm px-1"
+                        value={lineItem?.quantity ?? ''}
+                        placeholder="0"
+                        onChange={(e) => handleQuantityInputChange(variant.id, e.target.value)}
+                      />
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-7 w-7"
+                        onClick={() => addOrIncrementProduct(variant.id)}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  };
+
+  // Render products grouped by base name
+  const renderProductsGrouped = (productsList: Product[]) => {
+    // Group by base product name
+    const grouped: Map<string, Product[]> = new Map();
+    for (const p of productsList) {
+      if (!grouped.has(p.product_name)) {
+        grouped.set(p.product_name, []);
+      }
+      grouped.get(p.product_name)!.push(p);
+    }
+
+    // Sort groups alphabetically
+    const sortedGroups = Array.from(grouped.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+    return sortedGroups.map(([baseName, variants]) => renderProductGroup(baseName, variants));
+  };
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -589,7 +669,6 @@ export default function NewOrder() {
             <CardTitle>Products</CardTitle>
           </CardHeader>
           <CardContent>
-            {/* Case-only ordering notice */}
             {constraints.caseOnly && constraints.caseSize && (
               <Alert className="mb-4">
                 <Package className="h-4 w-4" />
@@ -611,7 +690,7 @@ export default function NewOrder() {
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                       Perennial
                     </p>
-                    <ul>{perennialProducts.map(renderProductRow)}</ul>
+                    <div>{renderProductsGrouped(perennialProducts)}</div>
                   </div>
                 )}
                 {perennialProducts.length > 0 && seasonalProducts.length > 0 && (
@@ -622,7 +701,7 @@ export default function NewOrder() {
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                       Seasonal
                     </p>
-                    <ul>{seasonalProducts.map(renderProductRow)}</ul>
+                    <div>{renderProductsGrouped(seasonalProducts)}</div>
                   </div>
                 )}
               </div>
@@ -644,9 +723,12 @@ export default function NewOrder() {
                   {lineItems.map((li) => (
                     <li key={li.productId} className="flex items-start justify-between gap-2 text-sm border-b pb-3 last:border-0">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium truncate">{li.productName}</span>
-                          <PackagingBadge variant={li.packagingVariant} />
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium">{li.productName}</span>
+                          <GramPackagingBadge 
+                            packagingTypeName={li.packagingTypeName} 
+                            gramsPerUnit={li.gramsPerUnit} 
+                          />
                         </div>
                         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                           {constraints.caseOnly && constraints.caseSize ? (
@@ -733,7 +815,6 @@ export default function NewOrder() {
               <CardTitle>Order Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Location Selection (if client has locations) */}
               {authUser?.clientId && (
                 <LocationSelect
                   clientId={authUser.clientId}
@@ -742,7 +823,6 @@ export default function NewOrder() {
                   required
                 />
               )}
-              {/* Ship Timing Preference */}
               <div className="space-y-2">
                 <Label>When do you need this order?</Label>
                 <div className="flex gap-2">
