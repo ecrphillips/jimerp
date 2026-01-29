@@ -1,10 +1,28 @@
 import React, { useMemo } from 'react';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { formatGramsSuffix, type PackagingVariantEntry } from './PackagingVariantsSection';
+import { 
+  buildSku, 
+  generateFgNameCode, 
+  getOriginCode,
+  formatGramsSuffix as formatGrams 
+} from '@/lib/skuGenerator';
 
 interface GramBasedSkuPreviewProps {
   clientCode: string;
-  productCode: string;
+  /**
+   * For single origin: the origin name (e.g., "Colombia")
+   * For blends: pass "BLD" or undefined
+   */
+  origin?: string;
+  /**
+   * Whether this is a blend product
+   */
+  isBlend?: boolean;
+  /**
+   * The user-entered finished good name (just the suffix, e.g., "Hermanos")
+   */
+  fgNameSuffix: string;
   variants: PackagingVariantEntry[];
   existingSkus: Set<string>;
 }
@@ -48,12 +66,20 @@ function resolveSkuCollision(
 
 export function GramBasedSkuPreview({
   clientCode,
-  productCode,
+  origin,
+  isBlend = false,
+  fgNameSuffix,
   variants,
   existingSkus,
 }: GramBasedSkuPreviewProps) {
   const resolvedSkus = useMemo(() => {
-    if (!clientCode || !productCode || variants.length === 0) return [];
+    if (!clientCode || !fgNameSuffix || variants.length === 0) return [];
+
+    // Determine origin code: ISO alpha-3 for single origin, 'BLD' for blends
+    const originCode = isBlend ? 'BLD' : (origin ? getOriginCode(origin) : 'XXX');
+    
+    // Generate 5-char FG name code
+    const { code: fgNameCode } = generateFgNameCode(fgNameSuffix);
 
     const batchSkus = new Set<string>();
     const results: SkuPreviewItem[] = [];
@@ -61,9 +87,14 @@ export function GramBasedSkuPreview({
     for (const variant of variants) {
       if (variant.grams <= 0) continue;
 
-      // SKU format: {CLIENT_CODE}-{PRODUCT_CODE}-{5-DIGIT-GRAMS}
-      const gramsSuffix = formatGramsSuffix(variant.grams);
-      const baseSku = `${clientCode}-${productCode}-${gramsSuffix}`;
+      // SKU format: {CLIENT3}-{ORIGIN3orBLD}-{FGNAME5}-{GRAMS5}
+      const gramsSuffix = formatGrams(variant.grams);
+      const baseSku = buildSku({
+        clientCode,
+        originCode,
+        fgNameCode,
+        gramsSuffix,
+      });
 
       const { finalSku, wasAdjusted } = resolveSkuCollision(
         baseSku,
@@ -83,7 +114,7 @@ export function GramBasedSkuPreview({
     }
 
     return results;
-  }, [clientCode, productCode, variants, existingSkus]);
+  }, [clientCode, origin, isBlend, fgNameSuffix, variants, existingSkus]);
 
   const hasAdjustments = resolvedSkus.some((s) => s.wasAdjusted);
 
@@ -97,7 +128,7 @@ export function GramBasedSkuPreview({
     );
   }
 
-  if (!clientCode || !productCode) {
+  if (!clientCode || !fgNameSuffix) {
     return (
       <div className="mt-4 p-4 border border-dashed rounded-lg bg-muted/20">
         <p className="text-sm text-muted-foreground text-center">
@@ -147,9 +178,13 @@ export function GramBasedSkuPreview({
       </div>
 
       <p className="text-xs text-muted-foreground pt-2 border-t">
-        SKU format: <code className="bg-muted px-1 rounded">{'{CLIENT}'}-{'{PRODUCT}'}-{'{GRAMS}'}</code>
+        SKU format: <code className="bg-muted px-1 rounded">{'{CLIENT}'}-{'{ORIGIN/BLD}'}-{'{NAME}'}-{'{GRAMS}'}</code>
         <br />
-        Grams are zero-padded to 5 digits (e.g., 340g → 00340)
+        {isBlend ? (
+          <span>BLD = Blend • Name = first 5 letters • Grams zero-padded to 5 digits</span>
+        ) : (
+          <span>Origin = ISO 3166-1 alpha-3 • Name = first 5 letters • Grams zero-padded to 5 digits</span>
+        )}
       </p>
     </div>
   );
@@ -160,7 +195,9 @@ export function GramBasedSkuPreview({
  */
 export function getResolvedSkus(
   clientCode: string,
-  productCode: string,
+  origin: string | undefined,
+  isBlend: boolean,
+  fgNameSuffix: string,
   variants: PackagingVariantEntry[],
   existingSkus: Set<string>
 ): Array<{
@@ -170,7 +207,13 @@ export function getResolvedSkus(
   sku: string;
   wasAdjusted: boolean;
 }> {
-  if (!clientCode || !productCode || variants.length === 0) return [];
+  if (!clientCode || !fgNameSuffix || variants.length === 0) return [];
+
+  // Determine origin code
+  const originCode = isBlend ? 'BLD' : (origin ? getOriginCode(origin) : 'XXX');
+  
+  // Generate 5-char FG name code
+  const { code: fgNameCode } = generateFgNameCode(fgNameSuffix);
 
   const batchSkus = new Set<string>();
   const results: Array<{
@@ -184,8 +227,13 @@ export function getResolvedSkus(
   for (const variant of variants) {
     if (variant.grams <= 0) continue;
 
-    const gramsSuffix = formatGramsSuffix(variant.grams);
-    const baseSku = `${clientCode}-${productCode}-${gramsSuffix}`;
+    const gramsSuffix = formatGrams(variant.grams);
+    const baseSku = buildSku({
+      clientCode,
+      originCode,
+      fgNameCode,
+      gramsSuffix,
+    });
 
     const { finalSku, wasAdjusted } = resolveSkuCollision(
       baseSku,
@@ -205,3 +253,16 @@ export function getResolvedSkus(
 
   return results;
 }
+
+/**
+ * Resolves SKU collisions - exported for use in modals
+ */
+function resolveSkuCollisionExport(
+  baseSku: string,
+  existingSkus: Set<string>,
+  batchSkus: Set<string>
+): { finalSku: string; wasAdjusted: boolean } {
+  return resolveSkuCollision(baseSku, existingSkus, batchSkus);
+}
+
+export { resolveSkuCollisionExport as resolveSkuCollision };

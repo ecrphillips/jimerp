@@ -2,124 +2,161 @@
 
 export interface SkuComponents {
   clientCode: string;
-  roastGroupCode: string;
-  productCode: string;
-  variantCode: string;
+  originCode: string; // ISO 3166-1 alpha-3 or 'BLD' for blends
+  fgNameCode: string; // 5-char finished good name code
+  gramsSuffix: string; // 5-digit zero-padded grams
 }
 
 /**
- * Generate a product code from the product suffix (e.g., "Hermanos" -> "HER")
- * @param suffix The product suffix text
- * @param existingCodes Set of existing product codes to avoid collisions
- * @returns A unique 3-character product code
+ * ISO 3166-1 alpha-3 country codes for coffee origins
  */
-export function generateProductCode(suffix: string, existingCodes: Set<string> = new Set()): string {
-  // Clean and uppercase the suffix
-  const cleaned = suffix.toUpperCase().replace(/[^A-Z]/g, '');
+export const ORIGIN_TO_ISO3: Record<string, string> = {
+  'Brazil': 'BRA',
+  'Colombia': 'COL',
+  'Costa Rica': 'CRI',
+  'Ecuador': 'ECU',
+  'El Salvador': 'SLV',
+  'Ethiopia': 'ETH',
+  'Guatemala': 'GTM',
+  'Honduras': 'HND',
+  'Indonesia': 'IDN',
+  'Kenya': 'KEN',
+  'Mexico': 'MEX',
+  'Nicaragua': 'NIC',
+  'Panama': 'PAN',
+  'Peru': 'PER',
+  'Rwanda': 'RWA',
+  'Sumatra': 'IDN', // Sumatra is Indonesia
+  'Tanzania': 'TZA',
+  'Uganda': 'UGA',
+  'Vietnam': 'VNM',
+  'Yemen': 'YEM',
+  'Bolivia': 'BOL',
+  'Burundi': 'BDI',
+  'Cameroon': 'CMR',
+  'China': 'CHN',
+  'Congo': 'COD',
+  'Cuba': 'CUB',
+  'Dominican Republic': 'DOM',
+  'Haiti': 'HTI',
+  'India': 'IND',
+  'Jamaica': 'JAM',
+  'Laos': 'LAO',
+  'Malawi': 'MWI',
+  'Myanmar': 'MMR',
+  'Nepal': 'NPL',
+  'Papua New Guinea': 'PNG',
+  'Philippines': 'PHL',
+  'Thailand': 'THA',
+  'Timor-Leste': 'TLS',
+  'Venezuela': 'VEN',
+  'Zambia': 'ZMB',
+  'Zimbabwe': 'ZWE',
+};
+
+/**
+ * Get ISO 3166-1 alpha-3 code for an origin
+ * Returns first 3 letters uppercased if not found in mapping
+ */
+export function getOriginCode(origin: string): string {
+  const trimmed = origin.trim();
   
-  if (cleaned.length === 0) {
-    return 'XXX';
+  // Check exact match first
+  if (ORIGIN_TO_ISO3[trimmed]) {
+    return ORIGIN_TO_ISO3[trimmed];
   }
   
-  // Try first 3 characters
-  const base = cleaned.substring(0, 3).padEnd(3, 'X');
-  
-  if (!existingCodes.has(base)) {
-    return base;
-  }
-  
-  // Try permutations using different character positions
-  const chars = cleaned.split('');
-  for (let i = 0; i < chars.length && i < 6; i++) {
-    for (let j = i + 1; j < chars.length && j < 6; j++) {
-      for (let k = j + 1; k < chars.length && k < 6; k++) {
-        const code = `${chars[i]}${chars[j]}${chars[k]}`;
-        if (!existingCodes.has(code)) {
-          return code;
-        }
-      }
-    }
-  }
-  
-  // Fallback: append digit
-  for (let n = 2; n <= 99; n++) {
-    const code = `${base.substring(0, 2)}${n}`;
-    if (!existingCodes.has(code)) {
+  // Check case-insensitive
+  const lowerOrigin = trimmed.toLowerCase();
+  for (const [key, code] of Object.entries(ORIGIN_TO_ISO3)) {
+    if (key.toLowerCase() === lowerOrigin) {
       return code;
     }
   }
   
-  // Last resort
-  return `${base.substring(0, 2)}${Date.now() % 100}`;
+  // Fallback: first 3 letters, uppercased
+  const cleaned = trimmed.toUpperCase().replace(/[^A-Z]/g, '');
+  return cleaned.substring(0, 3).padEnd(3, 'X');
 }
 
 /**
- * Generate a roast group code from origin or blend name
- * @param name The origin name or blend name
- * @param isBlend Whether this is a blend
- * @param existingCodes Set of existing roast group codes to avoid collisions
- * @returns A unique 3-6 character roast group code
+ * Generate a 5-character FG name code from the user-entered name
+ * Uses sliding window and padding for collision resolution
  */
-export function generateRoastGroupCode(
-  name: string, 
-  isBlend: boolean,
+export function generateFgNameCode(
+  name: string,
   existingCodes: Set<string> = new Set()
-): string {
+): { code: string; wasAdjusted: boolean } {
   const cleaned = name.toUpperCase().replace(/[^A-Z]/g, '');
   
   if (cleaned.length === 0) {
-    return 'XXX';
+    return { code: 'XXXXX', wasAdjusted: false };
   }
   
-  let base: string;
+  // Pad short names with X
+  const padded = cleaned.padEnd(5, 'X');
   
-  if (isBlend) {
-    // For blends, try initials (e.g., "Medium Dark" -> "MD")
-    const words = name.trim().split(/\s+/);
-    if (words.length >= 2) {
-      base = words.map(w => w[0]?.toUpperCase() ?? '').join('').substring(0, 4);
-    } else {
-      base = cleaned.substring(0, 3);
-    }
-  } else {
-    // For single origin, use first 3 letters
-    base = cleaned.substring(0, 3);
+  // Try first 5 characters
+  const baseCode = padded.substring(0, 5);
+  if (!existingCodes.has(baseCode)) {
+    return { code: baseCode, wasAdjusted: false };
   }
   
-  base = base.padEnd(3, 'X');
-  
-  if (!existingCodes.has(base)) {
-    return base;
-  }
-  
-  // Try appending more characters
-  for (let len = 4; len <= 6; len++) {
-    const extended = cleaned.substring(0, len);
-    if (extended.length >= len && !existingCodes.has(extended)) {
-      return extended;
+  // Try sliding window: letters 2-6, 3-7, etc.
+  for (let start = 1; start <= cleaned.length - 5; start++) {
+    const windowCode = cleaned.substring(start, start + 5);
+    if (windowCode.length === 5 && !existingCodes.has(windowCode)) {
+      return { code: windowCode, wasAdjusted: true };
     }
   }
   
-  // Append digit
-  for (let n = 2; n <= 99; n++) {
-    const code = `${base}${n}`;
-    if (!existingCodes.has(code)) {
-      return code;
+  // Try last 5 characters
+  if (cleaned.length >= 5) {
+    const lastFive = cleaned.substring(cleaned.length - 5);
+    if (!existingCodes.has(lastFive)) {
+      return { code: lastFive, wasAdjusted: true };
     }
   }
   
-  return `${base}${Date.now() % 100}`;
+  // Fallback: replace last char with digit (HERM1, HERM2, etc.)
+  const prefix = baseCode.substring(0, 4);
+  for (let n = 1; n <= 9; n++) {
+    const numericCode = `${prefix}${n}`;
+    if (!existingCodes.has(numericCode)) {
+      return { code: numericCode, wasAdjusted: true };
+    }
+  }
+  
+  // Last resort: replace last 2 chars with digits
+  const shortPrefix = baseCode.substring(0, 3);
+  for (let n = 10; n <= 99; n++) {
+    const numericCode = `${shortPrefix}${n}`;
+    if (!existingCodes.has(numericCode)) {
+      return { code: numericCode, wasAdjusted: true };
+    }
+  }
+  
+  // Absolute fallback
+  return { code: `${shortPrefix}${Date.now() % 100}`.substring(0, 5), wasAdjusted: true };
 }
 
 /**
  * Build a complete SKU from components
+ * Format: {CLIENT3}-{ORIGIN3orBLD}-{FGNAME5}-{GRAMS5}
  */
 export function buildSku(components: SkuComponents): string {
-  return `${components.clientCode}-${components.roastGroupCode}-${components.productCode}-${components.variantCode}`;
+  return `${components.clientCode}-${components.originCode}-${components.fgNameCode}-${components.gramsSuffix}`;
 }
 
 /**
- * Packaging variant configurations
+ * Format grams as 5-digit zero-padded string
+ */
+export function formatGramsSuffix(grams: number): string {
+  return String(grams).padStart(5, '0');
+}
+
+/**
+ * Packaging variant configurations (legacy, kept for reference)
  */
 export const PACKAGING_VARIANTS = [
   { value: 'CAN_125G', label: '125g can', code: '125', bagSizeG: 125 },

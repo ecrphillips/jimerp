@@ -149,12 +149,6 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     [components]
   );
   
-  // Product code for SKU generation
-  const productCode = useMemo(() => {
-    if (!finishedGoodName.trim()) return '';
-    return generateShortCode(finishedGoodName.trim(), 6);
-  }, [finishedGoodName]);
-
   // Valid variants (with grams > 0)
   const validVariants = useMemo(() => 
     packagingVariants.filter(v => v.grams > 0),
@@ -283,10 +277,12 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
         }
       }
       
-      // Get resolved SKUs
+      // Get resolved SKUs - for blends, use 'BLD' as origin
       const resolvedSkus = getResolvedSkus(
         selectedClient.client_code,
-        productCode,
+        undefined, // No origin for blends
+        true, // Is a blend
+        trimmedName, // Use the full FG name for blends
         validVariants,
         existingSkus ?? new Set()
       );
@@ -569,7 +565,8 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
           {/* SKU Preview Section */}
           <GramBasedSkuPreview
             clientCode={selectedClient?.client_code ?? ''}
-            productCode={productCode}
+            isBlend={true}
+            fgNameSuffix={finishedGoodName.trim()}
             variants={validVariants}
             existingSkus={existingSkus ?? new Set()}
           />
