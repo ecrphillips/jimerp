@@ -56,7 +56,9 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
   const [customOrigin, setCustomOrigin] = useState('');
   const [cropsterProfileRef, setCropsterProfileRef] = useState('');
   
-  // Step 3: Finished Good Name (single field)
+  // Step 3: Finished Good Name (user types unique identifier only, origin is prefix)
+  // For new roast groups: displays as "<Origin> - <userInput>"
+  // For existing roast groups: displays existing roast group display_name as prefix
   const [finishedGoodName, setFinishedGoodName] = useState('');
   
   // Step 4: Packaging variants
@@ -112,11 +114,29 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
     [roastGroups, selectedRoastGroup]
   );
   
-  // Generate SKU previews (read-only)
-  const skuPreviews = useMemo(() => {
-    if (!selectedClient || !finishedGoodName.trim()) return [];
+  // Get the origin prefix for new roast group mode
+  const originPrefix = useMemo(() => {
+    if (roastGroupMode !== 'new') return '';
+    if (!origin) return '';
+    return origin === '__custom__' ? customOrigin.trim() : origin;
+  }, [roastGroupMode, origin, customOrigin]);
+  
+  // Full finished good display name (combines origin prefix + user input)
+  const fullFinishedGoodName = useMemo(() => {
+    const userPart = finishedGoodName.trim();
+    if (!userPart) return '';
     
-    const productCode = generateShortCode(finishedGoodName.trim(), 6);
+    if (roastGroupMode === 'new' && originPrefix) {
+      return `${originPrefix} - ${userPart}`;
+    }
+    return userPart;
+  }, [roastGroupMode, originPrefix, finishedGoodName]);
+  
+  // Generate SKU previews (read-only) - uses full FG name for code generation
+  const skuPreviews = useMemo(() => {
+    if (!selectedClient || !fullFinishedGoodName) return [];
+    
+    const productCode = generateShortCode(fullFinishedGoodName, 6);
     
     return Array.from(selectedVariants).map(variantValue => {
       const variant = PACKAGING_VARIANTS.find(v => v.value === variantValue);
@@ -136,7 +156,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
       baseSku: string;
       bagSizeG: number;
     }>;
-  }, [selectedClient, finishedGoodName, selectedVariants]);
+  }, [selectedClient, fullFinishedGoodName, selectedVariants]);
   
   const canSave = useMemo(() => {
     if (!clientId) return false;
@@ -168,14 +188,19 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const trimmedName = finishedGoodName.trim();
+      // Full display name for the finished good
+      const displayName = fullFinishedGoodName;
+      if (!displayName) throw new Error('Product name is required');
+      
       let roastGroupKey: string;
       
       // Create roast group if needed
       if (roastGroupMode === 'new') {
         const originValue = origin === '__custom__' ? customOrigin.trim() : origin;
-        const baseKey = originValue.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-        const baseCode = generateShortCode(originValue, 6);
+        
+        // Use the FULL display name (Origin - UserPart) for system key generation
+        const baseKey = displayName.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+        const baseCode = generateShortCode(displayName, 6);
         
         // Try to create with collision handling
         let rgSuccess = false;
@@ -189,9 +214,9 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
               roast_group: key,
               roast_group_code: code,
               is_blend: false,
-              origin: originValue,
+              origin: originValue, // Store origin as metadata
               blend_name: null,
-              display_name: originValue,
+              display_name: displayName, // Use full name as display name
               standard_batch_kg: 20,
               expected_yield_loss_pct: 16,
               default_roaster: 'EITHER',
@@ -223,7 +248,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
       
       const productInserts = skuPreviews.map(preview => ({
         client_id: clientId,
-        product_name: trimmedName,
+        product_name: displayName, // Use full display name
         baseSku: preview.baseSku,
         roast_group: roastGroupKey!,
         packaging_variant: preview.variant,
@@ -264,7 +289,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
       
       return { 
         count: created.length, 
-        name: trimmedName, 
+        name: displayName, 
         adjustedCount,
       };
     },
@@ -341,7 +366,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="new" id="rg-new" />
                 <Label htmlFor="rg-new" className="font-normal cursor-pointer">
-                  Create new origin
+                  Create new roast group
                 </Label>
               </div>
             </RadioGroup>
@@ -406,14 +431,34 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
           {/* Step 3: Finished Good Name */}
           <div>
             <Label htmlFor="fgName">3. Finished Good Name</Label>
-            <Input
-              id="fgName"
-              placeholder="e.g. Guatemala Huehuetenango, Ethiopia Yirgacheffe Natural"
-              value={finishedGoodName}
-              onChange={(e) => setFinishedGoodName(e.target.value)}
-            />
+            {roastGroupMode === 'new' && originPrefix ? (
+              <div className="flex items-center gap-0">
+                <div className="flex-shrink-0 px-3 py-2 bg-muted border border-r-0 rounded-l-md text-sm text-muted-foreground">
+                  {originPrefix} -
+                </div>
+                <Input
+                  id="fgName"
+                  className="rounded-l-none"
+                  placeholder="e.g. Hermanos, Santa Rosa, Yirgacheffe Natural"
+                  value={finishedGoodName}
+                  onChange={(e) => setFinishedGoodName(e.target.value)}
+                />
+              </div>
+            ) : (
+              <Input
+                id="fgName"
+                placeholder={roastGroupMode === 'existing' 
+                  ? "e.g. Guatemala Huehuetenango, Ethiopia Yirgacheffe Natural"
+                  : "Select an origin above first"}
+                value={finishedGoodName}
+                onChange={(e) => setFinishedGoodName(e.target.value)}
+                disabled={roastGroupMode === 'new' && !originPrefix}
+              />
+            )}
             <p className="text-xs text-muted-foreground mt-1">
-              This name appears on orders, pack lists, and shipping.
+              {fullFinishedGoodName 
+                ? <>Full name: <span className="font-medium">{fullFinishedGoodName}</span></> 
+                : 'This name appears on orders, pack lists, and shipping.'}
             </p>
           </div>
           
