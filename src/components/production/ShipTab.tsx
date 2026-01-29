@@ -738,7 +738,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
               </Badge>
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              SKUs where FG (unallocated) is less than remaining unpicked demand.
+              SKUs where total FG (packed) is less than total demanded.
             </p>
           </CardHeader>
           <CardContent>
@@ -753,7 +753,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
                   <div className="text-sm font-mono">
                     <span className="text-warning font-medium">Short: {item.shortage}</span>
                     <span className="text-muted-foreground ml-3">
-                      Req: {item.demanded_units} | Picked: {item.picked_units} | FG: {item.fg_available_units} | Remain: {item.remaining_units}
+                      Demand: {item.demanded_units} | Packed: {item.fg_available_units} | Picked: {item.picked_units}
                     </span>
                   </div>
                 </div>

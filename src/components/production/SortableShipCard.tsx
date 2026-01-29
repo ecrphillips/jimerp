@@ -168,6 +168,7 @@ export function SortableShipCard({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ship-picks', order.id] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-ship-picks'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-ledger-fg'] });
     },
     onError: (err) => {
