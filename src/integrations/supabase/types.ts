@@ -1140,6 +1140,7 @@ export type Database = {
           assigned_roaster:
             | Database["public"]["Enums"]["roaster_machine"]
             | null
+          consumed_by_blend_at: string | null
           created_at: string
           created_by: string | null
           cropster_batch_id: string | null
@@ -1157,6 +1158,7 @@ export type Database = {
           assigned_roaster?:
             | Database["public"]["Enums"]["roaster_machine"]
             | null
+          consumed_by_blend_at?: string | null
           created_at?: string
           created_by?: string | null
           cropster_batch_id?: string | null
@@ -1174,6 +1176,7 @@ export type Database = {
           assigned_roaster?:
             | Database["public"]["Enums"]["roaster_machine"]
             | null
+          consumed_by_blend_at?: string | null
           created_at?: string
           created_by?: string | null
           cropster_batch_id?: string | null
