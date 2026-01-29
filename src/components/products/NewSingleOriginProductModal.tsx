@@ -145,11 +145,15 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
     return userPart;
   }, [roastGroupMode, originPrefix, finishedGoodName]);
 
-  // Product code for SKU generation
-  const productCode = useMemo(() => {
-    if (!fullFinishedGoodName) return '';
-    return generateShortCode(fullFinishedGoodName, 6);
-  }, [fullFinishedGoodName]);
+  // Get the origin value for SKU generation
+  const originForSku = useMemo(() => {
+    if (roastGroupMode === 'new') {
+      return origin === '__custom__' ? customOrigin.trim() : origin;
+    }
+    // For existing roast group, find the origin
+    const selectedRg = singleOriginRoastGroups.find(g => g.roast_group === selectedRoastGroup);
+    return selectedRg?.origin ?? '';
+  }, [roastGroupMode, origin, customOrigin, selectedRoastGroup, singleOriginRoastGroups]);
 
   // Valid variants (with grams > 0)
   const validVariants = useMemo(() => 
@@ -239,10 +243,22 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
         roastGroupKey = selectedRoastGroup;
       }
       
+      // Get the origin for SKU generation
+      let skuOrigin: string;
+      if (roastGroupMode === 'new') {
+        skuOrigin = origin === '__custom__' ? customOrigin.trim() : origin;
+      } else {
+        const selectedRg = singleOriginRoastGroups.find(g => g.roast_group === selectedRoastGroup);
+        skuOrigin = selectedRg?.origin ?? '';
+      }
+      
       // Get resolved SKUs with collision handling
+      // Use the user-entered suffix (finishedGoodName) for the FG name code
       const resolvedSkus = getResolvedSkus(
         selectedClient.client_code,
-        productCode,
+        skuOrigin, // The origin for ISO code
+        false, // Not a blend
+        finishedGoodName.trim(), // The user-entered suffix
         validVariants,
         existingSkus ?? new Set()
       );
@@ -514,7 +530,9 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
           {/* SKU Preview Section */}
           <GramBasedSkuPreview
             clientCode={selectedClient?.client_code ?? ''}
-            productCode={productCode}
+            origin={originForSku}
+            isBlend={false}
+            fgNameSuffix={finishedGoodName.trim()}
             variants={validVariants}
             existingSkus={existingSkus ?? new Set()}
           />
