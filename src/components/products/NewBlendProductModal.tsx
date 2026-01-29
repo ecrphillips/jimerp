@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { AlertCircle, Plus, Trash2, ExternalLink, Info, Loader2 } from 'lucide-react';
-import { generateShortCode } from '@/lib/skuUtils';
+import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
 import { RoastGroupPreview } from './RoastGroupPreview';
 import { PackagingVariantsSection, type PackagingVariantEntry } from './PackagingVariantsSection';
 import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
@@ -210,51 +210,29 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
       const trimmedName = finishedGoodName.trim();
       if (!selectedClient) throw new Error('Client is required');
       
-      // Generate roast group key from FG name
-      const roastGroupKey = trimmedName.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-      const roastGroupCode = generateShortCode(trimmedName, 6);
+      // Build blend notes from components
+      const blendNotes = `Blend components: ${components.map(c => {
+        const rg = componentRoastGroups.find(g => g.roast_group === c.roastGroup);
+        return `${rg?.display_name || c.roastGroup} (${c.percentage}%)`;
+      }).join(', ')}`;
       
-      // Try to create blend roast group with collision handling
-      let finalRoastGroupKey = roastGroupKey;
-      let rgSuccess = false;
+      // Create or reuse blend roast group (single attempt, no retries)
+      const result = await createOrReuseRoastGroup({
+        displayName: trimmedName,
+        isBlend: true,
+        blendName: trimmedName,
+        cropsterProfileRef: cropsterProfileRef.trim() || null,
+        notes: blendNotes,
+      });
       
-      for (let attempt = 0; attempt < 50; attempt++) {
-        const key = attempt === 0 ? roastGroupKey : `${roastGroupKey}_${attempt + 1}`;
-        const code = attempt === 0 ? roastGroupCode : `${roastGroupCode}${attempt + 1}`.substring(0, 6);
-        
-        const { error: rgError } = await supabase
-          .from('roast_groups')
-          .insert({
-            roast_group: key,
-            roast_group_code: code,
-            is_blend: true,
-            origin: null,
-            blend_name: trimmedName,
-            display_name: trimmedName,
-            standard_batch_kg: 20,
-            expected_yield_loss_pct: 16,
-            default_roaster: 'EITHER',
-            is_active: true,
-            cropster_profile_ref: cropsterProfileRef.trim() || null,
-            notes: `Blend components: ${components.map(c => {
-              const rg = componentRoastGroups.find(g => g.roast_group === c.roastGroup);
-              return `${rg?.display_name || c.roastGroup} (${c.percentage}%)`;
-            }).join(', ')}`,
-          });
-        
-        if (!rgError) {
-          finalRoastGroupKey = key;
-          rgSuccess = true;
-          break;
-        }
-        
-        if (rgError.code !== '23505') {
-          throw rgError;
-        }
+      if (result.error) {
+        throw new Error(result.error);
       }
       
-      if (!rgSuccess) {
-        throw new Error('Could not create roast group after 50 attempts');
+      const finalRoastGroupKey = result.roastGroupKey;
+      
+      if (!result.created) {
+        console.log(`[Blend] Reusing existing roast group: ${finalRoastGroupKey}`);
       }
       
       // Save blend components
