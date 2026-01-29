@@ -76,6 +76,7 @@ export interface ComponentInventory {
 /**
  * Fetch all roasted batches (for WIP calculation)
  * Includes planned_for_blend_roast_group to distinguish component batches
+ * Includes consumed_by_blend_at to track consumed component batches
  */
 function useRoastedBatches() {
   return useQuery({
@@ -83,7 +84,7 @@ function useRoastedBatches() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roasted_batches')
-        .select('id, roast_group, status, actual_output_kg, planned_output_kg, planned_for_blend_roast_group');
+        .select('id, roast_group, status, actual_output_kg, planned_output_kg, planned_for_blend_roast_group, consumed_by_blend_at');
       if (error) throw error;
       return data ?? [];
     },
@@ -559,7 +560,7 @@ export function useAuthoritativeShortList() {
 /**
  * Component Inventory by blend roast group
  * Shows roasted component batches that are available for blending.
- * These batches have planned_for_blend_roast_group set and are ROASTED but not yet consumed.
+ * These batches have planned_for_blend_roast_group set, are ROASTED, and NOT yet consumed.
  */
 export function useComponentInventory() {
   const { data: batches, isLoading } = useRoastedBatches();
@@ -568,10 +569,12 @@ export function useComponentInventory() {
     if (!batches) return {};
     
     // Group by blend roast group, then by component roast group
+    // Only include UNCONSUMED batches (consumed_by_blend_at is null)
     const byBlend: Record<string, Record<string, { kg: number; count: number }>> = {};
     
     for (const b of batches) {
-      if (b.status === 'ROASTED' && b.planned_for_blend_roast_group) {
+      // Only include ROASTED batches that are linked to a blend AND not yet consumed
+      if (b.status === 'ROASTED' && b.planned_for_blend_roast_group && !b.consumed_by_blend_at) {
         if (!byBlend[b.planned_for_blend_roast_group]) {
           byBlend[b.planned_for_blend_roast_group] = {};
         }

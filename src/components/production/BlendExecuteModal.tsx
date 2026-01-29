@@ -18,6 +18,7 @@ interface RoastedBatch {
   actual_output_kg: number;
   status: 'PLANNED' | 'ROASTED';
   planned_for_blend_roast_group: string | null;
+  consumed_by_blend_at: string | null;  // null = available for blending
   notes: string | null;
   target_date: string;
   created_at: string;
@@ -103,6 +104,7 @@ export function BlendExecuteModal({
   });
   
   // Fetch ROASTED batches for component groups (available for blending)
+  // Only include batches that have NOT been consumed by a prior blend
   const { data: roastedBatches } = useQuery({
     queryKey: ['roasted-batches-for-blending', blendRoastGroup],
     queryFn: async () => {
@@ -110,13 +112,14 @@ export function BlendExecuteModal({
       
       const componentGroups = blendComponents.map(c => c.component_roast_group);
       
-      // Get all ROASTED batches for component groups
-      // Include both those linked to this blend AND unlinked ones (surplus WIP)
+      // Get all ROASTED batches for component groups that are NOT consumed
+      // consumed_by_blend_at IS NULL means the batch is still available
       const { data, error } = await supabase
         .from('roasted_batches')
-        .select('id, roast_group, actual_output_kg, status, planned_for_blend_roast_group, notes, target_date, created_at')
+        .select('id, roast_group, actual_output_kg, status, planned_for_blend_roast_group, consumed_by_blend_at, notes, target_date, created_at')
         .in('roast_group', componentGroups)
         .eq('status', 'ROASTED')
+        .is('consumed_by_blend_at', null)  // Only unconsumed batches
         .order('created_at', { ascending: true });
       
       if (error) throw error;
@@ -326,6 +329,7 @@ export function BlendExecuteModal({
     mutationFn: async () => {
       if (!canBlend) throw new Error('Cannot blend - check proportions and selections');
       
+      const batchIdsToConsume: string[] = [];
       const transactions: Array<{
         transaction_type: 'ADJUSTMENT';
         roast_group: string;
@@ -341,6 +345,8 @@ export function BlendExecuteModal({
         
         const batch = batchesWithAvailable.find(b => b.id === batchId);
         if (!batch) continue;
+        
+        batchIdsToConsume.push(batchId);
         
         transactions.push({
           transaction_type: 'ADJUSTMENT',
@@ -359,14 +365,41 @@ export function BlendExecuteModal({
         quantity_kg: totalBlendOutput, // Positive = increment
         is_system_generated: true,
         created_by: user?.id,
-        notes: `Created blend from ${Object.keys(selectedBatches).length} component batches`,
+        notes: `Created blend from ${batchIdsToConsume.length} component batches`,
       });
       
-      const { error } = await supabase
+      // Step 1: Mark selected batches as consumed (prevents double-consumption)
+      // Use a WHERE clause to ensure we only consume batches that haven't been consumed yet
+      const now = new Date().toISOString();
+      const { error: consumeError, data: consumedData } = await supabase
+        .from('roasted_batches')
+        .update({ consumed_by_blend_at: now })
+        .in('id', batchIdsToConsume)
+        .is('consumed_by_blend_at', null)  // Only update if not already consumed
+        .select('id');
+      
+      if (consumeError) throw consumeError;
+      
+      // Verify all batches were consumed (no race condition)
+      if (!consumedData || consumedData.length !== batchIdsToConsume.length) {
+        const consumedIds = new Set(consumedData?.map(b => b.id) ?? []);
+        const failedIds = batchIdsToConsume.filter(id => !consumedIds.has(id));
+        throw new Error(`Some batches were already consumed by another blend: ${failedIds.map(id => id.slice(0, 8)).join(', ')}`);
+      }
+      
+      // Step 2: Insert inventory transactions
+      const { error: txError } = await supabase
         .from('inventory_transactions')
         .insert(transactions);
       
-      if (error) throw error;
+      if (txError) {
+        // Rollback: un-consume the batches if transaction insert failed
+        await supabase
+          .from('roasted_batches')
+          .update({ consumed_by_blend_at: null })
+          .in('id', batchIdsToConsume);
+        throw txError;
+      }
       
       return totalBlendOutput;
     },
@@ -376,6 +409,10 @@ export function BlendExecuteModal({
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
       queryClient.invalidateQueries({ queryKey: ['roast-demand'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-wip'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
+      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
       setBlendedAmount(amount);
       setShowSuccess(true);
     },
