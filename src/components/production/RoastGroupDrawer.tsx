@@ -89,6 +89,7 @@ interface RoastGroupDrawerProps {
   isDragging?: boolean;
   isBlend?: boolean;
   onPlanBlendBatches?: () => void;
+  onBlendBatches?: () => void;
   components: RoastGroupComponent[];
   roastGroupsLookupMap: Map<string, { display_name: string | null; origin: string | null }>;
 }
@@ -111,6 +112,7 @@ export function RoastGroupDrawer({
   isDragging = false,
   isBlend = false,
   onPlanBlendBatches,
+  onBlendBatches,
   components,
   roastGroupsLookupMap,
 }: RoastGroupDrawerProps) {
@@ -659,18 +661,32 @@ export function RoastGroupDrawer({
                 </div>
                 {/* Different button for blends vs single origins */}
                 {isBlend ? (
-                  <Button
-                    size="sm"
-                    variant="default"
-                    className="h-7 text-xs"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onPlanBlendBatches?.();
-                    }}
-                  >
-                    <Layers className="h-3 w-3 mr-1" />
-                    Plan blend batches
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPlanBlendBatches?.();
+                      }}
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Plan batches
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="h-7 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onBlendBatches?.();
+                      }}
+                    >
+                      <Layers className="h-3 w-3 mr-1" />
+                      Blend batches
+                    </Button>
+                  </div>
                 ) : (
                   <Button
                     size="sm"
