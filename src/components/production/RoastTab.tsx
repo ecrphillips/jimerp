@@ -42,6 +42,7 @@ import {
 import type { DateFilterConfig } from './types';
 // Use AUTHORITATIVE inventory hooks - computed from source-of-truth tables
 import { useAuthoritativeWip, useAuthoritativeRoastDemand } from '@/hooks/useAuthoritativeInventory';
+import { useRoastGroupComponents, getComponentBreakdown, type ComponentDisplay } from '@/hooks/useRoastGroupComponents';
 import { AuthoritativeSummaryPanel } from './AuthoritativeTotals';
 
 interface RoastTabProps {
@@ -77,6 +78,7 @@ interface RoastGroupConfig {
   notes: string | null;
   display_order: number | null;
   display_name: string | null;
+  origin: string | null;
 }
 
 interface DemandByRoastGroup {
@@ -141,6 +143,21 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     const map: Record<string, RoastGroupConfig> = {};
     for (const rg of roastGroupsConfig ?? []) {
       map[rg.roast_group] = rg;
+    }
+    return map;
+  }, [roastGroupsConfig]);
+
+  // Fetch roast group components (blend recipes)
+  const { data: roastGroupComponents } = useRoastGroupComponents();
+
+  // Create a map of roast_group -> { display_name, origin } for component display lookup
+  const roastGroupsLookupMap = useMemo(() => {
+    const map = new Map<string, { display_name: string | null; origin: string | null }>();
+    for (const rg of roastGroupsConfig ?? []) {
+      map.set(rg.roast_group, {
+        display_name: rg.display_name ?? null,
+        origin: (rg as any).origin ?? null,
+      });
     }
     return map;
   }, [roastGroupsConfig]);
@@ -783,6 +800,8 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                               demandKg: group.total_kg,
                               netDemandKg: group.net_demand_kg,
                             })}
+                            components={roastGroupComponents ?? []}
+                            roastGroupsLookupMap={roastGroupsLookupMap}
                           />
                           
                           {/* Quick batch suggestion row (shown below collapsed row if there's demand and no batches visible) */}
@@ -929,6 +948,8 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                           demandKg: 0,
                           netDemandKg: 0,
                         })}
+                        components={roastGroupComponents ?? []}
+                        roastGroupsLookupMap={roastGroupsLookupMap}
                       />
                     );
                   })}
