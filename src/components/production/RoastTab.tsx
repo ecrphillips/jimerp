@@ -185,6 +185,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   });
   // Fetch ALL order line items for demand calculation
   // Filtering by work_start_at happens client-side for accurate production window logic
+  // IMPORTANT: Uses work_deadline_at (timestamptz), NOT work_deadline (legacy text field)
   const { data: allOrderLineItems } = useQuery({
     queryKey: ['roast-demand-all'],
     queryFn: async () => {
@@ -194,7 +195,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
           id,
           product_id,
           quantity_units,
-          order:orders!inner(id, status, work_deadline, manually_deprioritized),
+          order:orders!inner(id, status, work_deadline_at, manually_deprioritized),
           product:products(id, product_name, roast_group, bag_size_g)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
@@ -205,14 +206,15 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   });
   
   // Client-side filter using work_start_at calculation
+  // Uses work_deadline_at field for accurate timestamptz-based scheduling
   const orderLineItems = useMemo(() => {
     if (!allOrderLineItems) return [];
     if (dateFilterConfig.mode === 'all') return allOrderLineItems;
     
     return allOrderLineItems.filter(li => {
-      const workDeadline = li.order?.work_deadline ?? null;
+      const workDeadlineAt = li.order?.work_deadline_at ?? null;
       const manuallyDeprioritized = li.order?.manually_deprioritized ?? false;
-      return filterOrderByWorkStart(workDeadline, manuallyDeprioritized, dateFilterConfig.mode);
+      return filterOrderByWorkStart(workDeadlineAt, manuallyDeprioritized, dateFilterConfig.mode);
     });
   }, [allOrderLineItems, dateFilterConfig.mode]);
 
@@ -293,7 +295,8 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
 
       const kgForLine = (li.quantity_units * (li.product?.bag_size_g ?? 0)) / 1000;
       const isTimeSensitive = timeSensitiveProducts.has(li.product_id);
-      const workDeadline = li.order?.work_deadline ?? null;
+      // Use work_deadline_at (timestamptz) for accurate scheduling
+      const workDeadlineAt = li.order?.work_deadline_at ?? null;
       
       if (!groupMap[roastGroup]) {
         groupMap[roastGroup] = { 
@@ -309,8 +312,8 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
         groupMap[roastGroup].hasTimeSensitive = true;
       }
       
-      if (workDeadline && (!groupMap[roastGroup].earliestShipDate || workDeadline < groupMap[roastGroup].earliestShipDate)) {
-        groupMap[roastGroup].earliestShipDate = workDeadline;
+      if (workDeadlineAt && (!groupMap[roastGroup].earliestShipDate || workDeadlineAt < groupMap[roastGroup].earliestShipDate)) {
+        groupMap[roastGroup].earliestShipDate = workDeadlineAt;
       }
       
       const productName = li.product?.product_name ?? 'Unknown';

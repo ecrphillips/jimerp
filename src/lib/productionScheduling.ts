@@ -5,15 +5,18 @@
  * DST-aware via date-fns-tz.
  * 
  * Key concepts:
- * - Production window: 08:00–16:00 local time
+ * - Production window: 08:00–16:00 local time, Mon-Fri only
  * - Required processing time: 2 hours 1 minute (hardcoded)
  * - work_start_at: When work must begin to meet the deadline
+ * 
+ * IMPORTANT: Use work_deadline_at field (timestamptz), NOT work_deadline (legacy text field)
  */
 
 import { 
   format, 
   parseISO, 
   addDays, 
+  subDays,
   subMinutes, 
   startOfDay, 
   setHours, 
@@ -22,13 +25,19 @@ import {
   isAfter,
   isEqual,
   differenceInMinutes,
+  getDay,
+  isWeekend,
+  nextMonday,
 } from 'date-fns';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 
+// ========== CENTRALIZED CONFIG ==========
 export const TIMEZONE = 'America/Vancouver';
 export const PRODUCTION_WINDOW_START = 8; // 08:00
 export const PRODUCTION_WINDOW_END = 16; // 16:00
 export const REQUIRED_PROCESSING_MINUTES = 121; // 2 hours 1 minute
+export const WORK_DAYS = [1, 2, 3, 4, 5]; // Mon-Fri (0=Sun, 6=Sat)
+export const DEFAULT_NUDGE_HOUR = 10; // Default nudge target time
 
 /**
  * Get the current time in Vancouver timezone
@@ -69,14 +78,45 @@ export function getProductionWindowEnd(date: Date): Date {
 }
 
 /**
+ * Check if a date is a business day (Mon-Fri)
+ */
+export function isBusinessDay(date: Date): boolean {
+  return WORK_DAYS.includes(getDay(date));
+}
+
+/**
+ * Get the next business day from a given date
+ * If the given date is already a business day, returns it
+ */
+export function getNextBusinessDay(date: Date): Date {
+  let result = date;
+  while (!isBusinessDay(result)) {
+    result = addDays(result, 1);
+  }
+  return result;
+}
+
+/**
+ * Get the previous business day from a given date
+ * If the given date is already a business day, returns it
+ */
+export function getPreviousBusinessDay(date: Date): Date {
+  let result = date;
+  while (!isBusinessDay(result)) {
+    result = subDays(result, 1);
+  }
+  return result;
+}
+
+/**
  * Calculate work_start_at from work_deadline_at
  * 
  * Rules:
  * 1. theoretical_start = work_deadline_at - 2h1m
  * 2. Snap to production window:
- *    - If between 08:00–16:00 → use as-is
+ *    - If between 08:00–16:00 on a business day → use as-is
  *    - If before 08:00 → previous business day at 15:59
- *    - If after 16:00 → same day at 16:00
+ *    - If after 16:00 → same day at 16:00 (or next business day if weekend)
  */
 export function computeWorkStartAt(workDeadlineAt: string | null): Date | null {
   if (!workDeadlineAt) return null;
@@ -89,21 +129,33 @@ export function computeWorkStartAt(workDeadlineAt: string | null): Date | null {
     const theoreticalStart = subMinutes(deadlineVancouver, REQUIRED_PROCESSING_MINUTES);
     
     // Step 2: Get the production window boundaries for that day
-    const windowStart = getProductionWindowStart(theoreticalStart);
-    const windowEnd = getProductionWindowEnd(theoreticalStart);
+    let windowDate = theoreticalStart;
+    
+    // If weekend, find the appropriate business day
+    if (!isBusinessDay(windowDate)) {
+      // For snapping purposes, treat weekend theoretical starts as previous Friday
+      windowDate = getPreviousBusinessDay(windowDate);
+    }
+    
+    const windowStart = getProductionWindowStart(windowDate);
+    const windowEnd = getProductionWindowEnd(windowDate);
     
     // Step 3: Snap to production window
     let workStartAt: Date;
     
     if (isBefore(theoreticalStart, windowStart)) {
-      // Before 08:00 → previous day at 15:59
-      const previousDay = addDays(theoreticalStart, -1);
-      workStartAt = setMinutes(setHours(startOfDay(previousDay), 15), 59);
+      // Before 08:00 → previous business day at 15:59
+      const previousBizDay = getPreviousBusinessDay(subDays(windowDate, 1));
+      workStartAt = setMinutes(setHours(startOfDay(previousBizDay), 15), 59);
     } else if (isAfter(theoreticalStart, windowEnd)) {
-      // After 16:00 → same day at 16:00
-      workStartAt = windowEnd;
+      // After 16:00 → same business day at 16:00
+      workStartAt = getProductionWindowEnd(windowDate);
+    } else if (!isBusinessDay(theoreticalStart)) {
+      // Weekend → snap to previous Friday at 15:59
+      const previousBizDay = getPreviousBusinessDay(theoreticalStart);
+      workStartAt = setMinutes(setHours(startOfDay(previousBizDay), 15), 59);
     } else {
-      // Within window → use as-is
+      // Within window on a business day → use as-is
       workStartAt = theoreticalStart;
     }
     
@@ -127,7 +179,10 @@ export function isWorkStartInWindow(
   const windowEnd = getProductionWindowEnd(windowDate);
   
   // Check if work_start_at is >= windowStart and <= windowEnd
-  return (
+  // Also check that it's the same calendar day
+  const sameDay = format(workStartAt, 'yyyy-MM-dd') === format(windowDate, 'yyyy-MM-dd');
+  
+  return sameDay && (
     (isAfter(workStartAt, windowStart) || isEqual(workStartAt, windowStart)) &&
     (isBefore(workStartAt, windowEnd) || isEqual(workStartAt, windowEnd))
   );
@@ -146,7 +201,6 @@ export function getProductionDayBucket(
   const now = getVancouverNow();
   const today = startOfDay(now);
   const tomorrow = addDays(today, 1);
-  const dayAfterTomorrow = addDays(today, 2);
   
   // Check if work must start today
   if (isWorkStartInWindow(workStartAt, today)) {
@@ -158,7 +212,7 @@ export function getProductionDayBucket(
     return 'tomorrow';
   }
   
-  // Check if it's in the past (before today's window)
+  // Check if it's in the past (before today's window start)
   const todayWindowStart = getProductionWindowStart(today);
   if (isBefore(workStartAt, todayWindowStart)) {
     return 'past'; // Should have started already - treat as urgent/today
@@ -220,6 +274,8 @@ export function getWorkStartFilterConfig(): WorkStartFilterConfig {
 /**
  * Client-side filter function to determine if an order belongs in a bucket
  * Use this after fetching orders to filter them correctly
+ * 
+ * IMPORTANT: This is the authoritative filter - all production views must use this
  */
 export function filterOrderByWorkStart(
   workDeadlineAt: string | null,
@@ -268,7 +324,6 @@ export function getWorkStartUrgency(
   if (!workStartAt) return null;
   
   const now = getVancouverNow();
-  const today = startOfDay(now);
   
   // Check if work should have already started
   if (isBefore(workStartAt, now)) {
@@ -328,4 +383,123 @@ export function getDeadlineBoundsForDay(
     minDeadline: fromZonedTime(dayStart, TIMEZONE).toISOString(),
     maxDeadline: fromZonedTime(nextDayEnd, TIMEZONE).toISOString(),
   };
+}
+
+// ========== NUDGE SCHEDULING ==========
+
+export type NudgeDirection = 'earlier' | 'later';
+
+/**
+ * Calculate the new work_deadline_at for a nudge operation
+ * 
+ * Nudge later: Move to next business day at 10:00
+ * Nudge earlier: Move to current business day at 15:00 (if still within window) 
+ *                or previous business day at 15:00
+ * 
+ * Returns the new deadline as ISO string (UTC)
+ */
+export function computeNudgedDeadline(
+  currentDeadline: string | null,
+  direction: NudgeDirection
+): string {
+  const now = getVancouverNow();
+  const today = startOfDay(now);
+  
+  let targetDate: Date;
+  let targetHour: number;
+  
+  if (direction === 'later') {
+    // Move to next business day at 10:00
+    if (currentDeadline) {
+      const currentUtc = parseISO(currentDeadline);
+      const currentVancouver = toZonedTime(currentUtc, TIMEZONE);
+      const currentDay = startOfDay(currentVancouver);
+      // Next business day after current deadline's day
+      targetDate = getNextBusinessDay(addDays(currentDay, 1));
+    } else {
+      // No current deadline - set to next business day
+      targetDate = getNextBusinessDay(addDays(today, 1));
+    }
+    targetHour = DEFAULT_NUDGE_HOUR; // 10:00
+  } else {
+    // Nudge earlier
+    const currentHour = now.getHours();
+    
+    if (isBusinessDay(today) && currentHour < PRODUCTION_WINDOW_END) {
+      // Still within today's window - set to today at 15:00
+      targetDate = today;
+      targetHour = 15;
+    } else {
+      // After today's window or weekend - set to next business day at 10:00
+      targetDate = getNextBusinessDay(today);
+      targetHour = DEFAULT_NUDGE_HOUR;
+    }
+  }
+  
+  // Create the target datetime in Vancouver timezone
+  const targetDatetime = setMinutes(setHours(targetDate, targetHour), 0);
+  
+  // Convert to UTC for storage
+  const utcDatetime = fromZonedTime(targetDatetime, TIMEZONE);
+  
+  return utcDatetime.toISOString();
+}
+
+/**
+ * Format nudge result for toast message
+ */
+export function formatNudgeResult(newDeadline: string): string {
+  const utc = parseISO(newDeadline);
+  const vancouver = toZonedTime(utc, TIMEZONE);
+  return format(vancouver, "EEE MMM d, HH:mm");
+}
+
+// ========== DEV LOGGING ==========
+
+/**
+ * Log run sheet query details for debugging (dev only)
+ */
+export function logRunSheetQuery(
+  label: string,
+  orders: Array<{ work_deadline_at?: string | null; id: string }>,
+  filterMode: 'today' | 'tomorrow' | 'all'
+): void {
+  if (process.env.NODE_ENV !== 'development') return;
+  
+  const now = getVancouverNow();
+  const today = startOfDay(now);
+  const tomorrow = addDays(today, 1);
+  
+  const todayWindowStart = getProductionWindowStart(today);
+  const todayWindowEnd = getProductionWindowEnd(today);
+  const tomorrowWindowStart = getProductionWindowStart(tomorrow);
+  const tomorrowWindowEnd = getProductionWindowEnd(tomorrow);
+  
+  const deadlines = orders
+    .map(o => o.work_deadline_at)
+    .filter((d): d is string => d !== null && d !== undefined)
+    .sort();
+  
+  console.log(`[RunSheet:${label}] Filter mode: ${filterMode}`);
+  console.log(`[RunSheet:${label}] Today's window: ${format(todayWindowStart, 'yyyy-MM-dd HH:mm')} to ${format(todayWindowEnd, 'HH:mm')}`);
+  console.log(`[RunSheet:${label}] Tomorrow's window: ${format(tomorrowWindowStart, 'yyyy-MM-dd HH:mm')} to ${format(tomorrowWindowEnd, 'HH:mm')}`);
+  console.log(`[RunSheet:${label}] Orders returned: ${orders.length}`);
+  if (deadlines.length > 0) {
+    const minDeadline = toZonedTime(parseISO(deadlines[0]), TIMEZONE);
+    const maxDeadline = toZonedTime(parseISO(deadlines[deadlines.length - 1]), TIMEZONE);
+    console.log(`[RunSheet:${label}] Deadline range: ${format(minDeadline, 'yyyy-MM-dd HH:mm')} to ${format(maxDeadline, 'yyyy-MM-dd HH:mm')}`);
+  } else {
+    console.log(`[RunSheet:${label}] No orders with work_deadline_at`);
+  }
+}
+
+/**
+ * Snap a date to the next valid business day if it falls on a weekend
+ * Used by WorkDeadlinePicker to enforce Mon-Fri only
+ */
+export function snapToBusinessDay(date: Date): Date {
+  if (isWeekend(date)) {
+    return nextMonday(date);
+  }
+  return date;
 }
