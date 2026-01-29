@@ -204,10 +204,18 @@ export function AuthoritativeSummaryPanel({ tab }: AuthoritativeSummaryPanelProp
   
   const isLoading = wipLoading || fgLoading || demandLoading;
   
-  // Summary stats
-  const totalWipKg = Object.values(wip ?? {}).reduce((sum, w) => sum + w.wip_available_kg, 0);
-  const totalFgUnits = Object.values(fg ?? {}).reduce((sum, f) => sum + f.fg_available_units, 0);
-  const totalNetDemandKg = Object.values(roastDemand ?? {}).reduce((sum, d) => sum + d.net_roast_demand_kg, 0);
+  // Summary stats - only count roast groups/products with actual inventory > 0
+  const wipEntries = Object.entries(wip ?? {});
+  const totalWipKg = wipEntries.reduce((sum, [, w]) => sum + w.wip_available_kg, 0);
+  const wipGroupsWithInventory = wipEntries.filter(([, w]) => w.wip_available_kg > 0).length;
+  
+  const fgEntries = Object.entries(fg ?? {});
+  const totalFgUnits = fgEntries.reduce((sum, [, f]) => sum + f.fg_available_units, 0);
+  const fgProductsWithInventory = fgEntries.filter(([, f]) => f.fg_available_units > 0).length;
+  
+  const demandEntries = Object.entries(roastDemand ?? {});
+  const totalNetDemandKg = demandEntries.reduce((sum, [, d]) => sum + d.net_roast_demand_kg, 0);
+  const demandGroupsWithNetDemand = demandEntries.filter(([, d]) => d.net_roast_demand_kg > 0).length;
   
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -225,31 +233,37 @@ export function AuthoritativeSummaryPanel({ tab }: AuthoritativeSummaryPanelProp
             <div>
               <div className="text-muted-foreground mb-1">Net Roast Demand</div>
               <div className="font-mono text-lg">{totalNetDemandKg.toFixed(1)} kg</div>
-              <div className="text-muted-foreground text-[10px]">
-                After WIP + FG offset
-              </div>
+              {demandGroupsWithNetDemand > 0 && (
+                <div className="text-muted-foreground text-[10px]">
+                  {demandGroupsWithNetDemand} roast group{demandGroupsWithNetDemand !== 1 ? 's' : ''} with demand
+                </div>
+              )}
             </div>
             <div>
               <div className="text-muted-foreground mb-1">Total WIP</div>
               <div className="font-mono text-lg">{totalWipKg.toFixed(1)} kg</div>
-              <div className="text-muted-foreground text-[10px]">
-                {Object.keys(wip ?? {}).length} roast groups
-              </div>
+              {wipGroupsWithInventory > 0 && (
+                <div className="text-muted-foreground text-[10px]">
+                  {wipGroupsWithInventory} roast group{wipGroupsWithInventory !== 1 ? 's' : ''} with WIP
+                </div>
+              )}
             </div>
             <div>
-              <div className="text-muted-foreground mb-1">Total FG (unallocated)</div>
+              <div className="text-muted-foreground mb-1">Unallocated FG</div>
               <div className="font-mono text-lg">{totalFgUnits} units</div>
-              <div className="text-muted-foreground text-[10px]">
-                {Object.keys(fg ?? {}).length} products
-              </div>
+              {fgProductsWithInventory > 0 && (
+                <div className="text-muted-foreground text-[10px]">
+                  {fgProductsWithInventory} product{fgProductsWithInventory !== 1 ? 's' : ''} with FG
+                </div>
+              )}
             </div>
           </div>
           
-          {tab === 'roast' && Object.keys(roastDemand ?? {}).length > 0 && (
+          {tab === 'roast' && demandEntries.length > 0 && (
             <div className="mt-3 pt-3 border-t border-border/50">
               <div className="text-muted-foreground mb-2">By Roast Group</div>
               <div className="space-y-1 max-h-40 overflow-y-auto">
-                {Object.entries(roastDemand ?? {}).sort((a, b) => b[1].net_roast_demand_kg - a[1].net_roast_demand_kg).map(([rg, data]) => (
+                {demandEntries.sort((a, b) => b[1].net_roast_demand_kg - a[1].net_roast_demand_kg).map(([rg, data]) => (
                   <div key={rg} className="flex justify-between items-center font-mono">
                     <span className="truncate max-w-[150px]">{rg}</span>
                     <div className="flex gap-3">
