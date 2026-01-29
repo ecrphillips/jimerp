@@ -128,16 +128,26 @@ export function useBlendReadiness(
     }));
     
     // Calculate staged and shortfall
-    const stagedForBlendKg = Math.min(blendPossibleKg, netDemandKg);
-    const roastShortfallKg = Math.max(0, netDemandKg - blendPossibleKg);
+    const stagedForBlendKg = Math.min(blendPossibleKg, Math.max(0, netDemandKg - wipKg));
+    const roastShortfallKg = Math.max(0, netDemandKg - wipKg - blendPossibleKg);
     
     // Determine state
+    // "blended" = WIP exists and covers demand (from blend ADJUSTMENT)
+    // "ready_to_blend" = components roasted, enough to blend, but blend not yet executed
+    // "partially_ready" = some components available but not enough for full demand
+    // "needs_roasting" = components not roasted enough
     let state: BlendReadinessState;
-    if (wipKg > 0 && wipKg >= netDemandKg) {
+    if (wipKg >= netDemandKg && netDemandKg > 0) {
+      // WIP already covers demand - fully blended
       state = 'blended';
-    } else if (roastShortfallKg === 0 && stagedForBlendKg > 0) {
+    } else if (wipKg > 0 && wipKg < netDemandKg && blendPossibleKg === 0) {
+      // Some WIP but not enough and no more components to blend
+      state = 'blended'; // Partially blended, need more roasting
+    } else if (blendPossibleKg >= (netDemandKg - wipKg) && blendPossibleKg > 0) {
+      // Components can cover remaining demand
       state = 'ready_to_blend';
-    } else if (stagedForBlendKg > 0) {
+    } else if (blendPossibleKg > 0) {
+      // Some components available but not enough
       state = 'partially_ready';
     } else {
       state = 'needs_roasting';
@@ -164,21 +174,35 @@ export function getBlendReadinessDisplay(readiness: BlendReadiness | null, cover
     return null;
   }
   
-  const { state, stagedForBlendKg, roastShortfallKg, wipKg, blendNeededKg } = readiness;
+  const { state, stagedForBlendKg, roastShortfallKg, wipKg, blendNeededKg, blendPossibleKg } = readiness;
   
   switch (state) {
     case 'blended':
-      if (coverageDelta >= 0) {
+      // WIP exists - show coverage status based on WIP vs demand
+      if (wipKg >= blendNeededKg) {
+        const surplus = wipKg - blendNeededKg;
         return {
-          label: `Covered +${coverageDelta.toFixed(1)} kg`,
+          label: surplus > 0.1 ? `Covered +${surplus.toFixed(1)} kg` : 'Covered',
           variant: 'covered' as const,
           className: 'bg-primary/10 text-primary border-primary/20',
         };
       }
+      // WIP exists but doesn't cover full demand
+      const shortfall = blendNeededKg - wipKg - blendPossibleKg;
+      if (shortfall > 0) {
+        return {
+          label: `Short ${shortfall.toFixed(1)} kg`,
+          sublabel: wipKg > 0 ? `${wipKg.toFixed(1)} kg WIP` : undefined,
+          variant: 'short' as const,
+          className: 'bg-amber-100 text-amber-800 border-amber-300',
+        };
+      }
+      // WIP + staged components can cover
       return {
-        label: `Short ${Math.abs(coverageDelta).toFixed(1)} kg`,
-        variant: 'short' as const,
-        className: 'bg-amber-100 text-amber-800 border-amber-300',
+        label: 'Ready to blend more',
+        sublabel: `${wipKg.toFixed(1)} kg WIP, ${blendPossibleKg.toFixed(1)} kg staged`,
+        variant: 'ready' as const,
+        className: 'bg-green-100 text-green-800 border-green-300',
       };
       
     case 'ready_to_blend':

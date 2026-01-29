@@ -410,13 +410,16 @@ export function BlendExecuteModal({
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
       queryClient.invalidateQueries({ queryKey: ['roast-demand'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-wip'] });
-      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-adjustments'] }); // New: blend output adjustments
+      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-adjustments'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
-      queryClient.invalidateQueries({ queryKey: ['authoritative-roast-demand'] }); // For net demand recalculation
+      queryClient.invalidateQueries({ queryKey: ['authoritative-roast-demand'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-roast-groups-info'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
-      queryClient.invalidateQueries({ queryKey: ['roasted-component-batches-for-blending'] }); // Blend readiness
+      queryClient.invalidateQueries({ queryKey: ['roasted-component-batches-for-blending'] });
       queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
+      // Dashboard metrics
+      queryClient.invalidateQueries({ queryKey: ['dashboard-metrics-v2'] });
       setBlendedAmount(amount);
       setShowSuccess(true);
     },
