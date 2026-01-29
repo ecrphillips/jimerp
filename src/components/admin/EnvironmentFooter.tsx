@@ -8,9 +8,12 @@ declare const __BUILD_MODE__: string;
 export function EnvironmentFooter() {
   const { authUser } = useAuth();
   
-  // Only show to ADMIN/OPS
+  // Only show when ?debug=true is in URL AND user is ADMIN/OPS
   const isAdminOrOps = authUser?.role === 'ADMIN' || authUser?.role === 'OPS';
-  if (!isAdminOrOps) return null;
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const debugMode = urlParams?.get('debug') === 'true';
+  
+  if (!isAdminOrOps || !debugMode) return null;
 
   // Get environment info
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
