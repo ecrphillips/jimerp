@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
@@ -17,6 +16,8 @@ import {
   type PackagingVariantValue 
 } from '@/lib/skuGenerator';
 import { generateShortCode, insertProductsWithUniqueSkus } from '@/lib/skuUtils';
+import { SkuPreviewList } from './SkuPreviewList';
+import { RoastGroupPreview } from './RoastGroupPreview';
 
 interface Client {
   id: string;
@@ -96,6 +97,29 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
       return (data ?? []) as RoastGroup[];
     },
   });
+  
+  // Fetch existing SKUs for collision detection
+  const { data: existingSkus } = useQuery({
+    queryKey: ['existing-product-skus-set'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('sku');
+      if (error) throw error;
+      return new Set((data ?? []).map(p => p.sku?.toUpperCase().trim()).filter(Boolean));
+    },
+  });
+  
+  // Fetch existing roast group keys/codes for collision detection
+  const existingRoastGroupKeys = useMemo(() => 
+    new Set(roastGroups?.map(g => g.roast_group.toUpperCase()) ?? []),
+    [roastGroups]
+  );
+  
+  const existingRoastGroupCodes = useMemo(() => 
+    new Set(roastGroups?.map(g => g.roast_group_code.toUpperCase()) ?? []),
+    [roastGroups]
+  );
   
   // Filter to only single origin roast groups for selection
   const singleOriginRoastGroups = useMemo(() => 
@@ -424,6 +448,15 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
                     onChange={(e) => setCropsterProfileRef(e.target.value)}
                   />
                 </div>
+                
+                {/* Roast Group Preview (shows system key that will be created) */}
+                {fullFinishedGoodName && (
+                  <RoastGroupPreview
+                    displayName={fullFinishedGoodName}
+                    existingKeys={existingRoastGroupKeys}
+                    existingCodes={existingRoastGroupCodes}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -483,25 +516,13 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
                 </label>
               ))}
             </div>
-            
-            {/* SKU Previews (read-only) */}
-            {skuPreviews.length > 0 && (
-              <div className="mt-3 space-y-1">
-                <p className="text-xs text-muted-foreground">SKU Preview (may be adjusted for uniqueness):</p>
-                <div className="flex flex-wrap gap-2">
-                  {skuPreviews.map(p => (
-                    <Badge 
-                      key={p.baseSku} 
-                      variant="secondary"
-                      className="font-mono text-xs"
-                    >
-                      {p.baseSku}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
+          
+          {/* SKU Preview Section - moved outside packaging variants div, before price */}
+          <SkuPreviewList 
+            skuPreviews={skuPreviews}
+            existingSkus={existingSkus ?? new Set()}
+          />
           
           {/* Step 5: Price */}
           <div>
