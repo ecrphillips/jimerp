@@ -223,6 +223,13 @@ export function AuthoritativeSummaryPanel({ tab }: AuthoritativeSummaryPanelProp
         <div className="mt-2 p-3 bg-muted/30 rounded-md border border-border/50 text-xs">
           <div className="grid grid-cols-3 gap-4">
             <div>
+              <div className="text-muted-foreground mb-1">Net Roast Demand</div>
+              <div className="font-mono text-lg">{totalNetDemandKg.toFixed(1)} kg</div>
+              <div className="text-muted-foreground text-[10px]">
+                After WIP + FG offset
+              </div>
+            </div>
+            <div>
               <div className="text-muted-foreground mb-1">Total WIP</div>
               <div className="font-mono text-lg">{totalWipKg.toFixed(1)} kg</div>
               <div className="text-muted-foreground text-[10px]">
@@ -234,13 +241,6 @@ export function AuthoritativeSummaryPanel({ tab }: AuthoritativeSummaryPanelProp
               <div className="font-mono text-lg">{totalFgUnits} units</div>
               <div className="text-muted-foreground text-[10px]">
                 {Object.keys(fg ?? {}).length} products
-              </div>
-            </div>
-            <div>
-              <div className="text-muted-foreground mb-1">Net Roast Demand</div>
-              <div className="font-mono text-lg">{totalNetDemandKg.toFixed(1)} kg</div>
-              <div className="text-muted-foreground text-[10px]">
-                After WIP + FG offset
               </div>
             </div>
           </div>
