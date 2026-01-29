@@ -75,6 +75,15 @@ export async function findExistingRoastGroup(
  * 2. If not, create with deterministic system_key derived from display_name
  * 3. If system_key collision occurs at DB level, fail fast with clear error
  */
+/**
+ * Creates or reuses a roast group.
+ * 
+ * Logic:
+ * 1. Check if roast group with EXACT same display_name exists (case-insensitive) → reuse it
+ * 2. If not, create with system_key derived from display_name
+ * 3. If system_key or code collides, auto-suffix (_2, _3, ...) until unique
+ * 4. Only fail if we can't find a unique key after max attempts (very rare)
+ */
 export async function createOrReuseRoastGroup(
   params: RoastGroupCreateParams
 ): Promise<RoastGroupResult> {
@@ -88,7 +97,7 @@ export async function createOrReuseRoastGroup(
     };
   }
 
-  // Step 1: Check for existing roast group with same display name
+  // Step 1: Check for EXACT existing roast group with same display name (case-insensitive)
   const existingKey = await findExistingRoastGroup(displayName);
   
   if (existingKey) {
@@ -99,60 +108,53 @@ export async function createOrReuseRoastGroup(
     };
   }
 
-  // Step 2: Generate deterministic system key
-  const systemKey = generateSystemKey(displayName);
-  const code = generateRoastGroupCode(displayName);
+  // Step 2: Generate base system key and code
+  const baseSystemKey = generateSystemKey(displayName);
+  const baseCode = generateRoastGroupCode(displayName);
 
-  // Step 3: Attempt to create (single attempt, no retries)
-  const { error } = await supabase
-    .from('roast_groups')
-    .insert({
-      roast_group: systemKey,
-      roast_group_code: code,
-      display_name: displayName,
-      is_blend: params.isBlend,
-      origin: params.origin ?? null,
-      blend_name: params.blendName ?? null,
-      standard_batch_kg: 20,
-      expected_yield_loss_pct: 16,
-      default_roaster: 'EITHER',
-      is_active: true,
-      cropster_profile_ref: params.cropsterProfileRef ?? null,
-      notes: params.notes ?? null,
-    });
+  // Step 3: Try to insert, auto-suffixing on collision
+  const MAX_SUFFIX_ATTEMPTS = 25;
+  
+  for (let attempt = 0; attempt < MAX_SUFFIX_ATTEMPTS; attempt++) {
+    const systemKey = attempt === 0 ? baseSystemKey : `${baseSystemKey}_${attempt + 1}`;
+    const code = attempt === 0 ? baseCode : `${baseCode}${attempt + 1}`.substring(0, 6);
+    
+    const { error } = await supabase
+      .from('roast_groups')
+      .insert({
+        roast_group: systemKey,
+        roast_group_code: code,
+        display_name: displayName,
+        is_blend: params.isBlend,
+        origin: params.origin ?? null,
+        blend_name: params.blendName ?? null,
+        standard_batch_kg: 20,
+        expected_yield_loss_pct: 16,
+        default_roaster: 'EITHER',
+        is_active: true,
+        cropster_profile_ref: params.cropsterProfileRef ?? null,
+        notes: params.notes ?? null,
+      });
 
-  if (error) {
-    // Check if it's a unique constraint violation
-    if (error.code === '23505') {
-      // Could be system_key or code collision
-      // Since display_name is the source of truth and it didn't match above,
-      // this means a stale system_key exists. Provide clear error.
-      const message = error.message?.toLowerCase() ?? '';
-      
-      if (message.includes('roast_group_pkey') || message.includes('roast_groups_pkey')) {
-        return {
-          roastGroupKey: '',
-          created: false,
-          error: `A roast group with system key "${systemKey}" already exists but has a different display name. Please use a more distinct name.`,
-        };
+    if (!error) {
+      if (attempt > 0) {
+        console.log(`[RoastGroup] Created new roast group with suffix: ${systemKey} (${displayName})`);
+      } else {
+        console.log(`[RoastGroup] Created new roast group: ${systemKey} (${displayName})`);
       }
-      
-      if (message.includes('roast_group_code')) {
-        return {
-          roastGroupKey: '',
-          created: false,
-          error: `A roast group with code "${code}" already exists. Please use a more distinct name.`,
-        };
-      }
-
       return {
-        roastGroupKey: '',
-        created: false,
-        error: `A roast group with a similar identifier already exists. Please use a more distinct name.`,
+        roastGroupKey: systemKey,
+        created: true,
       };
     }
 
-    // Other error
+    // Check if it's a unique constraint violation - if so, try next suffix
+    if (error.code === '23505') {
+      console.log(`[RoastGroup] Key collision on attempt ${attempt + 1}, trying suffix...`);
+      continue;
+    }
+
+    // Other error - fail fast
     return {
       roastGroupKey: '',
       created: false,
@@ -160,16 +162,20 @@ export async function createOrReuseRoastGroup(
     };
   }
 
-  console.log(`[RoastGroup] Created new roast group: ${systemKey} (${displayName})`);
+  // Exhausted all suffix attempts (very rare - would need 25+ roast groups with same base name)
   return {
-    roastGroupKey: systemKey,
-    created: true,
+    roastGroupKey: '',
+    created: false,
+    error: `Could not create roast group "${displayName}" - too many similar system keys exist. Please use a more distinct name.`,
   };
 }
 
 /**
  * Validates that a display name can be used for a new roast group.
  * Returns an error message if invalid, null if valid.
+ * 
+ * Only blocks on EXACT display_name duplicates (case-insensitive).
+ * System key collisions are handled automatically via suffixing during creation.
  */
 export async function validateRoastGroupName(
   displayName: string
@@ -184,7 +190,7 @@ export async function validateRoastGroupName(
     return 'Display name must be at least 2 characters';
   }
 
-  // Check if it would conflict with existing
+  // Check for exact duplicate display_name (will be reused, so not an error)
   const existingKey = await findExistingRoastGroup(trimmed);
   
   if (existingKey) {
@@ -192,18 +198,6 @@ export async function validateRoastGroupName(
     return null;
   }
 
-  // Check if system key would collide (but with different display name)
-  const systemKey = generateSystemKey(trimmed);
-  
-  const { data } = await supabase
-    .from('roast_groups')
-    .select('roast_group, display_name')
-    .eq('roast_group', systemKey)
-    .limit(1);
-
-  if (data && data.length > 0) {
-    return `System key "${systemKey}" is already used by "${data[0].display_name}". Please use a more distinct name.`;
-  }
-
+  // No blocking validation for system_key - collisions are auto-resolved
   return null;
 }
