@@ -58,12 +58,24 @@ export interface RoastDemand {
   roasted_output_kg: number;      // sum of ROASTED batches
 }
 
+/**
+ * Component inventory: roasted batches that are earmarked for a blend but not yet blended.
+ * These do NOT count as WIP for the component roast group.
+ */
+export interface ComponentInventory {
+  component_roast_group: string;
+  blend_roast_group: string;
+  roasted_kg: number;             // sum of actual_output_kg for ROASTED component batches
+  batch_count: number;            // number of ROASTED batches ready for blending
+}
+
 // ============================================================================
 // RAW DATA QUERIES
 // ============================================================================
 
 /**
  * Fetch all roasted batches (for WIP calculation)
+ * Includes planned_for_blend_roast_group to distinguish component batches
  */
 function useRoastedBatches() {
   return useQuery({
@@ -71,7 +83,7 @@ function useRoastedBatches() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roasted_batches')
-        .select('id, roast_group, status, actual_output_kg, planned_output_kg');
+        .select('id, roast_group, status, actual_output_kg, planned_output_kg, planned_for_blend_roast_group');
       if (error) throw error;
       return data ?? [];
     },
@@ -190,6 +202,10 @@ function useOpenOrderLines() {
 /**
  * Authoritative WIP by roast group
  * WIP = sum(actual_output_kg for ROASTED batches) - sum(kg_consumed from packing_runs)
+ * 
+ * IMPORTANT: Component batches (those with planned_for_blend_roast_group set) do NOT contribute
+ * to their component roast group's WIP. They are held as "roasted component inventory" until
+ * the blend is executed. Only the blend execution action creates WIP for the blend roast group.
  */
 export function useAuthoritativeWip() {
   const { data: batches, isLoading: batchesLoading } = useRoastedBatches();
@@ -208,9 +224,15 @@ export function useAuthoritativeWip() {
     }
     
     // Calculate roasted output by roast_group
+    // EXCLUDE component batches (those with planned_for_blend_roast_group set)
+    // Component batches do NOT contribute to WIP until the blend is executed
     const roastedByGroup: Record<string, number> = {};
     for (const b of batches) {
       if (b.status === 'ROASTED') {
+        // Skip component batches - they don't count as WIP until blended
+        if (b.planned_for_blend_roast_group) {
+          continue;
+        }
         roastedByGroup[b.roast_group] = (roastedByGroup[b.roast_group] ?? 0) + Number(b.actual_output_kg);
       }
     }
@@ -531,5 +553,52 @@ export function useAuthoritativeShortList() {
   return {
     data: shortList,
     isLoading: packingLoading || demandLoading || productsLoading,
+  };
+}
+
+/**
+ * Component Inventory by blend roast group
+ * Shows roasted component batches that are available for blending.
+ * These batches have planned_for_blend_roast_group set and are ROASTED but not yet consumed.
+ */
+export function useComponentInventory() {
+  const { data: batches, isLoading } = useRoastedBatches();
+  
+  const componentInventory = useMemo((): Record<string, ComponentInventory[]> => {
+    if (!batches) return {};
+    
+    // Group by blend roast group, then by component roast group
+    const byBlend: Record<string, Record<string, { kg: number; count: number }>> = {};
+    
+    for (const b of batches) {
+      if (b.status === 'ROASTED' && b.planned_for_blend_roast_group) {
+        if (!byBlend[b.planned_for_blend_roast_group]) {
+          byBlend[b.planned_for_blend_roast_group] = {};
+        }
+        if (!byBlend[b.planned_for_blend_roast_group][b.roast_group]) {
+          byBlend[b.planned_for_blend_roast_group][b.roast_group] = { kg: 0, count: 0 };
+        }
+        byBlend[b.planned_for_blend_roast_group][b.roast_group].kg += Number(b.actual_output_kg);
+        byBlend[b.planned_for_blend_roast_group][b.roast_group].count += 1;
+      }
+    }
+    
+    // Convert to array format
+    const result: Record<string, ComponentInventory[]> = {};
+    for (const [blendRg, components] of Object.entries(byBlend)) {
+      result[blendRg] = Object.entries(components).map(([componentRg, data]) => ({
+        component_roast_group: componentRg,
+        blend_roast_group: blendRg,
+        roasted_kg: data.kg,
+        batch_count: data.count,
+      }));
+    }
+    
+    return result;
+  }, [batches]);
+  
+  return {
+    data: componentInventory,
+    isLoading,
   };
 }
