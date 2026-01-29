@@ -553,9 +553,16 @@ export default function NewOrder() {
 
   // Render product group (base product name as header, variants underneath)
   const renderProductGroup = (baseName: string, variants: Product[]) => {
-    if (variants.length === 1) {
+    // Sort variants by grams per unit (smallest to largest)
+    const sortedVariants = [...variants].sort((a, b) => {
+      const gramsA = a.grams_per_unit ?? a.bag_size_g ?? 0;
+      const gramsB = b.grams_per_unit ?? b.bag_size_g ?? 0;
+      return gramsA - gramsB;
+    });
+
+    if (sortedVariants.length === 1) {
       // Single variant - no grouping needed
-      return renderProductRow(variants[0]);
+      return renderProductRow(sortedVariants[0]);
     }
 
     // Multiple variants - show as grouped section
@@ -563,7 +570,7 @@ export default function NewOrder() {
       <div key={baseName} className="mb-3">
         <p className="text-sm font-semibold text-foreground mb-1 pl-1">{baseName}</p>
         <ul className="pl-2 border-l-2 border-muted">
-          {variants.map((variant) => {
+          {sortedVariants.map((variant) => {
             const lineItem = getLineItem(variant.id);
             const hasPrice = prices && variant.id in prices;
             const price = prices?.[variant.id];
