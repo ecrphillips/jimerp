@@ -27,6 +27,7 @@ import {
   Package,
   Layers,
   Leaf,
+  Sparkles,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -43,6 +44,7 @@ import { UndoWorkflowModal, type UndoOperationType } from './UndoWorkflowModal';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { type RoastGroupComponent, getComponentBreakdown, type ComponentDisplay } from '@/hooks/useRoastGroupComponents';
+import { useBlendReadiness, getBlendReadinessDisplay } from '@/hooks/useBlendReadiness';
 
 type RoasterMachine = 'SAMIAC' | 'LORING';
 type DefaultRoaster = 'SAMIAC' | 'LORING' | 'EITHER';
@@ -260,6 +262,24 @@ export function RoastGroupDrawer({
       .map(c => `${c.pct}% ${c.displayName}`)
       .join(' · ');
   }, [componentBreakdown]);
+
+  // Blend readiness calculation - determines staged-for-blend kg from roasted components
+  const blendReadiness = useBlendReadiness(
+    roastGroup,
+    isBlend,
+    components,
+    netDemandKg,
+    wipKg
+  );
+  
+  // Get display props for blend readiness status
+  const blendStatusDisplay = getBlendReadinessDisplay(blendReadiness, coverageDelta);
+  
+  // For blends: "expected" column should show staged-for-blend kg instead of planned batches
+  // This reflects component inventory ready for blending, not direct roast batches
+  const displayExpectedOutput = isBlend && blendReadiness
+    ? blendReadiness.stagedForBlendKg
+    : plannedExpectedOutput;
 
   // Sort batches helper function - STATIC ORDER by created_at only
   // No resorting by status - preserve user's "work down the list" flow
@@ -724,8 +744,10 @@ export function RoastGroupDrawer({
         </td>
         <td className="py-3 text-right">
           <div className="flex flex-col items-end">
-            <span className="font-medium">{plannedExpectedOutput.toFixed(1)}</span>
-            <span className="text-muted-foreground text-xs">expected</span>
+            <span className="font-medium">{displayExpectedOutput.toFixed(1)}</span>
+            <span className="text-muted-foreground text-xs">
+              {isBlend && blendReadiness ? 'staged' : 'expected'}
+            </span>
           </div>
         </td>
         <td className="py-3 text-right">
@@ -733,7 +755,22 @@ export function RoastGroupDrawer({
           <span className="text-muted-foreground text-xs ml-1">kg</span>
         </td>
         <td className="py-3 text-right">
-          {coverageDelta >= 0 ? (
+          {/* Use blend-specific status display if available */}
+          {blendStatusDisplay ? (
+            <div className="flex flex-col items-end gap-0.5">
+              <Badge variant="secondary" className={blendStatusDisplay.className}>
+                {blendStatusDisplay.variant === 'ready' && (
+                  <Sparkles className="h-3 w-3 mr-1" />
+                )}
+                {blendStatusDisplay.label}
+              </Badge>
+              {blendStatusDisplay.sublabel && (
+                <span className="text-[10px] text-muted-foreground">
+                  {blendStatusDisplay.sublabel}
+                </span>
+              )}
+            </div>
+          ) : coverageDelta >= 0 ? (
             <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
               Covered +{coverageDelta.toFixed(1)} kg
             </Badge>
