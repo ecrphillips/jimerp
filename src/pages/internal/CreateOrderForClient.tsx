@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Plus, Minus, Trash2, ArrowLeft, ShieldAlert } from 'lucide-react';
-import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
+import { GramPackagingBadge, formatGramsLabel } from '@/components/GramPackagingBadge';
 import { useClientOrderingConstraints } from '@/hooks/useClientOrderingConstraints';
 import type { GrindOption } from '@/types/database';
 import type { Database } from '@/integrations/supabase/types';
@@ -25,11 +25,13 @@ import { Link } from 'react-router-dom';
 interface LineItem {
   productId: string;
   productName: string;
+  displayName: string;
   quantity: number;
   grind: GrindOption | null;
   grindOptions: GrindOption[];
   price: number | null;
-  packagingVariant: PackagingVariant | null;
+  packagingTypeName: string | null;
+  gramsPerUnit: number | null;
 }
 
 interface Product {
@@ -37,16 +39,27 @@ interface Product {
   product_name: string;
   sku: string | null;
   bag_size_g: number;
+  grams_per_unit: number | null;
   format: string;
   grind_options: GrindOption[];
   is_perennial: boolean;
-  packaging_variant: PackagingVariant | null;
+  packaging_type_id: string | null;
+  packaging_types: { name: string } | null;
   client_id: string;
 }
 
 interface Client {
   id: string;
   name: string;
+}
+
+// Helper to build display name with packaging info
+function buildDisplayName(productName: string, packagingTypeName: string | null, gramsPerUnit: number | null): string {
+  if (!packagingTypeName || !gramsPerUnit) {
+    return productName;
+  }
+  const sizeLabel = formatGramsLabel(gramsPerUnit);
+  return `${productName} — ${packagingTypeName} (${sizeLabel})`;
 }
 
 // Info banner showing client constraints (for admin awareness)
@@ -104,14 +117,14 @@ export default function CreateOrderForClient() {
     },
   });
 
-  // Fetch products for selected client
+  // Fetch products for selected client with packaging type join
   const { data: products, isLoading: productsLoading } = useQuery({
     queryKey: ['client-products-admin', selectedClientId],
     queryFn: async () => {
       if (!selectedClientId) return [];
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, bag_size_g, format, grind_options, is_perennial, packaging_variant, client_id')
+        .select('id, product_name, sku, bag_size_g, grams_per_unit, format, grind_options, is_perennial, packaging_type_id, packaging_types(name), client_id')
         .eq('client_id', selectedClientId)
         .eq('is_active', true)
         .order('product_name', { ascending: true });
@@ -167,6 +180,24 @@ export default function CreateOrderForClient() {
 
   const getLineItem = (productId: string) => lineItems.find((li) => li.productId === productId);
 
+  const createLineItem = (product: Product, qty: number): LineItem => {
+    const grindOpts = (product.grind_options ?? []) as GrindOption[];
+    const packagingTypeName = product.packaging_types?.name ?? null;
+    const gramsPerUnit = product.grams_per_unit;
+    
+    return {
+      productId: product.id,
+      productName: product.product_name,
+      displayName: buildDisplayName(product.product_name, packagingTypeName, gramsPerUnit),
+      quantity: qty,
+      grind: grindOpts.length > 0 ? grindOpts[0] : null,
+      grindOptions: grindOpts,
+      price: prices?.[product.id] ?? null,
+      packagingTypeName,
+      gramsPerUnit,
+    };
+  };
+
   const addOrIncrementProduct = (productId: string) => {
     const existing = getLineItem(productId);
     if (existing) {
@@ -177,19 +208,7 @@ export default function CreateOrderForClient() {
     const product = products?.find((p) => p.id === productId);
     if (!product) return;
 
-    const grindOpts = (product.grind_options ?? []) as GrindOption[];
-    setLineItems([
-      ...lineItems,
-      {
-        productId: product.id,
-        productName: product.product_name,
-        quantity: 1,
-        grind: grindOpts.length > 0 ? grindOpts[0] : null,
-        grindOptions: grindOpts,
-        price: prices?.[product.id] ?? null,
-        packagingVariant: product.packaging_variant,
-      },
-    ]);
+    setLineItems([...lineItems, createLineItem(product, 1)]);
   };
 
   const updateQuantity = (productId: string, qty: number) => {
@@ -227,19 +246,7 @@ export default function CreateOrderForClient() {
       if (!existing) {
         const product = products?.find((p) => p.id === productId);
         if (!product) return;
-        const grindOpts = (product.grind_options ?? []) as GrindOption[];
-        setLineItems([
-          ...lineItems,
-          {
-            productId: product.id,
-            productName: product.product_name,
-            quantity: qty,
-            grind: grindOpts.length > 0 ? grindOpts[0] : null,
-            grindOptions: grindOpts,
-            price: prices?.[product.id] ?? null,
-            packagingVariant: product.packaging_variant,
-          },
-        ]);
+        setLineItems([...lineItems, createLineItem(product, qty)]);
       } else {
         updateQuantity(productId, qty);
       }
@@ -258,7 +265,7 @@ export default function CreateOrderForClient() {
 
     const missingPrice = lineItems.find((li) => li.price === null);
     if (missingPrice) {
-      toast.error(`"${missingPrice.productName}" has no price set.`);
+      toast.error(`"${missingPrice.displayName}" has no price set.`);
       return;
     }
 
@@ -325,16 +332,19 @@ export default function CreateOrderForClient() {
     }
   };
 
+  // Render a single product SKU row
   const renderProductRow = (p: Product) => {
     const lineItem = getLineItem(p.id);
     const hasPrice = prices && p.id in prices;
     const price = prices?.[p.id];
+    const packagingTypeName = p.packaging_types?.name ?? null;
+    const gramsPerUnit = p.grams_per_unit;
 
     return (
       <li key={p.id} className="flex items-center justify-between py-2 border-b last:border-0">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className="font-medium truncate">{p.product_name}</span>
-          <PackagingBadge variant={p.packaging_variant} />
+          <GramPackagingBadge packagingTypeName={packagingTypeName} gramsPerUnit={gramsPerUnit} />
           {hasPrice ? (
             <span className="text-sm text-muted-foreground">${price!.toFixed(2)}</span>
           ) : (
@@ -370,6 +380,82 @@ export default function CreateOrderForClient() {
         </div>
       </li>
     );
+  };
+
+  // Render product group (base product name as header, variants underneath)
+  const renderProductGroup = (baseName: string, variants: Product[]) => {
+    if (variants.length === 1) {
+      return renderProductRow(variants[0]);
+    }
+
+    return (
+      <div key={baseName} className="mb-3">
+        <p className="text-sm font-semibold text-foreground mb-1 pl-1">{baseName}</p>
+        <ul className="pl-2 border-l-2 border-muted">
+          {variants.map((variant) => {
+            const lineItem = getLineItem(variant.id);
+            const hasPrice = prices && variant.id in prices;
+            const price = prices?.[variant.id];
+            const packagingTypeName = variant.packaging_types?.name ?? null;
+            const gramsPerUnit = variant.grams_per_unit;
+
+            return (
+              <li key={variant.id} className="flex items-center justify-between py-1.5 border-b last:border-0">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <GramPackagingBadge packagingTypeName={packagingTypeName} gramsPerUnit={gramsPerUnit} />
+                  {hasPrice ? (
+                    <span className="text-sm text-muted-foreground">${price!.toFixed(2)}</span>
+                  ) : (
+                    <span className="text-xs text-destructive">No price</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-7 w-7"
+                    onClick={() => updateQuantity(variant.id, (lineItem?.quantity ?? 0) - 1)}
+                    disabled={!lineItem}
+                  >
+                    <Minus className="h-3 w-3" />
+                  </Button>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    className="w-14 h-7 text-center text-sm px-1"
+                    value={lineItem?.quantity ?? ''}
+                    placeholder="0"
+                    onChange={(e) => handleQuantityInputChange(variant.id, e.target.value)}
+                  />
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-7 w-7"
+                    onClick={() => addOrIncrementProduct(variant.id)}
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  };
+
+  // Render products grouped by base name
+  const renderProductsGrouped = (productsList: Product[]) => {
+    const grouped: Map<string, Product[]> = new Map();
+    for (const p of productsList) {
+      if (!grouped.has(p.product_name)) {
+        grouped.set(p.product_name, []);
+      }
+      grouped.get(p.product_name)!.push(p);
+    }
+
+    const sortedGroups = Array.from(grouped.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    return sortedGroups.map(([baseName, variants]) => renderProductGroup(baseName, variants));
   };
 
   return (
@@ -462,7 +548,7 @@ export default function CreateOrderForClient() {
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                         Perennial
                       </p>
-                      <ul>{perennialProducts.map(renderProductRow)}</ul>
+                      <div>{renderProductsGrouped(perennialProducts)}</div>
                     </div>
                   )}
                   {perennialProducts.length > 0 && seasonalProducts.length > 0 && (
@@ -473,7 +559,7 @@ export default function CreateOrderForClient() {
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                         Seasonal
                       </p>
-                      <ul>{seasonalProducts.map(renderProductRow)}</ul>
+                      <div>{renderProductsGrouped(seasonalProducts)}</div>
                     </div>
                   )}
                 </div>
@@ -492,9 +578,12 @@ export default function CreateOrderForClient() {
                   <ul className="space-y-2">
                     {lineItems.map((li) => (
                       <li key={li.productId} className="flex items-center justify-between text-sm border-b pb-2 last:border-0">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
                           <span className="truncate">{li.productName}</span>
-                          <PackagingBadge variant={li.packagingVariant} />
+                          <GramPackagingBadge 
+                            packagingTypeName={li.packagingTypeName} 
+                            gramsPerUnit={li.gramsPerUnit} 
+                          />
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           {li.grindOptions.length > 0 && (
