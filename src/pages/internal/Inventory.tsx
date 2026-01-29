@@ -66,13 +66,27 @@ export default function Inventory() {
 
   // ===== WIP Tab Queries =====
   
+  // Fetch roast groups to identify blends
+  const { data: roastGroupsInfo } = useQuery({
+    queryKey: ['roast-groups-info-inventory'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('roast_groups')
+        .select('roast_group, is_blend, is_active')
+        .eq('is_active', true);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  
   // Fetch roasted batches (ROASTED status only)
+  // EXCLUDE component batches (those with planned_for_blend_roast_group set)
   const { data: roastedBatches } = useQuery({
     queryKey: ['roasted-batches-inventory'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roasted_batches')
-        .select('roast_group, actual_output_kg')
+        .select('roast_group, actual_output_kg, planned_for_blend_roast_group, consumed_by_blend_at')
         .eq('status', 'ROASTED');
       if (error) throw error;
       return data ?? [];
@@ -91,7 +105,7 @@ export default function Inventory() {
     },
   });
 
-  // Fetch WIP adjustments
+  // Fetch WIP adjustments from wip_adjustments table (manual adjustments)
   const { data: wipAdjustments } = useQuery({
     queryKey: ['wip-adjustments'],
     queryFn: async () => {
@@ -99,6 +113,20 @@ export default function Inventory() {
         .from('wip_adjustments')
         .select('*')
         .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  
+  // Fetch ledger ADJUSTMENT transactions (blend outputs, etc.)
+  const { data: ledgerAdjustments } = useQuery({
+    queryKey: ['ledger-adjustments-inventory'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('inventory_transactions')
+        .select('roast_group, quantity_kg, notes')
+        .in('transaction_type', ['ADJUSTMENT', 'LOSS'])
+        .not('roast_group', 'is', null);
       if (error) throw error;
       return data ?? [];
     },
@@ -117,14 +145,28 @@ export default function Inventory() {
     },
   });
 
-  // Calculate WIP by roast group
+  // Calculate WIP by roast group using ledger-based logic
+  // For blends: WIP = ledger adjustments (blend credits) - packing consumed
+  // For single origins: WIP = roasted output - packing consumed + manual adjustments + ledger adjustments
   const wipByRoastGroup = useMemo((): WipByRoastGroup[] => {
-    const groupMap: Record<string, { roasted: number; consumed: number; adjusted: number }> = {};
+    const groupMap: Record<string, { roasted: number; consumed: number; adjusted: number; ledgerAdj: number }> = {};
+    
+    // Identify blend roast groups
+    const blendGroups = new Set<string>();
+    for (const rg of roastGroupsInfo ?? []) {
+      if (rg.is_blend) {
+        blendGroups.add(rg.roast_group);
+      }
+    }
 
-    // Sum roasted output
+    // Sum roasted output - EXCLUDE component batches (they don't count as WIP)
     for (const batch of roastedBatches ?? []) {
+      // Skip component batches - they go into "staged for blend", not WIP
+      if (batch.planned_for_blend_roast_group) {
+        continue;
+      }
       if (!groupMap[batch.roast_group]) {
-        groupMap[batch.roast_group] = { roasted: 0, consumed: 0, adjusted: 0 };
+        groupMap[batch.roast_group] = { roasted: 0, consumed: 0, adjusted: 0, ledgerAdj: 0 };
       }
       groupMap[batch.roast_group].roasted += Number(batch.actual_output_kg) || 0;
     }
@@ -134,29 +176,49 @@ export default function Inventory() {
       const roastGroup = (run.product as any)?.roast_group;
       if (!roastGroup) continue;
       if (!groupMap[roastGroup]) {
-        groupMap[roastGroup] = { roasted: 0, consumed: 0, adjusted: 0 };
+        groupMap[roastGroup] = { roasted: 0, consumed: 0, adjusted: 0, ledgerAdj: 0 };
       }
       groupMap[roastGroup].consumed += Number(run.kg_consumed) || 0;
     }
 
-    // Sum adjustments
+    // Sum manual WIP adjustments (from wip_adjustments table)
     for (const adj of wipAdjustments ?? []) {
       if (!groupMap[adj.roast_group]) {
-        groupMap[adj.roast_group] = { roasted: 0, consumed: 0, adjusted: 0 };
+        groupMap[adj.roast_group] = { roasted: 0, consumed: 0, adjusted: 0, ledgerAdj: 0 };
       }
       groupMap[adj.roast_group].adjusted += Number(adj.kg_delta) || 0;
     }
+    
+    // Sum ledger adjustments (ADJUSTMENT/LOSS transactions) - includes blend outputs
+    for (const adj of ledgerAdjustments ?? []) {
+      if (!adj.roast_group) continue;
+      if (!groupMap[adj.roast_group]) {
+        groupMap[adj.roast_group] = { roasted: 0, consumed: 0, adjusted: 0, ledgerAdj: 0 };
+      }
+      groupMap[adj.roast_group].ledgerAdj += Number(adj.quantity_kg) || 0;
+    }
 
     return Object.entries(groupMap)
-      .map(([roast_group, data]) => ({
-        roast_group,
-        roasted_kg: data.roasted,
-        consumed_kg: data.consumed,
-        adjusted_kg: data.adjusted,
-        net_wip_kg: data.roasted - data.consumed + data.adjusted,
-      }))
+      .map(([roast_group, data]) => {
+        const isBlend = blendGroups.has(roast_group);
+        
+        // For blends: WIP = ledger adjustments (blend credits) - packing consumed
+        // (no direct roasted output for blends)
+        // For single origins: WIP = roasted - consumed + manual adj + ledger adj
+        const netWip = isBlend
+          ? data.ledgerAdj - data.consumed + data.adjusted
+          : data.roasted - data.consumed + data.adjusted + data.ledgerAdj;
+        
+        return {
+          roast_group,
+          roasted_kg: isBlend ? data.ledgerAdj : data.roasted, // Show blend credits as "roasted" for display
+          consumed_kg: data.consumed,
+          adjusted_kg: isBlend ? data.adjusted : (data.adjusted + data.ledgerAdj),
+          net_wip_kg: netWip,
+        };
+      })
       .sort((a, b) => a.roast_group.localeCompare(b.roast_group));
-  }, [roastedBatches, packingRuns, wipAdjustments]);
+  }, [roastedBatches, packingRuns, wipAdjustments, ledgerAdjustments, roastGroupsInfo]);
 
   // WIP adjustment mutation
   const createWipAdjustment = useMutation({
@@ -330,7 +392,10 @@ export default function Inventory() {
             <CardHeader>
               <CardTitle className="text-lg">Work-in-Progress by Roast Group</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Net WIP = Roasted Output − Packing Consumed + Adjustments
+                Net WIP = Roasted/Blended Output − Packing Consumed + Adjustments
+              </p>
+              <p className="text-xs text-muted-foreground">
+                For post-roast blends, WIP is created when components are blended, not when components are roasted.
               </p>
             </CardHeader>
             <CardContent>
@@ -341,7 +406,7 @@ export default function Inventory() {
                   <thead>
                     <tr className="border-b text-left">
                       <th className="pb-2">Roast Group</th>
-                      <th className="pb-2 text-right">Roasted</th>
+                      <th className="pb-2 text-right">Roasted/Blended</th>
                       <th className="pb-2 text-right">Consumed</th>
                       <th className="pb-2 text-right">Adjustments</th>
                       <th className="pb-2 text-right">Net WIP</th>
