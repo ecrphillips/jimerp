@@ -640,14 +640,14 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         <CardContent>
           {displayOrders.length === 0 ? (
             <div className="py-8 text-center">
-              <div className="text-4xl mb-3">🎉</div>
-              <p className="text-lg font-medium text-foreground mb-1">All caught up!</p>
+              <div className="text-4xl mb-3">🚚</div>
+              <p className="text-lg font-medium text-foreground mb-1">No shipping work right now</p>
               <p className="text-muted-foreground text-sm">
                 {dateFilterConfig.mode === 'today' 
-                  ? "No shipping work for today. Check 'Tomorrow' or 'All' for future orders."
+                  ? "Check 'Tomorrow' or 'All' for future orders, or enjoy being caught up!"
                   : dateFilterConfig.mode === 'tomorrow'
-                    ? "No shipping work for tomorrow. Check 'All' for future orders."
-                    : "No orders to ship across all dates."}
+                    ? "Check 'All' for future orders, or enjoy being caught up!"
+                    : "No orders to ship across all dates — enjoy being caught up!"}
               </p>
             </div>
           ) : (
