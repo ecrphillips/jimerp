@@ -405,13 +405,17 @@ export function BlendExecuteModal({
     },
     onSuccess: (amount) => {
       toast.success(`Blended ${amount.toFixed(1)} kg of ${blendDisplayName}`);
+      // Invalidate all inventory-related queries for immediate UI update
       queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
       queryClient.invalidateQueries({ queryKey: ['roast-demand'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-wip'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-adjustments'] }); // New: blend output adjustments
       queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-roast-demand'] }); // For net demand recalculation
       queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['roasted-component-batches-for-blending'] }); // Blend readiness
       queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
       setBlendedAmount(amount);
       setShowSuccess(true);

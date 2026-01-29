@@ -21,7 +21,8 @@ export interface AuthoritativeWip {
   roast_group: string;
   roasted_completed_kg: number;  // sum(actual_output_kg) for ROASTED batches
   packed_consumed_kg: number;    // sum(kg_consumed) from packing_runs
-  wip_available_kg: number;      // roasted_completed_kg - packed_consumed_kg
+  adjustments_kg: number;        // sum(ADJUSTMENT/LOSS transactions) - includes blend outputs
+  wip_available_kg: number;      // roasted_completed_kg - packed_consumed_kg + adjustments_kg
 }
 
 export interface AuthoritativeFg {
@@ -101,6 +102,25 @@ function usePackingRuns() {
       const { data, error } = await supabase
         .from('packing_runs')
         .select('id, product_id, units_packed, kg_consumed');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
+/**
+ * Fetch WIP adjustments from inventory_transactions (ADJUSTMENT type with roast_group)
+ * These include blend outputs, manual adjustments, losses, etc.
+ */
+function useWipAdjustments() {
+  return useQuery({
+    queryKey: ['authoritative-wip-adjustments'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('inventory_transactions')
+        .select('id, roast_group, quantity_kg, transaction_type, notes')
+        .not('roast_group', 'is', null)
+        .in('transaction_type', ['ADJUSTMENT', 'LOSS']);
       if (error) throw error;
       return data ?? [];
     },
@@ -212,6 +232,7 @@ export function useAuthoritativeWip() {
   const { data: batches, isLoading: batchesLoading } = useRoastedBatches();
   const { data: packingRuns, isLoading: packingLoading } = usePackingRuns();
   const { data: products, isLoading: productsLoading } = useProductsWithRoastGroup();
+  const { data: adjustments, isLoading: adjustmentsLoading } = useWipAdjustments();
   
   const wip = useMemo((): Record<string, AuthoritativeWip> => {
     if (!batches || !packingRuns || !products) return {};
@@ -247,27 +268,42 @@ export function useAuthoritativeWip() {
       }
     }
     
+    // Calculate adjustments (from inventory_transactions ADJUSTMENT/LOSS entries)
+    // This includes blend outputs (positive) and component consumptions (negative)
+    const adjustmentsByGroup: Record<string, number> = {};
+    for (const adj of adjustments ?? []) {
+      if (adj.roast_group) {
+        adjustmentsByGroup[adj.roast_group] = (adjustmentsByGroup[adj.roast_group] ?? 0) + Number(adj.quantity_kg ?? 0);
+      }
+    }
+    
     // Combine into authoritative WIP
-    const allGroups = new Set([...Object.keys(roastedByGroup), ...Object.keys(consumedByGroup)]);
+    const allGroups = new Set([
+      ...Object.keys(roastedByGroup), 
+      ...Object.keys(consumedByGroup),
+      ...Object.keys(adjustmentsByGroup),
+    ]);
     const result: Record<string, AuthoritativeWip> = {};
     
     for (const rg of allGroups) {
       const roasted = roastedByGroup[rg] ?? 0;
       const consumed = consumedByGroup[rg] ?? 0;
+      const adjusted = adjustmentsByGroup[rg] ?? 0;
       result[rg] = {
         roast_group: rg,
         roasted_completed_kg: roasted,
         packed_consumed_kg: consumed,
-        wip_available_kg: Math.max(0, roasted - consumed),
+        adjustments_kg: adjusted,
+        wip_available_kg: Math.max(0, roasted - consumed + adjusted),
       };
     }
     
     return result;
-  }, [batches, packingRuns, products]);
+  }, [batches, packingRuns, products, adjustments]);
   
   return {
     data: wip,
-    isLoading: batchesLoading || packingLoading || productsLoading,
+    isLoading: batchesLoading || packingLoading || productsLoading || adjustmentsLoading,
   };
 }
 
