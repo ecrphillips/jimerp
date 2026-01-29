@@ -9,19 +9,20 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Plus, Minus, Trash2, ArrowLeft, ShieldAlert } from 'lucide-react';
+import { Plus, Minus, Trash2, ArrowLeft, ShieldAlert, AlertCircle } from 'lucide-react';
 import { GramPackagingBadge, formatGramsLabel } from '@/components/GramPackagingBadge';
 import { useClientOrderingConstraints } from '@/hooks/useClientOrderingConstraints';
+import { WorkDeadlinePicker } from '@/components/orders/WorkDeadlinePicker';
 import type { GrindOption } from '@/types/database';
 import type { Database } from '@/integrations/supabase/types';
 import { LocationSelect } from '@/components/orders/LocationSelect';
 
 type DeliveryMethod = Database['public']['Enums']['delivery_method'];
 import { Link } from 'react-router-dom';
-
 interface LineItem {
   productId: string;
   productName: string;
@@ -96,6 +97,8 @@ export default function CreateOrderForClient() {
   const [selectedLocationId, setSelectedLocationId] = useState<string>('');
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [requestedShipDate, setRequestedShipDate] = useState('');
+  const [workDeadlineAt, setWorkDeadlineAt] = useState<string | null>(null);
+  const [confirmOnCreate, setConfirmOnCreate] = useState(false);
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('PICKUP');
   const [clientPo, setClientPo] = useState('');
   const [clientNotes, setClientNotes] = useState('');
@@ -158,10 +161,12 @@ export default function CreateOrderForClient() {
     enabled: !!selectedClientId,
   });
 
-  // Reset line items and location when client changes
+  // Reset line items, location, deadline, and confirm flag when client changes
   React.useEffect(() => {
     setLineItems([]);
     setSelectedLocationId('');
+    setWorkDeadlineAt(null);
+    setConfirmOnCreate(false);
   }, [selectedClientId]);
 
   // Group products by perennial status
@@ -271,14 +276,18 @@ export default function CreateOrderForClient() {
 
     setSubmitting(true);
     try {
+      // Determine initial status: CONFIRMED if user checked "Confirm order", else SUBMITTED
+      const initialStatus = confirmOnCreate ? 'CONFIRMED' : 'SUBMITTED';
+      
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
           client_id: selectedClientId,
           location_id: selectedLocationId || null,
           order_number: '',
-          status: 'SUBMITTED',
+          status: initialStatus,
           requested_ship_date: requestedShipDate || null,
+          work_deadline_at: workDeadlineAt || null,
           delivery_method: deliveryMethod,
           client_po: clientPo || null,
           client_notes: clientNotes || null,
@@ -641,6 +650,15 @@ export default function CreateOrderForClient() {
                   />
                 </div>
                 <div>
+                  <Label>Work Deadline</Label>
+                  <WorkDeadlinePicker
+                    value={workDeadlineAt}
+                    onChange={setWorkDeadlineAt}
+                    showSaveButton={false}
+                    compact
+                  />
+                </div>
+                <div>
                   <Label htmlFor="delivery">Delivery Method</Label>
                   <Select value={deliveryMethod} onValueChange={(v) => setDeliveryMethod(v as DeliveryMethod)}>
                     <SelectTrigger id="delivery">
@@ -681,12 +699,40 @@ export default function CreateOrderForClient() {
                     placeholder="Notes visible only to Admin/Ops"
                   />
                 </div>
+                
+                <Separator />
+                
+                {/* Confirm on creation option */}
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="confirmOnCreate"
+                      checked={confirmOnCreate}
+                      onCheckedChange={(checked) => setConfirmOnCreate(checked === true)}
+                    />
+                    <Label htmlFor="confirmOnCreate" className="text-sm font-normal cursor-pointer">
+                      Confirm order immediately
+                    </Label>
+                  </div>
+                  {confirmOnCreate && !workDeadlineAt && (
+                    <div className="flex items-center gap-1 text-xs text-amber-600">
+                      <AlertCircle className="h-3 w-3" />
+                      <span>No deadline set — order will still be confirmed</span>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {confirmOnCreate 
+                      ? 'Order will be created as CONFIRMED and generate production demand.' 
+                      : 'Order will be created as SUBMITTED (requires separate confirmation).'}
+                  </p>
+                </div>
+                
                 <Button
                   className="w-full"
                   onClick={submitOrder}
                   disabled={submitting || lineItems.length === 0}
                 >
-                  {submitting ? 'Creating…' : 'Create Order'}
+                  {submitting ? 'Creating…' : confirmOnCreate ? 'Create & Confirm Order' : 'Create Order'}
                 </Button>
               </CardContent>
             </Card>

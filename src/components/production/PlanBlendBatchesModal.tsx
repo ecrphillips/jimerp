@@ -21,7 +21,7 @@ interface BlendComponent {
   standardBatchKg: number;
   expectedYieldLossPct: number;
   defaultRoaster: DefaultRoaster;
-  // Inventory
+  // Inventory (authoritative from inventory_transactions)
   wipKg: number;
   // Coverage from existing batches
   plannedExpectedOutputKg: number;
@@ -101,18 +101,65 @@ export function PlanBlendBatchesModal({
     enabled: open,
   });
   
-  // Fetch inventory levels for components
-  const { data: inventoryLevels } = useQuery({
-    queryKey: ['roast-group-inventory-levels'],
+  // Fetch AUTHORITATIVE WIP from inventory_transactions (not legacy cached table)
+  const { data: authoritativeWip } = useQuery({
+    queryKey: ['inventory-ledger-wip-for-blend', blendRoastGroup],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('roast_group_inventory_levels')
-        .select('roast_group, wip_kg');
+      if (!blendComponents || blendComponents.length === 0) return {};
       
-      if (error) throw error;
-      return data ?? [];
+      const componentGroups = blendComponents.map(c => c.component_roast_group);
+      
+      // Get roast outputs
+      const { data: roastOutputs, error: roastError } = await supabase
+        .from('inventory_transactions')
+        .select('roast_group, quantity_kg')
+        .eq('transaction_type', 'ROAST_OUTPUT')
+        .in('roast_group', componentGroups);
+      
+      if (roastError) throw roastError;
+      
+      // Get pack consumptions
+      const { data: packConsumptions, error: packError } = await supabase
+        .from('inventory_transactions')
+        .select('roast_group, quantity_kg')
+        .eq('transaction_type', 'PACK_CONSUME_WIP')
+        .in('roast_group', componentGroups);
+      
+      if (packError) throw packError;
+      
+      // Get adjustments and losses
+      const { data: adjustments, error: adjError } = await supabase
+        .from('inventory_transactions')
+        .select('roast_group, quantity_kg')
+        .in('transaction_type', ['ADJUSTMENT', 'LOSS'])
+        .in('roast_group', componentGroups);
+      
+      if (adjError) throw adjError;
+      
+      // Calculate WIP per group
+      const wipByGroup: Record<string, number> = {};
+      
+      for (const output of roastOutputs ?? []) {
+        if (output.roast_group) {
+          wipByGroup[output.roast_group] = (wipByGroup[output.roast_group] ?? 0) + (Number(output.quantity_kg) || 0);
+        }
+      }
+      
+      for (const consume of packConsumptions ?? []) {
+        if (consume.roast_group) {
+          wipByGroup[consume.roast_group] = (wipByGroup[consume.roast_group] ?? 0) + (Number(consume.quantity_kg) || 0);
+        }
+      }
+      
+      for (const adj of adjustments ?? []) {
+        if (adj.roast_group) {
+          wipByGroup[adj.roast_group] = (wipByGroup[adj.roast_group] ?? 0) + (Number(adj.quantity_kg) || 0);
+        }
+      }
+      
+      return wipByGroup;
     },
-    enabled: open,
+    enabled: open && !!blendComponents && blendComponents.length > 0,
   });
   
   // Fetch existing batches for components
@@ -143,14 +190,14 @@ export function PlanBlendBatchesModal({
     return map;
   }, [roastGroupConfigs]);
   
-  // Build inventory map
+  // Build inventory map from AUTHORITATIVE WIP data
   const inventoryByGroup = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const level of inventoryLevels ?? []) {
-      map[level.roast_group] = Number(level.wip_kg) || 0;
+    for (const [roastGroup, wipKg] of Object.entries(authoritativeWip ?? {})) {
+      map[roastGroup] = Math.max(0, wipKg);
     }
     return map;
-  }, [inventoryLevels]);
+  }, [authoritativeWip]);
   
   // Calculate batch coverage for each component
   const batchCoverageByGroup = useMemo(() => {
