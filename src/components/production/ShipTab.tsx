@@ -31,6 +31,7 @@ import type { DateFilterConfig } from './types';
 // Use AUTHORITATIVE inventory hooks - computed from source-of-truth tables
 import { useAuthoritativeFg, useAuthoritativeShortList } from '@/hooks/useAuthoritativeInventory';
 import { AuthoritativeSummaryPanel } from './AuthoritativeTotals';
+import { filterOrderByWorkStart } from '@/lib/productionScheduling';
 
 type ShipPriority = 'NORMAL' | 'TIME_SENSITIVE';
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -110,12 +111,12 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     },
   });
 
-  // Fetch order line items for demand based on dateFilterConfig
-  // NOW FILTERS BY work_deadline instead of requested_ship_date
-  const { data: orderLineItems } = useQuery({
-    queryKey: ['ship-demand', dateFilterConfig],
+  // Fetch ALL order line items for demand
+  // Filtering by work_start_at happens client-side for accurate production window logic
+  const { data: allOrderLineItems } = useQuery({
+    queryKey: ['ship-demand-all'],
     queryFn: async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from('order_line_items')
         .select(`
           id,
@@ -126,24 +127,22 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
       
-      // Apply date filter based on mode - using work_deadline with 13:00 rule
-      if (dateFilterConfig.mode === 'today') {
-        // TODAY: work_deadline <= tomorrow at 13:00
-        query = query.lte('order.work_deadline', dateFilterConfig.maxDate);
-      } else if (dateFilterConfig.mode === 'tomorrow') {
-        // TOMORROW: (work_deadline > tomorrow 13:00 AND <= day after tomorrow 13:00) OR manually_deprioritized
-        query = query.or(
-          `and(work_deadline.gt.${dateFilterConfig.minDate},work_deadline.lte.${dateFilterConfig.maxDate}),manually_deprioritized.eq.true`, 
-          { referencedTable: 'orders' }
-        );
-      }
-      // ALL mode: no date filter
-      
-      const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
     },
   });
+  
+  // Client-side filter using work_start_at calculation
+  const orderLineItems = useMemo(() => {
+    if (!allOrderLineItems) return [];
+    if (dateFilterConfig.mode === 'all') return allOrderLineItems;
+    
+    return allOrderLineItems.filter(li => {
+      const workDeadline = li.order?.work_deadline ?? null;
+      const manuallyDeprioritized = li.order?.manually_deprioritized ?? false;
+      return filterOrderByWorkStart(workDeadline, manuallyDeprioritized, dateFilterConfig.mode);
+    });
+  }, [allOrderLineItems, dateFilterConfig.mode]);
 
   // ========== AUTHORITATIVE FG INVENTORY (from source-of-truth tables) ==========
   // FG = sum(packing_runs.units_packed) - sum(ship_picks.units_picked for open orders)
@@ -160,11 +159,11 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
   }, [authFg]);
 
   // Fetch orders for shippable view (including ship_display_order)
-  // NOW FILTERS BY work_deadline instead of requested_ship_date
-  const { data: ordersForShipping } = useQuery({
-    queryKey: ['shippable-orders', dateFilterConfig],
+  // Fetch ALL orders for shippable view - filtering happens client-side
+  const { data: allOrdersForShipping } = useQuery({
+    queryKey: ['shippable-orders-all'],
     queryFn: async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from('orders')
         .select(`
           id,
@@ -192,25 +191,24 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         .order('ship_display_order', { ascending: true, nullsFirst: false })
         .order('order_number', { ascending: true });
       
-      // Apply date filter based on mode - using work_deadline with 13:00 rule
-      if (dateFilterConfig.mode === 'today') {
-        // TODAY: work_deadline <= tomorrow at 13:00
-        query = query.lte('work_deadline', dateFilterConfig.maxDate);
-      } else if (dateFilterConfig.mode === 'tomorrow') {
-        // TOMORROW: (work_deadline > tomorrow 13:00 AND <= day after tomorrow 13:00) OR manually_deprioritized
-        query = query.or(
-          `and(work_deadline.gt.${dateFilterConfig.minDate},work_deadline.lte.${dateFilterConfig.maxDate}),manually_deprioritized.eq.true`
-        );
-      }
-      // ALL mode: no date filter
-      
-      const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
     },
     staleTime: 30000, // 30 seconds stale time to prevent refetches overriding user changes
     refetchOnWindowFocus: false,
   });
+  
+  // Client-side filter using work_start_at calculation
+  const ordersForShipping = useMemo(() => {
+    if (!allOrdersForShipping) return [];
+    if (dateFilterConfig.mode === 'all') return allOrdersForShipping;
+    
+    return allOrdersForShipping.filter(order => {
+      const workDeadline = (order as any).work_deadline ?? null;
+      const manuallyDeprioritized = (order as any).manually_deprioritized ?? false;
+      return filterOrderByWorkStart(workDeadline, manuallyDeprioritized, dateFilterConfig.mode);
+    });
+  }, [allOrdersForShipping, dateFilterConfig.mode]);
 
   // Fetch shipped orders awaiting invoice
   const { data: shippedAwaitingInvoice } = useQuery({
