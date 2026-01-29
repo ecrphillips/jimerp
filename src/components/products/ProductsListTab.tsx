@@ -15,6 +15,7 @@ import { ProductTypeChoiceModal } from './ProductTypeChoiceModal';
 import { NewSingleOriginProductModal } from './NewSingleOriginProductModal';
 import { NewBlendProductModal } from './NewBlendProductModal';
 import { SafeDeleteModal } from '@/components/SafeDeleteModal';
+import { RoastGroupRerouteModal } from './RoastGroupRerouteModal';
 import { Trash2 } from 'lucide-react';
 
 interface Product {
@@ -64,6 +65,27 @@ export function ProductsListTab() {
     open_orders: number;
     completed_orders: number;
     cancelled_orders: number;
+  } | null>(null);
+
+  // Roast group reroute modal state
+  const [showRerouteModal, setShowRerouteModal] = useState(false);
+  const [pendingRerouteData, setPendingRerouteData] = useState<{
+    productId: string;
+    productName: string;
+    currentRoastGroup: string | null;
+    newRoastGroup: string | null;
+    fullPayload: {
+      product_name: string;
+      sku: string | null;
+      format: ProductFormat;
+      bag_size_g: number;
+      grind_options: GrindOption[];
+      client_id: string;
+      is_active: boolean;
+      is_perennial: boolean;
+      packaging_variant: PackagingVariant | null;
+      roast_group: string | null;
+    };
   } | null>(null);
 
   // Form state (for editing only now)
@@ -158,21 +180,20 @@ export function ProductsListTab() {
     return products.filter((p) => !(p.id in currentPrices));
   }, [products, currentPrices]);
 
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const payload = {
-        product_name: productName,
-        sku: sku || null,
-        format,
-        bag_size_g: bagSize,
-        grind_options: grindOptions,
-        client_id: clientId,
-        is_active: isActive,
-        is_perennial: isPerennial,
-        packaging_variant: packagingVariant,
-        roast_group: roastGroup || null,
-      };
-
+  // Actual save mutation (used after confirmation if needed)
+  const executeSaveMutation = useMutation({
+    mutationFn: async (payload: {
+      product_name: string;
+      sku: string | null;
+      format: ProductFormat;
+      bag_size_g: number;
+      grind_options: GrindOption[];
+      client_id: string;
+      is_active: boolean;
+      is_perennial: boolean;
+      packaging_variant: PackagingVariant | null;
+      roast_group: string | null;
+    }) => {
       let productId: string;
 
       if (editingProduct) {
@@ -212,16 +233,85 @@ export function ProductsListTab() {
       }
     },
     onSuccess: () => {
-      toast.success(editingProduct ? 'Product updated' : 'Product created');
+      const wasReroute = pendingRerouteData !== null;
+      toast.success(
+        wasReroute 
+          ? 'Product rerouted — roast demand recalculated' 
+          : (editingProduct ? 'Product updated' : 'Product created')
+      );
+      // Invalidate all production-related queries to force recalculation
       queryClient.invalidateQueries({ queryKey: ['all-products'] });
       queryClient.invalidateQueries({ queryKey: ['all-prices'] });
+      queryClient.invalidateQueries({ queryKey: ['production-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['roast-demand'] });
+      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
       closeDialog();
+      setShowRerouteModal(false);
+      setPendingRerouteData(null);
     },
     onError: (err) => {
       console.error(err);
       toast.error('Failed to save product');
     },
   });
+
+  // Handler that checks if roast group is changing
+  const handleSave = useCallback(() => {
+    const payload = {
+      product_name: productName,
+      sku: sku || null,
+      format,
+      bag_size_g: bagSize,
+      grind_options: grindOptions,
+      client_id: clientId,
+      is_active: isActive,
+      is_perennial: isPerennial,
+      packaging_variant: packagingVariant,
+      roast_group: roastGroup || null,
+    };
+
+    // Check if we're editing and roast group is changing
+    if (editingProduct) {
+      const currentRG = editingProduct.roast_group || null;
+      const newRG = roastGroup || null;
+      
+      if (currentRG !== newRG) {
+        // Roast group is changing — show confirmation modal
+        setPendingRerouteData({
+          productId: editingProduct.id,
+          productName: editingProduct.product_name,
+          currentRoastGroup: currentRG,
+          newRoastGroup: newRG,
+          fullPayload: payload,
+        });
+        setShowRerouteModal(true);
+        return;
+      }
+    }
+
+    // No roast group change — proceed directly
+    executeSaveMutation.mutate(payload);
+  }, [
+    editingProduct,
+    productName,
+    sku,
+    format,
+    bagSize,
+    grindOptions,
+    clientId,
+    isActive,
+    isPerennial,
+    packagingVariant,
+    roastGroup,
+    executeSaveMutation,
+  ]);
+
+  // Handler for confirmed reroute
+  const handleConfirmReroute = useCallback(() => {
+    if (pendingRerouteData) {
+      executeSaveMutation.mutate(pendingRerouteData.fullPayload);
+    }
+  }, [pendingRerouteData, executeSaveMutation]);
 
   const backfillMutation = useMutation({
     mutationFn: async () => {
@@ -621,8 +711,8 @@ export function ProductsListTab() {
             </div>
             <div className="flex justify-end gap-2 pt-4">
               <Button variant="outline" onClick={closeDialog}>Cancel</Button>
-              <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !productName || !clientId}>
-                {saveMutation.isPending ? 'Saving…' : 'Save'}
+              <Button onClick={handleSave} disabled={executeSaveMutation.isPending || !productName || !clientId}>
+                {executeSaveMutation.isPending ? 'Saving…' : 'Save'}
               </Button>
             </div>
           </div>
@@ -656,6 +746,20 @@ export function ProductsListTab() {
         isLoading={deleteMutation.isPending || setInactiveMutation.isPending}
         onSetInactive={() => setInactiveMutation.mutate()}
         onConfirmDelete={() => deleteMutation.mutate(true)}
+      />
+
+      {/* Roast Group Reroute Confirmation Modal */}
+      <RoastGroupRerouteModal
+        open={showRerouteModal}
+        onOpenChange={(open) => {
+          setShowRerouteModal(open);
+          if (!open) setPendingRerouteData(null);
+        }}
+        productName={pendingRerouteData?.productName ?? ''}
+        currentRoastGroup={pendingRerouteData?.currentRoastGroup ?? null}
+        newRoastGroup={pendingRerouteData?.newRoastGroup ?? null}
+        onConfirm={handleConfirmReroute}
+        isPending={executeSaveMutation.isPending}
       />
     </div>
   );
