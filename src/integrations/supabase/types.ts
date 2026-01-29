@@ -76,6 +76,42 @@ export type Database = {
         }
         Relationships: []
       }
+      client_allowed_products: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          product_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          product_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_allowed_products_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_allowed_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_locations: {
         Row: {
           client_id: string
@@ -118,6 +154,8 @@ export type Database = {
         Row: {
           billing_contact_name: string | null
           billing_email: string | null
+          case_only: boolean
+          case_size: number | null
           client_code: string
           created_at: string
           id: string
@@ -130,6 +168,8 @@ export type Database = {
         Insert: {
           billing_contact_name?: string | null
           billing_email?: string | null
+          case_only?: boolean
+          case_size?: number | null
           client_code: string
           created_at?: string
           id?: string
@@ -142,6 +182,8 @@ export type Database = {
         Update: {
           billing_contact_name?: string | null
           billing_email?: string | null
+          case_only?: boolean
+          case_size?: number | null
           client_code?: string
           created_at?: string
           id?: string

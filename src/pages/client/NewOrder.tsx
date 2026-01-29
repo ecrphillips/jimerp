@@ -8,13 +8,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Plus, Minus, Trash2 } from 'lucide-react';
+import { Plus, Minus, Trash2, Package } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { UnusualOrderModal, type FlaggedItem } from '@/components/client/UnusualOrderModal';
 import { LocationSelect } from '@/components/orders/LocationSelect';
+import { CaseQuantityInput } from '@/components/orders/CaseQuantityInput';
+import { useClientOrderingConstraints, validateCaseQuantity } from '@/hooks/useClientOrderingConstraints';
 import type { GrindOption, DeliveryMethod } from '@/types/database';
 
 interface LineItem {
@@ -68,19 +71,30 @@ export default function NewOrder() {
     currentTotal: number;
     multiplier: number;
   } | null>(null);
-  // Fetch products for this client (RLS filters automatically)
+
+  // Fetch client ordering constraints (case_only, allowed products)
+  const { constraints, isLoading: constraintsLoading } = useClientOrderingConstraints(authUser?.clientId);
+
+  // Fetch allowed products for this client if restricted
   const { data: products, isLoading: productsLoading } = useQuery({
-    queryKey: ['client-products'],
+    queryKey: ['client-products', authUser?.clientId, constraints.allowedProductIds],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('products')
         .select('id, product_name, sku, bag_size_g, format, grind_options, is_perennial, packaging_variant')
         .eq('is_active', true)
         .order('product_name', { ascending: true });
 
+      // If client has allowed products restriction, filter to those only
+      if (constraints.allowedProductIds && constraints.allowedProductIds.length > 0) {
+        query = query.in('id', constraints.allowedProductIds);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as Product[];
     },
+    enabled: !constraintsLoading,
   });
 
   // Fetch current prices for all products
@@ -123,8 +137,10 @@ export default function NewOrder() {
 
   const addOrIncrementProduct = (productId: string) => {
     const existing = getLineItem(productId);
+    const incrementAmount = constraints.caseOnly && constraints.caseSize ? constraints.caseSize : 1;
+    
     if (existing) {
-      updateQuantity(productId, existing.quantity + 1);
+      updateQuantity(productId, existing.quantity + incrementAmount);
       return;
     }
 
@@ -132,12 +148,14 @@ export default function NewOrder() {
     if (!product) return;
 
     const grindOpts = (product.grind_options ?? []) as GrindOption[];
+    const initialQty = constraints.caseOnly && constraints.caseSize ? constraints.caseSize : 1;
+    
     setLineItems([
       ...lineItems,
       {
         productId: product.id,
         productName: product.product_name,
-        quantity: 1,
+        quantity: initialQty,
         grind: grindOpts.length > 0 ? grindOpts[0] : null,
         grindOptions: grindOpts,
         price: prices?.[product.id] ?? null,
@@ -321,6 +339,18 @@ export default function NewOrder() {
       return;
     }
 
+    // Validate case quantity constraints (client-side)
+    if (constraints.caseOnly && constraints.caseSize) {
+      const invalidItem = lineItems.find((li) => {
+        const error = validateCaseQuantity(li.quantity, constraints.caseOnly, constraints.caseSize);
+        return error !== null;
+      });
+      if (invalidItem) {
+        toast.error(`"${invalidItem.productName}" quantity must be a multiple of ${constraints.caseSize} (case size).`);
+        return;
+      }
+    }
+
     // Check for unusual order size
     const isUnusual = await checkUnusualOrderSize();
     if (isUnusual) {
@@ -336,6 +366,35 @@ export default function NewOrder() {
 
     setSubmitting(true);
     try {
+      // Server-side validation of constraints
+      const { data: validationResult, error: validationError } = await supabase.functions.invoke(
+        'validate-order-constraints',
+        {
+          body: {
+            client_id: authUser.clientId,
+            line_items: lineItems.map((li) => ({
+              product_id: li.productId,
+              quantity_units: li.quantity,
+            })),
+          },
+        }
+      );
+
+      if (validationError) {
+        console.error('Validation error:', validationError);
+        toast.error('Failed to validate order');
+        setSubmitting(false);
+        return;
+      }
+
+      if (!validationResult.valid) {
+        for (const error of validationResult.errors) {
+          toast.error(error);
+        }
+        setSubmitting(false);
+        return;
+      }
+
       // Create order (order_number is auto-generated by DB trigger)
       // For 'SOONEST', we send null/empty and let Ops set the real date
       const { data: order, error: orderError } = await supabase
@@ -436,6 +495,34 @@ export default function NewOrder() {
     const lineItem = getLineItem(p.id);
     const hasPrice = prices && p.id in prices;
     const price = prices?.[p.id];
+    const isCaseOnly = constraints.caseOnly && constraints.caseSize;
+
+    const handleQuantityChange = (qty: number) => {
+      if (qty <= 0) {
+        removeLine(p.id);
+        return;
+      }
+      const existing = getLineItem(p.id);
+      if (!existing) {
+        const product = products?.find((prod) => prod.id === p.id);
+        if (!product) return;
+        const grindOpts = (product.grind_options ?? []) as GrindOption[];
+        setLineItems([
+          ...lineItems,
+          {
+            productId: product.id,
+            productName: product.product_name,
+            quantity: qty,
+            grind: grindOpts.length > 0 ? grindOpts[0] : null,
+            grindOptions: grindOpts,
+            price: prices?.[product.id] ?? null,
+            packagingVariant: product.packaging_variant,
+          },
+        ]);
+      } else {
+        updateQuantity(p.id, qty);
+      }
+    };
 
     return (
       <li key={p.id} className="flex items-center justify-between py-2 border-b last:border-0">
@@ -449,31 +536,41 @@ export default function NewOrder() {
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <Button
-            size="icon"
-            variant="outline"
-            className="h-7 w-7"
-            onClick={() => updateQuantity(p.id, (lineItem?.quantity ?? 0) - 1)}
-            disabled={!lineItem}
-          >
-            <Minus className="h-3 w-3" />
-          </Button>
-          <Input
-            type="text"
-            inputMode="numeric"
-            className="w-14 h-7 text-center text-sm px-1"
-            value={lineItem?.quantity ?? ''}
-            placeholder="0"
-            onChange={(e) => handleQuantityInputChange(p.id, e.target.value)}
-          />
-          <Button
-            size="icon"
-            variant="outline"
-            className="h-7 w-7"
-            onClick={() => addOrIncrementProduct(p.id)}
-          >
-            <Plus className="h-3 w-3" />
-          </Button>
+          {isCaseOnly ? (
+            <CaseQuantityInput
+              value={lineItem?.quantity ?? 0}
+              onChange={handleQuantityChange}
+              caseSize={constraints.caseSize!}
+            />
+          ) : (
+            <>
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-7 w-7"
+                onClick={() => updateQuantity(p.id, (lineItem?.quantity ?? 0) - 1)}
+                disabled={!lineItem}
+              >
+                <Minus className="h-3 w-3" />
+              </Button>
+              <Input
+                type="text"
+                inputMode="numeric"
+                className="w-14 h-7 text-center text-sm px-1"
+                value={lineItem?.quantity ?? ''}
+                placeholder="0"
+                onChange={(e) => handleQuantityInputChange(p.id, e.target.value)}
+              />
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-7 w-7"
+                onClick={() => addOrIncrementProduct(p.id)}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </>
+          )}
         </div>
       </li>
     );
@@ -492,7 +589,18 @@ export default function NewOrder() {
             <CardTitle>Products</CardTitle>
           </CardHeader>
           <CardContent>
-            {productsLoading ? (
+            {/* Case-only ordering notice */}
+            {constraints.caseOnly && constraints.caseSize && (
+              <Alert className="mb-4">
+                <Package className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Case ordering:</strong> Products are sold in case lots of {constraints.caseSize} only.
+                  Quantities will be adjusted to the nearest case.
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            {productsLoading || constraintsLoading ? (
               <p className="text-muted-foreground">Loading…</p>
             ) : !products || products.length === 0 ? (
               <p className="text-muted-foreground">No products available.</p>
@@ -541,31 +649,40 @@ export default function NewOrder() {
                           <PackagingBadge variant={li.packagingVariant} />
                         </div>
                         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                          <div className="flex items-center gap-1">
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              className="h-6 w-6"
-                              onClick={() => updateQuantity(li.productId, li.quantity - 1)}
-                            >
-                              <Minus className="h-3 w-3" />
-                            </Button>
-                            <Input
-                              type="text"
-                              inputMode="numeric"
-                              className="w-12 h-6 text-center text-xs px-1"
+                          {constraints.caseOnly && constraints.caseSize ? (
+                            <CaseQuantityInput
                               value={li.quantity}
-                              onChange={(e) => handleQuantityInputChange(li.productId, e.target.value)}
+                              onChange={(qty) => updateQuantity(li.productId, qty)}
+                              caseSize={constraints.caseSize}
+                              size="sm"
                             />
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              className="h-6 w-6"
-                              onClick={() => updateQuantity(li.productId, li.quantity + 1)}
-                            >
-                              <Plus className="h-3 w-3" />
-                            </Button>
-                          </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => updateQuantity(li.productId, li.quantity - 1)}
+                              >
+                                <Minus className="h-3 w-3" />
+                              </Button>
+                              <Input
+                                type="text"
+                                inputMode="numeric"
+                                className="w-12 h-6 text-center text-xs px-1"
+                                value={li.quantity}
+                                onChange={(e) => handleQuantityInputChange(li.productId, e.target.value)}
+                              />
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => updateQuantity(li.productId, li.quantity + 1)}
+                              >
+                                <Plus className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
                           {li.grindOptions.length > 0 && (
                             <Select
                               value={li.grind ?? ''}
