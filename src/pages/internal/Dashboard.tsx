@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Flame, Package, Truck, AlertCircle, TrendingDown } from 'lucide-react';
+import { Flame, Package, Truck, Clock } from 'lucide-react';
 import { useDashboardMetrics, TimeHorizon } from '@/hooks/useDashboardMetrics';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -11,14 +10,14 @@ function MetricCard({
   label, 
   sublabel, 
   value, 
-  unit = 'kg',
+  unit,
   isLoading 
 }: { 
   icon: React.ElementType;
   label: string;
   sublabel: string;
   value: number;
-  unit?: string;
+  unit: string;
   isLoading?: boolean;
 }) {
   return (
@@ -46,54 +45,7 @@ function MetricCard({
   );
 }
 
-function YieldIndicator({ 
-  expected, 
-  actual, 
-  isLoading 
-}: { 
-  expected: number;
-  actual: number | null;
-  isLoading?: boolean;
-}) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-center gap-2">
-          <TrendingDown className="h-4 w-4 text-muted-foreground" />
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            Yield Loss
-          </CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <Skeleton className="h-6 w-32" />
-        ) : (
-          <div className="flex items-baseline gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">Expected: </span>
-              <span className="font-medium">{expected}%</span>
-            </div>
-            {actual !== null && (
-              <div>
-                <span className="text-muted-foreground">Actual: </span>
-                <span className="font-medium">{actual}%</span>
-              </div>
-            )}
-            {actual === null && (
-              <span className="text-muted-foreground/60 text-xs">
-                No completed batches
-              </span>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 export default function Dashboard() {
-  const { authUser } = useAuth();
   const [horizon, setHorizon] = useState<TimeHorizon>('today');
   const { data: metrics, isLoading } = useDashboardMetrics(horizon);
 
@@ -109,7 +61,7 @@ export default function Dashboard() {
         <div>
           <h1 className="page-title">Production Flow</h1>
           <p className="text-muted-foreground text-sm">
-            Pressure gauge across ROAST → PACK → SHIP
+            Order-constrained work remaining across ROAST → PACK → SHIP
           </p>
         </div>
         <Tabs value={horizon} onValueChange={(v) => setHorizon(v as TimeHorizon)}>
@@ -123,69 +75,67 @@ export default function Dashboard() {
 
       <p className="text-xs text-muted-foreground mb-4">
         Showing: <span className="font-medium">{horizonLabel}</span>
+        {metrics && (
+          <span className="ml-2">
+            ({metrics.ordersInWindow} orders, {metrics.lineItemsInWindow} line items)
+          </span>
+        )}
       </p>
 
-      {/* Main pipeline stages */}
+      {/* Main pipeline stages - order constrained */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
         <MetricCard
           icon={Flame}
           label="Roast Demand"
-          sublabel="Green coffee equivalent"
-          value={metrics?.greenKgRequired ?? 0}
+          sublabel="Remaining roasting work"
+          value={metrics?.roastDemandKg ?? 0}
+          unit="kg"
           isLoading={isLoading}
         />
         <MetricCard
           icon={Package}
           label="WIP Buffer"
-          sublabel="Roasted, unpacked"
-          value={metrics?.wipKg ?? 0}
+          sublabel="Roasted, waiting to pack"
+          value={metrics?.wipBufferKg ?? 0}
+          unit="kg"
           isLoading={isLoading}
         />
         <MetricCard
           icon={Truck}
           label="FG Ready"
-          sublabel="Packed, awaiting ship"
-          value={metrics?.fgReadyKg ?? 0}
+          sublabel="Packed, ready to pick"
+          value={metrics?.fgReadyUnits ?? 0}
+          unit="units"
           isLoading={isLoading}
         />
         <MetricCard
-          icon={AlertCircle}
+          icon={Clock}
           label="Blocked Demand"
-          sublabel="Awaiting inventory"
-          value={metrics?.blockedDemandKg ?? 0}
+          sublabel="Orders awaiting fulfilment"
+          value={metrics?.blockedDemandUnits ?? 0}
+          unit="units"
           isLoading={isLoading}
         />
       </div>
 
-      {/* Yield indicator */}
-      <YieldIndicator
-        expected={metrics?.expectedYieldLossPct ?? 16}
-        actual={metrics?.actualYieldLossPct ?? null}
-        isLoading={isLoading}
-      />
-
-      {/* Batch context */}
-      <Card className="mt-4">
+      {/* Explanation card */}
+      <Card>
         <CardContent className="pt-4">
-          <div className="flex items-center gap-6 text-sm text-muted-foreground">
-            <div>
-              <span className="font-medium text-foreground">
-                {metrics?.plannedBatches ?? 0}
-              </span>{' '}
-              batches planned
-            </div>
-            <div>
-              <span className="font-medium text-foreground">
-                {metrics?.completedBatches ?? 0}
-              </span>{' '}
-              batches completed
-            </div>
+          <div className="text-sm text-muted-foreground space-y-2">
+            <p>
+              <strong>Roast Demand</strong> decreases when: batches are roasted (single origin), 
+              blends are created (post-roast blend), FG is packed, or FG is picked.
+            </p>
+            <p>
+              <strong>WIP Buffer</strong> and <strong>FG Ready</strong> are capped at what's 
+              actually needed for orders in this window — surplus inventory is excluded.
+            </p>
           </div>
         </CardContent>
       </Card>
 
       <p className="text-xs text-muted-foreground mt-6">
-        This dashboard shows flow pressure in kilograms. Use the Production page to manage work.
+        Use the Production page to manage work. These metrics reflect remaining work for orders only.
       </p>
     </div>
   );
