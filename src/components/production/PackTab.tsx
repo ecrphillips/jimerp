@@ -25,7 +25,9 @@ import { Link } from 'react-router-dom';
 import { type PackagingVariant } from '@/components/PackagingBadge';
 import { SortablePackRow } from './SortablePackRow';
 import type { DateFilterConfig } from './types';
-import { useWipInventory, useFgInventory } from '@/hooks/useInventoryLedger';
+// Use AUTHORITATIVE inventory hooks - computed from source-of-truth tables
+import { useAuthoritativeWip } from '@/hooks/useAuthoritativeInventory';
+import { AuthoritativeSummaryPanel } from './AuthoritativeTotals';
 
 // Removed SortOption type - no more auto-sorting, order is manual via pack_display_order
 
@@ -144,17 +146,18 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     },
   });
 
-  // ========== LEDGER-BASED INVENTORY ==========
-  // WIP inventory from ledger: sum(quantity_kg) by roast_group
-  const { data: wipInventory } = useWipInventory();
+  // ========== AUTHORITATIVE INVENTORY (from source-of-truth tables) ==========
+  // WIP = sum(roasted_batches.actual_output_kg) - sum(packing_runs.kg_consumed)
+  const { data: authWip } = useAuthoritativeWip();
   
-  // FG inventory from ledger: sum(quantity_units) by product_id
-  const { data: fgInventory } = useFgInventory();
-  
-  // Use ledger-based WIP for roasted inventory display
+  // Use authoritative WIP for roasted inventory display
   const roastedInventory = useMemo(() => {
-    return wipInventory ?? {};
-  }, [wipInventory]);
+    const result: Record<string, number> = {};
+    for (const [rg, data] of Object.entries(authWip ?? {})) {
+      result[rg] = data.wip_available_kg;
+    }
+    return result;
+  }, [authWip]);
 
   // Fetch packing runs (still needed for units_packed tracking until ledger migration)
   const { data: packingRuns } = useQuery({
@@ -500,6 +503,9 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
 
   return (
     <div className="space-y-4">
+      {/* Authoritative Totals Summary */}
+      <AuthoritativeSummaryPanel tab="pack" />
+      
       {/* Packing Progress */}
       <Card>
         <CardHeader>
@@ -510,7 +516,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                 Pack SKUs
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Drag rows to reorder. Green highlight = WIP available.
+                Drag rows to reorder. Green = WIP covers full row. Amber = partial WIP.
               </p>
             </div>
             <div className="flex items-center gap-2">

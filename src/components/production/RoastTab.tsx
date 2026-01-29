@@ -40,6 +40,9 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import type { DateFilterConfig } from './types';
+// Use AUTHORITATIVE inventory hooks - computed from source-of-truth tables
+import { useAuthoritativeWip, useAuthoritativeRoastDemand } from '@/hooks/useAuthoritativeInventory';
+import { AuthoritativeSummaryPanel } from './AuthoritativeTotals';
 
 interface RoastTabProps {
   dateFilterConfig: DateFilterConfig;
@@ -229,29 +232,29 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     },
   });
 
-  // Fetch roast_group_inventory_levels for WIP + FG
-  const { data: inventoryLevels } = useQuery({
-    queryKey: ['roast-group-inventory-levels'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('roast_group_inventory_levels')
-        .select('*');
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  // ========== AUTHORITATIVE INVENTORY (from source-of-truth tables) ==========
+  // WIP = sum(roasted_batches.actual_output_kg) - sum(packing_runs.kg_consumed)
+  const { data: authWip } = useAuthoritativeWip();
+  const { data: authRoastDemand } = useAuthoritativeRoastDemand();
 
-  // Map roast_group to inventory levels
+  // Map roast_group to authoritative inventory levels (replaces cached levels table)
   const inventoryLevelsByGroup = useMemo(() => {
     const map: Record<string, { wip_kg: number; fg_kg: number }> = {};
-    for (const level of inventoryLevels ?? []) {
-      map[level.roast_group] = {
-        wip_kg: Number(level.wip_kg) || 0,
-        fg_kg: Number(level.fg_kg) || 0,
+    for (const [rg, data] of Object.entries(authWip ?? {})) {
+      map[rg] = {
+        wip_kg: data.wip_available_kg,
+        fg_kg: 0, // FG is tracked per-product, not per-roast-group directly
       };
     }
+    // Merge in FG from authRoastDemand if available
+    for (const [rg, data] of Object.entries(authRoastDemand ?? {})) {
+      if (!map[rg]) {
+        map[rg] = { wip_kg: 0, fg_kg: 0 };
+      }
+      map[rg].fg_kg = data.fg_unallocated_kg;
+    }
     return map;
-  }, [inventoryLevels]);
+  }, [authWip, authRoastDemand]);
 
   // Aggregate demand by roast_group with priority info
   const demandByRoastGroup = useMemo((): DemandByRoastGroup[] => {
@@ -652,6 +655,9 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
 
   return (
     <div className="space-y-4">
+      {/* Authoritative Totals Summary */}
+      <AuthoritativeSummaryPanel tab="roast" />
+      
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
