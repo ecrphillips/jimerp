@@ -6,16 +6,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { AlertCircle, Plus, Trash2, ExternalLink, Info, Loader2 } from 'lucide-react';
-import { PACKAGING_VARIANTS, type PackagingVariantValue } from '@/lib/skuGenerator';
-import { generateShortCode, insertProductsWithUniqueSkus } from '@/lib/skuUtils';
-import { SkuPreviewList } from './SkuPreviewList';
+import { generateShortCode } from '@/lib/skuUtils';
 import { RoastGroupPreview } from './RoastGroupPreview';
+import { PackagingVariantsSection, type PackagingVariantEntry } from './PackagingVariantsSection';
+import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
 
 interface Client {
   id: string;
@@ -54,7 +53,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   // Step 1: Client
   const [clientId, setClientId] = useState('');
   
-  // Step 2: Single "Finished Good Name" (replaces blend name + suffix)
+  // Step 2: Finished Good Name
   const [finishedGoodName, setFinishedGoodName] = useState('');
   
   // Blend components
@@ -66,17 +65,14 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   // Optional Cropster ref
   const [cropsterProfileRef, setCropsterProfileRef] = useState('');
   
-  // Step 3: Packaging variants
-  const [selectedVariants, setSelectedVariants] = useState<Set<PackagingVariantValue>>(new Set());
+  // Step 3: Packaging variants (new gram-based system)
+  const [packagingVariants, setPackagingVariants] = useState<PackagingVariantEntry[]>([]);
   
   // Step 4: Price
   const [priceInput, setPriceInput] = useState('');
   
   // Step 5: Lifecycle
   const [lifecycle, setLifecycle] = useState<LifecycleType | null>(null);
-  
-  // Track adjusted SKUs after save
-  const [adjustedSkus, setAdjustedSkus] = useState<string[]>([]);
   
   // Queries
   const { data: clients } = useQuery({
@@ -111,7 +107,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     [roastGroups]
   );
   
-  // Existing roast group keys/codes for collision detection (blend creates new roast group)
+  // Existing roast group keys/codes for collision detection
   const existingRoastGroupKeys = useMemo(() => 
     new Set(roastGroups?.map(g => g.roast_group.toUpperCase()) ?? []),
     [roastGroups]
@@ -153,31 +149,17 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     [components]
   );
   
-  // Generate SKU previews (read-only, for display)
-  const skuPreviews = useMemo(() => {
-    if (!selectedClient || !finishedGoodName.trim()) return [];
-    
-    const productCode = generateShortCode(finishedGoodName.trim(), 6);
-    
-    return Array.from(selectedVariants).map(variantValue => {
-      const variant = PACKAGING_VARIANTS.find(v => v.value === variantValue);
-      if (!variant) return null;
-      
-      const baseSku = `${selectedClient.client_code}-${productCode}-${variant.code}`;
-      
-      return {
-        variant: variantValue,
-        label: variant.label,
-        baseSku,
-        bagSizeG: variant.bagSizeG,
-      };
-    }).filter(Boolean) as Array<{
-      variant: PackagingVariantValue;
-      label: string;
-      baseSku: string;
-      bagSizeG: number;
-    }>;
-  }, [selectedClient, finishedGoodName, selectedVariants]);
+  // Product code for SKU generation
+  const productCode = useMemo(() => {
+    if (!finishedGoodName.trim()) return '';
+    return generateShortCode(finishedGoodName.trim(), 6);
+  }, [finishedGoodName]);
+
+  // Valid variants (with grams > 0)
+  const validVariants = useMemo(() => 
+    packagingVariants.filter(v => v.grams > 0),
+    [packagingVariants]
+  );
   
   const hasNoComponents = componentRoastGroups.length === 0;
   
@@ -187,10 +169,10 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     if (hasNoComponents) return false;
     if (!allComponentsSelected) return false;
     if (!percentageValid) return false;
-    if (selectedVariants.size === 0) return false;
+    if (validVariants.length === 0) return false;
     if (!lifecycle) return false;
     return true;
-  }, [clientId, finishedGoodName, hasNoComponents, allComponentsSelected, percentageValid, selectedVariants, lifecycle]);
+  }, [clientId, finishedGoodName, hasNoComponents, allComponentsSelected, percentageValid, validVariants, lifecycle]);
   
   // Reset form
   const resetForm = () => {
@@ -201,10 +183,9 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
       { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
       { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
     ]);
-    setSelectedVariants(new Set());
+    setPackagingVariants([]);
     setPriceInput('');
     setLifecycle(null);
-    setAdjustedSkus([]);
   };
   
   // Component management
@@ -233,6 +214,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   const saveMutation = useMutation({
     mutationFn: async () => {
       const trimmedName = finishedGoodName.trim();
+      if (!selectedClient) throw new Error('Client is required');
       
       // Generate roast group key from FG name
       const roastGroupKey = trimmedName.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
@@ -272,20 +254,18 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
           break;
         }
         
-        // If not a unique violation, throw
         if (rgError.code !== '23505') {
           throw rgError;
         }
-        // Otherwise retry with suffix
       }
       
       if (!rgSuccess) {
         throw new Error('Could not create roast group after 50 attempts');
       }
       
-      // Save blend components to roast_group_components table
+      // Save blend components
       const componentInserts = components
-        .filter(c => c.roastGroup) // Only include components with selected roast groups
+        .filter(c => c.roastGroup)
         .map((c, idx) => ({
           parent_roast_group: finalRoastGroupKey,
           component_roast_group: c.roastGroup,
@@ -300,42 +280,86 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
         
         if (componentsError) {
           console.error('Failed to save blend components:', componentsError);
-          // Don't throw - the roast group was created, just log the error
         }
       }
       
-      // Create products for each variant using auto-dedupe
+      // Get resolved SKUs
+      const resolvedSkus = getResolvedSkus(
+        selectedClient.client_code,
+        productCode,
+        validVariants,
+        existingSkus ?? new Set()
+      );
+      
+      // Create products
       const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
       const hasPrice = !isNaN(priceValue);
       
-      const productInserts = skuPreviews.map(preview => ({
-        client_id: clientId,
-        product_name: trimmedName,
-        baseSku: preview.baseSku,
-        roast_group: finalRoastGroupKey,
-        packaging_variant: preview.variant,
-        bag_size_g: preview.bagSizeG,
-        format: 'WHOLE_BEAN',
-        grind_options: ['WHOLE_BEAN'],
-        is_active: true,
-        is_perennial: lifecycle === 'perennial',
-      }));
+      const createdProducts: Array<{ id: string; sku: string; wasAdjusted: boolean }> = [];
       
-      const { created, errors } = await insertProductsWithUniqueSkus(supabase, productInserts);
-      
-      if (errors.length > 0) {
-        console.error('Product creation errors:', errors);
-        throw new Error(errors[0]);
+      for (const skuData of resolvedSkus) {
+        const { data: newProduct, error } = await supabase
+          .from('products')
+          .insert({
+            client_id: clientId,
+            product_name: trimmedName,
+            sku: skuData.sku,
+            roast_group: finalRoastGroupKey,
+            packaging_type_id: skuData.packagingTypeId,
+            grams_per_unit: skuData.grams,
+            bag_size_g: skuData.grams,
+            format: 'WHOLE_BEAN',
+            grind_options: ['WHOLE_BEAN'],
+            is_active: true,
+            is_perennial: lifecycle === 'perennial',
+          })
+          .select('id, sku')
+          .single();
+        
+        if (error) {
+          if (error.code === '23505' && error.message?.toLowerCase().includes('sku')) {
+            for (let i = 2; i <= 50; i++) {
+              const fallbackSku = `${skuData.sku}-${i}`;
+              const { data: retryProduct, error: retryError } = await supabase
+                .from('products')
+                .insert({
+                  client_id: clientId,
+                  product_name: trimmedName,
+                  sku: fallbackSku,
+                  roast_group: finalRoastGroupKey,
+                  packaging_type_id: skuData.packagingTypeId,
+                  grams_per_unit: skuData.grams,
+                  bag_size_g: skuData.grams,
+                  format: 'WHOLE_BEAN',
+                  grind_options: ['WHOLE_BEAN'],
+                  is_active: true,
+                  is_perennial: lifecycle === 'perennial',
+                })
+                .select('id, sku')
+                .single();
+              
+              if (!retryError) {
+                createdProducts.push({ id: retryProduct.id, sku: retryProduct.sku, wasAdjusted: true });
+                break;
+              }
+              if (retryError.code !== '23505') {
+                throw retryError;
+              }
+            }
+          } else {
+            throw error;
+          }
+        } else {
+          createdProducts.push({ id: newProduct.id, sku: newProduct.sku, wasAdjusted: skuData.wasAdjusted });
+        }
       }
       
-      // Track which SKUs were adjusted
-      const adjusted = created.filter(c => c.wasAdjusted).map(c => c.sku);
-      setAdjustedSkus(adjusted);
+      const adjustedCount = createdProducts.filter(c => c.wasAdjusted).length;
       
       // Create prices
-      if (hasPrice && created.length > 0) {
+      if (hasPrice && createdProducts.length > 0) {
         const today = new Date().toISOString().split('T')[0];
-        const priceInserts = created.map(p => ({
+        const priceInserts = createdProducts.map(p => ({
           product_id: p.id,
           unit_price: priceValue,
           currency: 'CAD',
@@ -352,10 +376,9 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
       }
       
       return { 
-        count: created.length, 
+        count: createdProducts.length, 
         name: trimmedName, 
-        adjustedCount: adjusted.length,
-        adjustedSkus: adjusted,
+        adjustedCount,
       };
     },
     onSuccess: (result) => {
@@ -376,18 +399,6 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
       toast.error(err?.message || 'Failed to create blend products');
     },
   });
-  
-  const toggleVariant = (variant: PackagingVariantValue) => {
-    setSelectedVariants(prev => {
-      const next = new Set(prev);
-      if (next.has(variant)) {
-        next.delete(variant);
-      } else {
-        next.add(variant);
-      }
-      return next;
-    });
-  };
   
   const getDisplayName = (rg: RoastGroup) => 
     rg.display_name?.trim() || rg.roast_group.replace(/_/g, ' ');
@@ -426,7 +437,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
             </Select>
           </div>
           
-          {/* Step 2: Finished Good Name (simplified) */}
+          {/* Step 2: Finished Good Name */}
           <div>
             <Label htmlFor="fgName">2. Finished Good Name</Label>
             <Input
@@ -444,7 +455,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label>3. Blend Components</Label>
-              <div className={`text-xs font-medium ${percentageValid ? 'text-green-600' : 'text-destructive'}`}>
+              <div className={`text-xs font-medium ${percentageValid ? 'text-primary' : 'text-destructive'}`}>
                 Total: {totalPercentage}%
               </div>
             </div>
@@ -462,7 +473,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
             ) : (
               <>
                 <div className="space-y-2">
-                  {components.map((comp, idx) => (
+                  {components.map((comp) => (
                     <div key={comp.id} className="flex items-center gap-2">
                       <Select 
                         value={comp.roastGroup || 'NONE'} 
@@ -539,30 +550,14 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
             />
           </div>
           
-          {/* Step 4: Packaging Variants */}
-          <div>
-            <Label>4. Packaging Variants (select all that apply)</Label>
-            <div className="grid grid-cols-3 gap-2 mt-2">
-              {PACKAGING_VARIANTS.map(v => (
-                <label
-                  key={v.value}
-                  className={`flex items-center gap-2 p-2 border rounded-md cursor-pointer transition-colors ${
-                    selectedVariants.has(v.value) 
-                      ? 'bg-primary/10 border-primary' 
-                      : 'hover:bg-muted/50'
-                  }`}
-                >
-                  <Checkbox
-                    checked={selectedVariants.has(v.value)}
-                    onCheckedChange={() => toggleVariant(v.value)}
-                  />
-                  <span className="text-sm">{v.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
+          {/* Step 4: Packaging Variants (new gram-based section) */}
+          <PackagingVariantsSection
+            selectedVariants={packagingVariants}
+            onVariantsChange={setPackagingVariants}
+            stepNumber={4}
+          />
           
-          {/* Roast Group Preview (blends always create a new roast group) */}
+          {/* Roast Group Preview */}
           {finishedGoodName.trim() && (
             <RoastGroupPreview
               displayName={finishedGoodName.trim()}
@@ -572,8 +567,10 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
           )}
           
           {/* SKU Preview Section */}
-          <SkuPreviewList 
-            skuPreviews={skuPreviews}
+          <GramBasedSkuPreview
+            clientCode={selectedClient?.client_code ?? ''}
+            productCode={productCode}
+            variants={validVariants}
             existingSkus={existingSkus ?? new Set()}
           />
           
@@ -635,7 +632,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
                   Creating…
                 </>
               ) : (
-                `Create ${selectedVariants.size} Product${selectedVariants.size !== 1 ? 's' : ''}`
+                `Create ${validVariants.length} Product${validVariants.length !== 1 ? 's' : ''}`
               )}
             </Button>
           </div>

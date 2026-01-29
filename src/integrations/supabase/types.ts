@@ -628,6 +628,33 @@ export type Database = {
           },
         ]
       }
+      packaging_types: {
+        Row: {
+          created_at: string
+          display_order: number
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       packing_runs: {
         Row: {
           created_at: string
@@ -824,12 +851,14 @@ export type Database = {
           client_id: string
           created_at: string
           format: Database["public"]["Enums"]["product_format"]
+          grams_per_unit: number | null
           grind_options: Database["public"]["Enums"]["grind_option"][] | null
           id: string
           internal_packaging_notes: string | null
           is_active: boolean
           is_perennial: boolean
           pack_display_order: number | null
+          packaging_type_id: string | null
           packaging_variant:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
@@ -843,12 +872,14 @@ export type Database = {
           client_id: string
           created_at?: string
           format?: Database["public"]["Enums"]["product_format"]
+          grams_per_unit?: number | null
           grind_options?: Database["public"]["Enums"]["grind_option"][] | null
           id?: string
           internal_packaging_notes?: string | null
           is_active?: boolean
           is_perennial?: boolean
           pack_display_order?: number | null
+          packaging_type_id?: string | null
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
@@ -862,12 +893,14 @@ export type Database = {
           client_id?: string
           created_at?: string
           format?: Database["public"]["Enums"]["product_format"]
+          grams_per_unit?: number | null
           grind_options?: Database["public"]["Enums"]["grind_option"][] | null
           id?: string
           internal_packaging_notes?: string | null
           is_active?: boolean
           is_perennial?: boolean
           pack_display_order?: number | null
+          packaging_type_id?: string | null
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
@@ -882,6 +915,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_packaging_type_id_fkey"
+            columns: ["packaging_type_id"]
+            isOneToOne: false
+            referencedRelation: "packaging_types"
             referencedColumns: ["id"]
           },
         ]

@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { OrderNotificationSettings } from '@/components/admin/OrderNotificationSettings';
 import { BuildInfoPanel } from '@/components/admin/BuildInfoPanel';
+import { PackagingTypesManager } from '@/components/admin/PackagingTypesManager';
 
 // Check if we're in development mode
 const isDev = import.meta.env.DEV;
@@ -157,6 +158,9 @@ export default function AdminTools() {
 
       {/* Build Info Panel - DEV diagnostics */}
       <BuildInfoPanel />
+
+      {/* Packaging Types Manager */}
+      <PackagingTypesManager />
 
       {/* Order Submit Notifications */}
       <OrderNotificationSettings />

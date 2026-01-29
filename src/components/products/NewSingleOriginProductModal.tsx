@@ -5,19 +5,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
-import { 
-  PACKAGING_VARIANTS, 
-  COMMON_ORIGINS,
-  type PackagingVariantValue 
-} from '@/lib/skuGenerator';
-import { generateShortCode, insertProductsWithUniqueSkus } from '@/lib/skuUtils';
-import { SkuPreviewList } from './SkuPreviewList';
+import { COMMON_ORIGINS } from '@/lib/skuGenerator';
+import { generateShortCode } from '@/lib/skuUtils';
 import { RoastGroupPreview } from './RoastGroupPreview';
+import { PackagingVariantsSection, type PackagingVariantEntry } from './PackagingVariantsSection';
+import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
 
 interface Client {
   id: string;
@@ -57,13 +53,11 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
   const [customOrigin, setCustomOrigin] = useState('');
   const [cropsterProfileRef, setCropsterProfileRef] = useState('');
   
-  // Step 3: Finished Good Name (user types unique identifier only, origin is prefix)
-  // For new roast groups: displays as "<Origin> - <userInput>"
-  // For existing roast groups: displays existing roast group display_name as prefix
+  // Step 3: Finished Good Name
   const [finishedGoodName, setFinishedGoodName] = useState('');
   
-  // Step 4: Packaging variants
-  const [selectedVariants, setSelectedVariants] = useState<Set<PackagingVariantValue>>(new Set());
+  // Step 4: Packaging variants (new gram-based system)
+  const [packagingVariants, setPackagingVariants] = useState<PackagingVariantEntry[]>([]);
   
   // Step 5: Price
   const [priceInput, setPriceInput] = useState('');
@@ -133,11 +127,6 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
     [clients, clientId]
   );
   
-  const selectedRoastGroupData = useMemo(() => 
-    roastGroups?.find(g => g.roast_group === selectedRoastGroup),
-    [roastGroups, selectedRoastGroup]
-  );
-  
   // Get the origin prefix for new roast group mode
   const originPrefix = useMemo(() => {
     if (roastGroupMode !== 'new') return '';
@@ -155,32 +144,18 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
     }
     return userPart;
   }, [roastGroupMode, originPrefix, finishedGoodName]);
-  
-  // Generate SKU previews (read-only) - uses full FG name for code generation
-  const skuPreviews = useMemo(() => {
-    if (!selectedClient || !fullFinishedGoodName) return [];
-    
-    const productCode = generateShortCode(fullFinishedGoodName, 6);
-    
-    return Array.from(selectedVariants).map(variantValue => {
-      const variant = PACKAGING_VARIANTS.find(v => v.value === variantValue);
-      if (!variant) return null;
-      
-      const baseSku = `${selectedClient.client_code}-${productCode}-${variant.code}`;
-      
-      return {
-        variant: variantValue,
-        label: variant.label,
-        baseSku,
-        bagSizeG: variant.bagSizeG,
-      };
-    }).filter(Boolean) as Array<{
-      variant: PackagingVariantValue;
-      label: string;
-      baseSku: string;
-      bagSizeG: number;
-    }>;
-  }, [selectedClient, fullFinishedGoodName, selectedVariants]);
+
+  // Product code for SKU generation
+  const productCode = useMemo(() => {
+    if (!fullFinishedGoodName) return '';
+    return generateShortCode(fullFinishedGoodName, 6);
+  }, [fullFinishedGoodName]);
+
+  // Valid variants (with grams > 0)
+  const validVariants = useMemo(() => 
+    packagingVariants.filter(v => v.grams > 0),
+    [packagingVariants]
+  );
   
   const canSave = useMemo(() => {
     if (!clientId) return false;
@@ -190,10 +165,10 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
       if (origin === '__custom__' && !customOrigin.trim()) return false;
     }
     if (!finishedGoodName.trim()) return false;
-    if (selectedVariants.size === 0) return false;
+    if (validVariants.length === 0) return false;
     if (!lifecycle) return false;
     return true;
-  }, [clientId, roastGroupMode, selectedRoastGroup, origin, customOrigin, finishedGoodName, selectedVariants, lifecycle]);
+  }, [clientId, roastGroupMode, selectedRoastGroup, origin, customOrigin, finishedGoodName, validVariants, lifecycle]);
   
   // Reset form
   const resetForm = () => {
@@ -204,7 +179,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
     setCustomOrigin('');
     setCropsterProfileRef('');
     setFinishedGoodName('');
-    setSelectedVariants(new Set());
+    setPackagingVariants([]);
     setPriceInput('');
     setLifecycle(null);
   };
@@ -212,9 +187,9 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
-      // Full display name for the finished good
       const displayName = fullFinishedGoodName;
       if (!displayName) throw new Error('Product name is required');
+      if (!selectedClient) throw new Error('Client is required');
       
       let roastGroupKey: string;
       
@@ -222,11 +197,9 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
       if (roastGroupMode === 'new') {
         const originValue = origin === '__custom__' ? customOrigin.trim() : origin;
         
-        // Use the FULL display name (Origin - UserPart) for system key generation
         const baseKey = displayName.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
         const baseCode = generateShortCode(displayName, 6);
         
-        // Try to create with collision handling
         let rgSuccess = false;
         for (let attempt = 0; attempt < 50; attempt++) {
           const key = attempt === 0 ? baseKey : `${baseKey}_${attempt + 1}`;
@@ -238,9 +211,9 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
               roast_group: key,
               roast_group_code: code,
               is_blend: false,
-              origin: originValue, // Store origin as metadata
+              origin: originValue,
               blend_name: null,
-              display_name: displayName, // Use full name as display name
+              display_name: displayName,
               standard_batch_kg: 20,
               expected_yield_loss_pct: 16,
               default_roaster: 'EITHER',
@@ -266,36 +239,84 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
         roastGroupKey = selectedRoastGroup;
       }
       
-      // Create products using auto-dedupe
+      // Get resolved SKUs with collision handling
+      const resolvedSkus = getResolvedSkus(
+        selectedClient.client_code,
+        productCode,
+        validVariants,
+        existingSkus ?? new Set()
+      );
+      
+      // Create products
       const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
       const hasPrice = !isNaN(priceValue);
       
-      const productInserts = skuPreviews.map(preview => ({
-        client_id: clientId,
-        product_name: displayName, // Use full display name
-        baseSku: preview.baseSku,
-        roast_group: roastGroupKey!,
-        packaging_variant: preview.variant,
-        bag_size_g: preview.bagSizeG,
-        format: 'WHOLE_BEAN',
-        grind_options: ['WHOLE_BEAN'],
-        is_active: true,
-        is_perennial: lifecycle === 'perennial',
-      }));
+      const createdProducts: Array<{ id: string; sku: string; wasAdjusted: boolean }> = [];
       
-      const { created, errors } = await insertProductsWithUniqueSkus(supabase, productInserts);
-      
-      if (errors.length > 0) {
-        console.error('Product creation errors:', errors);
-        throw new Error(errors[0]);
+      for (const skuData of resolvedSkus) {
+        const { data: newProduct, error } = await supabase
+          .from('products')
+          .insert({
+            client_id: clientId,
+            product_name: displayName,
+            sku: skuData.sku,
+            roast_group: roastGroupKey!,
+            packaging_type_id: skuData.packagingTypeId,
+            grams_per_unit: skuData.grams,
+            bag_size_g: skuData.grams, // Keep for backward compatibility
+            format: 'WHOLE_BEAN',
+            grind_options: ['WHOLE_BEAN'],
+            is_active: true,
+            is_perennial: lifecycle === 'perennial',
+          })
+          .select('id, sku')
+          .single();
+        
+        if (error) {
+          // If SKU collision at DB level, try with suffix
+          if (error.code === '23505' && error.message?.toLowerCase().includes('sku')) {
+            for (let i = 2; i <= 50; i++) {
+              const fallbackSku = `${skuData.sku}-${i}`;
+              const { data: retryProduct, error: retryError } = await supabase
+                .from('products')
+                .insert({
+                  client_id: clientId,
+                  product_name: displayName,
+                  sku: fallbackSku,
+                  roast_group: roastGroupKey!,
+                  packaging_type_id: skuData.packagingTypeId,
+                  grams_per_unit: skuData.grams,
+                  bag_size_g: skuData.grams,
+                  format: 'WHOLE_BEAN',
+                  grind_options: ['WHOLE_BEAN'],
+                  is_active: true,
+                  is_perennial: lifecycle === 'perennial',
+                })
+                .select('id, sku')
+                .single();
+              
+              if (!retryError) {
+                createdProducts.push({ id: retryProduct.id, sku: retryProduct.sku, wasAdjusted: true });
+                break;
+              }
+              if (retryError.code !== '23505') {
+                throw retryError;
+              }
+            }
+          } else {
+            throw error;
+          }
+        } else {
+          createdProducts.push({ id: newProduct.id, sku: newProduct.sku, wasAdjusted: skuData.wasAdjusted });
+        }
       }
       
-      const adjustedCount = created.filter(c => c.wasAdjusted).length;
+      const adjustedCount = createdProducts.filter(c => c.wasAdjusted).length;
       
       // Create prices
-      if (hasPrice && created.length > 0) {
+      if (hasPrice && createdProducts.length > 0) {
         const today = new Date().toISOString().split('T')[0];
-        const priceInserts = created.map(p => ({
+        const priceInserts = createdProducts.map(p => ({
           product_id: p.id,
           unit_price: priceValue,
           currency: 'CAD',
@@ -312,7 +333,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
       }
       
       return { 
-        count: created.length, 
+        count: createdProducts.length, 
         name: displayName, 
         adjustedCount,
       };
@@ -335,18 +356,6 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
       toast.error(err?.message || 'Failed to create products');
     },
   });
-  
-  const toggleVariant = (variant: PackagingVariantValue) => {
-    setSelectedVariants(prev => {
-      const next = new Set(prev);
-      if (next.has(variant)) {
-        next.delete(variant);
-      } else {
-        next.add(variant);
-      }
-      return next;
-    });
-  };
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -449,7 +458,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
                   />
                 </div>
                 
-                {/* Roast Group Preview (shows system key that will be created) */}
+                {/* Roast Group Preview */}
                 {fullFinishedGoodName && (
                   <RoastGroupPreview
                     displayName={fullFinishedGoodName}
@@ -495,32 +504,18 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
             </p>
           </div>
           
-          {/* Step 4: Packaging Variants */}
-          <div>
-            <Label>4. Packaging Variants (select all that apply)</Label>
-            <div className="grid grid-cols-3 gap-2 mt-2">
-              {PACKAGING_VARIANTS.map(v => (
-                <label
-                  key={v.value}
-                  className={`flex items-center gap-2 p-2 border rounded-md cursor-pointer transition-colors ${
-                    selectedVariants.has(v.value) 
-                      ? 'bg-primary/10 border-primary' 
-                      : 'hover:bg-muted/50'
-                  }`}
-                >
-                  <Checkbox
-                    checked={selectedVariants.has(v.value)}
-                    onCheckedChange={() => toggleVariant(v.value)}
-                  />
-                  <span className="text-sm">{v.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
+          {/* Step 4: Packaging Variants (new gram-based section) */}
+          <PackagingVariantsSection
+            selectedVariants={packagingVariants}
+            onVariantsChange={setPackagingVariants}
+            stepNumber={4}
+          />
           
-          {/* SKU Preview Section - moved outside packaging variants div, before price */}
-          <SkuPreviewList 
-            skuPreviews={skuPreviews}
+          {/* SKU Preview Section */}
+          <GramBasedSkuPreview
+            clientCode={selectedClient?.client_code ?? ''}
+            productCode={productCode}
+            variants={validVariants}
             existingSkus={existingSkus ?? new Set()}
           />
           
@@ -582,7 +577,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
                   Creating…
                 </>
               ) : (
-                `Create ${selectedVariants.size} Product${selectedVariants.size !== 1 ? 's' : ''}`
+                `Create ${validVariants.length} Product${validVariants.length !== 1 ? 's' : ''}`
               )}
             </Button>
           </div>
