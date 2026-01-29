@@ -169,9 +169,10 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
 
       // 8. Get WIP from roasted batches and packing runs (authoritative calculation)
       // WIP = roasted output - packing consumed + adjustments
+      // For blends: WIP = adjustments only (no direct roasted batches contribute)
       const { data: roastedBatches } = await supabase
         .from('roasted_batches')
-        .select('roast_group, actual_output_kg, status, consumed_by_blend_at')
+        .select('roast_group, actual_output_kg, status, consumed_by_blend_at, planned_for_blend_roast_group')
         .eq('status', 'ROASTED');
 
       const { data: packingRuns } = await supabase
@@ -184,15 +185,23 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
         .not('roast_group', 'is', null)
         .in('transaction_type', ['ADJUSTMENT', 'LOSS']);
 
-      // Calculate roasted output by roast_group (excluding consumed-by-blend batches)
+      // Calculate roasted output by roast_group
+      // EXCLUDE: component batches (planned_for_blend_roast_group set)
+      // EXCLUDE: batches already consumed by blend (consumed_by_blend_at set)
       const roastedByGroup = new Map<string, number>();
       for (const batch of roastedBatches || []) {
-        if (!batch.consumed_by_blend_at) {
-          roastedByGroup.set(
-            batch.roast_group,
-            (roastedByGroup.get(batch.roast_group) || 0) + Number(batch.actual_output_kg)
-          );
+        // Skip component batches - they don't count as WIP until blended
+        if (batch.planned_for_blend_roast_group) {
+          continue;
         }
+        // Skip batches consumed by blend (defensive check)
+        if (batch.consumed_by_blend_at) {
+          continue;
+        }
+        roastedByGroup.set(
+          batch.roast_group,
+          (roastedByGroup.get(batch.roast_group) || 0) + Number(batch.actual_output_kg)
+        );
       }
 
       // Calculate packing consumed by roast_group
@@ -207,7 +216,7 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
         }
       }
 
-      // Calculate adjustments by roast_group
+      // Calculate adjustments by roast_group (includes blend outputs)
       const adjustmentsByGroup = new Map<string, number>();
       for (const adj of wipAdjustments || []) {
         if (adj.roast_group) {
@@ -219,6 +228,8 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
       }
 
       // Calculate net WIP by roast_group
+      // For blends: WIP = adjustments - consumed (blend WIP comes only from adjustments)
+      // For single origins: WIP = roasted - consumed + adjustments
       const wipByGroup = new Map<string, number>();
       const allWipGroups = new Set([
         ...roastedByGroup.keys(),
@@ -230,7 +241,16 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
         const roasted = roastedByGroup.get(rg) || 0;
         const consumed = consumedByGroup.get(rg) || 0;
         const adjusted = adjustmentsByGroup.get(rg) || 0;
-        const netWip = Math.max(0, roasted - consumed + adjusted);
+        
+        // Check if this is a blend roast group
+        const isBlend = blendGroups.has(rg);
+        
+        // For blends: WIP = adjustments - consumed
+        // For single origins: WIP = roasted - consumed + adjustments
+        const netWip = isBlend
+          ? Math.max(0, adjusted - consumed)
+          : Math.max(0, roasted - consumed + adjusted);
+        
         if (netWip > 0) {
           wipByGroup.set(rg, netWip);
         }

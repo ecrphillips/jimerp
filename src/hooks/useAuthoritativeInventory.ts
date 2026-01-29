@@ -85,7 +85,7 @@ function useRoastedBatches() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roasted_batches')
-        .select('id, roast_group, status, actual_output_kg, planned_output_kg, planned_for_blend_roast_group, consumed_by_blend_at');
+        .select('id, roast_group, status, actual_output_kg, planned_output_kg, planned_for_blend_roast_group, consumed_by_blend_at, target_date');
       if (error) throw error;
       return data ?? [];
     },
@@ -137,6 +137,23 @@ function useProductsWithRoastGroup() {
       const { data, error } = await supabase
         .from('products')
         .select('id, product_name, sku, bag_size_g, roast_group')
+        .eq('is_active', true);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
+/**
+ * Fetch roast groups to identify blends
+ */
+function useRoastGroupsInfo() {
+  return useQuery({
+    queryKey: ['authoritative-roast-groups-info'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('roast_groups')
+        .select('roast_group, is_blend, is_active')
         .eq('is_active', true);
       if (error) throw error;
       return data ?? [];
@@ -233,6 +250,7 @@ export function useAuthoritativeWip() {
   const { data: packingRuns, isLoading: packingLoading } = usePackingRuns();
   const { data: products, isLoading: productsLoading } = useProductsWithRoastGroup();
   const { data: adjustments, isLoading: adjustmentsLoading } = useWipAdjustments();
+  const { data: roastGroups, isLoading: roastGroupsLoading } = useRoastGroupsInfo();
   
   const wip = useMemo((): Record<string, AuthoritativeWip> => {
     if (!batches || !packingRuns || !products) return {};
@@ -245,21 +263,34 @@ export function useAuthoritativeWip() {
       }
     }
     
+    // Track which roast groups are blends
+    const blendGroups = new Set<string>();
+    for (const rg of roastGroups ?? []) {
+      if (rg.is_blend) {
+        blendGroups.add(rg.roast_group);
+      }
+    }
+    
     // Calculate roasted output by roast_group
     // EXCLUDE component batches (those with planned_for_blend_roast_group set)
     // Component batches do NOT contribute to WIP until the blend is executed
+    // For blends: WIP comes ONLY from ADJUSTMENT transactions (blend outputs), not from roasted_batches
     const roastedByGroup: Record<string, number> = {};
     for (const b of batches) {
       if (b.status === 'ROASTED') {
-        // Skip component batches - they don't count as WIP until blended
+        // Skip component batches - they don't count as WIP for anyone until blended
         if (b.planned_for_blend_roast_group) {
+          continue;
+        }
+        // Skip batches that have been consumed by a blend (should already be excluded but double-check)
+        if (b.consumed_by_blend_at) {
           continue;
         }
         roastedByGroup[b.roast_group] = (roastedByGroup[b.roast_group] ?? 0) + Number(b.actual_output_kg);
       }
     }
     
-    // Calculate kg consumed by roast_group
+    // Calculate kg consumed by roast_group (from packing runs)
     const consumedByGroup: Record<string, number> = {};
     for (const pr of packingRuns) {
       const rg = productRoastGroup[pr.product_id];
@@ -270,6 +301,7 @@ export function useAuthoritativeWip() {
     
     // Calculate adjustments (from inventory_transactions ADJUSTMENT/LOSS entries)
     // This includes blend outputs (positive) and component consumptions (negative)
+    // For blends: this is the PRIMARY source of WIP (no roasted_batches contribute directly)
     const adjustmentsByGroup: Record<string, number> = {};
     for (const adj of adjustments ?? []) {
       if (adj.roast_group) {
@@ -289,21 +321,30 @@ export function useAuthoritativeWip() {
       const roasted = roastedByGroup[rg] ?? 0;
       const consumed = consumedByGroup[rg] ?? 0;
       const adjusted = adjustmentsByGroup[rg] ?? 0;
+      
+      // For blends: WIP = adjustments (blend output) - consumed (packing)
+      // The blend roast group has no direct roasted_batches, only ADJUSTMENT entries from blend execution
+      // For single origins: WIP = roasted - consumed + adjustments
+      const isBlend = blendGroups.has(rg);
+      const wipAvailable = isBlend
+        ? Math.max(0, adjusted - consumed)
+        : Math.max(0, roasted - consumed + adjusted);
+      
       result[rg] = {
         roast_group: rg,
         roasted_completed_kg: roasted,
         packed_consumed_kg: consumed,
         adjustments_kg: adjusted,
-        wip_available_kg: Math.max(0, roasted - consumed + adjusted),
+        wip_available_kg: wipAvailable,
       };
     }
     
     return result;
-  }, [batches, packingRuns, products, adjustments]);
+  }, [batches, packingRuns, products, adjustments, roastGroups]);
   
   return {
     data: wip,
-    isLoading: batchesLoading || packingLoading || productsLoading || adjustmentsLoading,
+    isLoading: batchesLoading || packingLoading || productsLoading || adjustmentsLoading || roastGroupsLoading,
   };
 }
 
