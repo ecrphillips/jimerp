@@ -10,7 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { COMMON_ORIGINS } from '@/lib/skuGenerator';
-import { generateShortCode } from '@/lib/skuUtils';
+import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
 import { RoastGroupPreview } from './RoastGroupPreview';
 import { PackagingVariantsSection, type PackagingVariantEntry } from './PackagingVariantsSection';
 import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
@@ -197,47 +197,25 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
       
       let roastGroupKey: string;
       
-      // Create roast group if needed
+      // Create or reuse roast group if needed
       if (roastGroupMode === 'new') {
         const originValue = origin === '__custom__' ? customOrigin.trim() : origin;
         
-        const baseKey = displayName.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-        const baseCode = generateShortCode(displayName, 6);
+        const result = await createOrReuseRoastGroup({
+          displayName,
+          isBlend: false,
+          origin: originValue,
+          cropsterProfileRef: cropsterProfileRef.trim() || null,
+        });
         
-        let rgSuccess = false;
-        for (let attempt = 0; attempt < 50; attempt++) {
-          const key = attempt === 0 ? baseKey : `${baseKey}_${attempt + 1}`;
-          const code = attempt === 0 ? baseCode : `${baseCode}${attempt + 1}`.substring(0, 6);
-          
-          const { error: rgError } = await supabase
-            .from('roast_groups')
-            .insert({
-              roast_group: key,
-              roast_group_code: code,
-              is_blend: false,
-              origin: originValue,
-              blend_name: null,
-              display_name: displayName,
-              standard_batch_kg: 20,
-              expected_yield_loss_pct: 16,
-              default_roaster: 'EITHER',
-              is_active: true,
-              cropster_profile_ref: cropsterProfileRef.trim() || null,
-            });
-          
-          if (!rgError) {
-            roastGroupKey = key;
-            rgSuccess = true;
-            break;
-          }
-          
-          if (rgError.code !== '23505') {
-            throw rgError;
-          }
+        if (result.error) {
+          throw new Error(result.error);
         }
         
-        if (!rgSuccess) {
-          throw new Error('Could not create roast group after 50 attempts');
+        roastGroupKey = result.roastGroupKey;
+        
+        if (!result.created) {
+          console.log(`[Product] Reusing existing roast group: ${roastGroupKey}`);
         }
       } else {
         roastGroupKey = selectedRoastGroup;
