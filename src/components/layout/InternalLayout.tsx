@@ -4,7 +4,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { useOrderNotifications } from '@/hooks/useOrderNotifications';
 import { AccountSheet } from '@/components/account/AccountSheet';
-import { EnvironmentFooter } from '@/components/admin/EnvironmentFooter';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -331,9 +330,6 @@ export function InternalLayout({ children }: InternalLayoutProps) {
           {children}
         </main>
       </div>
-
-      {/* Environment Footer for ADMIN/OPS */}
-      <EnvironmentFooter />
     </div>
   );
 }
