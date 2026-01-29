@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Package, Scale, Plus, Minus, History, AlertTriangle } from 'lucide-react';
+import { Package, Scale, Plus, Minus, History, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { PackagingBadge } from '@/components/PackagingBadge';
 import { format } from 'date-fns';
 
@@ -47,7 +48,14 @@ interface FgInventoryRow {
 export default function Inventory() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState('wip');
+  const [searchParams] = useSearchParams();
+  
+  // Read from query params
+  const fromParam = searchParams.get('from');
+  const tabParam = searchParams.get('tab');
+  const showBackToPack = fromParam === 'pack';
+  
+  const [activeTab, setActiveTab] = useState(tabParam === 'fg' ? 'fg' : 'wip');
   
   // WIP Adjustment dialog state
   const [showWipAdjust, setShowWipAdjust] = useState(false);
@@ -284,6 +292,17 @@ export default function Inventory() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Context-aware back navigation */}
+      {showBackToPack && (
+        <Link 
+          to="/production?tab=pack" 
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Pack
+        </Link>
+      )}
+      
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Inventory Levels</h1>
