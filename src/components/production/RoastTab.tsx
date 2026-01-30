@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -92,6 +93,7 @@ interface DemandByRoastGroup {
   products: { name: string; kg: number }[];
   hasTimeSensitive: boolean;
   earliestShipDate: string | null;
+  isCompleted: boolean; // true if net_demand_kg === 0 but has activity (batches/WIP)
 }
 
 export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
@@ -100,6 +102,9 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   
   // Roaster filter
   const [roasterFilter, setRoasterFilter] = useState<RoasterFilter>('ALL');
+  
+  // Show completed toggle - default ON so completed groups remain visible
+  const [showCompleted, setShowCompleted] = useState(true);
   
   // Roast group config dialog
   const [showConfigDialog, setShowConfigDialog] = useState(false);
@@ -305,6 +310,9 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   // Aggregate demand by roast_group with priority info
   // CRITICAL: Use REMAINING units (after picks) not total demanded units
   // Once an item is PICKED (allocated to a specific order), it should NOT contribute to upstream demand
+  // 
+  // ALSO: Include groups that have activity (batches, WIP) even if demand is now 0
+  // This ensures completed work remains visible for editing/review
   const demandByRoastGroup = useMemo((): DemandByRoastGroup[] => {
     const groupMap: Record<string, { 
       total_kg: number; 
@@ -313,6 +321,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       earliestShipDate: string | null;
     }> = {};
 
+    // 1. Build demand from order line items (unpicked only)
     for (const li of orderLineItems ?? []) {
       const roastGroup = li.product?.roast_group;
       if (!roastGroup) continue;
@@ -352,10 +361,43 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       groupMap[roastGroup].products.set(productName, existing + kgForLine);
     }
 
+    // 2. Identify groups with ACTIVITY (batches or WIP) that may not have remaining demand
+    // These should still appear on the run sheet for visibility and editing
+    const groupsWithActivity = new Set<string>();
+    
+    // Groups with batches (planned or roasted)
+    for (const b of batches ?? []) {
+      groupsWithActivity.add(b.roast_group);
+    }
+    
+    // Groups with WIP inventory
+    for (const [rg, data] of Object.entries(authWip ?? {})) {
+      if (data.wip_available_kg > 0 || data.roasted_completed_kg > 0 || data.packed_consumed_kg > 0) {
+        groupsWithActivity.add(rg);
+      }
+    }
+    
+    // 3. Merge: ensure all groups with activity are represented
+    for (const rg of groupsWithActivity) {
+      if (!groupMap[rg]) {
+        groupMap[rg] = {
+          total_kg: 0,
+          products: new Map(),
+          hasTimeSensitive: false,
+          earliestShipDate: null,
+        };
+      }
+    }
+
+    // 4. Build final array with isCompleted flag
     return Object.entries(groupMap).map(([roast_group, data]) => {
       const wip_kg = inventoryLevelsByGroup[roast_group]?.wip_kg ?? 0;
       const fg_kg = inventoryLevelsByGroup[roast_group]?.fg_kg ?? 0;
       const net_demand_kg = Math.max(0, data.total_kg - wip_kg - fg_kg);
+      
+      // A group is "completed" if it has no net demand but has some form of activity
+      const hasActivity = groupsWithActivity.has(roast_group);
+      const isCompleted = net_demand_kg === 0 && hasActivity;
       
       return {
         roast_group,
@@ -366,9 +408,10 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
         products: Array.from(data.products.entries()).map(([name, kg]) => ({ name, kg })),
         hasTimeSensitive: data.hasTimeSensitive,
         earliestShipDate: data.earliestShipDate,
+        isCompleted,
       };
     });
-  }, [orderLineItems, timeSensitiveProducts, inventoryLevelsByGroup, picksByLineItemId]);
+  }, [orderLineItems, timeSensitiveProducts, inventoryLevelsByGroup, picksByLineItemId, batches, authWip]);
 
   // Calculate roasted inventory per roast_group (sum of ROASTED batches)
   const roastedInventory = useMemo(() => {
@@ -421,11 +464,23 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
 
   // Computed sorted groups - use display_order from config (manual ordering only)
   // NO automatic reprioritization - order is strictly user-controlled
+  // Apply showCompleted filter: if OFF, hide groups with isCompleted=true
   const computedSortedGroups = useMemo(() => {
-    const filtered = demandByRoastGroup.filter(group => groupMatchesRoasterFilter(group.roast_group));
+    let filtered = demandByRoastGroup.filter(group => groupMatchesRoasterFilter(group.roast_group));
     
-    // Sort ONLY by display_order (manual), then by name as tie-breaker
+    // Apply "show completed" filter
+    if (!showCompleted) {
+      filtered = filtered.filter(group => !group.isCompleted);
+    }
+    
+    // Sort: active groups (with demand) first, then completed groups
+    // Within each category, sort by display_order (manual), then by name
     return [...filtered].sort((a, b) => {
+      // Active groups before completed groups
+      if (a.isCompleted !== b.isCompleted) {
+        return a.isCompleted ? 1 : -1;
+      }
+      
       const configA = configByGroup[a.roast_group];
       const configB = configByGroup[b.roast_group];
       const orderA = configA?.display_order ?? 999999;
@@ -434,7 +489,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       if (orderA !== orderB) return orderA - orderB;
       return a.roast_group.localeCompare(b.roast_group);
     });
-  }, [demandByRoastGroup, roasterFilter, configByGroup]);
+  }, [demandByRoastGroup, roasterFilter, configByGroup, showCompleted]);
 
   // Handle editing state changes from drawer - freeze order by roast_group names
   const handleEditingChange = useCallback((groupId: string, isEditing: boolean) => {
@@ -726,28 +781,41 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                 Drag the grip handle to reorder groups manually. Order persists across sessions.
               </p>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Auto-prioritize button hidden for MVP - manual ordering only */}
-              <span className="text-sm text-muted-foreground">Filter:</span>
-              <ToggleGroup 
-                type="single" 
-                value={roasterFilter} 
-                onValueChange={(val) => val && setRoasterFilter(val as RoasterFilter)}
-                className="border rounded-md"
-              >
-                <ToggleGroupItem value="ALL" aria-label="All roasters" className="text-xs px-3">
-                  All
-                </ToggleGroupItem>
-                <ToggleGroupItem value="SAMIAC" aria-label="Samiac only" className="text-xs px-3 data-[state=on]:bg-blue-100 data-[state=on]:text-blue-800">
-                  Samiac
-                </ToggleGroupItem>
-                <ToggleGroupItem value="LORING" aria-label="Loring only" className="text-xs px-3 data-[state=on]:bg-orange-100 data-[state=on]:text-orange-800">
-                  Loring
-                </ToggleGroupItem>
-                <ToggleGroupItem value="UNASSIGNED" aria-label="Unassigned" className="text-xs px-3">
-                  Unassigned
-                </ToggleGroupItem>
-              </ToggleGroup>
+            <div className="flex items-center gap-4 flex-wrap">
+              {/* Show completed toggle */}
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="show-completed" 
+                  checked={showCompleted} 
+                  onCheckedChange={(checked) => setShowCompleted(checked === true)}
+                />
+                <Label htmlFor="show-completed" className="text-sm text-muted-foreground cursor-pointer">
+                  Show completed
+                </Label>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Filter:</span>
+                <ToggleGroup 
+                  type="single" 
+                  value={roasterFilter} 
+                  onValueChange={(val) => val && setRoasterFilter(val as RoasterFilter)}
+                  className="border rounded-md"
+                >
+                  <ToggleGroupItem value="ALL" aria-label="All roasters" className="text-xs px-3">
+                    All
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="SAMIAC" aria-label="Samiac only" className="text-xs px-3 data-[state=on]:bg-blue-100 data-[state=on]:text-blue-800">
+                    Samiac
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="LORING" aria-label="Loring only" className="text-xs px-3 data-[state=on]:bg-orange-100 data-[state=on]:text-orange-800">
+                    Loring
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="UNASSIGNED" aria-label="Unassigned" className="text-xs px-3">
+                    Unassigned
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -833,6 +901,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                             onEditingChange={(isEditing) => handleEditingChange(group.roast_group, isEditing)}
                             onAdjustWipFg={(rg) => setWipFgModalGroup(rg)}
                             isBlend={config?.is_blend ?? false}
+                            isCompleted={group.isCompleted}
                             onPlanBlendBatches={() => setBlendPlanModal({
                               roastGroup: group.roast_group,
                               displayName: config?.display_name?.trim() || group.roast_group.replace(/_/g, ' '),
