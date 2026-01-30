@@ -109,18 +109,19 @@ function usePackingRuns() {
 }
 
 /**
- * Fetch WIP adjustments from inventory_transactions (ADJUSTMENT type with roast_group)
- * These include blend outputs, manual adjustments, losses, etc.
+ * Fetch WIP-related transactions from inventory_transactions ledger
+ * This includes ROAST_OUTPUT (positive), PACK_CONSUME_WIP (negative), ADJUSTMENT, and LOSS
+ * The ledger is the single source of truth for all WIP movements
  */
-function useWipAdjustments() {
+function useWipLedgerTransactions() {
   return useQuery({
-    queryKey: ['authoritative-wip-adjustments'],
+    queryKey: ['authoritative-wip-ledger'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('inventory_transactions')
         .select('id, roast_group, quantity_kg, transaction_type, notes')
         .not('roast_group', 'is', null)
-        .in('transaction_type', ['ADJUSTMENT', 'LOSS']);
+        .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'ADJUSTMENT', 'LOSS']);
       if (error) throw error;
       return data ?? [];
     },
@@ -239,29 +240,22 @@ function useOpenOrderLines() {
 
 /**
  * Authoritative WIP by roast group
- * WIP = sum(actual_output_kg for ROASTED batches) - sum(kg_consumed from packing_runs)
  * 
- * IMPORTANT: Component batches (those with planned_for_blend_roast_group set) do NOT contribute
- * to their component roast group's WIP. They are held as "roasted component inventory" until
- * the blend is executed. Only the blend execution action creates WIP for the blend roast group.
+ * WIP is calculated ENTIRELY from the inventory_transactions ledger:
+ * - ROAST_OUTPUT: positive kg added (roasted batches)
+ * - PACK_CONSUME_WIP: negative kg removed (packing consumed)
+ * - ADJUSTMENT: +/- kg (blend outputs, reverts, manual adjustments)
+ * - LOSS: negative kg (recorded losses)
+ * 
+ * This is the single source of truth. The roasted_batches table is used only
+ * for batch status tracking, not for inventory calculations.
  */
 export function useAuthoritativeWip() {
-  const { data: batches, isLoading: batchesLoading } = useRoastedBatches();
-  const { data: packingRuns, isLoading: packingLoading } = usePackingRuns();
-  const { data: products, isLoading: productsLoading } = useProductsWithRoastGroup();
-  const { data: adjustments, isLoading: adjustmentsLoading } = useWipAdjustments();
+  const { data: wipTransactions, isLoading: wipLoading } = useWipLedgerTransactions();
   const { data: roastGroups, isLoading: roastGroupsLoading } = useRoastGroupsInfo();
   
   const wip = useMemo((): Record<string, AuthoritativeWip> => {
-    if (!batches || !packingRuns || !products) return {};
-    
-    // Map product_id to roast_group
-    const productRoastGroup: Record<string, string> = {};
-    for (const p of products) {
-      if (p.roast_group) {
-        productRoastGroup[p.id] = p.roast_group;
-      }
-    }
+    if (!wipTransactions) return {};
     
     // Track which roast groups are blends
     const blendGroups = new Set<string>();
@@ -271,41 +265,39 @@ export function useAuthoritativeWip() {
       }
     }
     
-    // Calculate roasted output by roast_group
-    // EXCLUDE component batches (those with planned_for_blend_roast_group set)
-    // Component batches do NOT contribute to WIP until the blend is executed
-    // For blends: WIP comes ONLY from ADJUSTMENT transactions (blend outputs), not from roasted_batches
+    // Aggregate transactions by roast group and type
     const roastedByGroup: Record<string, number> = {};
-    for (const b of batches) {
-      if (b.status === 'ROASTED') {
-        // Skip component batches - they don't count as WIP for anyone until blended
-        if (b.planned_for_blend_roast_group) {
-          continue;
-        }
-        // Skip batches that have been consumed by a blend (should already be excluded but double-check)
-        if (b.consumed_by_blend_at) {
-          continue;
-        }
-        roastedByGroup[b.roast_group] = (roastedByGroup[b.roast_group] ?? 0) + Number(b.actual_output_kg);
-      }
-    }
-    
-    // Calculate kg consumed by roast_group (from packing runs)
     const consumedByGroup: Record<string, number> = {};
-    for (const pr of packingRuns) {
-      const rg = productRoastGroup[pr.product_id];
-      if (rg) {
-        consumedByGroup[rg] = (consumedByGroup[rg] ?? 0) + Number(pr.kg_consumed);
-      }
-    }
-    
-    // Calculate adjustments (from inventory_transactions ADJUSTMENT/LOSS entries)
-    // This includes blend outputs (positive) and component consumptions (negative)
-    // For blends: this is the PRIMARY source of WIP (no roasted_batches contribute directly)
     const adjustmentsByGroup: Record<string, number> = {};
-    for (const adj of adjustments ?? []) {
-      if (adj.roast_group) {
-        adjustmentsByGroup[adj.roast_group] = (adjustmentsByGroup[adj.roast_group] ?? 0) + Number(adj.quantity_kg ?? 0);
+    
+    for (const tx of wipTransactions) {
+      if (!tx.roast_group) continue;
+      const kg = Number(tx.quantity_kg ?? 0);
+      const notes = tx.notes?.toLowerCase() ?? '';
+      
+      switch (tx.transaction_type) {
+        case 'ROAST_OUTPUT':
+          // Direct roast output - positive kg
+          roastedByGroup[tx.roast_group] = (roastedByGroup[tx.roast_group] ?? 0) + kg;
+          break;
+        case 'PACK_CONSUME_WIP':
+          // Packing consumption - typically negative, but track absolute consumed
+          if (kg < 0) {
+            consumedByGroup[tx.roast_group] = (consumedByGroup[tx.roast_group] ?? 0) + Math.abs(kg);
+          } else {
+            // Reversal - reduce consumed
+            consumedByGroup[tx.roast_group] = (consumedByGroup[tx.roast_group] ?? 0) - kg;
+          }
+          break;
+        case 'ADJUSTMENT':
+          // Adjustments can be positive (blend output, reverts) or negative (blend consume)
+          // We track them separately to show in the UI
+          adjustmentsByGroup[tx.roast_group] = (adjustmentsByGroup[tx.roast_group] ?? 0) + kg;
+          break;
+        case 'LOSS':
+          // Losses are negative
+          adjustmentsByGroup[tx.roast_group] = (adjustmentsByGroup[tx.roast_group] ?? 0) + kg;
+          break;
       }
     }
     
@@ -322,29 +314,31 @@ export function useAuthoritativeWip() {
       const consumed = consumedByGroup[rg] ?? 0;
       const adjusted = adjustmentsByGroup[rg] ?? 0;
       
-      // For blends: WIP = adjustments (blend output) - consumed (packing)
-      // The blend roast group has no direct roasted_batches, only ADJUSTMENT entries from blend execution
-      // For single origins: WIP = roasted - consumed + adjustments
+      // For blends: roasted_completed_kg may still include component roast outputs
+      // but the net WIP formula is the same: roasted - consumed + adjustments
+      // Adjustments for blends include "Created blend" (positive) and component consumption is tracked elsewhere
       const isBlend = blendGroups.has(rg);
-      const wipAvailable = isBlend
-        ? Math.max(0, adjusted - consumed)
-        : Math.max(0, roasted - consumed + adjusted);
+      
+      // WIP = roasted - consumed + adjustments
+      // For blends, roasted might be 0 if blend output comes via ADJUSTMENT
+      // For single origins, roasted is the primary source
+      const wipAvailable = roasted - consumed + adjusted;
       
       result[rg] = {
         roast_group: rg,
         roasted_completed_kg: roasted,
         packed_consumed_kg: consumed,
         adjustments_kg: adjusted,
-        wip_available_kg: wipAvailable,
+        wip_available_kg: Math.max(0, wipAvailable),
       };
     }
     
     return result;
-  }, [batches, packingRuns, products, adjustments, roastGroups]);
+  }, [wipTransactions, roastGroups]);
   
   return {
     data: wip,
-    isLoading: batchesLoading || packingLoading || productsLoading || adjustmentsLoading || roastGroupsLoading,
+    isLoading: wipLoading || roastGroupsLoading,
   };
 }
 
