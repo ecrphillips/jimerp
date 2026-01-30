@@ -416,16 +416,25 @@ export function RoastGroupDrawer({
       roast_group: string;
       target_date: string;
     }) => {
-      // Update batch status
-      const { error: batchError } = await supabase
+      // Update batch status - the eq('status', 'PLANNED') ensures idempotency
+      // If batch is already ROASTED, this update will affect 0 rows
+      const { data: updateData, error: batchError } = await supabase
         .from('roasted_batches')
         .update({ 
           status: 'ROASTED',
           actual_output_kg,
         })
         .eq('id', id)
-        .eq('status', 'PLANNED');
+        .eq('status', 'PLANNED')
+        .select('id');
+      
       if (batchError) throw batchError;
+      
+      // Check if we actually updated anything (idempotency check)
+      if (!updateData || updateData.length === 0) {
+        // Batch was already roasted or doesn't exist - no-op
+        return { alreadyRoasted: true, actual_output_kg: 0 };
+      }
       
       // Create inventory_transactions entry for roast output (new ledger)
       const { error: ledgerError } = await supabase
@@ -439,15 +448,24 @@ export function RoastGroupDrawer({
           notes: `Batch ${id.slice(0, 8)}`,
         });
       if (ledgerError) throw ledgerError;
+      
+      return { alreadyRoasted: false, actual_output_kg };
     },
-    onSuccess: () => {
-      toast.success('Batch marked as roasted');
+    onSuccess: (result) => {
+      if (result.alreadyRoasted) {
+        toast.info('Batch already roasted');
+        return;
+      }
+      
+      toast.success(`Added ${result.actual_output_kg.toFixed(2)} kg to WIP`);
+      
       // Invalidate all relevant queries for immediate UI update
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
       queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
       // Refresh frozen batch order to reflect new status positions
       refreshFrozenBatches();
