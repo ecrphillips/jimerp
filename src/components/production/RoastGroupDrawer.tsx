@@ -91,6 +91,7 @@ interface RoastGroupDrawerProps {
   onAdjustWipFg: (roastGroup: string) => void;
   isDragging?: boolean;
   isBlend?: boolean;
+  isCompleted?: boolean; // true if no remaining demand but has activity (batches/WIP)
   onPlanBlendBatches?: () => void;
   onBlendBatches?: () => void;
   components: RoastGroupComponent[];
@@ -114,6 +115,7 @@ export function RoastGroupDrawer({
   onAdjustWipFg,
   isDragging = false,
   isBlend = false,
+  isCompleted = false,
   onPlanBlendBatches,
   onBlendBatches,
   components,
@@ -679,8 +681,9 @@ export function RoastGroupDrawer({
         ref={setNodeRef}
         style={style}
         className={`border-b cursor-pointer transition-colors 
-          ${isFullyRoasted ? 'opacity-60' : ''}
-          ${hasTimeSensitive && !isFullyRoasted ? 'bg-destructive/5' : ''} 
+          ${isFullyRoasted || isCompleted ? 'opacity-60' : ''}
+          ${hasTimeSensitive && !isFullyRoasted && !isCompleted ? 'bg-destructive/5' : ''} 
+          ${isCompleted && !isExpanded ? 'bg-muted/30' : ''}
           ${isExpanded ? 'bg-accent/40 border-l-2 border-l-primary' : 'hover:bg-muted/50'}
           ${isDragging ? 'opacity-50' : ''}`}
         onClick={() => setIsExpanded(!isExpanded)}
@@ -770,6 +773,11 @@ export function RoastGroupDrawer({
                 </span>
               )}
             </div>
+          ) : isCompleted ? (
+            <Badge variant="secondary" className="bg-muted text-muted-foreground border-border">
+              <Check className="h-3 w-3 mr-1" />
+              Completed
+            </Badge>
           ) : coverageDelta >= 0 ? (
             <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
               Covered +{coverageDelta.toFixed(1)} kg
