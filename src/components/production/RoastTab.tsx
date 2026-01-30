@@ -183,6 +183,28 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       return data ?? [];
     },
   });
+  // Fetch ship_picks to know what's already picked (allocated)
+  // Picked items should NOT contribute to upstream demand (roast/pack)
+  const { data: shipPicks } = useQuery({
+    queryKey: ['roast-tab-ship-picks'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ship_picks')
+        .select('order_line_item_id, units_picked');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Map order_line_item_id to units_picked
+  const picksByLineItemId = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const pick of shipPicks ?? []) {
+      map[pick.order_line_item_id] = pick.units_picked;
+    }
+    return map;
+  }, [shipPicks]);
+
   // Fetch ALL order line items for demand calculation
   // Filtering by work_start_at happens client-side for accurate production window logic
   // IMPORTANT: Uses work_deadline_at (timestamptz), NOT work_deadline (legacy text field)
@@ -281,6 +303,8 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   }, [authWip, authRoastDemand]);
 
   // Aggregate demand by roast_group with priority info
+  // CRITICAL: Use REMAINING units (after picks) not total demanded units
+  // Once an item is PICKED (allocated to a specific order), it should NOT contribute to upstream demand
   const demandByRoastGroup = useMemo((): DemandByRoastGroup[] => {
     const groupMap: Record<string, { 
       total_kg: number; 
@@ -293,7 +317,14 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       const roastGroup = li.product?.roast_group;
       if (!roastGroup) continue;
 
-      const kgForLine = (li.quantity_units * (li.product?.bag_size_g ?? 0)) / 1000;
+      // Calculate remaining (unpicked) units - this is the actual demand on upstream production
+      const pickedUnits = picksByLineItemId[li.id] ?? 0;
+      const remainingUnits = Math.max(0, li.quantity_units - pickedUnits);
+      
+      // Skip line items that are fully picked - they have no upstream demand
+      if (remainingUnits <= 0) continue;
+      
+      const kgForLine = (remainingUnits * (li.product?.bag_size_g ?? 0)) / 1000;
       const isTimeSensitive = timeSensitiveProducts.has(li.product_id);
       // Use work_deadline_at (timestamptz) for accurate scheduling
       const workDeadlineAt = li.order?.work_deadline_at ?? null;
@@ -337,7 +368,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
         earliestShipDate: data.earliestShipDate,
       };
     });
-  }, [orderLineItems, timeSensitiveProducts, inventoryLevelsByGroup]);
+  }, [orderLineItems, timeSensitiveProducts, inventoryLevelsByGroup, picksByLineItemId]);
 
   // Calculate roasted inventory per roast_group (sum of ROASTED batches)
   const roastedInventory = useMemo(() => {
