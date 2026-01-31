@@ -277,6 +277,33 @@ export function getWorkStartFilterConfig(): WorkStartFilterConfig {
  * 
  * IMPORTANT: This is the authoritative filter - all production views must use this
  */
+/**
+ * Check if an order is overdue (work_deadline < now in Pacific Time)
+ * This is a pure deadline check - does NOT check order status
+ */
+export function isDeadlineOverdue(workDeadlineAt: string | null): boolean {
+  if (!workDeadlineAt) return false;
+  
+  try {
+    const deadlineUtc = parseISO(workDeadlineAt);
+    const now = getVancouverNow();
+    const deadlineVancouver = toZonedTime(deadlineUtc, TIMEZONE);
+    
+    return isBefore(deadlineVancouver, now);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Client-side filter function to determine if an order belongs in a bucket
+ * Use this after fetching orders to filter them correctly
+ * 
+ * IMPORTANT: This is the authoritative filter - all production views must use this
+ * 
+ * CRITICAL RULE: Overdue orders (deadline passed, not resolved) ALWAYS appear in "Today"
+ * They must NEVER be hidden by time-of-day logic - this is critical for floor accountability
+ */
 export function filterOrderByWorkStart(
   workDeadlineAt: string | null,
   manuallyDeprioritized: boolean,
@@ -285,7 +312,18 @@ export function filterOrderByWorkStart(
   // All mode - no filtering
   if (targetBucket === 'all') return true;
   
-  // Manually deprioritized orders go to tomorrow
+  // CRITICAL: Check if order is overdue (deadline passed)
+  // Overdue orders ALWAYS show in "Today" view - they require immediate attention
+  // They should NEVER disappear due to time-of-day filtering
+  const isOverdue = isDeadlineOverdue(workDeadlineAt);
+  
+  if (isOverdue) {
+    // Overdue orders ONLY appear in "Today" (not tomorrow)
+    // This ensures they are always visible and cannot be missed
+    return targetBucket === 'today';
+  }
+  
+  // Manually deprioritized orders go to tomorrow (only if NOT overdue)
   if (manuallyDeprioritized) {
     return targetBucket === 'tomorrow';
   }
