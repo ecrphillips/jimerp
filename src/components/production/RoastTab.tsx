@@ -759,8 +759,8 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   };
 
   const getRoasterBadgeColor = (roaster: RoasterMachine | null) => {
-    if (roaster === 'SAMIAC') return 'bg-blue-100 text-blue-800 border-blue-300';
-    if (roaster === 'LORING') return 'bg-orange-100 text-orange-800 border-orange-300';
+    if (roaster === 'SAMIAC') return 'bg-yellow-200 text-red-700 border-yellow-400';
+    if (roaster === 'LORING') return 'bg-sky-100 text-sky-800 border-sky-300';
     return 'bg-muted text-muted-foreground';
   };
 
@@ -805,10 +805,10 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                   <ToggleGroupItem value="ALL" aria-label="All roasters" className="text-xs px-3">
                     All
                   </ToggleGroupItem>
-                  <ToggleGroupItem value="SAMIAC" aria-label="Samiac only" className="text-xs px-3 data-[state=on]:bg-blue-100 data-[state=on]:text-blue-800">
+                  <ToggleGroupItem value="SAMIAC" aria-label="Samiac only" className="text-xs px-3 data-[state=on]:bg-yellow-200 data-[state=on]:text-red-700">
                     Samiac
                   </ToggleGroupItem>
-                  <ToggleGroupItem value="LORING" aria-label="Loring only" className="text-xs px-3 data-[state=on]:bg-orange-100 data-[state=on]:text-orange-800">
+                  <ToggleGroupItem value="LORING" aria-label="Loring only" className="text-xs px-3 data-[state=on]:bg-sky-100 data-[state=on]:text-sky-800">
                     Loring
                   </ToggleGroupItem>
                   <ToggleGroupItem value="UNASSIGNED" aria-label="Unassigned" className="text-xs px-3">

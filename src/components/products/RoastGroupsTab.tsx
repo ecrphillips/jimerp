@@ -432,9 +432,9 @@ export function RoastGroupsTab() {
   const getRoasterBadgeColor = (roaster: DefaultRoaster) => {
     switch (roaster) {
       case 'SAMIAC':
-        return 'bg-blue-100 text-blue-800 border-blue-300';
+        return 'bg-yellow-200 text-red-700 border-yellow-400';
       case 'LORING':
-        return 'bg-green-100 text-green-800 border-green-300';
+        return 'bg-sky-100 text-sky-800 border-sky-300';
       default:
         return 'bg-muted text-muted-foreground';
     }

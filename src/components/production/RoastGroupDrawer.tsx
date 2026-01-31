@@ -653,8 +653,8 @@ export function RoastGroupDrawer({
   });
 
   const getRoasterBadgeColor = (roaster: RoasterMachine | null | DefaultRoaster) => {
-    if (roaster === 'SAMIAC') return 'bg-blue-100 text-blue-800 border-blue-300';
-    if (roaster === 'LORING') return 'bg-orange-100 text-orange-800 border-orange-300';
+    if (roaster === 'SAMIAC') return 'bg-yellow-200 text-red-700 border-yellow-400';
+    if (roaster === 'LORING') return 'bg-sky-100 text-sky-800 border-sky-300';
     return 'bg-muted text-muted-foreground';
   };
 
