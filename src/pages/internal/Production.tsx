@@ -35,9 +35,9 @@ export default function Production() {
   const filterHelperText = useMemo(() => {
     switch (dateFilterMode) {
       case 'today':
-        return 'Orders where work must start today';
+        return 'Orders where work must start today, plus all overdue orders';
       case 'tomorrow':
-        return 'Orders where work must start tomorrow';
+        return 'Orders where work must start tomorrow (excludes overdue)';
       case 'all':
         return 'All open orders';
       default:
