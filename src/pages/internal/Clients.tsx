@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,6 +13,7 @@ import { toast } from 'sonner';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { ClientLocations } from '@/components/clients/ClientLocations';
 import { ClientOrderingConstraints } from '@/components/clients/ClientOrderingConstraints';
+import { ClientAccountNotes } from '@/components/crm/ClientAccountNotes';
 import { SafeDeleteModal } from '@/components/SafeDeleteModal';
 
 interface Client {
@@ -447,6 +449,17 @@ export default function Clients() {
                   </div>
                   {/* Ordering Constraints section */}
                   <ClientOrderingConstraints clientId={c.id} clientName={c.name} />
+                  {/* Account Notes */}
+                  <Collapsible>
+                    <CollapsibleTrigger asChild>
+                      <button className="mt-2 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
+                        Account Notes
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-2">
+                      <ClientAccountNotes clientId={c.id} />
+                    </CollapsibleContent>
+                  </Collapsible>
                 </li>
               ))}
             </ul>
