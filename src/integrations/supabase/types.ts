@@ -230,6 +230,453 @@ export type Database = {
         }
         Relationships: []
       }
+      coroast_billing_periods: {
+        Row: {
+          base_fee: number
+          created_at: string
+          exceeded_6hrs: boolean
+          id: string
+          included_hours: number
+          member_id: string
+          overage_rate_per_hr: number
+          period_end: string
+          period_start: string
+          tier_snapshot: Database["public"]["Enums"]["coroast_tier"]
+          upgrade_nudge_sent: boolean
+        }
+        Insert: {
+          base_fee: number
+          created_at?: string
+          exceeded_6hrs?: boolean
+          id?: string
+          included_hours: number
+          member_id: string
+          overage_rate_per_hr: number
+          period_end: string
+          period_start: string
+          tier_snapshot: Database["public"]["Enums"]["coroast_tier"]
+          upgrade_nudge_sent?: boolean
+        }
+        Update: {
+          base_fee?: number
+          created_at?: string
+          exceeded_6hrs?: boolean
+          id?: string
+          included_hours?: number
+          member_id?: string
+          overage_rate_per_hr?: number
+          period_end?: string
+          period_start?: string
+          tier_snapshot?: Database["public"]["Enums"]["coroast_tier"]
+          upgrade_nudge_sent?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_billing_periods_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coroast_bookings: {
+        Row: {
+          billing_period_id: string
+          booking_date: string
+          cancellation_fee_amt: number | null
+          cancellation_waived: boolean
+          cancelled_at: string | null
+          cancelled_by: string | null
+          created_at: string
+          created_by: string | null
+          duration_hours: number | null
+          end_time: string
+          id: string
+          is_prime_time: boolean
+          member_id: string
+          notes_internal: string | null
+          notes_member: string | null
+          recurring_block_id: string | null
+          reminder_sent_at: string | null
+          start_time: string
+          status: Database["public"]["Enums"]["coroast_booking_status"]
+          updated_at: string
+          waive_reason: string | null
+        }
+        Insert: {
+          billing_period_id: string
+          booking_date: string
+          cancellation_fee_amt?: number | null
+          cancellation_waived?: boolean
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          duration_hours?: number | null
+          end_time: string
+          id?: string
+          is_prime_time?: boolean
+          member_id: string
+          notes_internal?: string | null
+          notes_member?: string | null
+          recurring_block_id?: string | null
+          reminder_sent_at?: string | null
+          start_time: string
+          status?: Database["public"]["Enums"]["coroast_booking_status"]
+          updated_at?: string
+          waive_reason?: string | null
+        }
+        Update: {
+          billing_period_id?: string
+          booking_date?: string
+          cancellation_fee_amt?: number | null
+          cancellation_waived?: boolean
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          duration_hours?: number | null
+          end_time?: string
+          id?: string
+          is_prime_time?: boolean
+          member_id?: string
+          notes_internal?: string | null
+          notes_member?: string | null
+          recurring_block_id?: string | null
+          reminder_sent_at?: string | null
+          start_time?: string
+          status?: Database["public"]["Enums"]["coroast_booking_status"]
+          updated_at?: string
+          waive_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_bookings_billing_period_id_fkey"
+            columns: ["billing_period_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_billing_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coroast_bookings_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coroast_bookings_recurring_block_fkey"
+            columns: ["recurring_block_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_recurring_blocks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coroast_hour_ledger: {
+        Row: {
+          billing_period_id: string
+          booking_id: string | null
+          created_at: string
+          created_by: string | null
+          entry_type: Database["public"]["Enums"]["coroast_ledger_entry_type"]
+          hours_delta: number
+          id: string
+          member_id: string
+          notes: string
+        }
+        Insert: {
+          billing_period_id: string
+          booking_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          entry_type: Database["public"]["Enums"]["coroast_ledger_entry_type"]
+          hours_delta: number
+          id?: string
+          member_id: string
+          notes?: string
+        }
+        Update: {
+          billing_period_id?: string
+          booking_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          entry_type?: Database["public"]["Enums"]["coroast_ledger_entry_type"]
+          hours_delta?: number
+          id?: string
+          member_id?: string
+          notes?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_hour_ledger_billing_period_id_fkey"
+            columns: ["billing_period_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_billing_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coroast_hour_ledger_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coroast_hour_ledger_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coroast_loring_blocks: {
+        Row: {
+          block_date: string
+          block_type: Database["public"]["Enums"]["coroast_loring_block_type"]
+          created_at: string
+          created_by: string | null
+          end_time: string
+          id: string
+          notes: string | null
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          block_date: string
+          block_type?: Database["public"]["Enums"]["coroast_loring_block_type"]
+          created_at?: string
+          created_by?: string | null
+          end_time: string
+          id?: string
+          notes?: string | null
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          block_date?: string
+          block_type?: Database["public"]["Enums"]["coroast_loring_block_type"]
+          created_at?: string
+          created_by?: string | null
+          end_time?: string
+          id?: string
+          notes?: string | null
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      coroast_members: {
+        Row: {
+          business_name: string
+          certified: boolean
+          certified_by: string | null
+          certified_date: string | null
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          joined_date: string
+          notes_internal: string | null
+          tier: Database["public"]["Enums"]["coroast_tier"]
+          updated_at: string
+        }
+        Insert: {
+          business_name: string
+          certified?: boolean
+          certified_by?: string | null
+          certified_date?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          joined_date?: string
+          notes_internal?: string | null
+          tier?: Database["public"]["Enums"]["coroast_tier"]
+          updated_at?: string
+        }
+        Update: {
+          business_name?: string
+          certified?: boolean
+          certified_by?: string | null
+          certified_date?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          joined_date?: string
+          notes_internal?: string | null
+          tier?: Database["public"]["Enums"]["coroast_tier"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      coroast_recurring_blocks: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          day_of_week: Database["public"]["Enums"]["coroast_recurring_day"]
+          effective_from: string
+          effective_until: string | null
+          end_time: string
+          id: string
+          is_active: boolean
+          member_id: string
+          notes: string | null
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          day_of_week: Database["public"]["Enums"]["coroast_recurring_day"]
+          effective_from: string
+          effective_until?: string | null
+          end_time: string
+          id?: string
+          is_active?: boolean
+          member_id: string
+          notes?: string | null
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          day_of_week?: Database["public"]["Enums"]["coroast_recurring_day"]
+          effective_from?: string
+          effective_until?: string | null
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          member_id?: string
+          notes?: string | null
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_recurring_blocks_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coroast_storage_allocations: {
+        Row: {
+          billing_period_id: string
+          created_at: string
+          id: string
+          included_pallets: number
+          member_id: string
+          paid_pallets: number
+          pallets_in_use: number
+          rate_per_add_pallet: number
+          release_notes: string | null
+          release_requested: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          billing_period_id: string
+          created_at?: string
+          id?: string
+          included_pallets?: number
+          member_id: string
+          paid_pallets?: number
+          pallets_in_use?: number
+          rate_per_add_pallet: number
+          release_notes?: string | null
+          release_requested?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          billing_period_id?: string
+          created_at?: string
+          id?: string
+          included_pallets?: number
+          member_id?: string
+          paid_pallets?: number
+          pallets_in_use?: number
+          rate_per_add_pallet?: number
+          release_notes?: string | null
+          release_requested?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_storage_allocations_billing_period_id_fkey"
+            columns: ["billing_period_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_billing_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coroast_storage_allocations_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coroast_waiver_log: {
+        Row: {
+          booking_id: string
+          created_at: string
+          fee_amount_waived: number
+          id: string
+          member_id: string
+          waive_reason: string | null
+          waived_by: string | null
+        }
+        Insert: {
+          booking_id: string
+          created_at?: string
+          fee_amount_waived: number
+          id?: string
+          member_id: string
+          waive_reason?: string | null
+          waived_by?: string | null
+        }
+        Update: {
+          booking_id?: string
+          created_at?: string
+          fee_amount_waived?: number
+          id?: string
+          member_id?: string
+          waive_reason?: string | null
+          waived_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_waiver_log_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coroast_waiver_log_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       external_demand: {
         Row: {
           created_at: string
@@ -1555,6 +2002,32 @@ export type Database = {
     Enums: {
       app_role: "ADMIN" | "OPS" | "CLIENT"
       board_source: "MATCHSTICK" | "FUNK" | "NOSMOKE"
+      coroast_booking_status:
+        | "CONFIRMED"
+        | "CANCELLED_CHARGED"
+        | "CANCELLED_WAIVED"
+        | "CANCELLED_FREE"
+        | "COMPLETED"
+        | "NO_SHOW"
+      coroast_ledger_entry_type:
+        | "BOOKING_CONFIRMED"
+        | "BOOKING_RETURNED"
+        | "MANUAL_CREDIT"
+        | "MANUAL_DEBIT"
+      coroast_loring_block_type:
+        | "INTERNAL_PRODUCTION"
+        | "MAINTENANCE"
+        | "CLOSED"
+        | "OTHER"
+      coroast_recurring_day:
+        | "MON"
+        | "TUE"
+        | "WED"
+        | "THU"
+        | "FRI"
+        | "SAT"
+        | "SUN"
+      coroast_tier: "ACCESS" | "GROWTH"
       default_roaster: "SAMIAC" | "LORING" | "EITHER"
       delivery_method: "PICKUP" | "DELIVERY" | "COURIER"
       exception_event_type:
@@ -1751,6 +2224,28 @@ export const Constants = {
     Enums: {
       app_role: ["ADMIN", "OPS", "CLIENT"],
       board_source: ["MATCHSTICK", "FUNK", "NOSMOKE"],
+      coroast_booking_status: [
+        "CONFIRMED",
+        "CANCELLED_CHARGED",
+        "CANCELLED_WAIVED",
+        "CANCELLED_FREE",
+        "COMPLETED",
+        "NO_SHOW",
+      ],
+      coroast_ledger_entry_type: [
+        "BOOKING_CONFIRMED",
+        "BOOKING_RETURNED",
+        "MANUAL_CREDIT",
+        "MANUAL_DEBIT",
+      ],
+      coroast_loring_block_type: [
+        "INTERNAL_PRODUCTION",
+        "MAINTENANCE",
+        "CLOSED",
+        "OTHER",
+      ],
+      coroast_recurring_day: ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
+      coroast_tier: ["ACCESS", "GROWTH"],
       default_roaster: ["SAMIAC", "LORING", "EITHER"],
       delivery_method: ["PICKUP", "DELIVERY", "COURIER"],
       exception_event_type: [
