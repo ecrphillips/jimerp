@@ -77,19 +77,22 @@ export default function CoRoastLoringSchedule() {
               <List className="h-4 w-4 mr-1" /> List
             </Button>
             <Button
+              variant={viewMode === 'week' ? 'default' : 'ghost'}
+              size="sm"
+              className="rounded-none"
+              onClick={() => setViewMode('week')}
+            >
+              <Clock className="h-4 w-4 mr-1" /> Week
+            </Button>
+            <Button
               variant={viewMode === 'calendar' ? 'default' : 'ghost'}
               size="sm"
               className="rounded-none"
               onClick={() => setViewMode('calendar')}
             >
-              <CalendarDays className="h-4 w-4 mr-1" /> Calendar
+              <CalendarDays className="h-4 w-4 mr-1" /> Month
             </Button>
           </div>
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-2" /> Add Block
-          </Button>
-        </div>
-      </div>
 
       {/* Availability Blocks */}
       <Card className="mb-6">
