@@ -368,6 +368,13 @@ export default function CoRoastMembers() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <WaiverHistoryPanel
+        open={!!waiverMember}
+        onOpenChange={(o) => { if (!o) setWaiverMember(null); }}
+        memberId={waiverMember?.id ?? ''}
+        memberName={waiverMember?.business_name ?? ''}
+      />
     </div>
   );
 }
