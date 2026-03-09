@@ -218,12 +218,13 @@ export function BookingFormDialog({
           if (bErr) throw bErr;
 
           // Write hour ledger
+          const bookingDurationHrs = (timeToMinutes(formEndTime) - timeToMinutes(formStartTime)) / 60;
           await supabase.from('coroast_hour_ledger').insert({
             member_id: memberId,
             billing_period_id: billingPeriodId,
             booking_id: booking.id,
             entry_type: 'BOOKING_CONFIRMED' as any,
-            hours_delta: durationHours,
+            hours_delta: bookingDurationHrs,
             notes: `Booking on ${ds}`,
           });
         }
