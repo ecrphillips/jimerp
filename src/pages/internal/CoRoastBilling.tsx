@@ -4,15 +4,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
-import { FileText, TrendingUp, AlertTriangle } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, subMonths, addMonths } from 'date-fns';
+import { CheckCircle2, TrendingUp, AlertTriangle } from 'lucide-react';
+import { format, endOfMonth, subMonths, addMonths } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { TIER_RATES } from '@/components/bookings/bookingUtils';
+import QuickBooksInstructionsModal from '@/components/coroast/QuickBooksInstructionsModal';
 
 const CANCELLED_STATUSES = ['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CANCELLED_WAIVED'];
+const GST_RATE = 0.05;
 
 function buildMonthOptions() {
   const opts: { value: string; label: string }[] = [];
@@ -29,11 +30,11 @@ export default function CoRoastBilling() {
   const queryClient = useQueryClient();
   const monthOptions = useMemo(() => buildMonthOptions(), []);
   const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
+  const [modalData, setModalData] = useState<any>(null);
 
   const periodStart = `${selectedMonth}-01`;
   const periodEnd = format(endOfMonth(new Date(`${selectedMonth}-01`)), 'yyyy-MM-dd');
 
-  // Previous month for upgrade nudge
   const prevMonth = format(subMonths(new Date(`${selectedMonth}-01`), 1), 'yyyy-MM');
   const prevPeriodStart = `${prevMonth}-01`;
   const prevPeriodEnd = format(endOfMonth(new Date(`${prevMonth}-01`)), 'yyyy-MM-dd');
@@ -43,7 +44,7 @@ export default function CoRoastBilling() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_members')
-        .select('id, business_name, tier, is_active')
+        .select('id, business_name, tier, is_active, contact_email')
         .eq('is_active', true)
         .order('business_name');
       if (error) throw error;
@@ -77,7 +78,6 @@ export default function CoRoastBilling() {
     },
   });
 
-  // Previous month bookings for upgrade nudge
   const { data: prevBookings = [] } = useQuery({
     queryKey: ['coroast-billing-bookings-prev', prevMonth],
     queryFn: async () => {
@@ -121,29 +121,24 @@ export default function CoRoastBilling() {
     enabled: billingPeriods.length > 0,
   });
 
-  // Compute per-member hours used
   const memberHoursUsed = useMemo(() => {
     const map = new Map<string, number>();
     for (const bk of bookings) {
       if (CANCELLED_STATUSES.includes(bk.status)) continue;
-      const dur = bk.duration_hours ?? 0;
-      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + Number(dur));
+      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + Number(bk.duration_hours ?? 0));
     }
     return map;
   }, [bookings]);
 
-  // Previous month hours for upgrade nudge
   const prevMemberHoursUsed = useMemo(() => {
     const map = new Map<string, number>();
     for (const bk of prevBookings) {
       if (CANCELLED_STATUSES.includes(bk.status)) continue;
-      const dur = bk.duration_hours ?? 0;
-      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + Number(dur));
+      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + Number(bk.duration_hours ?? 0));
     }
     return map;
   }, [prevBookings]);
 
-  // Build member billing data
   const memberBillingData = useMemo(() => {
     return members.map(m => {
       const tier = m.tier ?? 'ACCESS';
@@ -158,14 +153,15 @@ export default function CoRoastBilling() {
       const storage = storageAllocations.find(s => s.member_id === m.id);
       const includedPallets = storage?.included_pallets ?? 0;
       const paidPallets = storage?.paid_pallets ?? 0;
-      const palletRate = storage?.rate_per_add_pallet ?? 0;
-      const storageCharge = paidPallets * Number(palletRate);
+      const palletRate = Number(storage?.rate_per_add_pallet ?? 0);
+      const storageCharge = paidPallets * palletRate;
 
-      const totalAmount = baseFee + overageCharge + storageCharge;
+      const subtotal = baseFee + overageCharge + storageCharge;
+      const gst = subtotal * GST_RATE;
+      const grandTotal = subtotal + gst;
 
       const invoice = bp ? invoices.find((inv: any) => inv.member_id === m.id && inv.billing_period_id === bp.id) : null;
 
-      // Upgrade nudge: exceeded 6h this AND prev month, only for ACCESS tier
       const prevUsed = prevMemberHoursUsed.get(m.id) ?? 0;
       const upgradeRecommended = tier === 'ACCESS' && usedHours > 6 && prevUsed > 6;
 
@@ -181,28 +177,32 @@ export default function CoRoastBilling() {
         overageCharge,
         includedPallets,
         paidPallets,
-        palletRate: Number(palletRate),
+        palletRate,
         storageCharge,
-        totalAmount,
+        subtotal,
+        gst,
+        grandTotal,
         invoice,
         upgradeRecommended,
+        contactEmail: (m as any).contact_email ?? null,
       };
     });
   }, [members, billingPeriods, memberHoursUsed, prevMemberHoursUsed, storageAllocations, invoices]);
 
-  // Totals
   const totals = useMemo(() => {
-    let baseFees = 0, overageCharges = 0, storageCharges = 0, grandTotal = 0;
+    let baseFees = 0, overageCharges = 0, storageCharges = 0, subtotal = 0, gst = 0, grandTotal = 0;
     for (const d of memberBillingData) {
       baseFees += d.baseFee;
       overageCharges += d.overageCharge;
       storageCharges += d.storageCharge;
-      grandTotal += d.totalAmount;
+      subtotal += d.subtotal;
+      gst += d.gst;
+      grandTotal += d.grandTotal;
     }
-    return { baseFees, overageCharges, storageCharges, grandTotal };
+    return { baseFees, overageCharges, storageCharges, subtotal, gst, grandTotal };
   }, [memberBillingData]);
 
-  const generateInvoiceMutation = useMutation({
+  const markReadyMutation = useMutation({
     mutationFn: async (data: typeof memberBillingData[number]) => {
       if (!data.bp) throw new Error('No billing period found for this member');
       const { error } = await supabase.from('coroast_invoices').insert({
@@ -221,16 +221,19 @@ export default function CoRoastBilling() {
         paid_pallets: data.paidPallets,
         pallet_rate: data.palletRate,
         storage_charge: data.storageCharge,
-        total_amount: data.totalAmount,
+        total_amount: data.grandTotal,
       } as any);
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success('Invoice generated');
+      toast.success('Marked as ready to invoice');
       refetchInvoices();
+      setModalData(null);
     },
     onError: (err: Error) => toast.error(err.message),
   });
+
+  const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -277,17 +280,16 @@ export default function CoRoastBilling() {
                 <div className="flex items-center gap-2">
                   {d.invoice ? (
                     <Badge variant="secondary" className="text-xs">
-                      <FileText className="h-3 w-3 mr-1" />
-                      Invoice Generated
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Ready to Invoice ✓ {format(new Date(d.invoice.created_at), 'MMM d')}
                     </Badge>
                   ) : (
                     <Button
                       size="sm"
-                      onClick={() => generateInvoiceMutation.mutate(d)}
-                      disabled={!d.bp || generateInvoiceMutation.isPending}
+                      onClick={() => setModalData(d)}
+                      disabled={!d.bp}
                     >
-                      <FileText className="h-3.5 w-3.5 mr-1" />
-                      Generate Invoice
+                      Mark as Ready to Invoice
                     </Button>
                   )}
                 </div>
@@ -340,9 +342,19 @@ export default function CoRoastBilling() {
 
               <Separator className="my-3" />
 
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">Total Amount</span>
-                <span className="text-lg font-bold">${d.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Subtotal</span>
+                  <span className="text-sm font-semibold">${fmt(d.subtotal)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">GST (5%)</span>
+                  <span className="text-sm font-semibold">${fmt(d.gst)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted-foreground">Total incl. GST</span>
+                  <span className="text-lg font-bold">${fmt(d.grandTotal)}</span>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -355,26 +367,57 @@ export default function CoRoastBilling() {
             <CardTitle className="text-base">Period Summary</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
               <div>
                 <p className="text-muted-foreground text-xs">Total Base Fees</p>
                 <p className="font-bold text-lg">${totals.baseFees.toLocaleString()}</p>
               </div>
               <div>
                 <p className="text-muted-foreground text-xs">Total Overage Charges</p>
-                <p className="font-bold text-lg">${totals.overageCharges.toFixed(2)}</p>
+                <p className="font-bold text-lg">${fmt(totals.overageCharges)}</p>
               </div>
               <div>
                 <p className="text-muted-foreground text-xs">Total Storage Charges</p>
-                <p className="font-bold text-lg">${totals.storageCharges.toFixed(2)}</p>
+                <p className="font-bold text-lg">${fmt(totals.storageCharges)}</p>
               </div>
               <div>
-                <p className="text-muted-foreground text-xs">Grand Total</p>
-                <p className="font-bold text-xl text-primary">${totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <p className="text-muted-foreground text-xs">Subtotal</p>
+                <p className="font-bold text-lg">${fmt(totals.subtotal)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Total GST (5%)</p>
+                <p className="font-bold text-lg">${fmt(totals.gst)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Grand Total incl. GST</p>
+                <p className="font-bold text-xl text-primary">${fmt(totals.grandTotal)}</p>
               </div>
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {modalData && (
+        <QuickBooksInstructionsModal
+          open={!!modalData}
+          onClose={() => setModalData(null)}
+          onConfirm={() => markReadyMutation.mutate(modalData)}
+          isPending={markReadyMutation.isPending}
+          memberName={modalData.member.business_name}
+          memberEmail={modalData.contactEmail}
+          tier={modalData.tier}
+          periodEnd={periodEnd}
+          baseFee={modalData.baseFee}
+          overageHours={modalData.overageHours}
+          overageRate={modalData.overageRate}
+          overageCharge={modalData.overageCharge}
+          paidPallets={modalData.paidPallets}
+          palletRate={modalData.palletRate}
+          storageCharge={modalData.storageCharge}
+          subtotal={modalData.subtotal}
+          gst={modalData.gst}
+          grandTotal={modalData.grandTotal}
+        />
       )}
     </div>
   );
