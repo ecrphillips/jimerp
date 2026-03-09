@@ -23,7 +23,7 @@ import {
   Wrench,
   Users2,
   UserPlus,
-  Bean,
+  Handshake,
   Calendar,
   Receipt
 } from 'lucide-react';
