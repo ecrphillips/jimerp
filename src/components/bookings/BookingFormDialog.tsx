@@ -70,6 +70,7 @@ export function BookingFormDialog({
   const [recurringDay, setRecurringDay] = useState('MON');
   const [recurringEndDate, setRecurringEndDate] = useState<Date | undefined>();
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [showPastConfirm, setShowPastConfirm] = useState(false);
 
   const activeMembers = useMemo(() => members.filter(m => m.is_active), [members]);
   const selectedMember = useMemo(() => members.find(m => m.id === memberId), [members, memberId]);
