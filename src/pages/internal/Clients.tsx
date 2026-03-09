@@ -68,6 +68,7 @@ function generateAlternativeCodes(name: string, existingCodes: string[]): string
 
 export default function Clients() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [showDialog, setShowDialog] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [showInactive, setShowInactive] = useState(false);
