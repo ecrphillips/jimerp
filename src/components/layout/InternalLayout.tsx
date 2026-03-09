@@ -50,6 +50,12 @@ const inventorySubItems = [
   { to: '/inventory/ledger', label: 'Ledger', icon: BookOpen },
 ];
 
+// Co-Roasting sub-items
+const coroastSubItems = [
+  { to: '/co-roasting/members', label: 'Members', icon: Users },
+  { to: '/co-roasting/loring-schedule', label: 'Loring Schedule', icon: Calendar },
+];
+
 // Bottom nav items (removed Green Coffee)
 const bottomNavItems = [
   { to: '/products', label: 'Products', icon: Package },
