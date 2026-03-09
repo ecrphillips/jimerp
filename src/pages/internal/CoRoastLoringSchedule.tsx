@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Pencil, Trash2, Repeat, List, CalendarDays } from 'lucide-react';
+import { Plus, Pencil, Trash2, Repeat, List, CalendarDays, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   LoringBlock, BookingWithMember,
