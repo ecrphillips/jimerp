@@ -24,6 +24,7 @@ import Production from "@/pages/internal/Production";
 import GreenCoffee from "@/pages/internal/GreenCoffee";
 import CoRoastMembers from "@/pages/internal/CoRoastMembers";
 import CoRoastLoringSchedule from "@/pages/internal/CoRoastLoringSchedule";
+import BookingCalendar from "@/pages/internal/BookingCalendar";
 import BoardsDisabled from "@/pages/internal/BoardsDisabled";
 import BulkProducts from "@/pages/internal/BulkProducts";
 import Inventory from "@/pages/internal/Inventory";
