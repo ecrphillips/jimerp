@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Plus, Pencil, ShieldCheck } from 'lucide-react';
+import { Plus, Pencil, ShieldCheck, FileText } from 'lucide-react';
+import { WaiverHistoryPanel } from '@/components/bookings/WaiverHistoryPanel';
 import type { Database } from '@/integrations/supabase/types';
 
 type CoroastTier = Database['public']['Enums']['coroast_tier'];
