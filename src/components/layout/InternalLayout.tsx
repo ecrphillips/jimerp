@@ -242,6 +242,48 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 </Collapsible>
               </li>
 
+              {/* Co-Roasting - Collapsible group */}
+              <li>
+                <Collapsible open={coroastOpen} onOpenChange={setCoroastOpen}>
+                  <CollapsibleTrigger asChild>
+                    <button
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
+                        isCoRoastRoute
+                          ? "bg-sidebar-accent"
+                          : "hover:bg-sidebar-accent/85"
+                      )}
+                    >
+                      <Bean className="h-5 w-5" />
+                      Co-Roasting
+                      {coroastOpen ? (
+                        <ChevronDown className="ml-auto h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="ml-auto h-4 w-4" />
+                      )}
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-1 space-y-1 pl-4">
+                    {coroastSubItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => setSidebarOpen(false)}
+                        className={({ isActive }) => cn(
+                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
+                          isActive
+                            ? "bg-sidebar-accent"
+                            : "hover:bg-sidebar-accent/85"
+                        )}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+              </li>
+
               {/* Bottom items: Products, Clients */}
               {bottomNavItems.map((item) => (
                 <li key={item.to}>
