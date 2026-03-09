@@ -431,7 +431,15 @@ export function BookingFormDialog({
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button
-              onClick={() => { setValidationError(null); mutation.mutate(); }}
+              onClick={() => {
+                setValidationError(null);
+                // Check if date is in the past
+                if (formDate && isBefore(startOfDay(formDate), startOfDay(new Date()))) {
+                  setShowPastConfirm(true);
+                } else {
+                  mutation.mutate();
+                }
+              }}
               disabled={mutation.isPending || startConflicted || endConflicted}
             >
               {mutation.isPending ? 'Saving…' : 'Create Booking'}
@@ -440,5 +448,16 @@ export function BookingFormDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+    <PastBookingConfirmModal
+      open={showPastConfirm}
+      onOpenChange={setShowPastConfirm}
+      onConfirm={() => {
+        setShowPastConfirm(false);
+        mutation.mutate();
+      }}
+      isPending={mutation.isPending}
+    />
+  </>
   );
 }
