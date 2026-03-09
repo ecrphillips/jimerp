@@ -26,6 +26,8 @@ function minutesToPx(minutes: number): number {
 const NO_SHOW_BG = 'hsl(15 80% 45%)';
 const CANCELLED_STATUSES = ['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CANCELLED_WAIVED'];
 
+type UrgencyTier = 'none' | 'amber' | 'red';
+
 type CalendarEvent = {
   id: string;
   bookingId?: string;
@@ -39,7 +41,7 @@ type CalendarEvent = {
   isBlock: boolean;
   isOverage: boolean;
   recurring: boolean;
-  isLocked: boolean;
+  urgency: UrgencyTier;
   isNoShow: boolean;
 };
 
