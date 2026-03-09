@@ -8,18 +8,17 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CalendarIcon, AlertTriangle } from 'lucide-react';
+import { CalendarIcon } from 'lucide-react';
 import { format, addDays, addWeeks, getDay, startOfMonth, endOfMonth } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { TimeSelect } from '@/components/coroast/TimeSelect';
 import { DAYS_OF_WEEK, DAY_LABELS, JS_DAY_TO_STRING } from '@/components/coroast/types';
 import {
   checkOverlap, TIER_RATES, timeToMinutes,
   type MemberRow, type BookingRow, type BlockRow,
 } from './bookingUtils';
+import { AvailabilityTimeSelect } from './AvailabilityTimeSelect';
 
 interface BookingFormDialogProps {
   open: boolean;
@@ -75,6 +74,29 @@ export function BookingFormDialog({
   const selectedMember = useMemo(() => members.find(m => m.id === memberId), [members, memberId]);
   const isGrowth = selectedMember?.tier === 'GROWTH';
 
+  const dateStr = formDate ? format(formDate, 'yyyy-MM-dd') : null;
+
+  // Check if current selections are conflicted
+  const startConflicted = useMemo(() => {
+    if (!dateStr || !formStartTime) return false;
+    const slotMin = timeToMinutes(formStartTime);
+    const slotEnd = slotMin + 30;
+    for (const b of blocks) {
+      if (b.block_date !== dateStr) continue;
+      if (slotMin < timeToMinutes(b.end_time) && slotEnd > timeToMinutes(b.start_time)) return true;
+    }
+    for (const bk of bookings) {
+      if (bk.booking_date !== dateStr || bk.status === 'CANCELLED') continue;
+      if (slotMin < timeToMinutes(bk.end_time) && slotEnd > timeToMinutes(bk.start_time)) return true;
+    }
+    return false;
+  }, [dateStr, formStartTime, blocks, bookings]);
+
+  const endConflicted = useMemo(() => {
+    if (!dateStr || !formStartTime || !formEndTime) return false;
+    return !!checkOverlap(dateStr, formStartTime, formEndTime, blocks, bookings);
+  }, [dateStr, formStartTime, formEndTime, blocks, bookings]);
+
   useEffect(() => {
     if (open) {
       setMemberId('');
@@ -117,7 +139,6 @@ export function BookingFormDialog({
     const monthStart = format(startOfMonth(new Date(bookingDate + 'T00:00:00')), 'yyyy-MM-dd');
     const monthEnd = format(endOfMonth(new Date(bookingDate + 'T00:00:00')), 'yyyy-MM-dd');
 
-    // Check existing
     const { data: existing } = await supabase
       .from('coroast_billing_periods')
       .select('id')
@@ -128,7 +149,6 @@ export function BookingFormDialog({
 
     if (existing && existing.length > 0) return existing[0].id;
 
-    // Create new
     const member = members.find(m => m.id === mId);
     const tier = member?.tier ?? 'ACCESS';
     const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
@@ -158,7 +178,7 @@ export function BookingFormDialog({
       if (!formStartTime || !formEndTime) throw new Error('Start and end times required');
       if (formEndTime <= formStartTime) throw new Error('End time must be after start time');
 
-      const dateStr = format(formDate, 'yyyy-MM-dd');
+      const saveDateStr = format(formDate, 'yyyy-MM-dd');
 
       // Access tier: 4 week horizon
       if (selectedMember?.tier === 'ACCESS') {
@@ -169,18 +189,15 @@ export function BookingFormDialog({
       }
 
       if (isRecurring && isGrowth) {
-        // Recurring booking for Growth tier
         const dates = generateRecurringDates(formDate, recurringDay, recurringEndDate ?? null);
         if (dates.length === 0) throw new Error('No dates generated');
 
-        // Check overlaps for all dates
         for (const d of dates) {
           const ds = format(d, 'yyyy-MM-dd');
           const overlap = checkOverlap(ds, formStartTime, formEndTime, blocks, bookings);
           if (overlap) throw new Error(`${format(d, 'MMM d')}: ${overlap}`);
         }
 
-        // Create recurring block record
         const { data: recurBlock, error: rbErr } = await supabase
           .from('coroast_recurring_blocks')
           .insert({
@@ -196,7 +213,6 @@ export function BookingFormDialog({
           .single();
         if (rbErr) throw rbErr;
 
-        // Create individual bookings
         for (const d of dates) {
           const ds = format(d, 'yyyy-MM-dd');
           const billingPeriodId = await getOrCreateBillingPeriod(memberId, ds);
@@ -217,7 +233,6 @@ export function BookingFormDialog({
             .single();
           if (bErr) throw bErr;
 
-          // Write hour ledger
           const bookingDurationHrs = (timeToMinutes(formEndTime) - timeToMinutes(formStartTime)) / 60;
           await supabase.from('coroast_hour_ledger').insert({
             member_id: memberId,
@@ -231,18 +246,17 @@ export function BookingFormDialog({
 
         toast.success(`Created ${dates.length} recurring bookings`);
       } else {
-        // Single booking
-        const overlap = checkOverlap(dateStr, formStartTime, formEndTime, blocks, bookings);
+        const overlap = checkOverlap(saveDateStr, formStartTime, formEndTime, blocks, bookings);
         if (overlap) throw new Error(overlap);
 
-        const billingPeriodId = await getOrCreateBillingPeriod(memberId, dateStr);
+        const billingPeriodId = await getOrCreateBillingPeriod(memberId, saveDateStr);
 
         const { data: booking, error } = await supabase
           .from('coroast_bookings')
           .insert({
             member_id: memberId,
             billing_period_id: billingPeriodId,
-            booking_date: dateStr,
+            booking_date: saveDateStr,
             start_time: formStartTime,
             end_time: formEndTime,
             notes_internal: notes.trim() || null,
@@ -252,7 +266,6 @@ export function BookingFormDialog({
           .single();
         if (error) throw error;
 
-        // Write hour ledger
         const singleDurationHrs = (timeToMinutes(formEndTime) - timeToMinutes(formStartTime)) / 60;
         await supabase.from('coroast_hour_ledger').insert({
           member_id: memberId,
@@ -260,7 +273,7 @@ export function BookingFormDialog({
           booking_id: booking.id,
           entry_type: 'BOOKING_CONFIRMED' as any,
           hours_delta: singleDurationHrs,
-          notes: `Booking on ${dateStr}`,
+          notes: `Booking on ${saveDateStr}`,
         });
 
         toast.success('Booking created');
@@ -283,13 +296,6 @@ export function BookingFormDialog({
           <DialogTitle>Add Booking</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          {validationError && (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>{validationError}</AlertDescription>
-            </Alert>
-          )}
-
           {/* Member select */}
           <div>
             <Label>Member *</Label>
@@ -330,13 +336,37 @@ export function BookingFormDialog({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Start Time *</Label>
-              <TimeSelect value={formStartTime} onValueChange={(v) => { setFormStartTime(v); setValidationError(null); }} placeholder="Start" />
+              <AvailabilityTimeSelect
+                value={formStartTime}
+                onValueChange={(v) => { setFormStartTime(v); setValidationError(null); }}
+                placeholder="Start"
+                dateStr={dateStr}
+                blocks={blocks}
+                bookings={bookings}
+                isConflicted={startConflicted}
+              />
             </div>
             <div>
               <Label>End Time *</Label>
-              <TimeSelect value={formEndTime} onValueChange={(v) => { setFormEndTime(v); setValidationError(null); }} placeholder="End" />
+              <AvailabilityTimeSelect
+                value={formEndTime}
+                onValueChange={(v) => { setFormEndTime(v); setValidationError(null); }}
+                placeholder="End"
+                dateStr={dateStr}
+                blocks={blocks}
+                bookings={bookings}
+                startTimeForRange={formStartTime || undefined}
+                isConflicted={endConflicted}
+              />
             </div>
           </div>
+
+          {/* Inline conflict hint */}
+          {(startConflicted || endConflicted) && (
+            <p className="text-xs text-destructive">
+              Selected time conflicts with an existing block or booking. Choose a different slot.
+            </p>
+          )}
 
           {/* Recurring (Growth only) */}
           {isGrowth && (
@@ -390,10 +420,18 @@ export function BookingFormDialog({
             <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
           </div>
 
+          {/* Backstop error (rarely shown) */}
+          {validationError && (
+            <p className="text-xs text-destructive font-medium">{validationError}</p>
+          )}
+
           {/* Actions */}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={() => { setValidationError(null); mutation.mutate(); }} disabled={mutation.isPending}>
+            <Button
+              onClick={() => { setValidationError(null); mutation.mutate(); }}
+              disabled={mutation.isPending || startConflicted || endConflicted}
+            >
               {mutation.isPending ? 'Saving…' : 'Create Booking'}
             </Button>
           </div>
