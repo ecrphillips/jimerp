@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, Pencil, Trash2, Repeat, List, CalendarDays, Clock } from 'lucide-react';
+import { PendingReminders } from '@/components/bookings/PendingReminders';
 import { format } from 'date-fns';
 import {
   LoringBlock, BookingWithMember,
@@ -221,6 +222,9 @@ export default function CoRoastLoringSchedule() {
           </Card>
         </>
       )}
+
+      {/* Pending Reminders */}
+      <PendingReminders />
 
       {/* Form Dialog */}
       <BlockFormDialog

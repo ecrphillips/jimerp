@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { BookingWeekView } from '@/components/bookings/BookingWeekView';
 import { BookingFormDialog } from '@/components/bookings/BookingFormDialog';
+import { BookingDetailModal } from '@/components/bookings/BookingDetailModal';
 import { MemberSummaryPanel } from '@/components/bookings/MemberSummaryPanel';
 import type { MemberRow, BookingRow, BlockRow } from '@/components/bookings/bookingUtils';
 
@@ -14,6 +15,7 @@ export default function BookingCalendar() {
   const [showBookingDialog, setShowBookingDialog] = useState(false);
   const [prefillDate, setPrefillDate] = useState<string | undefined>();
   const [prefillTime, setPrefillTime] = useState<string | undefined>();
+  const [detailBooking, setDetailBooking] = useState<BookingRow | null>(null);
 
   const currentMonth = format(new Date(), 'yyyy-MM');
 
@@ -83,6 +85,7 @@ export default function BookingCalendar() {
             bookings={bookings}
             members={members}
             onSlotClick={handleSlotClick}
+            onBookingClick={(bk) => setDetailBooking(bk)}
           />
         </CardContent>
       </Card>
@@ -96,6 +99,14 @@ export default function BookingCalendar() {
         prefillDate={prefillDate}
         prefillTime={prefillTime}
         onSuccess={() => {}}
+      />
+
+      <BookingDetailModal
+        open={!!detailBooking}
+        onOpenChange={(o) => { if (!o) setDetailBooking(null); }}
+        booking={detailBooking}
+        members={members}
+        allBookings={bookings}
       />
     </div>
   );

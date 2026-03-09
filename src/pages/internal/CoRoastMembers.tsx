@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Plus, Pencil, ShieldCheck } from 'lucide-react';
+import { Plus, Pencil, ShieldCheck, FileText } from 'lucide-react';
+import { WaiverHistoryPanel } from '@/components/bookings/WaiverHistoryPanel';
 import type { Database } from '@/integrations/supabase/types';
 
 type CoroastTier = Database['public']['Enums']['coroast_tier'];
@@ -38,6 +39,7 @@ export default function CoRoastMembers() {
   const [showDialog, setShowDialog] = useState(false);
   const [editingMember, setEditingMember] = useState<CoroastMember | null>(null);
   const [showInactive, setShowInactive] = useState(false);
+  const [waiverMember, setWaiverMember] = useState<CoroastMember | null>(null);
 
   // Form state
   const [formBusinessName, setFormBusinessName] = useState('');
@@ -272,6 +274,9 @@ export default function CoRoastMembers() {
                       >
                         <ShieldCheck className={`h-4 w-4 ${m.certified ? 'text-primary' : 'text-muted-foreground'}`} />
                       </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setWaiverMember(m)} title="Waiver history">
+                        <FileText className="h-4 w-4" />
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => openEditDialog(m)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -363,6 +368,13 @@ export default function CoRoastMembers() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <WaiverHistoryPanel
+        open={!!waiverMember}
+        onOpenChange={(o) => { if (!o) setWaiverMember(null); }}
+        memberId={waiverMember?.id ?? ''}
+        memberName={waiverMember?.business_name ?? ''}
+      />
     </div>
   );
 }
