@@ -32,12 +32,16 @@ export default function CoRoastBilling() {
   const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
   const [modalData, setModalData] = useState<any>(null);
 
-  const periodStart = `${selectedMonth}-01`;
-  const periodEnd = format(endOfMonth(new Date(`${selectedMonth}-01`)), 'yyyy-MM-dd');
+  // Parse year/month to avoid timezone issues with new Date('YYYY-MM-DD')
+  const [selYear, selMonthNum] = selectedMonth.split('-').map(Number);
+  const selectedDate = new Date(selYear, selMonthNum - 1, 1);
+  const periodStart = format(selectedDate, 'yyyy-MM-dd');
+  const periodEnd = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
 
-  const prevMonth = format(subMonths(new Date(`${selectedMonth}-01`), 1), 'yyyy-MM');
-  const prevPeriodStart = `${prevMonth}-01`;
-  const prevPeriodEnd = format(endOfMonth(new Date(`${prevMonth}-01`)), 'yyyy-MM-dd');
+  const prevDate = subMonths(selectedDate, 1);
+  const prevMonth = format(prevDate, 'yyyy-MM');
+  const prevPeriodStart = format(prevDate, 'yyyy-MM-dd');
+  const prevPeriodEnd = format(endOfMonth(prevDate), 'yyyy-MM-dd');
 
   const { data: members = [] } = useQuery({
     queryKey: ['coroast-billing-members'],
@@ -75,8 +79,8 @@ export default function CoRoastBilling() {
 
     if (membersWithoutPeriod.length === 0) return;
 
-    const monthStart = format(startOfMonth(new Date(`${selectedMonth}-01`)), 'yyyy-MM-dd');
-    const monthEnd = format(endOfMonth(new Date(`${selectedMonth}-01`)), 'yyyy-MM-dd');
+    const monthStart = format(startOfMonth(selectedDate), 'yyyy-MM-dd');
+    const monthEnd = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
 
     const createMissing = async () => {
       const inserts = membersWithoutPeriod.map(m => {
