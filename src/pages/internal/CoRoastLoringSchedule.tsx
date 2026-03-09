@@ -123,7 +123,7 @@ export default function CoRoastLoringSchedule() {
                       </Badge>
                       <div className="flex items-center gap-1.5">
                         {b.recurring_series_id && (
-                          <Repeat className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" title="Part of a recurring series" />
+                          <span title="Part of a recurring series"><Repeat className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" /></span>
                         )}
                         <span className="font-medium">{format(new Date(b.block_date + 'T00:00:00'), 'EEE, MMM d, yyyy')}</span>
                         <span className="ml-2 text-sm text-muted-foreground">
