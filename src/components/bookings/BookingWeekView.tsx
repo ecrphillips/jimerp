@@ -106,7 +106,8 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
         : getMemberColor(bk.member_id, allMemberIds);
       const isOverage = bookingOverageSet.has(bk.id);
       const bkStart = parseISO(`${bk.booking_date}T${bk.start_time}`);
-      const locked = differenceInHours(bkStart, now) < 48;
+      const hrsUntil = differenceInHours(bkStart, now);
+      const urgency: UrgencyTier = hrsUntil < 24 ? 'red' : hrsUntil < 48 ? 'amber' : 'none';
 
       result.push({
         id: `bk-${bk.id}`,
@@ -119,7 +120,7 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
         bgColor: color.bg,
         textColor: color.text,
         isBlock: false, isOverage, recurring: !!bk.recurring_block_id,
-        isLocked: locked, isNoShow,
+        urgency, isNoShow,
       });
     }
 
