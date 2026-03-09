@@ -12,6 +12,8 @@ import { toast } from 'sonner';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { ClientLocations } from '@/components/clients/ClientLocations';
 import { ClientOrderingConstraints } from '@/components/clients/ClientOrderingConstraints';
+import { ClientAccountNotes } from '@/components/crm/ClientAccountNotes';
+import { SafeDeleteModal } from '@/components/SafeDeleteModal';
 import { SafeDeleteModal } from '@/components/SafeDeleteModal';
 
 interface Client {
