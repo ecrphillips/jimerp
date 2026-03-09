@@ -10,12 +10,13 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Handshake } from 'lucide-react';
 import { ClientLocations } from '@/components/clients/ClientLocations';
 import { ClientOrderingConstraints } from '@/components/clients/ClientOrderingConstraints';
 import { ClientAccountNotes } from '@/components/crm/ClientAccountNotes';
 import { BriefMeButton } from '@/components/crm/BriefMeModal';
 import { SafeDeleteModal } from '@/components/SafeDeleteModal';
+import { useNavigate } from 'react-router-dom';
 
 interface Client {
   id: string;
@@ -67,6 +68,7 @@ function generateAlternativeCodes(name: string, existingCodes: string[]): string
 
 export default function Clients() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [showDialog, setShowDialog] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [showInactive, setShowInactive] = useState(false);
@@ -103,6 +105,26 @@ export default function Clients() {
       return (data ?? []) as Client[];
     },
   });
+
+  // Fetch co-roast members that have a client_id linked
+  const { data: coroastLinks } = useQuery({
+    queryKey: ['coroast-member-client-links'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('coroast_members')
+        .select('id, business_name, client_id')
+        .not('client_id', 'is', null);
+      if (error) throw error;
+      return (data ?? []) as { id: string; business_name: string; client_id: string }[];
+    },
+  });
+
+  // Map client_id -> coroast member info
+  const coroastByClientId = useMemo(() => {
+    const map = new Map<string, { id: string; business_name: string }>();
+    coroastLinks?.forEach(link => map.set(link.client_id, { id: link.id, business_name: link.business_name }));
+    return map;
+  }, [coroastLinks]);
 
   // Filter clients based on showInactive toggle
   const displayedClients = useMemo(() => {
@@ -420,14 +442,31 @@ export default function Clients() {
                       <Badge variant="outline" className="font-mono text-xs">
                         {c.client_code}
                       </Badge>
-                      <div>
+                      <div className="flex items-center gap-2">
                         <span className="font-medium">{c.name}</span>
                         {c.billing_email && (
-                          <span className="ml-2 text-sm text-muted-foreground">{c.billing_email}</span>
+                          <span className="text-sm text-muted-foreground">{c.billing_email}</span>
+                        )}
+                        {coroastByClientId.has(c.id) && (
+                          <Badge variant="secondary" className="text-xs gap-1">
+                            <Handshake className="h-3 w-3" />
+                            Co-Roasting Member
+                          </Badge>
                         )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {coroastByClientId.has(c.id) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs gap-1 h-7"
+                          onClick={() => navigate('/co-roasting/members')}
+                        >
+                          <Handshake className="h-3 w-3" />
+                          View Co-Roasting Account
+                        </Button>
+                      )}
                       <BriefMeButton type="client" id={c.id} name={c.name} />
                       <span className={`text-sm ${c.is_active ? 'text-green-600' : 'text-muted-foreground'}`}>
                         {c.is_active ? 'Active' : 'Inactive'}
