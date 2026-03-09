@@ -106,6 +106,26 @@ export default function Clients() {
     },
   });
 
+  // Fetch co-roast members that have a client_id linked
+  const { data: coroastLinks } = useQuery({
+    queryKey: ['coroast-member-client-links'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('coroast_members')
+        .select('id, business_name, client_id')
+        .not('client_id', 'is', null);
+      if (error) throw error;
+      return (data ?? []) as { id: string; business_name: string; client_id: string }[];
+    },
+  });
+
+  // Map client_id -> coroast member info
+  const coroastByClientId = useMemo(() => {
+    const map = new Map<string, { id: string; business_name: string }>();
+    coroastLinks?.forEach(link => map.set(link.client_id, { id: link.id, business_name: link.business_name }));
+    return map;
+  }, [coroastLinks]);
+
   // Filter clients based on showInactive toggle
   const displayedClients = useMemo(() => {
     if (!clients) return [];
