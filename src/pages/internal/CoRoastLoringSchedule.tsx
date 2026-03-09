@@ -14,6 +14,7 @@ import {
 import { BlockFormDialog } from '@/components/coroast/BlockFormDialog';
 import { BlockDeleteDialog } from '@/components/coroast/BlockDeleteDialog';
 import { BlockCalendarView } from '@/components/coroast/BlockCalendarView';
+import { BlockWeekView } from '@/components/coroast/BlockWeekView';
 
 export default function CoRoastLoringSchedule() {
   const today = new Date().toISOString().split('T')[0];
