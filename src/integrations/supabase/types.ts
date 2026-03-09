@@ -432,6 +432,90 @@ export type Database = {
           },
         ]
       }
+      coroast_invoices: {
+        Row: {
+          base_fee: number
+          billing_period_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          included_hours: number
+          included_pallets: number
+          member_id: string
+          notes: string | null
+          overage_charge: number
+          overage_hours: number
+          overage_rate: number
+          paid_pallets: number
+          pallet_rate: number
+          period_end: string
+          period_start: string
+          storage_charge: number
+          tier_snapshot: string
+          total_amount: number
+          used_hours: number
+        }
+        Insert: {
+          base_fee: number
+          billing_period_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          included_hours: number
+          included_pallets?: number
+          member_id: string
+          notes?: string | null
+          overage_charge?: number
+          overage_hours?: number
+          overage_rate: number
+          paid_pallets?: number
+          pallet_rate?: number
+          period_end: string
+          period_start: string
+          storage_charge?: number
+          tier_snapshot: string
+          total_amount: number
+          used_hours: number
+        }
+        Update: {
+          base_fee?: number
+          billing_period_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          included_hours?: number
+          included_pallets?: number
+          member_id?: string
+          notes?: string | null
+          overage_charge?: number
+          overage_hours?: number
+          overage_rate?: number
+          paid_pallets?: number
+          pallet_rate?: number
+          period_end?: string
+          period_start?: string
+          storage_charge?: number
+          tier_snapshot?: string
+          total_amount?: number
+          used_hours?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_invoices_billing_period_id_fkey"
+            columns: ["billing_period_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_billing_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coroast_invoices_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coroast_loring_blocks: {
         Row: {
           block_date: string
