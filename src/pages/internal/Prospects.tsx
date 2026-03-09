@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Plus, ChevronDown, ChevronRight } from 'lucide-react';
 import { NotesLog } from '@/components/crm/NotesLog';
+import { BriefMeButton } from '@/components/crm/BriefMeModal';
 
 type ProspectStage = 'AWARE' | 'CONTACTED' | 'CONVERSATION' | 'AGREEMENT_SENT' | 'ONBOARDED';
 
@@ -148,6 +149,7 @@ export default function Prospects() {
                         </button>
                       </CollapsibleTrigger>
                       <div className="flex items-center gap-2">
+                        <BriefMeButton type="prospect" id={p.id} name={p.business_name} />
                         <Select
                           value={p.stage}
                           onValueChange={(val) =>

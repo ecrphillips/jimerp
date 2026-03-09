@@ -14,6 +14,7 @@ import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { ClientLocations } from '@/components/clients/ClientLocations';
 import { ClientOrderingConstraints } from '@/components/clients/ClientOrderingConstraints';
 import { ClientAccountNotes } from '@/components/crm/ClientAccountNotes';
+import { BriefMeButton } from '@/components/crm/BriefMeModal';
 import { SafeDeleteModal } from '@/components/SafeDeleteModal';
 
 interface Client {
@@ -427,6 +428,7 @@ export default function Clients() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <BriefMeButton type="client" id={c.id} name={c.name} />
                       <span className={`text-sm ${c.is_active ? 'text-green-600' : 'text-muted-foreground'}`}>
                         {c.is_active ? 'Active' : 'Inactive'}
                       </span>
