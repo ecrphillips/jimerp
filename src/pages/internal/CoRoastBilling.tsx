@@ -122,7 +122,7 @@ export default function CoRoastBilling() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_bookings')
-        .select('id, member_id, duration_hours, status')
+        .select('id, member_id, start_time, end_time, duration_hours, status')
         .gte('booking_date', prevPeriodStart)
         .lte('booking_date', prevPeriodEnd);
       if (error) throw error;
