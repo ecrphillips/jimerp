@@ -95,6 +95,19 @@ export function BookingFormDialog({
     }
   }, [formDate]);
 
+  // Auto-set end time to 1 hour after start time
+  useEffect(() => {
+    if (formStartTime) {
+      const startMin = timeToMinutes(formStartTime);
+      const endMin = startMin + 60;
+      if (endMin <= 22 * 60) {
+        const h = Math.floor(endMin / 60);
+        const m = endMin % 60;
+        setFormEndTime(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+      }
+    }
+  }, [formStartTime]);
+
   // Reset recurring if switching to ACCESS tier
   useEffect(() => {
     if (!isGrowth) setIsRecurring(false);
