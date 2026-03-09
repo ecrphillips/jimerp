@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Plus, ChevronDown, ChevronRight } from 'lucide-react';
 import { NotesLog } from '@/components/crm/NotesLog';
+import { BriefMeButton } from '@/components/crm/BriefMeModal';
 
 type ProspectStage = 'AWARE' | 'CONTACTED' | 'CONVERSATION' | 'AGREEMENT_SENT' | 'ONBOARDED';
 
