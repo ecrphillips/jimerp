@@ -26,23 +26,21 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
   const [cancelMode, setCancelMode] = useState<CancelMode>(null);
   const [waiveReason, setWaiveReason] = useState('');
 
-  if (!booking) return null;
-
-  const member = members.find(m => m.id === booking.member_id);
-  const durationHrs = (timeToMinutes(booking.end_time) - timeToMinutes(booking.start_time)) / 60;
+  const member = booking ? members.find(m => m.id === booking.member_id) : undefined;
+  const durationHrs = booking ? (timeToMinutes(booking.end_time) - timeToMinutes(booking.start_time)) / 60 : 0;
   const tier = member?.tier ?? 'ACCESS';
   const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
   const cancellationFee = durationHrs * rates.overageRate;
 
-  // Lock: <48h from booking start
-  const bookingStart = parseISO(`${booking.booking_date}T${booking.start_time}`);
+  const bookingStart = booking ? parseISO(`${booking.booking_date}T${booking.start_time}`) : new Date();
   const hoursUntil = differenceInHours(bookingStart, new Date());
   const isLocked = hoursUntil < 48;
   const isPast = bookingStart < new Date();
-  const isConfirmed = booking.status === 'CONFIRMED';
+  const isConfirmed = booking?.status === 'CONFIRMED';
 
   // Determine hours type (included vs overage)
   const hoursType = useMemo(() => {
+    if (!booking) return 'Included';
     const month = booking.booking_date.slice(0, 7);
     const monthBookings = allBookings
       .filter(b => b.member_id === booking.member_id && b.booking_date.startsWith(month) && !['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CANCELLED_WAIVED'].includes(b.status))
@@ -56,7 +54,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
       running += dur;
     }
     return 'Included';
-  }, [booking, allBookings, rates, member]);
+  }, [booking, allBookings, rates]);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['booking-calendar'] });
