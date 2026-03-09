@@ -21,7 +21,8 @@ import {
   BookOpen,
   Warehouse,
   Wrench,
-  Users2
+  Users2,
+  UserPlus
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
