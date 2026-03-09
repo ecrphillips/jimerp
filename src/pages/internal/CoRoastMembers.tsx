@@ -278,7 +278,11 @@ export default function CoRoastMembers() {
           ) : (
             <ul className="space-y-3">
               {displayedMembers.map((m) => (
-                <li key={m.id} className={`border-b pb-3 last:border-0 ${!m.is_active ? 'opacity-60' : ''}`}>
+                <li
+                  key={m.id}
+                  className={`border-b pb-3 last:border-0 cursor-pointer hover:bg-muted/50 rounded-md px-2 py-2 -mx-2 transition-colors ${!m.is_active ? 'opacity-60' : ''}`}
+                  onClick={() => navigate(`/co-roasting/members/${m.id}`)}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Badge variant="outline" className="font-mono text-xs">
@@ -298,14 +302,14 @@ export default function CoRoastMembers() {
                           variant="outline"
                           size="sm"
                           className="text-xs gap-1 h-7"
-                          onClick={() => navigate('/clients')}
+                          onClick={(e) => { e.stopPropagation(); navigate('/clients'); }}
                         >
                           <Link2 className="h-3 w-3" />
                           View Client Account
                         </Button>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {m.certified ? (
                         <Badge variant="default" className="text-xs gap-1">
                           <ShieldCheck className="h-3 w-3" />
@@ -317,18 +321,10 @@ export default function CoRoastMembers() {
                       {!m.is_active && (
                         <Badge variant="secondary" className="text-xs">Inactive</Badge>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title={m.certified ? 'Remove certification' : 'Mark as certified'}
-                        onClick={() => toggleCertifiedMutation.mutate({ id: m.id, certified: !m.certified })}
-                      >
-                        <ShieldCheck className={`h-4 w-4 ${m.certified ? 'text-primary' : 'text-muted-foreground'}`} />
-                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => setWaiverMember(m)} title="Waiver history">
                         <FileText className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => openEditDialog(m)}>
+                      <Button variant="ghost" size="sm" onClick={() => navigate(`/co-roasting/members/${m.id}`)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <Button
