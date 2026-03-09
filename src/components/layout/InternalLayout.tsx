@@ -24,7 +24,8 @@ import {
   Users2,
   UserPlus,
   Bean,
-  Calendar
+  Calendar,
+  Receipt
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
