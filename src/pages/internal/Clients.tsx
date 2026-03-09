@@ -428,6 +428,7 @@ export default function Clients() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <BriefMeButton type="client" id={c.id} name={c.name} />
                       <span className={`text-sm ${c.is_active ? 'text-green-600' : 'text-muted-foreground'}`}>
                         {c.is_active ? 'Active' : 'Inactive'}
                       </span>

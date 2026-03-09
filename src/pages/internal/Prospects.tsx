@@ -149,6 +149,7 @@ export default function Prospects() {
                         </button>
                       </CollapsibleTrigger>
                       <div className="flex items-center gap-2">
+                        <BriefMeButton type="prospect" id={p.id} name={p.business_name} />
                         <Select
                           value={p.stage}
                           onValueChange={(val) =>
