@@ -26,6 +26,8 @@ function minutesToPx(minutes: number): number {
 const NO_SHOW_BG = 'hsl(15 80% 45%)';
 const CANCELLED_STATUSES = ['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CANCELLED_WAIVED'];
 
+type UrgencyTier = 'none' | 'amber' | 'red';
+
 type CalendarEvent = {
   id: string;
   bookingId?: string;
@@ -39,7 +41,7 @@ type CalendarEvent = {
   isBlock: boolean;
   isOverage: boolean;
   recurring: boolean;
-  isLocked: boolean;
+  urgency: UrgencyTier;
   isNoShow: boolean;
 };
 
@@ -92,7 +94,7 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
         tooltip: `Unavailable: ${formatTime12(b.start_time)} – ${formatTime12(b.end_time)}${b.notes ? ' — ' + b.notes : ''}`,
         bgColor: 'hsl(25 45% 25%)',
         textColor: 'hsl(40 30% 96%)',
-        isBlock: true, isOverage: false, recurring: false, isLocked: false, isNoShow: false,
+        isBlock: true, isOverage: false, recurring: false, urgency: 'none' as UrgencyTier, isNoShow: false,
       });
     }
 
@@ -104,7 +106,8 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
         : getMemberColor(bk.member_id, allMemberIds);
       const isOverage = bookingOverageSet.has(bk.id);
       const bkStart = parseISO(`${bk.booking_date}T${bk.start_time}`);
-      const locked = differenceInHours(bkStart, now) < 48;
+      const hrsUntil = differenceInHours(bkStart, now);
+      const urgency: UrgencyTier = hrsUntil < 24 ? 'red' : hrsUntil < 48 ? 'amber' : 'none';
 
       result.push({
         id: `bk-${bk.id}`,
@@ -117,7 +120,7 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
         bgColor: color.bg,
         textColor: color.text,
         isBlock: false, isOverage, recurring: !!bk.recurring_block_id,
-        isLocked: locked, isNoShow,
+        urgency, isNoShow,
       });
     }
 
@@ -233,6 +236,8 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
                         'absolute left-0.5 right-0.5 rounded px-1 text-[10px] leading-tight overflow-hidden',
                         ev.isBlock ? 'cursor-not-allowed opacity-90' : 'cursor-pointer',
                         ev.isOverage && 'ring-1 ring-inset ring-white/40',
+                        !ev.isBlock && ev.urgency === 'amber' && 'ring-2 ring-amber-400',
+                        !ev.isBlock && ev.urgency === 'red' && 'ring-2 ring-destructive',
                       )}
                       style={{
                         top, height,
@@ -246,7 +251,7 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
                       onClick={(e) => handleEventClick(ev, e)}
                     >
                       <div className="flex items-center gap-0.5 truncate pt-0.5">
-                        {ev.isLocked && !ev.isBlock && <Lock className="h-2.5 w-2.5 flex-shrink-0" />}
+                        {ev.urgency === 'red' && !ev.isBlock && <Lock className="h-2.5 w-2.5 flex-shrink-0" />}
                         {ev.recurring && <Repeat className="h-2.5 w-2.5 flex-shrink-0" />}
                         {ev.isOverage && <DollarSign className="h-2.5 w-2.5 flex-shrink-0" />}
                         <span className="truncate font-medium">{ev.label}</span>
@@ -291,8 +296,12 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
           <span>Overage ($)</span>
         </div>
         <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded ring-2 ring-amber-400 border" />
+          <span>24–48h</span>
+        </div>
+        <div className="flex items-center gap-1.5">
           <Lock className="h-3 w-3" />
-          <span>Locked (&lt;48h)</span>
+          <span>&lt;24h (locked)</span>
         </div>
       </div>
     </div>
