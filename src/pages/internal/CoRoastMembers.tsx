@@ -274,6 +274,9 @@ export default function CoRoastMembers() {
                       >
                         <ShieldCheck className={`h-4 w-4 ${m.certified ? 'text-primary' : 'text-muted-foreground'}`} />
                       </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setWaiverMember(m)} title="Waiver history">
+                        <FileText className="h-4 w-4" />
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => openEditDialog(m)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
