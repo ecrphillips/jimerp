@@ -39,6 +39,7 @@ export default function CoRoastMembers() {
   const [showDialog, setShowDialog] = useState(false);
   const [editingMember, setEditingMember] = useState<CoroastMember | null>(null);
   const [showInactive, setShowInactive] = useState(false);
+  const [waiverMember, setWaiverMember] = useState<CoroastMember | null>(null);
 
   // Form state
   const [formBusinessName, setFormBusinessName] = useState('');
