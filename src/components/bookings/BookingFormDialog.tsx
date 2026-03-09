@@ -159,7 +159,6 @@ export function BookingFormDialog({
       if (formEndTime <= formStartTime) throw new Error('End time must be after start time');
 
       const dateStr = format(formDate, 'yyyy-MM-dd');
-      const durationHours = (timeToMinutes(formEndTime) - timeToMinutes(formStartTime)) / 60;
 
       // Access tier: 4 week horizon
       if (selectedMember?.tier === 'ACCESS') {
