@@ -94,7 +94,7 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
         tooltip: `Unavailable: ${formatTime12(b.start_time)} – ${formatTime12(b.end_time)}${b.notes ? ' — ' + b.notes : ''}`,
         bgColor: 'hsl(25 45% 25%)',
         textColor: 'hsl(40 30% 96%)',
-        isBlock: true, isOverage: false, recurring: false, isLocked: false, isNoShow: false,
+        isBlock: true, isOverage: false, recurring: false, urgency: 'none' as UrgencyTier, isNoShow: false,
       });
     }
 
