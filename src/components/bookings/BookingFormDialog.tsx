@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon } from 'lucide-react';
-import { format, addDays, addWeeks, getDay, startOfMonth, endOfMonth } from 'date-fns';
+import { format, addDays, addWeeks, getDay, startOfMonth, endOfMonth, isBefore, startOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -19,6 +19,7 @@ import {
   type MemberRow, type BookingRow, type BlockRow,
 } from './bookingUtils';
 import { AvailabilityTimeSelect } from './AvailabilityTimeSelect';
+import { PastBookingConfirmModal } from './PastBookingConfirmModal';
 
 interface BookingFormDialogProps {
   open: boolean;
@@ -69,6 +70,7 @@ export function BookingFormDialog({
   const [recurringDay, setRecurringDay] = useState('MON');
   const [recurringEndDate, setRecurringEndDate] = useState<Date | undefined>();
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [showPastConfirm, setShowPastConfirm] = useState(false);
 
   const activeMembers = useMemo(() => members.filter(m => m.is_active), [members]);
   const selectedMember = useMemo(() => members.find(m => m.id === memberId), [members, memberId]);
@@ -180,8 +182,8 @@ export function BookingFormDialog({
 
       const saveDateStr = format(formDate, 'yyyy-MM-dd');
 
-      // Access tier: 4 week horizon
-      if (selectedMember?.tier === 'ACCESS') {
+      // Access tier: 4 week horizon (only for future dates)
+      if (selectedMember?.tier === 'ACCESS' && !isBefore(formDate, startOfDay(new Date()))) {
         const maxDate = addWeeks(new Date(), 4);
         if (formDate > maxDate) {
           throw new Error('Access tier members can only book within 4 weeks from today');
@@ -290,6 +292,7 @@ export function BookingFormDialog({
   });
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
@@ -429,7 +432,15 @@ export function BookingFormDialog({
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button
-              onClick={() => { setValidationError(null); mutation.mutate(); }}
+              onClick={() => {
+                setValidationError(null);
+                // Check if date is in the past
+                if (formDate && isBefore(startOfDay(formDate), startOfDay(new Date()))) {
+                  setShowPastConfirm(true);
+                } else {
+                  mutation.mutate();
+                }
+              }}
               disabled={mutation.isPending || startConflicted || endConflicted}
             >
               {mutation.isPending ? 'Saving…' : 'Create Booking'}
@@ -438,5 +449,16 @@ export function BookingFormDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+    <PastBookingConfirmModal
+      open={showPastConfirm}
+      onOpenChange={setShowPastConfirm}
+      onConfirm={() => {
+        setShowPastConfirm(false);
+        mutation.mutate();
+      }}
+      isPending={mutation.isPending}
+    />
+  </>
   );
 }
