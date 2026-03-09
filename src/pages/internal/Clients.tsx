@@ -456,6 +456,17 @@ export default function Clients() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {coroastByClientId.has(c.id) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs gap-1 h-7"
+                          onClick={() => navigate('/co-roasting/members')}
+                        >
+                          <Handshake className="h-3 w-3" />
+                          View Co-Roasting Account
+                        </Button>
+                      )}
                       <BriefMeButton type="client" id={c.id} name={c.name} />
                       <span className={`text-sm ${c.is_active ? 'text-green-600' : 'text-muted-foreground'}`}>
                         {c.is_active ? 'Active' : 'Inactive'}
