@@ -222,6 +222,9 @@ export default function CoRoastLoringSchedule() {
         </>
       )}
 
+      {/* Pending Reminders */}
+      <PendingReminders />
+
       {/* Form Dialog */}
       <BlockFormDialog
         open={showBlockDialog}
