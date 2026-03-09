@@ -182,8 +182,8 @@ export function BookingFormDialog({
 
       const saveDateStr = format(formDate, 'yyyy-MM-dd');
 
-      // Access tier: 4 week horizon
-      if (selectedMember?.tier === 'ACCESS') {
+      // Access tier: 4 week horizon (only for future dates)
+      if (selectedMember?.tier === 'ACCESS' && !isBefore(formDate, startOfDay(new Date()))) {
         const maxDate = addWeeks(new Date(), 4);
         if (formDate > maxDate) {
           throw new Error('Access tier members can only book within 4 weeks from today');
