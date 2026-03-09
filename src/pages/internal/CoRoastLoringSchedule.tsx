@@ -18,7 +18,7 @@ import { BlockWeekView } from '@/components/coroast/BlockWeekView';
 
 export default function CoRoastLoringSchedule() {
   const today = new Date().toISOString().split('T')[0];
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'week'>('list');
   const [showPastBlocks, setShowPastBlocks] = useState(false);
   const [showBlockDialog, setShowBlockDialog] = useState(false);
   const [editingBlock, setEditingBlock] = useState<LoringBlock | null>(null);
