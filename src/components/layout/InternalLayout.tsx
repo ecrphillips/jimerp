@@ -22,7 +22,9 @@ import {
   Warehouse,
   Wrench,
   Users2,
-  UserPlus
+  UserPlus,
+  Bean,
+  Calendar
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -46,6 +48,12 @@ const productionSubItems = [
 const inventorySubItems = [
   { to: '/inventory', label: 'Levels', icon: Warehouse },
   { to: '/inventory/ledger', label: 'Ledger', icon: BookOpen },
+];
+
+// Co-Roasting sub-items
+const coroastSubItems = [
+  { to: '/co-roasting/members', label: 'Members', icon: Users },
+  { to: '/co-roasting/loring-schedule', label: 'Loring Schedule', icon: Calendar },
 ];
 
 // Bottom nav items (removed Green Coffee)
@@ -73,6 +81,10 @@ export function InternalLayout({ children }: InternalLayoutProps) {
   const isInventoryRoute = location.pathname.startsWith('/inventory');
   const [inventoryOpen, setInventoryOpen] = React.useState(isInventoryRoute);
 
+  // Co-Roasting section
+  const isCoRoastRoute = location.pathname.startsWith('/co-roasting');
+  const [coroastOpen, setCoroastOpen] = React.useState(isCoRoastRoute);
+
   // Keep sections open when navigating within them
   React.useEffect(() => {
     if (isProductionRoute) {
@@ -85,6 +97,12 @@ export function InternalLayout({ children }: InternalLayoutProps) {
       setInventoryOpen(true);
     }
   }, [isInventoryRoute]);
+
+  React.useEffect(() => {
+    if (isCoRoastRoute) {
+      setCoroastOpen(true);
+    }
+  }, [isCoRoastRoute]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -208,6 +226,48 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                         key={item.to}
                         to={item.to}
                         end={item.to === '/inventory'}
+                        onClick={() => setSidebarOpen(false)}
+                        className={({ isActive }) => cn(
+                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
+                          isActive
+                            ? "bg-sidebar-accent"
+                            : "hover:bg-sidebar-accent/85"
+                        )}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+              </li>
+
+              {/* Co-Roasting - Collapsible group */}
+              <li>
+                <Collapsible open={coroastOpen} onOpenChange={setCoroastOpen}>
+                  <CollapsibleTrigger asChild>
+                    <button
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
+                        isCoRoastRoute
+                          ? "bg-sidebar-accent"
+                          : "hover:bg-sidebar-accent/85"
+                      )}
+                    >
+                      <Bean className="h-5 w-5" />
+                      Co-Roasting
+                      {coroastOpen ? (
+                        <ChevronDown className="ml-auto h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="ml-auto h-4 w-4" />
+                      )}
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-1 space-y-1 pl-4">
+                    {coroastSubItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
                         onClick={() => setSidebarOpen(false)}
                         className={({ isActive }) => cn(
                           "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",

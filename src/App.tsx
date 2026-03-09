@@ -22,6 +22,8 @@ import Pricing from "@/pages/internal/Pricing";
 import Prospects from "@/pages/internal/Prospects";
 import Production from "@/pages/internal/Production";
 import GreenCoffee from "@/pages/internal/GreenCoffee";
+import CoRoastMembers from "@/pages/internal/CoRoastMembers";
+import CoRoastLoringSchedule from "@/pages/internal/CoRoastLoringSchedule";
 import BoardsDisabled from "@/pages/internal/BoardsDisabled";
 import BulkProducts from "@/pages/internal/BulkProducts";
 import Inventory from "@/pages/internal/Inventory";
@@ -135,6 +137,16 @@ const App = () => (
             <Route path="/bulk-products" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><BulkProducts /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/co-roasting/members" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><CoRoastMembers /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/co-roasting/loring-schedule" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><CoRoastLoringSchedule /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/admin-tools" element={
