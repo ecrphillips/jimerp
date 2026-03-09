@@ -53,6 +53,7 @@ const inventorySubItems = [
 // Co-Roasting sub-items
 const coroastSubItems = [
   { to: '/co-roasting/members', label: 'Members', icon: Users },
+  { to: '/co-roasting/bookings', label: 'Booking Calendar', icon: Calendar },
   { to: '/co-roasting/loring-schedule', label: 'Loring Schedule', icon: Calendar },
 ];
 
