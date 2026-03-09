@@ -150,6 +150,41 @@ export type Database = {
           },
         ]
       }
+      client_notes: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string
+          follow_up_by: string | null
+          id: string
+          note_text: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by: string
+          follow_up_by?: string | null
+          id?: string
+          note_text: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string
+          follow_up_by?: string | null
+          id?: string
+          note_text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           billing_contact_name: string | null
@@ -956,6 +991,74 @@ export type Database = {
         }
         Relationships: []
       }
+      prospect_notes: {
+        Row: {
+          created_at: string
+          created_by: string
+          follow_up_by: string | null
+          id: string
+          note_text: string
+          prospect_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          follow_up_by?: string | null
+          id?: string
+          note_text: string
+          prospect_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          follow_up_by?: string | null
+          id?: string
+          note_text?: string
+          prospect_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospect_notes_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "prospects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prospects: {
+        Row: {
+          business_name: string
+          contact_info: string | null
+          contact_name: string | null
+          created_at: string
+          created_by: string
+          id: string
+          stage: Database["public"]["Enums"]["prospect_stage"]
+          updated_at: string
+        }
+        Insert: {
+          business_name: string
+          contact_info?: string | null
+          contact_name?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          stage?: Database["public"]["Enums"]["prospect_stage"]
+          updated_at?: string
+        }
+        Update: {
+          business_name?: string
+          contact_info?: string | null
+          contact_name?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          stage?: Database["public"]["Enums"]["prospect_stage"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       roast_exception_events: {
         Row: {
           batch_id: string | null
@@ -1496,6 +1599,12 @@ export type Database = {
         | "PACKED"
         | "STAGED"
         | "COMPLETE"
+      prospect_stage:
+        | "AWARE"
+        | "CONTACTED"
+        | "CONVERSATION"
+        | "AGREEMENT_SENT"
+        | "ONBOARDED"
       roasted_batch_status: "PLANNED" | "ROASTED"
       roaster_machine: "SAMIAC" | "LORING"
       ship_priority: "NORMAL" | "TIME_SENSITIVE"
@@ -1685,6 +1794,13 @@ export const Constants = {
       ],
       product_format: ["WHOLE_BEAN", "ESPRESSO", "FILTER", "OTHER"],
       production_status: ["PLANNED", "ROASTED", "PACKED", "STAGED", "COMPLETE"],
+      prospect_stage: [
+        "AWARE",
+        "CONTACTED",
+        "CONVERSATION",
+        "AGREEMENT_SENT",
+        "ONBOARDED",
+      ],
       roasted_batch_status: ["PLANNED", "ROASTED"],
       roaster_machine: ["SAMIAC", "LORING"],
       ship_priority: ["NORMAL", "TIME_SENSITIVE"],
