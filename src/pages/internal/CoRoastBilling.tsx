@@ -9,10 +9,10 @@ import { CheckCircle2, TrendingUp } from 'lucide-react';
 import { format, endOfMonth, subMonths, addMonths, startOfMonth } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { TIER_RATES } from '@/components/bookings/bookingUtils';
+import { TIER_RATES, timeToMinutes } from '@/components/bookings/bookingUtils';
 import QuickBooksInstructionsModal from '@/components/coroast/QuickBooksInstructionsModal';
 
-const CANCELLED_STATUSES = ['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CANCELLED_WAIVED'];
+const BILLABLE_STATUSES = ['CONFIRMED', 'COMPLETED', 'NO_SHOW'];
 const GST_RATE = 0.05;
 
 function buildMonthOptions() {
@@ -122,7 +122,7 @@ export default function CoRoastBilling() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_bookings')
-        .select('id, member_id, duration_hours, status')
+        .select('id, member_id, start_time, end_time, duration_hours, status')
         .gte('booking_date', prevPeriodStart)
         .lte('booking_date', prevPeriodEnd);
       if (error) throw error;
@@ -160,11 +160,16 @@ export default function CoRoastBilling() {
     enabled: billingPeriods.length > 0,
   });
 
+  function calcBookingHours(bk: { duration_hours: number | null; start_time: string; end_time: string }) {
+    if (bk.duration_hours != null && Number(bk.duration_hours) > 0) return Number(bk.duration_hours);
+    return (timeToMinutes(bk.end_time) - timeToMinutes(bk.start_time)) / 60;
+  }
+
   const memberHoursUsed = useMemo(() => {
     const map = new Map<string, number>();
     for (const bk of bookings) {
-      if (CANCELLED_STATUSES.includes(bk.status)) continue;
-      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + Number(bk.duration_hours ?? 0));
+      if (!BILLABLE_STATUSES.includes(bk.status)) continue;
+      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + calcBookingHours(bk));
     }
     return map;
   }, [bookings]);
@@ -172,8 +177,8 @@ export default function CoRoastBilling() {
   const prevMemberHoursUsed = useMemo(() => {
     const map = new Map<string, number>();
     for (const bk of prevBookings) {
-      if (CANCELLED_STATUSES.includes(bk.status)) continue;
-      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + Number(bk.duration_hours ?? 0));
+      if (!BILLABLE_STATUSES.includes(bk.status)) continue;
+      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + calcBookingHours(bk as any));
     }
     return map;
   }, [prevBookings]);
