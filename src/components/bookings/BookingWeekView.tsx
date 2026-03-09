@@ -296,8 +296,12 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
           <span>Overage ($)</span>
         </div>
         <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded ring-2 ring-amber-400 border" />
+          <span>24–48h</span>
+        </div>
+        <div className="flex items-center gap-1.5">
           <Lock className="h-3 w-3" />
-          <span>Locked (&lt;48h)</span>
+          <span>&lt;24h (locked)</span>
         </div>
       </div>
     </div>
