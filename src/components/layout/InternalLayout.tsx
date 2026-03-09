@@ -52,6 +52,7 @@ const inventorySubItems = [
 const bottomNavItems = [
   { to: '/products', label: 'Products', icon: Package },
   { to: '/clients', label: 'Clients', icon: Users },
+  { to: '/prospects', label: 'Prospects', icon: UserPlus },
 ];
 
 export function InternalLayout({ children }: InternalLayoutProps) {
