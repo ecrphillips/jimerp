@@ -36,11 +36,26 @@ export function NotesLog({ table, foreignKey, foreignId, queryKey }: NotesLogPro
   const { data: notes = [], isLoading } = useQuery({
     queryKey,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from(table)
-        .select('*')
-        .eq(foreignKey, foreignId)
-        .order('created_at', { ascending: false });
+      let data: any[] | null = null;
+      let error: any = null;
+
+      if (table === 'client_notes') {
+        const res = await supabase
+          .from('client_notes')
+          .select('*')
+          .eq('client_id', foreignId)
+          .order('created_at', { ascending: false });
+        data = res.data;
+        error = res.error;
+      } else {
+        const res = await supabase
+          .from('prospect_notes')
+          .select('*')
+          .eq('prospect_id', foreignId)
+          .order('created_at', { ascending: false });
+        data = res.data;
+        error = res.error;
+      }
 
       if (error) throw error;
 
