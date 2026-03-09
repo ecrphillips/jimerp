@@ -23,7 +23,7 @@ import {
   Wrench,
   Users2,
   UserPlus,
-  Bean,
+  Handshake,
   Calendar,
   Receipt
 } from 'lucide-react';
@@ -257,7 +257,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                           : "hover:bg-sidebar-accent/85"
                       )}
                     >
-                      <Bean className="h-5 w-5" />
+                      <Handshake className="h-5 w-5" />
                       Co-Roasting
                       {coroastOpen ? (
                         <ChevronDown className="ml-auto h-4 w-4" />
