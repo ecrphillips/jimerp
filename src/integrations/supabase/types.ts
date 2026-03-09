@@ -561,6 +561,7 @@ export type Database = {
           certified: boolean
           certified_by: string | null
           certified_date: string | null
+          client_id: string | null
           contact_email: string | null
           contact_name: string | null
           contact_phone: string | null
@@ -577,6 +578,7 @@ export type Database = {
           certified?: boolean
           certified_by?: string | null
           certified_date?: string | null
+          client_id?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: string | null
@@ -593,6 +595,7 @@ export type Database = {
           certified?: boolean
           certified_by?: string | null
           certified_date?: string | null
+          client_id?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: string | null
@@ -604,7 +607,15 @@ export type Database = {
           tier?: Database["public"]["Enums"]["coroast_tier"]
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "coroast_members_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       coroast_recurring_blocks: {
         Row: {
