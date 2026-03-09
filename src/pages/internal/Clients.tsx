@@ -14,6 +14,7 @@ import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { ClientLocations } from '@/components/clients/ClientLocations';
 import { ClientOrderingConstraints } from '@/components/clients/ClientOrderingConstraints';
 import { ClientAccountNotes } from '@/components/crm/ClientAccountNotes';
+import { BriefMeButton } from '@/components/crm/BriefMeModal';
 import { SafeDeleteModal } from '@/components/SafeDeleteModal';
 
 interface Client {
