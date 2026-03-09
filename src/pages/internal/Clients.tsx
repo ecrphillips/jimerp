@@ -449,6 +449,17 @@ export default function Clients() {
                   </div>
                   {/* Ordering Constraints section */}
                   <ClientOrderingConstraints clientId={c.id} clientName={c.name} />
+                  {/* Account Notes */}
+                  <Collapsible>
+                    <CollapsibleTrigger asChild>
+                      <button className="mt-2 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
+                        Account Notes
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-2">
+                      <ClientAccountNotes clientId={c.id} />
+                    </CollapsibleContent>
+                  </Collapsible>
                 </li>
               ))}
             </ul>
