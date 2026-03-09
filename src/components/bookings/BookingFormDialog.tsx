@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon } from 'lucide-react';
-import { format, addDays, addWeeks, getDay, startOfMonth, endOfMonth } from 'date-fns';
+import { format, addDays, addWeeks, getDay, startOfMonth, endOfMonth, isBefore, startOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -19,6 +19,7 @@ import {
   type MemberRow, type BookingRow, type BlockRow,
 } from './bookingUtils';
 import { AvailabilityTimeSelect } from './AvailabilityTimeSelect';
+import { PastBookingConfirmModal } from './PastBookingConfirmModal';
 
 interface BookingFormDialogProps {
   open: boolean;
