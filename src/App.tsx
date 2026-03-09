@@ -19,6 +19,7 @@ import CreateOrderForClient from "@/pages/internal/CreateOrderForClient";
 import Clients from "@/pages/internal/Clients";
 import Products from "@/pages/internal/Products";
 import Pricing from "@/pages/internal/Pricing";
+import Prospects from "@/pages/internal/Prospects";
 import Production from "@/pages/internal/Production";
 import GreenCoffee from "@/pages/internal/GreenCoffee";
 import BoardsDisabled from "@/pages/internal/BoardsDisabled";
