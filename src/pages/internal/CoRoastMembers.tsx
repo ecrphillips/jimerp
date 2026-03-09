@@ -9,12 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Plus, Pencil, ShieldCheck, FileText, Link2, ExternalLink, ChevronsUpDown, X } from 'lucide-react';
+import { Plus, Pencil, ShieldCheck, FileText, Link2 } from 'lucide-react';
 import { WaiverHistoryPanel } from '@/components/bookings/WaiverHistoryPanel';
 import { useNavigate } from 'react-router-dom';
 import type { Database } from '@/integrations/supabase/types';
@@ -46,22 +43,18 @@ interface SimpleClient {
 
 export default function CoRoastMembers() {
   const queryClient = useQueryClient();
-  const { authUser } = useAuth();
   const navigate = useNavigate();
   const [showDialog, setShowDialog] = useState(false);
-  const [editingMember, setEditingMember] = useState<CoroastMember | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const [waiverMember, setWaiverMember] = useState<CoroastMember | null>(null);
 
-  // Form state
+  // Create form state
   const [formBusinessName, setFormBusinessName] = useState('');
   const [formContactName, setFormContactName] = useState('');
   const [formContactEmail, setFormContactEmail] = useState('');
   const [formContactPhone, setFormContactPhone] = useState('');
   const [formTier, setFormTier] = useState<CoroastTier>('ACCESS');
   const [formNotes, setFormNotes] = useState('');
-  const [formClientId, setFormClientId] = useState<string | null>(null);
-  const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
 
   const { data: members, isLoading, error } = useQuery({
     queryKey: ['coroast-members'],
@@ -88,7 +81,6 @@ export default function CoRoastMembers() {
     },
   });
 
-  // Build a map of client_id -> client for display
   const clientMap = useMemo(() => {
     const map = new Map<string, SimpleClient>();
     clients?.forEach(c => map.set(c.id, c));
@@ -111,25 +103,6 @@ export default function CoRoastMembers() {
     setFormContactPhone('');
     setFormTier('ACCESS');
     setFormNotes('');
-    setFormClientId(null);
-    setEditingMember(null);
-  }, []);
-
-  const openCreateDialog = useCallback(() => {
-    resetForm();
-    setShowDialog(true);
-  }, [resetForm]);
-
-  const openEditDialog = useCallback((member: CoroastMember) => {
-    setEditingMember(member);
-    setFormBusinessName(member.business_name);
-    setFormContactName(member.contact_name ?? '');
-    setFormContactEmail(member.contact_email ?? '');
-    setFormContactPhone(member.contact_phone ?? '');
-    setFormTier(member.tier);
-    setFormNotes(member.notes_internal ?? '');
-    setFormClientId(member.client_id);
-    setShowDialog(true);
   }, []);
 
   const closeDialog = useCallback(() => {
@@ -148,7 +121,6 @@ export default function CoRoastMembers() {
           contact_phone: formContactPhone.trim() || null,
           tier: formTier,
           notes_internal: formNotes.trim() || null,
-          client_id: formClientId,
         });
       if (error) throw error;
     },
@@ -160,34 +132,6 @@ export default function CoRoastMembers() {
     onError: (err) => {
       console.error(err);
       toast.error('Failed to create member');
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async () => {
-      if (!editingMember) return;
-      const { error } = await supabase
-        .from('coroast_members')
-        .update({
-          business_name: formBusinessName.trim(),
-          contact_name: formContactName.trim() || null,
-          contact_email: formContactEmail.trim() || null,
-          contact_phone: formContactPhone.trim() || null,
-          tier: formTier,
-          notes_internal: formNotes.trim() || null,
-          client_id: formClientId,
-        })
-        .eq('id', editingMember.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success('Member updated');
-      queryClient.invalidateQueries({ queryKey: ['coroast-members'] });
-      closeDialog();
-    },
-    onError: (err) => {
-      console.error(err);
-      toast.error('Failed to update member');
     },
   });
 
@@ -206,50 +150,19 @@ export default function CoRoastMembers() {
     onError: () => toast.error('Failed to update member status'),
   });
 
-  const toggleCertifiedMutation = useMutation({
-    mutationFn: async ({ id, certified }: { id: string; certified: boolean }) => {
-      const updates: Record<string, unknown> = { certified };
-      if (certified) {
-        updates.certified_date = new Date().toISOString().split('T')[0];
-        updates.certified_by = authUser?.id ?? null;
-      } else {
-        updates.certified_date = null;
-        updates.certified_by = null;
-      }
-      const { error } = await supabase
-        .from('coroast_members')
-        .update(updates)
-        .eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: (_, vars) => {
-      toast.success(vars.certified ? 'Member certified' : 'Certification removed');
-      queryClient.invalidateQueries({ queryKey: ['coroast-members'] });
-    },
-    onError: () => toast.error('Failed to update certification'),
-  });
-
   const handleSubmit = () => {
     if (!formBusinessName.trim()) {
       toast.error('Business name is required');
       return;
     }
-    if (editingMember) {
-      updateMutation.mutate();
-    } else {
-      createMutation.mutate();
-    }
+    createMutation.mutate();
   };
-
-  const isPending = createMutation.isPending || updateMutation.isPending;
-
-  const selectedClientName = formClientId ? clientMap.get(formClientId)?.name : null;
 
   return (
     <div className="page-container">
       <div className="page-header flex items-center justify-between">
         <h1 className="page-title">Co-Roasting Members</h1>
-        <Button onClick={openCreateDialog}>
+        <Button onClick={() => { resetForm(); setShowDialog(true); }}>
           <Plus className="h-4 w-4 mr-2" />
           Add Member
         </Button>
@@ -278,7 +191,11 @@ export default function CoRoastMembers() {
           ) : (
             <ul className="space-y-3">
               {displayedMembers.map((m) => (
-                <li key={m.id} className={`border-b pb-3 last:border-0 ${!m.is_active ? 'opacity-60' : ''}`}>
+                <li
+                  key={m.id}
+                  className={`border-b pb-3 last:border-0 cursor-pointer hover:bg-muted/50 rounded-md px-2 py-2 -mx-2 transition-colors ${!m.is_active ? 'opacity-60' : ''}`}
+                  onClick={() => navigate(`/co-roasting/members/${m.id}`)}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Badge variant="outline" className="font-mono text-xs">
@@ -298,14 +215,14 @@ export default function CoRoastMembers() {
                           variant="outline"
                           size="sm"
                           className="text-xs gap-1 h-7"
-                          onClick={() => navigate('/clients')}
+                          onClick={(e) => { e.stopPropagation(); navigate('/clients'); }}
                         >
                           <Link2 className="h-3 w-3" />
                           View Client Account
                         </Button>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {m.certified ? (
                         <Badge variant="default" className="text-xs gap-1">
                           <ShieldCheck className="h-3 w-3" />
@@ -317,18 +234,10 @@ export default function CoRoastMembers() {
                       {!m.is_active && (
                         <Badge variant="secondary" className="text-xs">Inactive</Badge>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title={m.certified ? 'Remove certification' : 'Mark as certified'}
-                        onClick={() => toggleCertifiedMutation.mutate({ id: m.id, certified: !m.certified })}
-                      >
-                        <ShieldCheck className={`h-4 w-4 ${m.certified ? 'text-primary' : 'text-muted-foreground'}`} />
-                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => setWaiverMember(m)} title="Waiver history">
                         <FileText className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => openEditDialog(m)}>
+                      <Button variant="ghost" size="sm" onClick={() => navigate(`/co-roasting/members/${m.id}`)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <Button
@@ -348,11 +257,11 @@ export default function CoRoastMembers() {
         </CardContent>
       </Card>
 
-      {/* Create/Edit Dialog */}
+      {/* Create Dialog */}
       <Dialog open={showDialog} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingMember ? 'Edit Member' : 'Add New Member'}</DialogTitle>
+            <DialogTitle>Add New Member</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -402,60 +311,6 @@ export default function CoRoastMembers() {
               </Select>
             </div>
             <div>
-              <Label>Link to Client Account</Label>
-              <div className="flex items-center gap-2">
-                <Popover open={clientPopoverOpen} onOpenChange={setClientPopoverOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      className="w-full justify-between font-normal"
-                    >
-                      {selectedClientName ?? 'No client linked'}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[300px] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search clients…" />
-                      <CommandList>
-                        <CommandEmpty>No clients found.</CommandEmpty>
-                        <CommandGroup>
-                          {clients?.map((c) => (
-                            <CommandItem
-                              key={c.id}
-                              value={c.name}
-                              onSelect={() => {
-                                setFormClientId(c.id);
-                                setClientPopoverOpen(false);
-                              }}
-                            >
-                              <span className="font-mono text-xs mr-2 text-muted-foreground">{c.client_code}</span>
-                              {c.name}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-                {formClientId && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 shrink-0"
-                    onClick={() => setFormClientId(null)}
-                    title="Remove link"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Optional — link this member to a contract manufacturing client account.
-              </p>
-            </div>
-            <div>
               <Label htmlFor="notes">Internal Notes</Label>
               <Textarea
                 id="notes"
@@ -466,8 +321,8 @@ export default function CoRoastMembers() {
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={closeDialog}>Cancel</Button>
-              <Button onClick={handleSubmit} disabled={isPending}>
-                {isPending ? 'Saving…' : editingMember ? 'Update' : 'Create'}
+              <Button onClick={handleSubmit} disabled={createMutation.isPending}>
+                {createMutation.isPending ? 'Saving…' : 'Create'}
               </Button>
             </div>
           </div>
