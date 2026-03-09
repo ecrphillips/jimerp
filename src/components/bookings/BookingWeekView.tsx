@@ -236,6 +236,8 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
                         'absolute left-0.5 right-0.5 rounded px-1 text-[10px] leading-tight overflow-hidden',
                         ev.isBlock ? 'cursor-not-allowed opacity-90' : 'cursor-pointer',
                         ev.isOverage && 'ring-1 ring-inset ring-white/40',
+                        !ev.isBlock && ev.urgency === 'amber' && 'ring-2 ring-amber-400',
+                        !ev.isBlock && ev.urgency === 'red' && 'ring-2 ring-destructive',
                       )}
                       style={{
                         top, height,
@@ -249,7 +251,7 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
                       onClick={(e) => handleEventClick(ev, e)}
                     >
                       <div className="flex items-center gap-0.5 truncate pt-0.5">
-                        {ev.isLocked && !ev.isBlock && <Lock className="h-2.5 w-2.5 flex-shrink-0" />}
+                        {ev.urgency === 'red' && !ev.isBlock && <Lock className="h-2.5 w-2.5 flex-shrink-0" />}
                         {ev.recurring && <Repeat className="h-2.5 w-2.5 flex-shrink-0" />}
                         {ev.isOverage && <DollarSign className="h-2.5 w-2.5 flex-shrink-0" />}
                         <span className="truncate font-medium">{ev.label}</span>
