@@ -81,17 +81,23 @@ export function NotesLog({ table, foreignKey, foreignId, queryKey }: NotesLogPro
 
   const addNoteMutation = useMutation({
     mutationFn: async () => {
-      const insertData: any = {
-        [foreignKey]: foreignId,
-        note_text: noteText.trim(),
-        created_by: authUser!.id,
-      };
-      if (followUpBy) {
-        insertData.follow_up_by = followUpBy;
+      if (table === 'client_notes') {
+        const { error } = await supabase.from('client_notes').insert({
+          client_id: foreignId,
+          note_text: noteText.trim(),
+          created_by: authUser!.id,
+          follow_up_by: followUpBy || null,
+        });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('prospect_notes').insert({
+          prospect_id: foreignId,
+          note_text: noteText.trim(),
+          created_by: authUser!.id,
+          follow_up_by: followUpBy || null,
+        });
+        if (error) throw error;
       }
-
-      const { error } = await supabase.from(table).insert(insertData);
-      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
