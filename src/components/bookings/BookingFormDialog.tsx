@@ -209,7 +209,6 @@ export function BookingFormDialog({
               booking_date: ds,
               start_time: formStartTime,
               end_time: formEndTime,
-              duration_hours: durationHours,
               recurring_block_id: recurBlock.id,
               notes_internal: notes.trim() || null,
               status: 'CONFIRMED',
