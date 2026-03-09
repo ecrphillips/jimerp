@@ -22,7 +22,9 @@ import {
   Warehouse,
   Wrench,
   Users2,
-  UserPlus
+  UserPlus,
+  Bean,
+  Calendar
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
