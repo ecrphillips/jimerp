@@ -19,7 +19,7 @@ interface BookingDetailModalProps {
   allBookings: BookingRow[];
 }
 
-type CancelMode = 'free' | 'charge' | 'waive' | 'delete' | null;
+type CancelMode = 'charge' | 'waive' | 'delete' | null;
 
 export function BookingDetailModal({ open, onOpenChange, booking, members, allBookings }: BookingDetailModalProps) {
   const queryClient = useQueryClient();
@@ -38,7 +38,6 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
   const isPast = bookingStart < new Date();
   const isConfirmed = booking?.status === 'CONFIRMED';
 
-  // Determine hours type (included vs overage)
   const hoursType = useMemo(() => {
     if (!booking) return 'Included';
     const month = booking.booking_date.slice(0, 7);
@@ -56,38 +55,27 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
     return 'Included';
   }, [booking, allBookings, rates]);
 
-  const invalidateAll = () => {
-    queryClient.invalidateQueries({ queryKey: ['booking-calendar'] });
-  };
+  const invalidateAll = () => queryClient.invalidateQueries({ queryKey: ['booking-calendar'] });
 
-  // Cancel free (unlocked)
   const cancelFreeMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from('coroast_bookings')
-        .update({ status: 'CANCELLED_FREE' as any })
-        .eq('id', booking.id);
+      if (!booking) return;
+      const { error } = await supabase.from('coroast_bookings').update({ status: 'CANCELLED_FREE' as any }).eq('id', booking.id);
       if (error) throw error;
-
       await supabase.from('coroast_hour_ledger').insert({
-        member_id: booking.member_id,
-        billing_period_id: booking.billing_period_id,
-        booking_id: booking.id,
-        entry_type: 'BOOKING_RETURNED' as any,
-        hours_delta: -durationHrs,
-        notes: `Free cancellation for ${booking.booking_date}`,
+        member_id: booking.member_id, billing_period_id: booking.billing_period_id,
+        booking_id: booking.id, entry_type: 'BOOKING_RETURNED' as any,
+        hours_delta: -durationHrs, notes: `Free cancellation for ${booking.booking_date}`,
       });
     },
     onSuccess: () => { toast.success('Booking cancelled (free)'); invalidateAll(); onOpenChange(false); },
     onError: () => toast.error('Failed to cancel booking'),
   });
 
-  // Delete booking entirely (locked)
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      // Remove ledger entries for this booking
+      if (!booking) return;
       await supabase.from('coroast_hour_ledger').delete().eq('booking_id', booking.id);
-      // Delete the booking
       const { error } = await supabase.from('coroast_bookings').delete().eq('id', booking.id);
       if (error) throw error;
     },
@@ -95,71 +83,47 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
     onError: () => toast.error('Failed to delete booking'),
   });
 
-  // Cancel and charge fee (locked)
   const cancelChargeMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from('coroast_bookings')
-        .update({
-          status: 'CANCELLED_CHARGED' as any,
-          cancellation_fee_amt: cancellationFee,
-          cancelled_at: new Date().toISOString(),
-        })
-        .eq('id', booking.id);
+      if (!booking) return;
+      const { error } = await supabase.from('coroast_bookings').update({
+        status: 'CANCELLED_CHARGED' as any, cancellation_fee_amt: cancellationFee,
+        cancelled_at: new Date().toISOString(),
+      }).eq('id', booking.id);
       if (error) throw error;
-      // No hours returned
     },
     onSuccess: () => { toast.success('Booking cancelled with fee charged'); invalidateAll(); onOpenChange(false); },
     onError: () => toast.error('Failed to cancel booking'),
   });
 
-  // Cancel and waive fee (locked)
   const cancelWaiveMutation = useMutation({
     mutationFn: async () => {
+      if (!booking) return;
       if (!waiveReason.trim()) throw new Error('Waive reason is required');
-
-      const { error } = await supabase
-        .from('coroast_bookings')
-        .update({
-          status: 'CANCELLED_WAIVED' as any,
-          cancellation_waived: true,
-          waive_reason: waiveReason.trim(),
-          cancelled_at: new Date().toISOString(),
-        })
-        .eq('id', booking.id);
+      const { error } = await supabase.from('coroast_bookings').update({
+        status: 'CANCELLED_WAIVED' as any, cancellation_waived: true,
+        waive_reason: waiveReason.trim(), cancelled_at: new Date().toISOString(),
+      }).eq('id', booking.id);
       if (error) throw error;
-
-      // Write waiver log
       await supabase.from('coroast_waiver_log').insert({
-        member_id: booking.member_id,
-        booking_id: booking.id,
-        fee_amount_waived: cancellationFee,
-        waive_reason: waiveReason.trim(),
+        member_id: booking.member_id, booking_id: booking.id,
+        fee_amount_waived: cancellationFee, waive_reason: waiveReason.trim(),
       });
-
-      // Return hours
       await supabase.from('coroast_hour_ledger').insert({
-        member_id: booking.member_id,
-        billing_period_id: booking.billing_period_id,
-        booking_id: booking.id,
-        entry_type: 'BOOKING_RETURNED' as any,
-        hours_delta: -durationHrs,
-        notes: `Waived cancellation for ${booking.booking_date}`,
+        member_id: booking.member_id, billing_period_id: booking.billing_period_id,
+        booking_id: booking.id, entry_type: 'BOOKING_RETURNED' as any,
+        hours_delta: -durationHrs, notes: `Waived cancellation for ${booking.booking_date}`,
       });
     },
     onSuccess: () => { toast.success('Booking cancelled with fee waived'); invalidateAll(); onOpenChange(false); },
     onError: (err: Error) => toast.error(err.message || 'Failed to cancel booking'),
   });
 
-  // No-show
   const noShowMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from('coroast_bookings')
-        .update({ status: 'NO_SHOW' as any })
-        .eq('id', booking.id);
+      if (!booking) return;
+      const { error } = await supabase.from('coroast_bookings').update({ status: 'NO_SHOW' as any }).eq('id', booking.id);
       if (error) throw error;
-      // No hours returned for no-show
     },
     onSuccess: () => { toast.success('Marked as no-show'); invalidateAll(); onOpenChange(false); },
     onError: () => toast.error('Failed to mark no-show'),
@@ -167,6 +131,8 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
 
   const isPending = cancelFreeMutation.isPending || deleteMutation.isPending ||
     cancelChargeMutation.isPending || cancelWaiveMutation.isPending || noShowMutation.isPending;
+
+  if (!booking) return null;
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) setCancelMode(null); onOpenChange(o); }}>
@@ -206,57 +172,49 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
           )}
 
           {isLocked && isConfirmed && (
-            <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded p-2">
+            <div className="flex items-center gap-1.5 text-xs text-destructive bg-destructive/10 rounded p-2">
               <Lock className="h-3.5 w-3.5 flex-shrink-0" />
               Less than 48 hours away — late cancellation rules apply
             </div>
           )}
 
-          {/* Action buttons for CONFIRMED bookings */}
           {isConfirmed && !cancelMode && (
             <div className="space-y-2 pt-2 border-t">
               {!isLocked ? (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => cancelFreeMutation.mutate()}
-                  disabled={isPending}
-                >
+                <Button variant="destructive" size="sm" className="w-full"
+                  onClick={() => cancelFreeMutation.mutate()} disabled={isPending}>
                   Cancel Booking (Free)
                 </Button>
               ) : (
                 <>
-                  <Button variant="outline" size="sm" className="w-full" onClick={() => setCancelMode('delete')} disabled={isPending}>
+                  <Button variant="outline" size="sm" className="w-full"
+                    onClick={() => setCancelMode('delete')} disabled={isPending}>
                     Delete Booking
                   </Button>
-                  <Button variant="outline" size="sm" className="w-full" onClick={() => setCancelMode('charge')} disabled={isPending}>
+                  <Button variant="outline" size="sm" className="w-full"
+                    onClick={() => setCancelMode('charge')} disabled={isPending}>
                     Cancel &amp; Charge Fee (${cancellationFee.toFixed(0)})
                   </Button>
-                  <Button variant="outline" size="sm" className="w-full" onClick={() => setCancelMode('waive')} disabled={isPending}>
+                  <Button variant="outline" size="sm" className="w-full"
+                    onClick={() => setCancelMode('waive')} disabled={isPending}>
                     Cancel &amp; Waive Fee
                   </Button>
                 </>
               )}
 
               {isPast && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full text-orange-600 border-orange-300 hover:bg-orange-50"
-                  onClick={() => noShowMutation.mutate()}
-                  disabled={isPending}
-                >
+                <Button variant="outline" size="sm"
+                  className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
+                  onClick={() => noShowMutation.mutate()} disabled={isPending}>
                   <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Mark as No-Show
                 </Button>
               )}
             </div>
           )}
 
-          {/* Confirmation sub-panels */}
           {cancelMode === 'delete' && (
             <div className="space-y-2 pt-2 border-t">
-              <p className="text-xs text-destructive font-medium">This will permanently delete the booking and remove all ledger entries. Are you sure?</p>
+              <p className="text-xs text-destructive font-medium">This will permanently delete the booking and remove all ledger entries.</p>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setCancelMode(null)}>Back</Button>
                 <Button variant="destructive" size="sm" onClick={() => deleteMutation.mutate()} disabled={isPending}>
@@ -268,7 +226,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
 
           {cancelMode === 'charge' && (
             <div className="space-y-2 pt-2 border-t">
-              <p className="text-xs font-medium">Cancellation fee of <span className="text-destructive">${cancellationFee.toFixed(2)}</span> will be charged. Hours will not be returned.</p>
+              <p className="text-xs font-medium">Fee of <span className="text-destructive">${cancellationFee.toFixed(2)}</span> will be charged. Hours not returned.</p>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setCancelMode(null)}>Back</Button>
                 <Button variant="destructive" size="sm" onClick={() => cancelChargeMutation.mutate()} disabled={isPending}>
@@ -280,18 +238,14 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
 
           {cancelMode === 'waive' && (
             <div className="space-y-2 pt-2 border-t">
-              <p className="text-xs font-medium">Fee of ${cancellationFee.toFixed(2)} will be waived. Hours will be returned.</p>
+              <p className="text-xs font-medium">Fee of ${cancellationFee.toFixed(2)} will be waived. Hours returned.</p>
               <div>
                 <Label className="text-xs">Waive reason *</Label>
                 <Textarea value={waiveReason} onChange={e => setWaiveReason(e.target.value)} rows={2} placeholder="Reason for waiving the fee…" />
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setCancelMode(null)}>Back</Button>
-                <Button
-                  size="sm"
-                  onClick={() => cancelWaiveMutation.mutate()}
-                  disabled={isPending || !waiveReason.trim()}
-                >
+                <Button size="sm" onClick={() => cancelWaiveMutation.mutate()} disabled={isPending || !waiveReason.trim()}>
                   {cancelWaiveMutation.isPending ? 'Processing…' : 'Confirm Waive'}
                 </Button>
               </div>
