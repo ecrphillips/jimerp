@@ -555,6 +555,79 @@ export type Database = {
         }
         Relationships: []
       }
+      coroast_member_checklist: {
+        Row: {
+          completed: boolean
+          completed_by: string | null
+          completed_date: string | null
+          created_at: string
+          id: string
+          item_number: number
+          member_id: string
+          updated_at: string
+        }
+        Insert: {
+          completed?: boolean
+          completed_by?: string | null
+          completed_date?: string | null
+          created_at?: string
+          id?: string
+          item_number: number
+          member_id: string
+          updated_at?: string
+        }
+        Update: {
+          completed?: boolean
+          completed_by?: string | null
+          completed_date?: string | null
+          created_at?: string
+          id?: string
+          item_number?: number
+          member_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_member_checklist_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coroast_member_notes: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          member_id: string
+          note_text: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          member_id: string
+          note_text: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          member_id?: string
+          note_text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_member_notes_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coroast_members: {
         Row: {
           business_name: string
