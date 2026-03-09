@@ -47,6 +47,7 @@ const MEMBER_COLORS = [
 
 export function getMemberColor(memberId: string, allMemberIds: string[]) {
   const idx = allMemberIds.indexOf(memberId);
+  if (idx < 0) return MEMBER_COLORS[0];
   return MEMBER_COLORS[idx % MEMBER_COLORS.length];
 }
 
