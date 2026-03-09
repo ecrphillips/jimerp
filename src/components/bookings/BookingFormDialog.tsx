@@ -245,7 +245,6 @@ export function BookingFormDialog({
             booking_date: dateStr,
             start_time: formStartTime,
             end_time: formEndTime,
-            duration_hours: durationHours,
             notes_internal: notes.trim() || null,
             status: 'CONFIRMED',
           })
@@ -254,12 +253,13 @@ export function BookingFormDialog({
         if (error) throw error;
 
         // Write hour ledger
+        const singleDurationHrs = (timeToMinutes(formEndTime) - timeToMinutes(formStartTime)) / 60;
         await supabase.from('coroast_hour_ledger').insert({
           member_id: memberId,
           billing_period_id: billingPeriodId,
           booking_id: booking.id,
           entry_type: 'BOOKING_CONFIRMED' as any,
-          hours_delta: durationHours,
+          hours_delta: singleDurationHrs,
           notes: `Booking on ${dateStr}`,
         });
 
