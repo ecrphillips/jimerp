@@ -23,6 +23,7 @@ import Prospects from "@/pages/internal/Prospects";
 import Production from "@/pages/internal/Production";
 import GreenCoffee from "@/pages/internal/GreenCoffee";
 import CoRoastMembers from "@/pages/internal/CoRoastMembers";
+import CoRoastMemberDetail from "@/pages/internal/CoRoastMemberDetail";
 import CoRoastLoringSchedule from "@/pages/internal/CoRoastLoringSchedule";
 import BookingCalendar from "@/pages/internal/BookingCalendar";
 import CoRoastBilling from "@/pages/internal/CoRoastBilling";
