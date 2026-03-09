@@ -79,8 +79,8 @@ export default function CoRoastBilling() {
 
     if (membersWithoutPeriod.length === 0) return;
 
-    const monthStart = format(startOfMonth(new Date(`${selectedMonth}-01`)), 'yyyy-MM-dd');
-    const monthEnd = format(endOfMonth(new Date(`${selectedMonth}-01`)), 'yyyy-MM-dd');
+    const monthStart = format(startOfMonth(selectedDate), 'yyyy-MM-dd');
+    const monthEnd = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
 
     const createMissing = async () => {
       const inserts = membersWithoutPeriod.map(m => {
