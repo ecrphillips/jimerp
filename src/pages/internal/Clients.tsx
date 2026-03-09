@@ -10,12 +10,13 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Handshake } from 'lucide-react';
 import { ClientLocations } from '@/components/clients/ClientLocations';
 import { ClientOrderingConstraints } from '@/components/clients/ClientOrderingConstraints';
 import { ClientAccountNotes } from '@/components/crm/ClientAccountNotes';
 import { BriefMeButton } from '@/components/crm/BriefMeModal';
 import { SafeDeleteModal } from '@/components/SafeDeleteModal';
+import { useNavigate } from 'react-router-dom';
 
 interface Client {
   id: string;

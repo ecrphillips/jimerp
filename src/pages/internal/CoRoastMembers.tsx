@@ -9,11 +9,14 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Plus, Pencil, ShieldCheck, FileText } from 'lucide-react';
+import { Plus, Pencil, ShieldCheck, FileText, Link2, ExternalLink, ChevronsUpDown, X } from 'lucide-react';
 import { WaiverHistoryPanel } from '@/components/bookings/WaiverHistoryPanel';
+import { useNavigate } from 'react-router-dom';
 import type { Database } from '@/integrations/supabase/types';
 
 type CoroastTier = Database['public']['Enums']['coroast_tier'];
@@ -31,11 +34,20 @@ interface CoroastMember {
   certified_by: string | null;
   joined_date: string;
   notes_internal: string | null;
+  client_id: string | null;
+}
+
+interface SimpleClient {
+  id: string;
+  name: string;
+  client_code: string;
+  is_active: boolean;
 }
 
 export default function CoRoastMembers() {
   const queryClient = useQueryClient();
   const { authUser } = useAuth();
+  const navigate = useNavigate();
   const [showDialog, setShowDialog] = useState(false);
   const [editingMember, setEditingMember] = useState<CoroastMember | null>(null);
   const [showInactive, setShowInactive] = useState(false);
@@ -48,6 +60,8 @@ export default function CoRoastMembers() {
   const [formContactPhone, setFormContactPhone] = useState('');
   const [formTier, setFormTier] = useState<CoroastTier>('ACCESS');
   const [formNotes, setFormNotes] = useState('');
+  const [formClientId, setFormClientId] = useState<string | null>(null);
+  const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
 
   const { data: members, isLoading, error } = useQuery({
     queryKey: ['coroast-members'],
@@ -60,6 +74,26 @@ export default function CoRoastMembers() {
       return (data ?? []) as CoroastMember[];
     },
   });
+
+  const { data: clients } = useQuery({
+    queryKey: ['clients-for-linking'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('id, name, client_code, is_active')
+        .eq('is_active', true)
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as SimpleClient[];
+    },
+  });
+
+  // Build a map of client_id -> client for display
+  const clientMap = useMemo(() => {
+    const map = new Map<string, SimpleClient>();
+    clients?.forEach(c => map.set(c.id, c));
+    return map;
+  }, [clients]);
 
   const displayedMembers = useMemo(() => {
     if (!members) return [];
@@ -77,6 +111,7 @@ export default function CoRoastMembers() {
     setFormContactPhone('');
     setFormTier('ACCESS');
     setFormNotes('');
+    setFormClientId(null);
     setEditingMember(null);
   }, []);
 
@@ -93,6 +128,7 @@ export default function CoRoastMembers() {
     setFormContactPhone(member.contact_phone ?? '');
     setFormTier(member.tier);
     setFormNotes(member.notes_internal ?? '');
+    setFormClientId(member.client_id);
     setShowDialog(true);
   }, []);
 
@@ -112,6 +148,7 @@ export default function CoRoastMembers() {
           contact_phone: formContactPhone.trim() || null,
           tier: formTier,
           notes_internal: formNotes.trim() || null,
+          client_id: formClientId,
         });
       if (error) throw error;
     },
@@ -138,6 +175,7 @@ export default function CoRoastMembers() {
           contact_phone: formContactPhone.trim() || null,
           tier: formTier,
           notes_internal: formNotes.trim() || null,
+          client_id: formClientId,
         })
         .eq('id', editingMember.id);
       if (error) throw error;
@@ -205,6 +243,8 @@ export default function CoRoastMembers() {
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
+  const selectedClientName = formClientId ? clientMap.get(formClientId)?.name : null;
+
   return (
     <div className="page-container">
       <div className="page-header flex items-center justify-between">
@@ -253,6 +293,17 @@ export default function CoRoastMembers() {
                           <span className="ml-2 text-sm text-muted-foreground">{m.contact_email}</span>
                         )}
                       </div>
+                      {m.client_id && clientMap.get(m.client_id) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs gap-1 h-7"
+                          onClick={() => navigate('/clients')}
+                        >
+                          <Link2 className="h-3 w-3" />
+                          View Client Account
+                        </Button>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {m.certified ? (
@@ -349,6 +400,60 @@ export default function CoRoastMembers() {
                   <SelectItem value="GROWTH">Growth</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label>Link to Client Account</Label>
+              <div className="flex items-center gap-2">
+                <Popover open={clientPopoverOpen} onOpenChange={setClientPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between font-normal"
+                    >
+                      {selectedClientName ?? 'No client linked'}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search clients…" />
+                      <CommandList>
+                        <CommandEmpty>No clients found.</CommandEmpty>
+                        <CommandGroup>
+                          {clients?.map((c) => (
+                            <CommandItem
+                              key={c.id}
+                              value={c.name}
+                              onSelect={() => {
+                                setFormClientId(c.id);
+                                setClientPopoverOpen(false);
+                              }}
+                            >
+                              <span className="font-mono text-xs mr-2 text-muted-foreground">{c.client_code}</span>
+                              {c.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {formClientId && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => setFormClientId(null)}
+                    title="Remove link"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Optional — link this member to a contract manufacturing client account.
+              </p>
             </div>
             <div>
               <Label htmlFor="notes">Internal Notes</Label>
