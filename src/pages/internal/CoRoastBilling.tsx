@@ -1,12 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { CheckCircle2, TrendingUp, AlertTriangle } from 'lucide-react';
-import { format, endOfMonth, subMonths, addMonths } from 'date-fns';
+import { CheckCircle2, TrendingUp } from 'lucide-react';
+import { format, endOfMonth, subMonths, addMonths, startOfMonth } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { TIER_RATES } from '@/components/bookings/bookingUtils';
@@ -52,7 +52,7 @@ export default function CoRoastBilling() {
     },
   });
 
-  const { data: billingPeriods = [] } = useQuery({
+  const { data: billingPeriods = [], refetch: refetchPeriods } = useQuery({
     queryKey: ['coroast-billing-periods', selectedMonth],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -64,6 +64,45 @@ export default function CoRoastBilling() {
       return data;
     },
   });
+
+  // Auto-create billing periods for active members who don't have one for this month
+  useEffect(() => {
+    if (members.length === 0) return;
+
+    const membersWithoutPeriod = members.filter(
+      m => !billingPeriods.some(bp => bp.member_id === m.id)
+    );
+
+    if (membersWithoutPeriod.length === 0) return;
+
+    const monthStart = format(startOfMonth(new Date(`${selectedMonth}-01`)), 'yyyy-MM-dd');
+    const monthEnd = format(endOfMonth(new Date(`${selectedMonth}-01`)), 'yyyy-MM-dd');
+
+    const createMissing = async () => {
+      const inserts = membersWithoutPeriod.map(m => {
+        const tier = m.tier ?? 'ACCESS';
+        const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
+        return {
+          member_id: m.id,
+          period_start: monthStart,
+          period_end: monthEnd,
+          tier_snapshot: tier,
+          included_hours: rates.includedHours,
+          overage_rate_per_hr: rates.overageRate,
+          base_fee: rates.base,
+        };
+      });
+
+      const { error } = await supabase.from('coroast_billing_periods').insert(inserts as any);
+      if (error) {
+        console.error('Failed to auto-create billing periods:', error);
+        return;
+      }
+      refetchPeriods();
+    };
+
+    createMissing();
+  }, [members, billingPeriods, selectedMonth, refetchPeriods]);
 
   const { data: bookings = [] } = useQuery({
     queryKey: ['coroast-billing-bookings', selectedMonth],
@@ -294,12 +333,6 @@ export default function CoRoastBilling() {
                   )}
                 </div>
               </div>
-              {!d.bp && (
-                <div className="flex items-center gap-1.5 text-xs text-amber-600 mt-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  No billing period found for this month. Create one on the Members page.
-                </div>
-              )}
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
