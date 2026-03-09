@@ -442,10 +442,16 @@ export default function Clients() {
                       <Badge variant="outline" className="font-mono text-xs">
                         {c.client_code}
                       </Badge>
-                      <div>
+                      <div className="flex items-center gap-2">
                         <span className="font-medium">{c.name}</span>
                         {c.billing_email && (
-                          <span className="ml-2 text-sm text-muted-foreground">{c.billing_email}</span>
+                          <span className="text-sm text-muted-foreground">{c.billing_email}</span>
+                        )}
+                        {coroastByClientId.has(c.id) && (
+                          <Badge variant="secondary" className="text-xs gap-1">
+                            <Handshake className="h-3 w-3" />
+                            Co-Roasting Member
+                          </Badge>
                         )}
                       </div>
                     </div>
