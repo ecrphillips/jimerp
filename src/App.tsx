@@ -147,6 +147,11 @@ const App = () => (
                 <InternalLayout><CoRoastMembers /></InternalLayout>
               </ProtectedRoute>
             } />
+            <Route path="/co-roasting/members/:id" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><CoRoastMemberDetail /></InternalLayout>
+              </ProtectedRoute>
+            } />
             <Route path="/co-roasting/bookings" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><BookingCalendar /></InternalLayout>
