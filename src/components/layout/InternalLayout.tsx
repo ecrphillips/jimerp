@@ -81,6 +81,10 @@ export function InternalLayout({ children }: InternalLayoutProps) {
   const isInventoryRoute = location.pathname.startsWith('/inventory');
   const [inventoryOpen, setInventoryOpen] = React.useState(isInventoryRoute);
 
+  // Co-Roasting section
+  const isCoRoastRoute = location.pathname.startsWith('/co-roasting');
+  const [coroastOpen, setCoroastOpen] = React.useState(isCoRoastRoute);
+
   // Keep sections open when navigating within them
   React.useEffect(() => {
     if (isProductionRoute) {
@@ -93,6 +97,12 @@ export function InternalLayout({ children }: InternalLayoutProps) {
       setInventoryOpen(true);
     }
   }, [isInventoryRoute]);
+
+  React.useEffect(() => {
+    if (isCoRoastRoute) {
+      setCoroastOpen(true);
+    }
+  }, [isCoRoastRoute]);
 
   const handleSignOut = async () => {
     await signOut();
