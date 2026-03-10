@@ -10,6 +10,7 @@ import { ClientLayout } from "@/components/layout/ClientLayout";
 
 // Pages
 import Auth from "@/pages/Auth";
+import ProspectDetail from "@/pages/internal/ProspectDetail";
 import AuthCallback from "@/pages/AuthCallback";
 import SetPassword from "@/pages/SetPassword";
 import Dashboard from "@/pages/internal/Dashboard";
