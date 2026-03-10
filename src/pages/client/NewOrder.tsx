@@ -211,7 +211,7 @@ export default function NewOrder() {
   }, [lineItems]);
 
   const checkUnusualOrderSize = async (): Promise<boolean> => {
-    if (!authUser?.clientId) return false;
+    if (!authUser?.accountId) return false;
 
     try {
       const { data: lastOrder } = await supabase
