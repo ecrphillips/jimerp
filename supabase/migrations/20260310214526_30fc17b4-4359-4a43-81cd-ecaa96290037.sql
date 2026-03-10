@@ -1,0 +1,2 @@
+ALTER TABLE public.coroast_member_checklist ADD COLUMN account_id uuid REFERENCES public.accounts(id) ON DELETE CASCADE;
+CREATE INDEX idx_coroast_member_checklist_account_id ON public.coroast_member_checklist(account_id);
