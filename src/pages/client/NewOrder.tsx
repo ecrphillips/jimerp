@@ -376,7 +376,7 @@ export default function NewOrder() {
         'validate-order-constraints',
         {
           body: {
-            client_id: authUser.clientId,
+            client_id: authUser.accountId,
             line_items: lineItems.map((li) => ({
               product_id: li.productId,
               quantity_units: li.quantity,
