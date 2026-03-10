@@ -12,7 +12,6 @@ import type { Database } from '@/integrations/supabase/types';
 const BILLABLE_STATUSES: Database['public']['Enums']['coroast_booking_status'][] = ['CONFIRMED', 'COMPLETED', 'NO_SHOW'];
 
 const GST_RATE = 0.05;
-const BILLABLE_STATUSES = ['CONFIRMED', 'COMPLETED', 'NO_SHOW'];
 
 export default function MemberBilling() {
   const { authUser } = useAuth();
