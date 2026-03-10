@@ -145,24 +145,8 @@ export function InternalLayout({ children }: InternalLayoutProps) {
               <NavGroup label="Contract Manufacturing" open={cmOpen} onOpenChange={setCmOpen}>
                 <NavItem to="/clients" icon={Users} label="Clients" onClick={closeSidebar} />
                 <NavItem to="/orders" icon={ShoppingCart} label="Orders" onClick={closeSidebar} />
-                <NestedNavGroup
-                  icon={Flame}
-                  label="Production"
-                  isRoute={isProductionRoute}
-                  open={productionOpen}
-                  onOpenChange={setProductionOpen}
-                  items={productionSubItems.map(i => ({ ...i, end: i.to === '/production' }))}
-                  onItemClick={closeSidebar}
-                />
-                <NestedNavGroup
-                  icon={Warehouse}
-                  label="Inventory"
-                  isRoute={isInventoryRoute}
-                  open={inventoryOpen}
-                  onOpenChange={setInventoryOpen}
-                  items={inventorySubItems.map(i => ({ ...i, end: i.to === '/inventory' }))}
-                  onItemClick={closeSidebar}
-                />
+                <NavItem to="/production" icon={Flame} label="Run Sheet" onClick={closeSidebar} end />
+                <NavItem to="/inventory" icon={Warehouse} label="Inventory Levels" onClick={closeSidebar} end />
                 <NavItem to="/products" icon={Package} label="Products" onClick={closeSidebar} />
               </NavGroup>
 
@@ -174,16 +158,17 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 <NavItem to="/co-roasting/billing" icon={Receipt} label="Billing" onClick={closeSidebar} />
               </NavGroup>
 
-              {/* Relationships */}
-              <NavGroup label="Relationships" open={relOpen} onOpenChange={setRelOpen}>
+              {/* Prospects — standalone */}
+              <li>
                 <NavItem to="/prospects" icon={UserPlus} label="Prospects" onClick={closeSidebar} />
-              </NavGroup>
+              </li>
 
               {/* Admin — ADMIN only */}
               {authUser?.role === 'ADMIN' && (
                 <NavGroup label="Admin" open={adminOpen} onOpenChange={setAdminOpen}>
                   <NavItem to="/admin/users" icon={Users2} label="Users & Access" onClick={closeSidebar} />
                   <NavItem to="/admin-tools" icon={Wrench} label="Admin Tools" onClick={closeSidebar} />
+                  <NavItem to="/inventory/ledger" icon={BookOpen} label="Ledger" onClick={closeSidebar} />
                 </NavGroup>
               )}
             </ul>
