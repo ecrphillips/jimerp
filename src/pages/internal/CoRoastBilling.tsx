@@ -12,7 +12,8 @@ import { toast } from 'sonner';
 import { TIER_RATES, timeToMinutes } from '@/components/bookings/bookingUtils';
 import QuickBooksInstructionsModal from '@/components/coroast/QuickBooksInstructionsModal';
 
-const BILLABLE_STATUSES = ['CONFIRMED', 'COMPLETED', 'NO_SHOW'];
+const BILLABLE_STATUSES = ['CONFIRMED', 'COMPLETED', 'NO_SHOW'] as const;
+type BillableStatus = typeof BILLABLE_STATUSES[number];
 const GST_RATE = 0.05;
 
 function buildMonthOptions() {
