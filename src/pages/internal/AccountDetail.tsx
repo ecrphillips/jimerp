@@ -738,7 +738,7 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
   });
 
   const getItemChecked = (index: number) => {
-    const item = checklist.find((c: any) => c.item_number === index);
+    const item = checklist.find((c: any) => c.item_number === index + 1);
     return item?.completed || false;
   };
 
