@@ -13,7 +13,6 @@ import {
   Coffee,
   Menu,
   X,
-  Settings,
   ChevronDown,
   ChevronRight,
   Flame,
@@ -22,11 +21,8 @@ import {
   Wrench,
   Users2,
   UserPlus,
-  Handshake,
   Calendar,
   Receipt,
-  Factory,
-  Link
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
