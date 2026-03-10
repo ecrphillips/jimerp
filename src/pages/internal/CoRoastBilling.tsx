@@ -9,7 +9,7 @@ import { CheckCircle2, TrendingUp, Lock } from 'lucide-react';
 import { format, endOfMonth, subMonths, addMonths, startOfMonth, getDaysInMonth, isAfter } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { TIER_RATES, timeToMinutes } from '@/components/bookings/bookingUtils';
+import { TIER_RATES, STORAGE_RATES, timeToMinutes } from '@/components/bookings/bookingUtils';
 import QuickBooksInstructionsModal from '@/components/coroast/QuickBooksInstructionsModal';
 
 const BILLABLE_STATUSES = ['CONFIRMED', 'COMPLETED', 'NO_SHOW'] as const;
