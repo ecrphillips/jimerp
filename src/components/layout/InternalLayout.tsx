@@ -143,7 +143,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
               </li>
 
               {/* Contract Manufacturing */}
-              <NavGroup label="Contract Manufacturing" icon={Factory} open={cmOpen} onOpenChange={setCmOpen}>
+              <NavGroup label="Manufacturing" icon={Factory} open={cmOpen} onOpenChange={setCmOpen}>
                 <NavItem to="/clients" icon={Users} label="Clients" onClick={closeSidebar} />
                 <NavItem to="/orders" icon={ShoppingCart} label="Orders" onClick={closeSidebar} />
                 <NavItem to="/production" icon={Flame} label="Run Sheet" onClick={closeSidebar} end />
