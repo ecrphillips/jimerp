@@ -822,9 +822,9 @@ export default function NewOrder() {
               <CardTitle>Order Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {authUser?.clientId && (
+              {authUser?.accountId && (
                 <LocationSelect
-                  clientId={authUser.clientId}
+                  clientId={authUser.accountId}
                   value={selectedLocationId}
                   onChange={setSelectedLocationId}
                   required

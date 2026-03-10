@@ -10,18 +10,18 @@ export default function MemberAccount() {
   const { authUser } = useAuth();
 
   const { data: member, isLoading } = useQuery({
-    queryKey: ['my-coroast-account', authUser?.clientId],
+    queryKey: ['my-coroast-account', authUser?.accountId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_members')
         .select('*')
-        .eq('client_id', authUser!.clientId!)
+        .eq('client_id', authUser!.accountId!)
         .eq('is_active', true)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
-    enabled: !!authUser?.clientId,
+    enabled: !!authUser?.accountId,
   });
 
   if (isLoading) {
