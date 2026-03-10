@@ -425,6 +425,9 @@ export default function UsersAccess() {
     setEditRole(user.role);
     setEditClientId(user.client_id || '');
     setEditName(user.name || '');
+    // Find if this client is linked to a coroast member
+    const linkedMember = coroastMembers?.find(m => m.client_id === user.client_id);
+    setEditMemberId(linkedMember?.id || '');
     setShowEditModal(true);
   };
 
