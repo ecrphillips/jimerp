@@ -65,11 +65,13 @@ export default function UsersAccess() {
   const [inviteName, setInviteName] = useState('');
   const [inviteRole, setInviteRole] = useState<AppRole>('OPS');
   const [inviteClientId, setInviteClientId] = useState<string>('');
+  const [inviteMemberId, setInviteMemberId] = useState<string>('');
   const [isInviting, setIsInviting] = useState(false);
 
   // Edit form state
   const [editRole, setEditRole] = useState<AppRole>('OPS');
   const [editClientId, setEditClientId] = useState<string>('');
+  const [editMemberId, setEditMemberId] = useState<string>('');
   const [editName, setEditName] = useState('');
   const [isEditing, setIsEditing] = useState(false);
 
