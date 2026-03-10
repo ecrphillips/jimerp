@@ -715,7 +715,7 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
       // Check if all 7 are now complete
       const allItems = [...checklist.filter((c: any) => c.item_number !== itemNumber), { item_number: itemNumber, completed }];
       const allComplete = CHECKLIST_ITEMS.every((_, i) => {
-        const item = allItems.find((c: any) => c.item_number === i);
+        const item = allItems.find((c: any) => c.item_number === i + 1);
         return item?.completed;
       });
 
