@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,32 +8,24 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Plus, ChevronDown, ChevronRight } from 'lucide-react';
-import { NotesLog } from '@/components/crm/NotesLog';
-import { BriefMeButton } from '@/components/crm/BriefMeModal';
+import { Plus, CheckCircle2 } from 'lucide-react';
+import type { Database } from '@/integrations/supabase/types';
 
-type ProspectStage = 'AWARE' | 'CONTACTED' | 'CONVERSATION' | 'AGREEMENT_SENT' | 'ONBOARDED';
+type ProspectStream = Database['public']['Enums']['prospect_stream'];
+type ProspectStage = Database['public']['Enums']['prospect_stage'];
 
-const STAGES: { value: ProspectStage; label: string }[] = [
-  { value: 'AWARE', label: 'Aware' },
-  { value: 'CONTACTED', label: 'Contacted' },
-  { value: 'CONVERSATION', label: 'Conversation' },
-  { value: 'AGREEMENT_SENT', label: 'Agreement Sent' },
-  { value: 'ONBOARDED', label: 'Onboarded' },
+const STREAM_CONFIG: { value: ProspectStream; label: string; description: string; variant: 'default' | 'secondary' | 'outline' }[] = [
+  { value: 'CO_ROAST', label: 'Co-Roast', description: 'Potential co-roasting member looking to rent Loring time', variant: 'default' },
+  { value: 'CONTRACT', label: 'Contract Manufacturing', description: 'Potential client looking to outsource roasting and/or packing', variant: 'secondary' },
+  { value: 'BOTH', label: 'Both', description: 'Could be a fit for either co-roasting or contract manufacturing', variant: 'outline' },
+  { value: 'INDUSTRY_CONTACT', label: 'Industry Contact', description: 'Not a likely customer — a relationship worth tracking (importers, other roasters, retailers, industry connections)', variant: 'outline' },
 ];
 
-const stageBadgeVariant = (stage: ProspectStage): "default" | "secondary" | "outline" => {
-  switch (stage) {
-    case 'ONBOARDED': return 'default';
-    case 'AGREEMENT_SENT': return 'default';
-    case 'CONVERSATION': return 'secondary';
-    default: return 'outline';
-  }
-};
+const streamLabel = (s: ProspectStream) => STREAM_CONFIG.find(c => c.value === s)?.label ?? s;
+const streamVariant = (s: ProspectStream) => STREAM_CONFIG.find(c => c.value === s)?.variant ?? 'outline';
 
 interface Prospect {
   id: string;
@@ -40,20 +33,23 @@ interface Prospect {
   contact_name: string | null;
   contact_info: string | null;
   stage: ProspectStage;
+  stream: ProspectStream;
+  converted: boolean;
   created_at: string;
-  updated_at: string;
 }
 
 export default function Prospects() {
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [showDialog, setShowDialog] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Form state
   const [formName, setFormName] = useState('');
   const [formContact, setFormContact] = useState('');
-  const [formContactInfo, setFormContactInfo] = useState('');
+  const [formEmail, setFormEmail] = useState('');
+  const [formPhone, setFormPhone] = useState('');
+  const [formStream, setFormStream] = useState<ProspectStream>('CO_ROAST');
 
   const { data: prospects = [], isLoading } = useQuery({
     queryKey: ['prospects'],
@@ -69,10 +65,12 @@ export default function Prospects() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      const contactInfo = [formEmail.trim(), formPhone.trim()].filter(Boolean).join(' | ') || null;
       const { error } = await supabase.from('prospects').insert({
         business_name: formName.trim(),
         contact_name: formContact.trim() || null,
-        contact_info: formContactInfo.trim() || null,
+        contact_info: contactInfo,
+        stream: formStream,
         created_by: authUser!.id,
       });
       if (error) throw error;
@@ -80,27 +78,19 @@ export default function Prospects() {
     onSuccess: () => {
       toast.success('Prospect added');
       queryClient.invalidateQueries({ queryKey: ['prospects'] });
-      setShowDialog(false);
-      setFormName('');
-      setFormContact('');
-      setFormContactInfo('');
+      resetForm();
     },
     onError: () => toast.error('Failed to add prospect'),
   });
 
-  const updateStageMutation = useMutation({
-    mutationFn: async ({ id, stage }: { id: string; stage: ProspectStage }) => {
-      const { error } = await supabase
-        .from('prospects')
-        .update({ stage })
-        .eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['prospects'] });
-    },
-    onError: () => toast.error('Failed to update stage'),
-  });
+  const resetForm = () => {
+    setShowDialog(false);
+    setFormName('');
+    setFormContact('');
+    setFormEmail('');
+    setFormPhone('');
+    setFormStream('CO_ROAST');
+  };
 
   return (
     <div className="page-container">
@@ -114,7 +104,7 @@ export default function Prospects() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Co-Roasting Prospect Pipeline</CardTitle>
+          <CardTitle>CRM Pipeline</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -122,62 +112,32 @@ export default function Prospects() {
           ) : prospects.length === 0 ? (
             <p className="text-muted-foreground">No prospects yet. Add one to get started.</p>
           ) : (
-            <ul className="space-y-3">
+            <ul className="space-y-1">
               {prospects.map((p) => (
-                <li key={p.id} className="border-b pb-3 last:border-0">
-                  <Collapsible
-                    open={expandedId === p.id}
-                    onOpenChange={(open) => setExpandedId(open ? p.id : null)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <CollapsibleTrigger asChild>
-                        <button className="flex items-center gap-2 text-left group">
-                          {expandedId === p.id ? (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                          )}
-                          <div>
-                            <span className="font-medium group-hover:underline">{p.business_name}</span>
-                            {p.contact_name && (
-                              <span className="ml-2 text-sm text-muted-foreground">{p.contact_name}</span>
-                            )}
-                            {p.contact_info && (
-                              <span className="ml-2 text-sm text-muted-foreground">· {p.contact_info}</span>
-                            )}
-                          </div>
-                        </button>
-                      </CollapsibleTrigger>
-                      <div className="flex items-center gap-2">
-                        <BriefMeButton type="prospect" id={p.id} name={p.business_name} />
-                        <Select
-                          value={p.stage}
-                          onValueChange={(val) =>
-                            updateStageMutation.mutate({ id: p.id, stage: val as ProspectStage })
-                          }
-                        >
-                          <SelectTrigger className="h-8 w-[160px] text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {STAGES.map((s) => (
-                              <SelectItem key={s.value} value={s.value} className="text-xs">
-                                {s.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                <li
+                  key={p.id}
+                  className="flex items-center justify-between px-3 py-2.5 rounded-md hover:bg-muted/50 cursor-pointer transition-colors border-b last:border-0"
+                  onClick={() => navigate(`/prospects/${p.id}`)}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="min-w-0">
+                      <span className="font-medium">{p.business_name}</span>
+                      {p.contact_name && (
+                        <span className="ml-2 text-sm text-muted-foreground">{p.contact_name}</span>
+                      )}
                     </div>
-                    <CollapsibleContent className="mt-3 ml-6">
-                      <NotesLog
-                        table="prospect_notes"
-                        foreignKey="prospect_id"
-                        foreignId={p.id}
-                        queryKey={['prospect-notes', p.id]}
-                      />
-                    </CollapsibleContent>
-                  </Collapsible>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {p.converted && (
+                      <Badge variant="default" className="gap-1 text-xs">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Converted
+                      </Badge>
+                    )}
+                    <Badge variant={streamVariant(p.stream)} className="text-xs">
+                      {streamLabel(p.stream)}
+                    </Badge>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -186,7 +146,7 @@ export default function Prospects() {
       </Card>
 
       {/* Add Prospect Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+      <Dialog open={showDialog} onOpenChange={(v) => { if (!v) resetForm(); else setShowDialog(true); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Add Prospect</DialogTitle>
@@ -212,16 +172,44 @@ export default function Prospects() {
               />
             </div>
             <div>
-              <Label htmlFor="contactInfo">Email / Phone</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
-                id="contactInfo"
-                value={formContactInfo}
-                onChange={(e) => setFormContactInfo(e.target.value)}
-                placeholder="jane@acme.com or 604-555-1234"
+                id="email"
+                type="email"
+                value={formEmail}
+                onChange={(e) => setFormEmail(e.target.value)}
+                placeholder="jane@acme.com"
               />
             </div>
+            <div>
+              <Label htmlFor="phone">Phone</Label>
+              <Input
+                id="phone"
+                value={formPhone}
+                onChange={(e) => setFormPhone(e.target.value)}
+                placeholder="604-555-1234"
+              />
+            </div>
+            <div>
+              <Label>Stream *</Label>
+              <Select value={formStream} onValueChange={(v) => setFormStream(v as ProspectStream)}>
+                <SelectTrigger className="h-auto">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STREAM_CONFIG.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      <div>
+                        <span className="font-medium">{s.label}</span>
+                        <span className="ml-2 text-xs text-muted-foreground/70">{s.description}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={() => setShowDialog(false)}>
+              <Button variant="outline" onClick={resetForm}>
                 Cancel
               </Button>
               <Button
