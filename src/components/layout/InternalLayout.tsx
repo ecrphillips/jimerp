@@ -161,7 +161,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
 
               {/* Prospects — standalone */}
               <li>
-                <NavItem to="/prospects" icon={UserPlus} label="Prospects" onClick={closeSidebar} />
+                <NavItem to="/prospects" icon={UserPlus} label="Relationships" onClick={closeSidebar} />
               </li>
 
               {/* Admin — ADMIN only */}
