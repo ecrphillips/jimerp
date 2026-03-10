@@ -544,34 +544,65 @@ export default function ProspectDetail() {
             <CardTitle className="text-base">Conversion</CardTitle>
           </CardHeader>
           <CardContent>
-            {prospect.converted && !canConvertToMember && !canConvertToClient && (
-              <p className="text-sm text-muted-foreground">This prospect has been fully converted.</p>
+            {prospect.converted ? (
+              <p className="text-sm text-muted-foreground">This relationship has been converted.</p>
+            ) : (
+              <Button variant="outline" onClick={openConvertModal}>
+                Convert to Account
+              </Button>
             )}
-
-            {/* For BOTH stream, allow converting to whichever hasn't been done yet */}
-            <div className="flex flex-wrap gap-3">
-              {canConvertToMember && (
-                <Button
-                  variant="outline"
-                  disabled={convertLoading !== null}
-                  onClick={handleConvertToMember}
-                >
-                  {convertLoading === 'member' ? 'Converting…' : 'Convert to Co-Roasting Member'}
-                </Button>
-              )}
-              {canConvertToClient && (
-                <Button
-                  variant="outline"
-                  disabled={convertLoading !== null}
-                  onClick={handleConvertToClient}
-                >
-                  {convertLoading === 'client' ? 'Converting…' : 'Convert to Client'}
-                </Button>
-              )}
-            </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Convert to Account Modal */}
+      <Dialog open={convertOpen} onOpenChange={setConvertOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Convert to Account</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div>
+              <Label>Account Name</Label>
+              <Input value={convertName} onChange={e => setConvertName(e.target.value)} />
+            </div>
+            <div>
+              <Label className="mb-2 block">Programs</Label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={convertMfg} onChange={e => setConvertMfg(e.target.checked)} className="rounded" />
+                  Manufacturing
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={convertCoroast} onChange={e => setConvertCoroast(e.target.checked)} className="rounded" />
+                  Co-Roasting
+                </label>
+              </div>
+            </div>
+            {convertCoroast && (
+              <div>
+                <Label>Tier</Label>
+                <Select value={convertTier} onValueChange={setConvertTier}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ACCESS">Access</SelectItem>
+                    <SelectItem value="GROWTH">Growth</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="ghost" onClick={() => setConvertOpen(false)}>Cancel</Button>
+              <Button
+                disabled={!convertName.trim() || (!convertMfg && !convertCoroast) || convertLoading}
+                onClick={handleConvertToAccount}
+              >
+                {convertLoading ? 'Converting…' : 'Convert'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Brief Me Modal */}
       <Dialog open={briefOpen} onOpenChange={setBriefOpen}>
