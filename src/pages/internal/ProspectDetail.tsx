@@ -68,8 +68,13 @@ export default function ProspectDetail() {
   const [briefOpen, setBriefOpen] = useState(false);
   const [briefCopied, setBriefCopied] = useState(false);
 
-  // Convert
-  const [convertLoading, setConvertLoading] = useState<string | null>(null);
+  // Convert modal
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [convertName, setConvertName] = useState('');
+  const [convertMfg, setConvertMfg] = useState(false);
+  const [convertCoroast, setConvertCoroast] = useState(false);
+  const [convertTier, setConvertTier] = useState('ACCESS');
+  const [convertLoading, setConvertLoading] = useState(false);
 
   const { data: prospect, isLoading } = useQuery({
     queryKey: ['prospect', id],
