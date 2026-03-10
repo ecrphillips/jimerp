@@ -32,6 +32,7 @@ export default function CoRoastBilling() {
   const monthOptions = useMemo(() => buildMonthOptions(), []);
   const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
   const [modalData, setModalData] = useState<any>(null);
+  const [undoInvoiceId, setUndoInvoiceId] = useState<string | null>(null);
 
   const [selYear, selMonthNum] = selectedMonth.split('-').map(Number);
   const selectedDate = new Date(selYear, selMonthNum - 1, 1);
@@ -352,6 +353,22 @@ export default function CoRoastBilling() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const undoInvoiceMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const { error } = await supabase.from('coroast_invoices').delete().eq('id', invoiceId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Invoice record removed');
+      refetchInvoices();
+      setUndoInvoiceId(null);
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
+      setUndoInvoiceId(null);
+    },
+  });
+
   const fmt = (n: number) =>
     n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -414,10 +431,43 @@ export default function CoRoastBilling() {
                 </div>
                 <div className="flex items-center gap-2">
                   {d.invoice ? (
-                    <Badge className="text-xs bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-100">
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Invoice Recorded {format(new Date(d.invoice.created_at), 'MMM d, yyyy')}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge className="text-xs bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-100">
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        Invoice Recorded {format(new Date(d.invoice.created_at), 'MMM d, yyyy')}
+                      </Badge>
+                      {undoInvoiceId === d.invoice.id ? (
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <span className="text-muted-foreground">Reopen?</span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-xs"
+                            onClick={() => setUndoInvoiceId(null)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-6 px-2 text-xs"
+                            onClick={() => undoInvoiceMutation.mutate(d.invoice.id)}
+                            disabled={undoInvoiceMutation.isPending}
+                          >
+                            Confirm
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => setUndoInvoiceId(d.invoice.id)}
+                        >
+                          Undo
+                        </Button>
+                      )}
+                    </div>
                   ) : (
                     <Button size="sm" onClick={() => setModalData(d)} disabled={!d.bp}>
                       Record Invoice
