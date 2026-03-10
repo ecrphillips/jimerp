@@ -147,6 +147,21 @@ export default function UsersAccess() {
     },
   });
 
+  // Fetch active co-roast members for linking
+  const { data: coroastMembers } = useQuery({
+    queryKey: ['admin-coroast-members-list'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('coroast_members')
+        .select('id, business_name, client_id')
+        .eq('is_active', true)
+        .order('business_name');
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const handleInvite = async () => {
     if (!inviteEmail || !inviteRole) {
       toast.error('Email and role are required');
