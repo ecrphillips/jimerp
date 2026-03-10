@@ -758,7 +758,7 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
             <div key={i} className="flex items-start gap-2">
               <Checkbox
                 checked={getItemChecked(i)}
-                onCheckedChange={(v) => toggleItem.mutate({ itemNumber: i, completed: !!v })}
+                onCheckedChange={(v) => toggleItem.mutate({ itemNumber: i + 1, completed: !!v })}
                 className="mt-0.5"
               />
               <span className="text-sm flex-1">{item}</span>

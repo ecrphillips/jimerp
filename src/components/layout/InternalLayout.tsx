@@ -177,20 +177,6 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 <NavItem to="/co-roasting/billing" icon={Receipt} label="Billing" onClick={closeSidebar} />
               </NavGroup>
 
-              {/* Relationships — standalone */}
-              <li>
-                <NavLink
-                  to="/prospects"
-                  onClick={closeSidebar}
-                  className={({ isActive }) => cn(
-                    "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground transition-colors hover:text-sidebar-foreground/80",
-                    isActive && "bg-sidebar-accent"
-                  )}
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Relationships
-                </NavLink>
-              </li>
 
               {/* Admin — ADMIN only */}
               {authUser?.role === 'ADMIN' && (
