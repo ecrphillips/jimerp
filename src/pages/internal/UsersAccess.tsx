@@ -417,6 +417,7 @@ export default function UsersAccess() {
     setInviteName('');
     setInviteRole('OPS');
     setInviteClientId('');
+    setInviteMemberId('');
   };
 
   const openEditModal = (user: UserWithDetails) => {
