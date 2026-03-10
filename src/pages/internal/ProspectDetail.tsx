@@ -419,9 +419,17 @@ export default function ProspectDetail() {
           </div>
 
           {/* Conversion links */}
+          {prospect.converted_to_account_id && linkedAccount && (
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-xs">Account</Badge>
+              <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => navigate(`/accounts/${linkedAccount.id}`)}>
+                {linkedAccount.account_name} <ExternalLink className="h-3 w-3 ml-1" />
+              </Button>
+            </div>
+          )}
           {prospect.converted_to_member_id && linkedMember && (
             <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-xs">Co-Roasting Member</Badge>
+              <Badge variant="secondary" className="text-xs">Co-Roasting Member (legacy)</Badge>
               <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => navigate(`/co-roasting/members/${linkedMember.id}`)}>
                 {linkedMember.business_name} <ExternalLink className="h-3 w-3 ml-1" />
               </Button>
@@ -429,7 +437,7 @@ export default function ProspectDetail() {
           )}
           {prospect.converted_to_client_id && linkedClient && (
             <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-xs">Client Account</Badge>
+              <Badge variant="secondary" className="text-xs">Client (legacy)</Badge>
               <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => navigate(`/clients`)}>
                 {linkedClient.name} <ExternalLink className="h-3 w-3 ml-1" />
               </Button>
