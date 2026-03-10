@@ -35,16 +35,6 @@ interface InternalLayoutProps {
   children: React.ReactNode;
 }
 
-// Production sub-items
-const productionSubItems = [
-  { to: '/production', label: 'Run Sheet', icon: Flame, match: '/production' },
-];
-
-// Inventory sub-items
-const inventorySubItems = [
-  { to: '/inventory', label: 'Levels', icon: Warehouse },
-  { to: '/inventory/ledger', label: 'Ledger', icon: BookOpen },
-];
 
 interface NavGroupProps {
   label: string;
