@@ -14,6 +14,207 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_locations: {
+        Row: {
+          account_id: string
+          address: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          location_code: string
+          location_name: string
+          qbo_billing_entity: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          address?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          location_code: string
+          location_name: string
+          qbo_billing_entity?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          address?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          location_code?: string
+          location_name?: string
+          qbo_billing_entity?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_locations_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      account_user_locations: {
+        Row: {
+          account_user_id: string
+          created_at: string
+          id: string
+          location_id: string
+        }
+        Insert: {
+          account_user_id: string
+          created_at?: string
+          id?: string
+          location_id: string
+        }
+        Update: {
+          account_user_id?: string
+          created_at?: string
+          id?: string
+          location_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_user_locations_account_user_id_fkey"
+            columns: ["account_user_id"]
+            isOneToOne: false
+            referencedRelation: "account_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_user_locations_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "account_locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      account_users: {
+        Row: {
+          account_id: string
+          can_book_roaster: boolean
+          can_invite_users: boolean
+          can_manage_locations: boolean
+          can_place_orders: boolean
+          created_at: string
+          id: string
+          is_active: boolean
+          is_owner: boolean
+          location_access: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          can_book_roaster?: boolean
+          can_invite_users?: boolean
+          can_manage_locations?: boolean
+          can_place_orders?: boolean
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_owner?: boolean
+          location_access?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          can_book_roaster?: boolean
+          can_invite_users?: boolean
+          can_manage_locations?: boolean
+          can_place_orders?: boolean
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_owner?: boolean
+          location_access?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_users_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      accounts: {
+        Row: {
+          account_name: string
+          billing_address: string | null
+          billing_contact_name: string | null
+          billing_email: string | null
+          billing_phone: string | null
+          coroast_certified: boolean
+          coroast_certified_by: string | null
+          coroast_certified_date: string | null
+          coroast_joined_date: string | null
+          coroast_tier: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          notes_internal: string | null
+          programs: string[]
+          relationship_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_name: string
+          billing_address?: string | null
+          billing_contact_name?: string | null
+          billing_email?: string | null
+          billing_phone?: string | null
+          coroast_certified?: boolean
+          coroast_certified_by?: string | null
+          coroast_certified_date?: string | null
+          coroast_joined_date?: string | null
+          coroast_tier?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes_internal?: string | null
+          programs?: string[]
+          relationship_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_name?: string
+          billing_address?: string | null
+          billing_contact_name?: string | null
+          billing_email?: string | null
+          billing_phone?: string | null
+          coroast_certified?: boolean
+          coroast_certified_by?: string | null
+          coroast_certified_date?: string | null
+          coroast_joined_date?: string | null
+          coroast_tier?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes_internal?: string | null
+          programs?: string[]
+          relationship_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accounts_relationship_id_fkey"
+            columns: ["relationship_id"]
+            isOneToOne: false
+            referencedRelation: "prospects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       andon_picks: {
         Row: {
           board: string
@@ -232,6 +433,7 @@ export type Database = {
       }
       coroast_billing_periods: {
         Row: {
+          account_id: string | null
           base_fee: number
           created_at: string
           exceeded_6hrs: boolean
@@ -248,6 +450,7 @@ export type Database = {
           upgrade_nudge_sent: boolean
         }
         Insert: {
+          account_id?: string | null
           base_fee: number
           created_at?: string
           exceeded_6hrs?: boolean
@@ -264,6 +467,7 @@ export type Database = {
           upgrade_nudge_sent?: boolean
         }
         Update: {
+          account_id?: string | null
           base_fee?: number
           created_at?: string
           exceeded_6hrs?: boolean
@@ -281,6 +485,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "coroast_billing_periods_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "coroast_billing_periods_member_id_fkey"
             columns: ["member_id"]
             isOneToOne: false
@@ -291,6 +502,7 @@ export type Database = {
       }
       coroast_bookings: {
         Row: {
+          account_id: string | null
           billing_period_id: string
           booking_date: string
           cancellation_fee_amt: number | null
@@ -314,6 +526,7 @@ export type Database = {
           waive_reason: string | null
         }
         Insert: {
+          account_id?: string | null
           billing_period_id: string
           booking_date: string
           cancellation_fee_amt?: number | null
@@ -337,6 +550,7 @@ export type Database = {
           waive_reason?: string | null
         }
         Update: {
+          account_id?: string | null
           billing_period_id?: string
           booking_date?: string
           cancellation_fee_amt?: number | null
@@ -360,6 +574,13 @@ export type Database = {
           waive_reason?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "coroast_bookings_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "coroast_bookings_billing_period_id_fkey"
             columns: ["billing_period_id"]
@@ -385,6 +606,7 @@ export type Database = {
       }
       coroast_hour_ledger: {
         Row: {
+          account_id: string | null
           billing_period_id: string
           booking_id: string | null
           created_at: string
@@ -396,6 +618,7 @@ export type Database = {
           notes: string
         }
         Insert: {
+          account_id?: string | null
           billing_period_id: string
           booking_id?: string | null
           created_at?: string
@@ -407,6 +630,7 @@ export type Database = {
           notes?: string
         }
         Update: {
+          account_id?: string | null
           billing_period_id?: string
           booking_id?: string | null
           created_at?: string
@@ -418,6 +642,13 @@ export type Database = {
           notes?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "coroast_hour_ledger_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "coroast_hour_ledger_billing_period_id_fkey"
             columns: ["billing_period_id"]
@@ -443,6 +674,7 @@ export type Database = {
       }
       coroast_invoices: {
         Row: {
+          account_id: string | null
           base_fee: number
           billing_period_id: string
           created_at: string
@@ -465,6 +697,7 @@ export type Database = {
           used_hours: number
         }
         Insert: {
+          account_id?: string | null
           base_fee: number
           billing_period_id: string
           created_at?: string
@@ -487,6 +720,7 @@ export type Database = {
           used_hours: number
         }
         Update: {
+          account_id?: string | null
           base_fee?: number
           billing_period_id?: string
           created_at?: string
@@ -509,6 +743,13 @@ export type Database = {
           used_hours?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "coroast_invoices_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "coroast_invoices_billing_period_id_fkey"
             columns: ["billing_period_id"]
@@ -754,6 +995,7 @@ export type Database = {
       }
       coroast_storage_allocations: {
         Row: {
+          account_id: string | null
           billing_period_id: string
           created_at: string
           id: string
@@ -768,6 +1010,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          account_id?: string | null
           billing_period_id: string
           created_at?: string
           id?: string
@@ -782,6 +1025,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          account_id?: string | null
           billing_period_id?: string
           created_at?: string
           id?: string
@@ -796,6 +1040,13 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "coroast_storage_allocations_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "coroast_storage_allocations_billing_period_id_fkey"
             columns: ["billing_period_id"]
@@ -814,6 +1065,7 @@ export type Database = {
       }
       coroast_waiver_log: {
         Row: {
+          account_id: string | null
           booking_id: string
           created_at: string
           fee_amount_waived: number
@@ -823,6 +1075,7 @@ export type Database = {
           waived_by: string | null
         }
         Insert: {
+          account_id?: string | null
           booking_id: string
           created_at?: string
           fee_amount_waived: number
@@ -832,6 +1085,7 @@ export type Database = {
           waived_by?: string | null
         }
         Update: {
+          account_id?: string | null
           booking_id?: string
           created_at?: string
           fee_amount_waived?: number
@@ -841,6 +1095,13 @@ export type Database = {
           waived_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "coroast_waiver_log_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "coroast_waiver_log_booking_id_fkey"
             columns: ["booking_id"]
@@ -1196,6 +1457,8 @@ export type Database = {
       }
       orders: {
         Row: {
+          account_id: string | null
+          account_location_id: string | null
           client_id: string
           client_notes: string | null
           client_po: string | null
@@ -1222,6 +1485,8 @@ export type Database = {
           work_deadline_at: string | null
         }
         Insert: {
+          account_id?: string | null
+          account_location_id?: string | null
           client_id: string
           client_notes?: string | null
           client_po?: string | null
@@ -1248,6 +1513,8 @@ export type Database = {
           work_deadline_at?: string | null
         }
         Update: {
+          account_id?: string | null
+          account_location_id?: string | null
           client_id?: string
           client_notes?: string | null
           client_po?: string | null
@@ -1274,6 +1541,20 @@ export type Database = {
           work_deadline_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "orders_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_account_location_id_fkey"
+            columns: ["account_location_id"]
+            isOneToOne: false
+            referencedRelation: "account_locations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "orders_client_id_fkey"
             columns: ["client_id"]
@@ -1659,6 +1940,7 @@ export type Database = {
           contact_info: string | null
           contact_name: string | null
           converted: boolean
+          converted_to_account_id: string | null
           converted_to_client_id: string | null
           converted_to_member_id: string | null
           created_at: string
@@ -1673,6 +1955,7 @@ export type Database = {
           contact_info?: string | null
           contact_name?: string | null
           converted?: boolean
+          converted_to_account_id?: string | null
           converted_to_client_id?: string | null
           converted_to_member_id?: string | null
           created_at?: string
@@ -1687,6 +1970,7 @@ export type Database = {
           contact_info?: string | null
           contact_name?: string | null
           converted?: boolean
+          converted_to_account_id?: string | null
           converted_to_client_id?: string | null
           converted_to_member_id?: string | null
           created_at?: string
@@ -1697,6 +1981,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "prospects_converted_to_account_id_fkey"
+            columns: ["converted_to_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "prospects_converted_to_client_id_fkey"
             columns: ["converted_to_client_id"]
