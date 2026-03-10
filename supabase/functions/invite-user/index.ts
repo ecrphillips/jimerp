@@ -13,6 +13,7 @@ interface InviteRequest {
   email: string;
   role: 'ADMIN' | 'OPS' | 'CLIENT';
   client_id?: string;
+  coroast_member_id?: string;
   name?: string;
   generate_link_only?: boolean; // DEV: return link instead of sending email
 }
