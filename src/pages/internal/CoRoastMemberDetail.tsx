@@ -612,7 +612,10 @@ export default function CoRoastMemberDetail() {
         </CardContent>
       </Card>
 
-      {/* SECTION 3 — Notes */}
+      {/* SECTION 3 — Storage */}
+      <MemberStorageSection memberId={id!} tier={member.tier} />
+
+      {/* SECTION 4 — Notes */}
       <Card>
         <CardHeader>
           <CardTitle>Notes</CardTitle>
