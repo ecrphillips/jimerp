@@ -708,7 +708,7 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
           item_number: itemNumber,
           completed,
           completed_date: completed ? new Date().toISOString().split('T')[0] : null,
-        });
+        } as any);
         if (error) throw error;
       }
 
