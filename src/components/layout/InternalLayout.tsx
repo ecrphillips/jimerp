@@ -166,7 +166,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
 
               {/* Admin — ADMIN only */}
               {authUser?.role === 'ADMIN' && (
-                <NavGroup label="Admin" open={adminOpen} onOpenChange={setAdminOpen}>
+                <NavGroup label="Admin" icon={Settings} open={adminOpen} onOpenChange={setAdminOpen}>
                   <NavItem to="/admin/users" icon={Users2} label="Users & Access" onClick={closeSidebar} />
                   <NavItem to="/admin-tools" icon={Wrench} label="Admin Tools" onClick={closeSidebar} />
                   <NavItem to="/inventory/ledger" icon={BookOpen} label="Ledger" onClick={closeSidebar} />
