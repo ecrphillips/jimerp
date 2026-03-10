@@ -12,6 +12,8 @@ import { MemberPortalLayout } from "@/components/layout/MemberPortalLayout";
 // Pages
 import Auth from "@/pages/Auth";
 import ProspectDetail from "@/pages/internal/ProspectDetail";
+import Accounts from "@/pages/internal/Accounts";
+import AccountDetail from "@/pages/internal/AccountDetail";
 import AuthCallback from "@/pages/AuthCallback";
 import SetPassword from "@/pages/SetPassword";
 import Dashboard from "@/pages/internal/Dashboard";
@@ -61,6 +63,16 @@ const App = () => (
             <Route path="/" element={<Navigate to="/auth" replace />} />
 
             {/* Internal (Admin/Ops) */}
+            <Route path="/accounts" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><Accounts /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/accounts/:id" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><AccountDetail /></InternalLayout>
+              </ProtectedRoute>
+            } />
             <Route path="/dashboard" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><Dashboard /></InternalLayout>

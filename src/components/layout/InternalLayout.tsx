@@ -26,6 +26,7 @@ import {
   Factory,
   Handshake,
   Settings,
+  Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -104,6 +105,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
   const closeSidebar = () => setSidebarOpen(false);
 
   // Group open states
+  const [accountsOpen, setAccountsOpen] = React.useState(true);
   const [cmOpen, setCmOpen] = React.useState(true);
   const [coroastOpen, setCoroastOpen] = React.useState(true);
   const [adminOpen, setAdminOpen] = React.useState(true);
@@ -151,6 +153,11 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                   Dashboard
                 </NavLink>
               </li>
+
+              {/* Accounts */}
+              <NavGroup label="Accounts" icon={Building2} open={accountsOpen} onOpenChange={setAccountsOpen}>
+                <NavItem to="/accounts" icon={Building2} label="Accounts" onClick={closeSidebar} />
+              </NavGroup>
 
               {/* Contract Manufacturing */}
               <NavGroup label="Manufacturing" icon={Factory} open={cmOpen} onOpenChange={setCmOpen}>
