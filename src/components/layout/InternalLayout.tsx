@@ -139,11 +139,21 @@ export function InternalLayout({ children }: InternalLayoutProps) {
             <ul className="space-y-1 px-3">
               {/* Dashboard */}
               <li>
-                <NavItem to="/dashboard" icon={LayoutDashboard} label="Dashboard" onClick={closeSidebar} />
+                <NavLink
+                  to="/dashboard"
+                  onClick={closeSidebar}
+                  className={({ isActive }) => cn(
+                    "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground transition-colors hover:text-sidebar-foreground/80",
+                    isActive && "bg-sidebar-accent"
+                  )}
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  Dashboard
+                </NavLink>
               </li>
 
               {/* Contract Manufacturing */}
-              <NavGroup label="Contract Manufacturing" icon={Factory} open={cmOpen} onOpenChange={setCmOpen}>
+              <NavGroup label="Manufacturing" icon={Factory} open={cmOpen} onOpenChange={setCmOpen}>
                 <NavItem to="/clients" icon={Users} label="Clients" onClick={closeSidebar} />
                 <NavItem to="/orders" icon={ShoppingCart} label="Orders" onClick={closeSidebar} />
                 <NavItem to="/production" icon={Flame} label="Run Sheet" onClick={closeSidebar} end />
@@ -159,9 +169,19 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 <NavItem to="/co-roasting/billing" icon={Receipt} label="Billing" onClick={closeSidebar} />
               </NavGroup>
 
-              {/* Prospects — standalone */}
+              {/* Relationships — standalone */}
               <li>
-                <NavItem to="/prospects" icon={UserPlus} label="Relationships" onClick={closeSidebar} />
+                <NavLink
+                  to="/prospects"
+                  onClick={closeSidebar}
+                  className={({ isActive }) => cn(
+                    "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground transition-colors hover:text-sidebar-foreground/80",
+                    isActive && "bg-sidebar-accent"
+                  )}
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Relationships
+                </NavLink>
               </li>
 
               {/* Admin — ADMIN only */}
