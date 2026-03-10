@@ -37,17 +37,19 @@ interface InternalLayoutProps {
 
 interface NavGroupProps {
   label: string;
+  icon: React.ElementType;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
 }
 
-function NavGroup({ label, open, onOpenChange, children }: NavGroupProps) {
+function NavGroup({ label, icon: Icon, open, onOpenChange, children }: NavGroupProps) {
   return (
     <li>
       <Collapsible open={open} onOpenChange={onOpenChange}>
         <CollapsibleTrigger asChild>
           <button className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground transition-colors hover:text-sidebar-foreground/80">
+            <Icon className="h-4 w-4" />
             {label}
             {open ? (
               <ChevronDown className="ml-auto h-3 w-3" />
