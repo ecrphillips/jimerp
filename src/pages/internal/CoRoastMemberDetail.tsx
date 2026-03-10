@@ -703,6 +703,9 @@ export default function CoRoastMemberDetail() {
         </CardContent>
       </Card>
 
+      {/* SECTION 5 — Invoice History */}
+      <InvoiceHistorySection memberId={id!} />
+
       {/* Brief Me Dialog */}
       <Dialog open={briefOpen} onOpenChange={setBriefOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
