@@ -1,0 +1,1 @@
+ALTER TABLE public.coroast_member_checklist ALTER COLUMN member_id DROP NOT NULL;

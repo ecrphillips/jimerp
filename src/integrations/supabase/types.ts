@@ -814,7 +814,7 @@ export type Database = {
           created_at: string
           id: string
           item_number: number
-          member_id: string
+          member_id: string | null
           updated_at: string
         }
         Insert: {
@@ -825,7 +825,7 @@ export type Database = {
           created_at?: string
           id?: string
           item_number: number
-          member_id: string
+          member_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -836,7 +836,7 @@ export type Database = {
           created_at?: string
           id?: string
           item_number?: number
-          member_id?: string
+          member_id?: string | null
           updated_at?: string
         }
         Relationships: [
