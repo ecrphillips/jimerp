@@ -23,6 +23,9 @@ import {
   UserPlus,
   Calendar,
   Receipt,
+  Factory,
+  Handshake,
+  Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
