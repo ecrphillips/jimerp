@@ -344,11 +344,6 @@ export default function ProspectDetail() {
         </Button>
         <h1 className="page-title">{prospect.business_name}</h1>
         {prospect.converted && (
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          Back
-        </Button>
-        <h1 className="page-title">{prospect.business_name}</h1>
-        {prospect.converted && (
           <Badge variant="default" className="gap-1">
             <CheckCircle2 className="h-3 w-3" />
             Converted
