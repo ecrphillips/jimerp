@@ -353,6 +353,22 @@ export default function CoRoastBilling() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const undoInvoiceMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const { error } = await supabase.from('coroast_invoices').delete().eq('id', invoiceId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Invoice record removed');
+      refetchInvoices();
+      setUndoInvoiceId(null);
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
+      setUndoInvoiceId(null);
+    },
+  });
+
   const fmt = (n: number) =>
     n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
