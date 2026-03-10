@@ -368,7 +368,7 @@ export default function NewOrder() {
   };
 
   const submitOrder = async () => {
-    if (!authUser?.clientId) return;
+    if (!authUser?.accountId) return;
 
     setSubmitting(true);
     try {
