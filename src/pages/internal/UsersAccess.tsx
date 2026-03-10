@@ -250,6 +250,7 @@ export default function UsersAccess() {
           user_id: selectedUser.user_id,
           role: editRole,
           client_id: editRole === 'CLIENT' ? editClientId : null,
+          coroast_member_id: editRole === 'CLIENT' && editMemberId ? editMemberId : null,
           name: editName || undefined,
         },
       });
