@@ -5,15 +5,15 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { CheckCircle2, TrendingUp } from 'lucide-react';
-import { format, endOfMonth, subMonths, addMonths, startOfMonth } from 'date-fns';
+import { CheckCircle2, TrendingUp, Lock } from 'lucide-react';
+import { format, endOfMonth, subMonths, addMonths, startOfMonth, getDaysInMonth, isAfter } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { TIER_RATES, timeToMinutes } from '@/components/bookings/bookingUtils';
 import QuickBooksInstructionsModal from '@/components/coroast/QuickBooksInstructionsModal';
 
 const BILLABLE_STATUSES = ['CONFIRMED', 'COMPLETED', 'NO_SHOW'] as const;
-type BillableStatus = typeof BILLABLE_STATUSES[number];
+type BillableStatus = (typeof BILLABLE_STATUSES)[number];
 const GST_RATE = 0.05;
 
 function buildMonthOptions() {
@@ -33,23 +33,24 @@ export default function CoRoastBilling() {
   const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
   const [modalData, setModalData] = useState<any>(null);
 
-  // Parse year/month to avoid timezone issues with new Date('YYYY-MM-DD')
   const [selYear, selMonthNum] = selectedMonth.split('-').map(Number);
   const selectedDate = new Date(selYear, selMonthNum - 1, 1);
   const periodStart = format(selectedDate, 'yyyy-MM-dd');
   const periodEnd = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
 
   const prevDate = subMonths(selectedDate, 1);
-  const prevMonth = format(prevDate, 'yyyy-MM');
   const prevPeriodStart = format(prevDate, 'yyyy-MM-dd');
   const prevPeriodEnd = format(endOfMonth(prevDate), 'yyyy-MM-dd');
+
+  // Is this period in the past (closed)?
+  const periodIsClosed = isAfter(new Date(), endOfMonth(selectedDate));
 
   const { data: members = [] } = useQuery({
     queryKey: ['coroast-billing-members'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_members')
-        .select('id, business_name, tier, is_active, contact_email')
+        .select('id, business_name, tier, is_active, contact_email, joined_date')
         .eq('is_active', true)
         .order('business_name');
       if (error) throw error;
@@ -75,7 +76,7 @@ export default function CoRoastBilling() {
     if (members.length === 0) return;
 
     const membersWithoutPeriod = members.filter(
-      m => !billingPeriods.some(bp => bp.member_id === m.id)
+      (m) => !billingPeriods.some((bp) => bp.member_id === m.id)
     );
 
     if (membersWithoutPeriod.length === 0) return;
@@ -84,9 +85,30 @@ export default function CoRoastBilling() {
     const monthEnd = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
 
     const createMissing = async () => {
-      const inserts = membersWithoutPeriod.map(m => {
+      const inserts = membersWithoutPeriod.map((m) => {
         const tier = m.tier ?? 'ACCESS';
         const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
+
+        // Proration logic
+        let baseFee = rates.base;
+        let proratedBaseFee: number | null = null;
+        let prorationNote: string | null = null;
+
+        const joinedDate = (m as any).joined_date as string | null;
+        if (joinedDate) {
+          const joinedD = new Date(joinedDate + 'T00:00:00');
+          const joinedYear = joinedD.getFullYear();
+          const joinedMonth = joinedD.getMonth();
+          if (joinedYear === selYear && joinedMonth === selMonthNum - 1) {
+            // Member joined this month — prorate
+            const dayOfMonth = joinedD.getDate();
+            const daysRemaining = 30 - (dayOfMonth - 1);
+            proratedBaseFee = Math.round(((daysRemaining / 30) * rates.base) * 100) / 100;
+            baseFee = proratedBaseFee;
+            prorationNote = `Prorated — joined ${format(joinedD, 'MMM d')}, ${daysRemaining}/30 days`;
+          }
+        }
+
         return {
           member_id: m.id,
           period_start: monthStart,
@@ -94,7 +116,10 @@ export default function CoRoastBilling() {
           tier_snapshot: tier,
           included_hours: rates.includedHours,
           overage_rate_per_hr: rates.overageRate,
-          base_fee: rates.base,
+          base_fee: baseFee,
+          prorated_base_fee: proratedBaseFee,
+          proration_note: prorationNote,
+          is_closed: periodIsClosed,
         };
       });
 
@@ -109,11 +134,27 @@ export default function CoRoastBilling() {
     createMissing();
   }, [members, billingPeriods, selectedMonth, refetchPeriods]);
 
+  // Auto-close past periods that aren't marked closed yet
+  useEffect(() => {
+    if (!periodIsClosed || billingPeriods.length === 0) return;
+    const unclosed = billingPeriods.filter((bp) => !(bp as any).is_closed);
+    if (unclosed.length === 0) return;
+
+    const closeUnclosed = async () => {
+      const { error } = await supabase
+        .from('coroast_billing_periods')
+        .update({ is_closed: true } as any)
+        .in('id', unclosed.map((bp) => bp.id));
+      if (error) console.error('Failed to close periods:', error);
+      else refetchPeriods();
+    };
+    closeUnclosed();
+  }, [billingPeriods, periodIsClosed]);
+
   // Query bookings directly with billable status filter for current month
   const { data: bookings = [] } = useQuery({
     queryKey: ['coroast-billing-bookings', periodStart, periodEnd],
     queryFn: async () => {
-      console.log('[Billing] Querying bookings for period:', periodStart, 'to', periodEnd);
       const { data, error } = await supabase
         .from('coroast_bookings')
         .select('id, member_id, booking_date, start_time, end_time, duration_hours, status')
@@ -121,7 +162,6 @@ export default function CoRoastBilling() {
         .lte('booking_date', periodEnd)
         .in('status', BILLABLE_STATUSES);
       if (error) throw error;
-      console.log('[Billing] Bookings returned:', data?.length, 'rows', data?.map(b => ({ member: b.member_id, date: b.booking_date, hours: b.duration_hours, status: b.status })));
       return data;
     },
   });
@@ -144,7 +184,7 @@ export default function CoRoastBilling() {
   const { data: storageAllocations = [] } = useQuery({
     queryKey: ['coroast-billing-storage', selectedMonth],
     queryFn: async () => {
-      const bpIds = billingPeriods.map(bp => bp.id);
+      const bpIds = billingPeriods.map((bp) => bp.id);
       if (bpIds.length === 0) return [];
       const { data, error } = await supabase
         .from('coroast_storage_allocations')
@@ -159,7 +199,7 @@ export default function CoRoastBilling() {
   const { data: invoices = [], refetch: refetchInvoices } = useQuery({
     queryKey: ['coroast-invoices', selectedMonth],
     queryFn: async () => {
-      const bpIds = billingPeriods.map(bp => bp.id);
+      const bpIds = billingPeriods.map((bp) => bp.id);
       if (bpIds.length === 0) return [];
       const { data, error } = await supabase
         .from('coroast_invoices')
@@ -171,7 +211,6 @@ export default function CoRoastBilling() {
     enabled: billingPeriods.length > 0,
   });
 
-  // Calculate hours from duration_hours, falling back to time diff
   function calcBookingHours(bk: { duration_hours: number | null; start_time: string; end_time: string }) {
     const dh = Number(bk.duration_hours);
     if (!isNaN(dh) && dh > 0) return dh;
@@ -179,14 +218,12 @@ export default function CoRoastBilling() {
     return diff > 0 ? diff : 0;
   }
 
-  // Sum hours per member from bookings (already filtered to billable statuses)
   const memberHoursUsed = useMemo(() => {
     const map = new Map<string, number>();
     for (const bk of bookings) {
       const hours = calcBookingHours(bk);
       map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + hours);
     }
-    console.log('[Billing] memberHoursUsed:', Object.fromEntries(map));
     return map;
   }, [bookings]);
 
@@ -200,17 +237,38 @@ export default function CoRoastBilling() {
   }, [prevBookings]);
 
   const memberBillingData = useMemo(() => {
-    return members.map(m => {
+    return members.map((m) => {
       const tier = m.tier ?? 'ACCESS';
       const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
-      const bp = billingPeriods.find(bp => bp.member_id === m.id);
-      const baseFee = rates.base;
-      const includedHours = rates.includedHours;
-      const usedHours = memberHoursUsed.get(m.id) ?? 0;
-      const overageHours = Math.max(0, usedHours - includedHours);
-      const overageCharge = overageHours * rates.overageRate;
+      const bp = billingPeriods.find((bp) => bp.member_id === m.id);
 
-      const storage = storageAllocations.find(s => s.member_id === m.id);
+      // Use prorated base fee if available, otherwise full rate
+      const proratedBaseFee = bp ? (bp as any).prorated_base_fee as number | null : null;
+      const prorationNote = bp ? (bp as any).proration_note as string | null : null;
+      const baseFee = proratedBaseFee ?? (bp ? Number(bp.base_fee) : rates.base);
+      const includedHours = bp ? Number(bp.included_hours) : rates.includedHours;
+      const isClosed = bp ? !!(bp as any).is_closed : periodIsClosed;
+
+      // For closed periods with an invoice, use snapshotted values
+      const invoice = bp ? invoices.find((inv: any) => inv.member_id === m.id && inv.billing_period_id === bp.id) : null;
+
+      let usedHours: number;
+      let overageHours: number;
+      let overageCharge: number;
+
+      if (isClosed && invoice) {
+        // Use snapshotted values from invoice
+        usedHours = Number(invoice.used_hours);
+        overageHours = Number(invoice.overage_hours);
+        overageCharge = Number(invoice.overage_charge);
+      } else {
+        // Live calculation from bookings
+        usedHours = memberHoursUsed.get(m.id) ?? 0;
+        overageHours = Math.max(0, usedHours - includedHours);
+        overageCharge = overageHours * rates.overageRate;
+      }
+
+      const storage = storageAllocations.find((s) => s.member_id === m.id);
       const includedPallets = storage?.included_pallets ?? 0;
       const paidPallets = storage?.paid_pallets ?? 0;
       const palletRate = Number(storage?.rate_per_add_pallet ?? 0);
@@ -220,8 +278,6 @@ export default function CoRoastBilling() {
       const gst = subtotal * GST_RATE;
       const grandTotal = subtotal + gst;
 
-      const invoice = bp ? invoices.find((inv: any) => inv.member_id === m.id && inv.billing_period_id === bp.id) : null;
-
       const prevUsed = prevMemberHoursUsed.get(m.id) ?? 0;
       const upgradeRecommended = tier === 'ACCESS' && usedHours > 6 && prevUsed > 6;
 
@@ -230,6 +286,8 @@ export default function CoRoastBilling() {
         tier,
         bp,
         baseFee,
+        proratedBaseFee,
+        prorationNote,
         includedHours,
         usedHours,
         overageHours,
@@ -244,10 +302,11 @@ export default function CoRoastBilling() {
         grandTotal,
         invoice,
         upgradeRecommended,
+        isClosed,
         contactEmail: (m as any).contact_email ?? null,
       };
     });
-  }, [members, billingPeriods, memberHoursUsed, prevMemberHoursUsed, storageAllocations, invoices]);
+  }, [members, billingPeriods, memberHoursUsed, prevMemberHoursUsed, storageAllocations, invoices, periodIsClosed]);
 
   const totals = useMemo(() => {
     let baseFees = 0, overageCharges = 0, storageCharges = 0, subtotal = 0, gst = 0, grandTotal = 0;
@@ -263,7 +322,7 @@ export default function CoRoastBilling() {
   }, [memberBillingData]);
 
   const markReadyMutation = useMutation({
-    mutationFn: async (data: typeof memberBillingData[number]) => {
+    mutationFn: async (data: (typeof memberBillingData)[number]) => {
       if (!data.bp) throw new Error('No billing period found for this member');
       const { error } = await supabase.from('coroast_invoices').insert({
         member_id: data.member.id,
@@ -286,29 +345,34 @@ export default function CoRoastBilling() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success('Marked as ready to invoice');
+      toast.success('Invoice recorded');
       refetchInvoices();
       setModalData(null);
     },
     onError: (err: Error) => toast.error(err.message),
   });
 
-  const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = (n: number) =>
+    n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Co-Roasting Billing</h1>
-          <p className="text-sm text-muted-foreground">Monthly billing summary for all co-roasting members</p>
+          <p className="text-sm text-muted-foreground">
+            Monthly billing summary for all co-roasting members
+          </p>
         </div>
         <Select value={selectedMonth} onValueChange={setSelectedMonth}>
           <SelectTrigger className="w-[200px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {monthOptions.map(o => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            {monthOptions.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -323,15 +387,26 @@ export default function CoRoastBilling() {
       )}
 
       <div className="space-y-4">
-        {memberBillingData.map(d => (
+        {memberBillingData.map((d) => (
           <Card key={d.member.id}>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-lg">{d.member.business_name}</CardTitle>
-                  <Badge variant="secondary" className="text-xs">{d.tier}</Badge>
+                  <Badge variant="secondary" className="text-xs">
+                    {d.tier}
+                  </Badge>
+                  {d.isClosed && (
+                    <Badge variant="outline" className="text-xs gap-1">
+                      <Lock className="h-3 w-3" />
+                      Closed
+                    </Badge>
+                  )}
                   {d.upgradeRecommended && (
-                    <Badge variant="outline" className="text-xs border-amber-400 text-amber-600 bg-amber-50">
+                    <Badge
+                      variant="outline"
+                      className="text-xs border-amber-400 text-amber-600 bg-amber-50"
+                    >
                       <TrendingUp className="h-3 w-3 mr-1" />
                       Upgrade Recommended
                     </Badge>
@@ -339,17 +414,13 @@ export default function CoRoastBilling() {
                 </div>
                 <div className="flex items-center gap-2">
                   {d.invoice ? (
-                    <Badge variant="secondary" className="text-xs">
+                    <Badge className="text-xs bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-100">
                       <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Ready to Invoice ✓ {format(new Date(d.invoice.created_at), 'MMM d')}
+                      Invoice Recorded {format(new Date(d.invoice.created_at), 'MMM d, yyyy')}
                     </Badge>
                   ) : (
-                    <Button
-                      size="sm"
-                      onClick={() => setModalData(d)}
-                      disabled={!d.bp}
-                    >
-                      Mark as Ready to Invoice
+                    <Button size="sm" onClick={() => setModalData(d)} disabled={!d.bp}>
+                      Record Invoice
                     </Button>
                   )}
                 </div>
@@ -359,14 +430,19 @@ export default function CoRoastBilling() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground text-xs">Base Fee</p>
-                  <p className="font-semibold">${d.baseFee.toLocaleString()}</p>
+                  <p className="font-semibold">${fmt(d.baseFee)}</p>
+                  {d.prorationNote && (
+                    <p className="text-xs text-muted-foreground mt-0.5 italic">{d.prorationNote}</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-muted-foreground text-xs">Hours Used / Included</p>
                   <p className="font-semibold">
                     {d.usedHours.toFixed(1)}h / {d.includedHours}h
                     {d.overageHours > 0 && (
-                      <span className="text-destructive ml-1">(+{d.overageHours.toFixed(1)}h overage)</span>
+                      <span className="text-destructive ml-1">
+                        (+{d.overageHours.toFixed(1)}h overage)
+                      </span>
                     )}
                   </p>
                 </div>
@@ -375,7 +451,9 @@ export default function CoRoastBilling() {
                   <p className="font-semibold">
                     {d.overageCharge > 0 ? `$${d.overageCharge.toFixed(2)}` : '—'}
                     {d.overageCharge > 0 && (
-                      <span className="text-muted-foreground text-xs ml-1">@ ${d.overageRate}/hr</span>
+                      <span className="text-muted-foreground text-xs ml-1">
+                        @ ${d.overageRate}/hr
+                      </span>
                     )}
                   </p>
                 </div>
@@ -386,10 +464,14 @@ export default function CoRoastBilling() {
                       <>
                         {d.includedPallets} incl + {d.paidPallets} paid
                         {d.storageCharge > 0 && (
-                          <span className="text-destructive ml-1">(${d.storageCharge.toFixed(2)})</span>
+                          <span className="text-destructive ml-1">
+                            (${d.storageCharge.toFixed(2)})
+                          </span>
                         )}
                       </>
-                    ) : '—'}
+                    ) : (
+                      '—'
+                    )}
                   </p>
                 </div>
               </div>
@@ -424,7 +506,7 @@ export default function CoRoastBilling() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
               <div>
                 <p className="text-muted-foreground text-xs">Total Base Fees</p>
-                <p className="font-bold text-lg">${totals.baseFees.toLocaleString()}</p>
+                <p className="font-bold text-lg">${fmt(totals.baseFees)}</p>
               </div>
               <div>
                 <p className="text-muted-foreground text-xs">Total Overage Charges</p>
