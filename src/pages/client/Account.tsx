@@ -8,19 +8,19 @@ export default function Account() {
   const { authUser } = useAuth();
 
   const { data: client, isLoading } = useQuery({
-    queryKey: ['client-account', authUser?.clientId],
+    queryKey: ['client-account', authUser?.accountId],
     queryFn: async () => {
-      if (!authUser?.clientId) return null;
+      if (!authUser?.accountId) return null;
       const { data, error } = await supabase
-        .from('clients')
-        .select('name, billing_contact_name, billing_email, shipping_address')
-        .eq('id', authUser.clientId)
+        .from('accounts')
+        .select('account_name, billing_contact_name, billing_email, billing_address')
+        .eq('id', authUser.accountId)
         .maybeSingle();
 
       if (error) throw error;
       return data;
     },
-    enabled: !!authUser?.clientId,
+    enabled: !!authUser?.accountId,
   });
 
   return (
@@ -46,12 +46,12 @@ export default function Account() {
               <p className="text-muted-foreground">Loading…</p>
             ) : client ? (
               <>
-                <div><strong>Company:</strong> {client.name}</div>
+                <div><strong>Company:</strong> {client.account_name}</div>
                 <div><strong>Billing Contact:</strong> {client.billing_contact_name || '—'}</div>
                 <div><strong>Billing Email:</strong> {client.billing_email || '—'}</div>
                 <div>
-                  <strong>Shipping Address:</strong>
-                  <p className="text-muted-foreground whitespace-pre-wrap">{client.shipping_address || '—'}</p>
+                  <strong>Billing Address:</strong>
+                  <p className="text-muted-foreground whitespace-pre-wrap">{client.billing_address || '—'}</p>
                 </div>
               </>
             ) : (

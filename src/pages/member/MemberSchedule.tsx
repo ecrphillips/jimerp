@@ -71,18 +71,18 @@ export default function MemberSchedule() {
 
   // Fetch member record linked to this client user
   const { data: member } = useQuery({
-    queryKey: ['my-coroast-member', authUser?.clientId],
+    queryKey: ['my-coroast-member', authUser?.accountId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_members')
         .select('id, business_name, tier, is_active, joined_date')
-        .eq('client_id', authUser!.clientId!)
+        .eq('client_id', authUser!.accountId!)
         .eq('is_active', true)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
-    enabled: !!authUser?.clientId,
+    enabled: !!authUser?.accountId,
   });
 
   const memberId = member?.id;

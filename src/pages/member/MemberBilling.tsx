@@ -17,18 +17,18 @@ export default function MemberBilling() {
   const { authUser } = useAuth();
 
   const { data: member } = useQuery({
-    queryKey: ['my-coroast-member-billing', authUser?.clientId],
+    queryKey: ['my-coroast-member-billing', authUser?.accountId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_members')
         .select('id, business_name, tier, joined_date')
-        .eq('client_id', authUser!.clientId!)
+        .eq('client_id', authUser!.accountId!)
         .eq('is_active', true)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
-    enabled: !!authUser?.clientId,
+    enabled: !!authUser?.accountId,
   });
 
   const memberId = member?.id;

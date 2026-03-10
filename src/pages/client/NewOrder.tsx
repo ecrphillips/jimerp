@@ -82,11 +82,11 @@ export default function NewOrder() {
     multiplier: number;
   } | null>(null);
 
-  const { constraints, isLoading: constraintsLoading } = useClientOrderingConstraints(authUser?.clientId);
+  const { constraints, isLoading: constraintsLoading } = useClientOrderingConstraints(authUser?.accountId);
 
   // Fetch allowed products with packaging type join
   const { data: products, isLoading: productsLoading } = useQuery({
-    queryKey: ['client-products', authUser?.clientId, constraints.allowedProductIds],
+    queryKey: ['client-products', authUser?.accountId, constraints.allowedProductIds],
     queryFn: async () => {
       let query = supabase
         .from('products')
@@ -211,13 +211,13 @@ export default function NewOrder() {
   }, [lineItems]);
 
   const checkUnusualOrderSize = async (): Promise<boolean> => {
-    if (!authUser?.clientId) return false;
+    if (!authUser?.accountId) return false;
 
     try {
       const { data: lastOrder } = await supabase
         .from('orders')
         .select('id, order_line_items(product_id, quantity_units)')
-        .eq('client_id', authUser.clientId)
+        .eq('client_id', authUser.accountId)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'])
         .order('created_at', { ascending: false })
         .limit(1)
@@ -226,7 +226,7 @@ export default function NewOrder() {
       const { data: recentOrders } = await supabase
         .from('orders')
         .select('id')
-        .eq('client_id', authUser.clientId)
+        .eq('client_id', authUser.accountId)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'])
         .order('created_at', { ascending: false })
         .limit(5);
@@ -332,8 +332,8 @@ export default function NewOrder() {
   };
 
   const handleSubmitClick = async () => {
-    if (!authUser?.clientId) {
-      toast.error('No client linked to your account');
+    if (!authUser?.accountId) {
+      toast.error('No account linked to your user');
       return;
     }
     if (lineItems.length === 0) {
@@ -368,7 +368,7 @@ export default function NewOrder() {
   };
 
   const submitOrder = async () => {
-    if (!authUser?.clientId) return;
+    if (!authUser?.accountId) return;
 
     setSubmitting(true);
     try {
@@ -376,7 +376,7 @@ export default function NewOrder() {
         'validate-order-constraints',
         {
           body: {
-            client_id: authUser.clientId,
+            client_id: authUser.accountId,
             line_items: lineItems.map((li) => ({
               product_id: li.productId,
               quantity_units: li.quantity,
@@ -403,7 +403,7 @@ export default function NewOrder() {
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
-          client_id: authUser.clientId,
+          client_id: authUser.accountId,
           location_id: selectedLocationId || null,
           order_number: '',
           status: 'SUBMITTED',
@@ -822,9 +822,9 @@ export default function NewOrder() {
               <CardTitle>Order Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {authUser?.clientId && (
+              {authUser?.accountId && (
                 <LocationSelect
-                  clientId={authUser.clientId}
+                  clientId={authUser.accountId}
                   value={selectedLocationId}
                   onChange={setSelectedLocationId}
                   required
