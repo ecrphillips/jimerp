@@ -12,7 +12,8 @@ import { toast } from 'sonner';
 import { TIER_RATES, timeToMinutes } from '@/components/bookings/bookingUtils';
 import QuickBooksInstructionsModal from '@/components/coroast/QuickBooksInstructionsModal';
 
-const BILLABLE_STATUSES = ['CONFIRMED', 'COMPLETED', 'NO_SHOW'];
+const BILLABLE_STATUSES = ['CONFIRMED', 'COMPLETED', 'NO_SHOW'] as const;
+type BillableStatus = typeof BILLABLE_STATUSES[number];
 const GST_RATE = 0.05;
 
 function buildMonthOptions() {
@@ -108,27 +109,33 @@ export default function CoRoastBilling() {
     createMissing();
   }, [members, billingPeriods, selectedMonth, refetchPeriods]);
 
+  // Query bookings directly with billable status filter for current month
   const { data: bookings = [] } = useQuery({
-    queryKey: ['coroast-billing-bookings', selectedMonth],
+    queryKey: ['coroast-billing-bookings', periodStart, periodEnd],
     queryFn: async () => {
+      console.log('[Billing] Querying bookings for period:', periodStart, 'to', periodEnd);
       const { data, error } = await supabase
         .from('coroast_bookings')
         .select('id, member_id, booking_date, start_time, end_time, duration_hours, status')
         .gte('booking_date', periodStart)
-        .lte('booking_date', periodEnd);
+        .lte('booking_date', periodEnd)
+        .in('status', BILLABLE_STATUSES);
       if (error) throw error;
+      console.log('[Billing] Bookings returned:', data?.length, 'rows', data?.map(b => ({ member: b.member_id, date: b.booking_date, hours: b.duration_hours, status: b.status })));
       return data;
     },
   });
 
+  // Query bookings for previous month (for upgrade recommendation)
   const { data: prevBookings = [] } = useQuery({
-    queryKey: ['coroast-billing-bookings-prev', prevMonth],
+    queryKey: ['coroast-billing-bookings-prev', prevPeriodStart, prevPeriodEnd],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_bookings')
         .select('id, member_id, start_time, end_time, duration_hours, status')
         .gte('booking_date', prevPeriodStart)
-        .lte('booking_date', prevPeriodEnd);
+        .lte('booking_date', prevPeriodEnd)
+        .in('status', BILLABLE_STATUSES);
       if (error) throw error;
       return data;
     },
@@ -164,25 +171,30 @@ export default function CoRoastBilling() {
     enabled: billingPeriods.length > 0,
   });
 
+  // Calculate hours from duration_hours, falling back to time diff
   function calcBookingHours(bk: { duration_hours: number | null; start_time: string; end_time: string }) {
-    if (bk.duration_hours != null && Number(bk.duration_hours) > 0) return Number(bk.duration_hours);
-    return (timeToMinutes(bk.end_time) - timeToMinutes(bk.start_time)) / 60;
+    const dh = Number(bk.duration_hours);
+    if (!isNaN(dh) && dh > 0) return dh;
+    const diff = (timeToMinutes(bk.end_time) - timeToMinutes(bk.start_time)) / 60;
+    return diff > 0 ? diff : 0;
   }
 
+  // Sum hours per member from bookings (already filtered to billable statuses)
   const memberHoursUsed = useMemo(() => {
     const map = new Map<string, number>();
     for (const bk of bookings) {
-      if (!BILLABLE_STATUSES.includes(bk.status)) continue;
-      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + calcBookingHours(bk));
+      const hours = calcBookingHours(bk);
+      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + hours);
     }
+    console.log('[Billing] memberHoursUsed:', Object.fromEntries(map));
     return map;
   }, [bookings]);
 
   const prevMemberHoursUsed = useMemo(() => {
     const map = new Map<string, number>();
     for (const bk of prevBookings) {
-      if (!BILLABLE_STATUSES.includes(bk.status)) continue;
-      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + calcBookingHours(bk as any));
+      const hours = calcBookingHours(bk as any);
+      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + hours);
     }
     return map;
   }, [prevBookings]);
