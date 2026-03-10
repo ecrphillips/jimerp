@@ -686,7 +686,7 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
       const { data, error } = await supabase
         .from('coroast_member_checklist')
         .select('*')
-        .eq('member_id', account.id)
+        .eq('account_id', account.id)
         .order('item_number');
       if (error) throw error;
       return data;
@@ -704,11 +704,11 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
         if (error) throw error;
       } else {
         const { error } = await supabase.from('coroast_member_checklist').insert({
-          member_id: account.id,
+          account_id: account.id,
           item_number: itemNumber,
           completed,
           completed_date: completed ? new Date().toISOString().split('T')[0] : null,
-        });
+        } as any);
         if (error) throw error;
       }
 
