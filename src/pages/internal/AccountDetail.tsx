@@ -686,7 +686,7 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
       const { data, error } = await supabase
         .from('coroast_member_checklist')
         .select('*')
-        .eq('member_id', account.id)
+        .eq('account_id', account.id)
         .order('item_number');
       if (error) throw error;
       return data;
