@@ -333,14 +333,6 @@ export default function ProspectDetail() {
   if (!prospect) return <div className="page-container"><p className="text-muted-foreground">Prospect not found.</p></div>;
 
   const showConvert = !prospect.converted && prospect.stream !== 'INDUSTRY_CONTACT';
-  const canConvertToMember = ['CO_ROAST', 'BOTH'].includes(prospect.stream) && !prospect.converted_to_member_id;
-  const canConvertToClient = ['CONTRACT', 'BOTH'].includes(prospect.stream) && !prospect.converted_to_client_id;
-
-  return (
-    <div className="page-container space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/prospects')}>
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back
         </Button>
