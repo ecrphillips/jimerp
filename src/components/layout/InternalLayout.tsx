@@ -154,6 +154,11 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 </NavLink>
               </li>
 
+              {/* Accounts */}
+              <NavGroup label="Accounts" icon={Building2} open={accountsOpen} onOpenChange={setAccountsOpen}>
+                <NavItem to="/accounts" icon={Building2} label="Accounts" onClick={closeSidebar} />
+              </NavGroup>
+
               {/* Contract Manufacturing */}
               <NavGroup label="Manufacturing" icon={Factory} open={cmOpen} onOpenChange={setCmOpen}>
                 <NavItem to="/clients" icon={Users} label="Clients" onClick={closeSidebar} />

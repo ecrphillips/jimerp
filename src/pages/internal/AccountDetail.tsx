@@ -674,7 +674,7 @@ const CHECKLIST_ITEMS = [
 ];
 
 const CHECKLIST_TOOLTIPS: Record<number, string> = {
-  1: 'PSA: our member agreement says $2M but we've updated our standard to $5M.',
+  1: 'PSA: our member agreement says $2M but we have updated our standard to $5M.',
 };
 
 function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void }) {
