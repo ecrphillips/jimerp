@@ -86,7 +86,7 @@ export default function NewOrder() {
 
   // Fetch allowed products with packaging type join
   const { data: products, isLoading: productsLoading } = useQuery({
-    queryKey: ['client-products', authUser?.clientId, constraints.allowedProductIds],
+    queryKey: ['client-products', authUser?.accountId, constraints.allowedProductIds],
     queryFn: async () => {
       let query = supabase
         .from('products')
