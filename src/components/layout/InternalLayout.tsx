@@ -152,7 +152,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
               </NavGroup>
 
               {/* Co-Roasting */}
-              <NavGroup label="Co-Roasting" open={coroastOpen} onOpenChange={setCoroastOpen}>
+              <NavGroup label="Co-Roasting" icon={Handshake} open={coroastOpen} onOpenChange={setCoroastOpen}>
                 <NavItem to="/co-roasting/members" icon={Users} label="Members" onClick={closeSidebar} />
                 <NavItem to="/co-roasting/bookings" icon={Calendar} label="Booking Calendar" onClick={closeSidebar} />
                 <NavItem to="/co-roasting/loring-schedule" icon={Calendar} label="Loring Schedule" onClick={closeSidebar} />
