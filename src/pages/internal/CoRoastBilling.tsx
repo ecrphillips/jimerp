@@ -197,6 +197,44 @@ export default function CoRoastBilling() {
     enabled: billingPeriods.length > 0,
   });
 
+  // Auto-create storage allocations for members missing one for this period
+  useEffect(() => {
+    if (billingPeriods.length === 0 || members.length === 0) return;
+
+    const membersWithoutStorage = members.filter((m) => {
+      const bp = billingPeriods.find((bp) => bp.member_id === m.id);
+      if (!bp) return false;
+      return !storageAllocations.some((s) => s.member_id === m.id && s.billing_period_id === bp.id);
+    });
+
+    if (membersWithoutStorage.length === 0) return;
+
+    const createMissingStorage = async () => {
+      const inserts = membersWithoutStorage.map((m) => {
+        const tier = m.tier ?? 'ACCESS';
+        const sRates = STORAGE_RATES[tier] ?? STORAGE_RATES.ACCESS;
+        const bp = billingPeriods.find((bp) => bp.member_id === m.id)!;
+        return {
+          member_id: m.id,
+          billing_period_id: bp.id,
+          included_pallets: sRates.includedPallets,
+          paid_pallets: 0,
+          pallets_in_use: 0,
+          rate_per_add_pallet: sRates.ratePerPallet,
+        };
+      });
+
+      const { error } = await supabase.from('coroast_storage_allocations').insert(inserts);
+      if (error) {
+        console.error('Failed to auto-create storage allocations:', error);
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ['coroast-billing-storage', selectedMonth] });
+    };
+
+    createMissingStorage();
+  }, [billingPeriods, members, storageAllocations, selectedMonth]);
+
   const { data: invoices = [], refetch: refetchInvoices } = useQuery({
     queryKey: ['coroast-invoices', selectedMonth],
     queryFn: async () => {
