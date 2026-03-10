@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
 
     // Parse request
     const body: InviteRequest = await req.json();
-    const { email, role, client_id, name, generate_link_only = false } = body;
+    const { email, role, client_id, coroast_member_id, name, generate_link_only = false } = body;
 
     console.log('[invite-user] Invite requested for:', email, 'role:', role, 'generate_link_only:', generate_link_only);
 
