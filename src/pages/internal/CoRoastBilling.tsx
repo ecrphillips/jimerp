@@ -32,6 +32,7 @@ export default function CoRoastBilling() {
   const monthOptions = useMemo(() => buildMonthOptions(), []);
   const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
   const [modalData, setModalData] = useState<any>(null);
+  const [undoInvoiceId, setUndoInvoiceId] = useState<string | null>(null);
 
   const [selYear, selMonthNum] = selectedMonth.split('-').map(Number);
   const selectedDate = new Date(selYear, selMonthNum - 1, 1);
