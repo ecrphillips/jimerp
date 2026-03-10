@@ -162,7 +162,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
 
               {/* Contract Manufacturing */}
               <NavGroup label="Manufacturing" icon={Factory} open={cmOpen} onOpenChange={setCmOpen}>
-                <NavItem to="/clients" icon={Users} label="Clients" onClick={closeSidebar} />
+                
                 <NavItem to="/orders" icon={ShoppingCart} label="Orders" onClick={closeSidebar} />
                 <NavItem to="/production" icon={Flame} label="Run Sheet" onClick={closeSidebar} end />
                 <NavItem to="/inventory" icon={Warehouse} label="Inventory Levels" onClick={closeSidebar} end />
