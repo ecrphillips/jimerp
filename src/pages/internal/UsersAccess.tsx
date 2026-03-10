@@ -655,7 +655,7 @@ export default function UsersAccess() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="invite-member">Link to Co-Roast Member</Label>
-                  <Select value={inviteMemberId} onValueChange={setInviteMemberId}>
+                  <Select value={inviteMemberId || 'none'} onValueChange={(v) => setInviteMemberId(v === 'none' ? '' : v)}>
                     <SelectTrigger id="invite-member">
                       <SelectValue placeholder="None (standard client)" />
                     </SelectTrigger>
