@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { InternalLayout } from "@/components/layout/InternalLayout";
 import { ClientLayout } from "@/components/layout/ClientLayout";
+import { MemberPortalLayout } from "@/components/layout/MemberPortalLayout";
 
 // Pages
 import Auth from "@/pages/Auth";
@@ -38,6 +39,9 @@ import Portal from "@/pages/client/Portal";
 import NewOrder from "@/pages/client/NewOrder";
 import OrderHistory from "@/pages/client/OrderHistory";
 import Account from "@/pages/client/Account";
+import MemberSchedule from "@/pages/member/MemberSchedule";
+import MemberBilling from "@/pages/member/MemberBilling";
+import MemberAccount from "@/pages/member/MemberAccount";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
