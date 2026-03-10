@@ -13,7 +13,6 @@ import {
   Coffee,
   Menu,
   X,
-  Settings,
   ChevronDown,
   ChevronRight,
   Flame,
@@ -22,11 +21,8 @@ import {
   Wrench,
   Users2,
   UserPlus,
-  Handshake,
   Calendar,
   Receipt,
-  Factory,
-  Link
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -35,16 +31,6 @@ interface InternalLayoutProps {
   children: React.ReactNode;
 }
 
-// Production sub-items
-const productionSubItems = [
-  { to: '/production', label: 'Run Sheet', icon: Flame, match: '/production' },
-];
-
-// Inventory sub-items
-const inventorySubItems = [
-  { to: '/inventory', label: 'Levels', icon: Warehouse },
-  { to: '/inventory/ledger', label: 'Ledger', icon: BookOpen },
-];
 
 interface NavGroupProps {
   label: string;
@@ -58,7 +44,7 @@ function NavGroup({ label, open, onOpenChange, children }: NavGroupProps) {
     <li>
       <Collapsible open={open} onOpenChange={onOpenChange}>
         <CollapsibleTrigger asChild>
-          <button className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground/80">
+          <button className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground transition-colors hover:text-sidebar-foreground/80">
             {label}
             {open ? (
               <ChevronDown className="ml-auto h-3 w-3" />
@@ -67,7 +53,7 @@ function NavGroup({ label, open, onOpenChange, children }: NavGroupProps) {
             )}
           </button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="mt-0.5 space-y-0.5">
+        <CollapsibleContent className="mt-0.5 space-y-0.5 pl-3">
           {children}
         </CollapsibleContent>
       </Collapsible>
@@ -100,55 +86,6 @@ function NavItem({ to, icon: Icon, label, onClick, end }: NavItemProps) {
   );
 }
 
-interface NestedNavGroupProps {
-  icon: React.ElementType;
-  label: string;
-  isRoute: boolean;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  items: { to: string; label: string; icon: React.ElementType; end?: boolean }[];
-  onItemClick?: () => void;
-}
-
-function NestedNavGroup({ icon: Icon, label, isRoute, open, onOpenChange, items, onItemClick }: NestedNavGroupProps) {
-  return (
-    <Collapsible open={open} onOpenChange={onOpenChange}>
-      <CollapsibleTrigger asChild>
-        <button
-          className={cn(
-            "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
-            isRoute ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/85"
-          )}
-        >
-          <Icon className="h-5 w-5" />
-          {label}
-          {open ? (
-            <ChevronDown className="ml-auto h-4 w-4" />
-          ) : (
-            <ChevronRight className="ml-auto h-4 w-4" />
-          )}
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-1 space-y-1 pl-4">
-        {items.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            onClick={onItemClick}
-            className={({ isActive }) => cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
-              isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/85"
-            )}
-          >
-            <item.icon className="h-4 w-4" />
-            {item.label}
-          </NavLink>
-        ))}
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
 
 export function InternalLayout({ children }: InternalLayoutProps) {
   const { authUser, signOut } = useAuth();
@@ -164,17 +101,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
   // Group open states
   const [cmOpen, setCmOpen] = React.useState(true);
   const [coroastOpen, setCoroastOpen] = React.useState(true);
-  const [relOpen, setRelOpen] = React.useState(true);
   const [adminOpen, setAdminOpen] = React.useState(true);
-
-  // Nested dropdown states
-  const isProductionRoute = location.pathname.startsWith('/production');
-  const isInventoryRoute = location.pathname.startsWith('/inventory');
-  const [productionOpen, setProductionOpen] = React.useState(isProductionRoute);
-  const [inventoryOpen, setInventoryOpen] = React.useState(isInventoryRoute);
-
-  React.useEffect(() => { if (isProductionRoute) setProductionOpen(true); }, [isProductionRoute]);
-  React.useEffect(() => { if (isInventoryRoute) setInventoryOpen(true); }, [isInventoryRoute]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -214,24 +141,8 @@ export function InternalLayout({ children }: InternalLayoutProps) {
               <NavGroup label="Contract Manufacturing" open={cmOpen} onOpenChange={setCmOpen}>
                 <NavItem to="/clients" icon={Users} label="Clients" onClick={closeSidebar} />
                 <NavItem to="/orders" icon={ShoppingCart} label="Orders" onClick={closeSidebar} />
-                <NestedNavGroup
-                  icon={Flame}
-                  label="Production"
-                  isRoute={isProductionRoute}
-                  open={productionOpen}
-                  onOpenChange={setProductionOpen}
-                  items={productionSubItems.map(i => ({ ...i, end: i.to === '/production' }))}
-                  onItemClick={closeSidebar}
-                />
-                <NestedNavGroup
-                  icon={Warehouse}
-                  label="Inventory"
-                  isRoute={isInventoryRoute}
-                  open={inventoryOpen}
-                  onOpenChange={setInventoryOpen}
-                  items={inventorySubItems.map(i => ({ ...i, end: i.to === '/inventory' }))}
-                  onItemClick={closeSidebar}
-                />
+                <NavItem to="/production" icon={Flame} label="Run Sheet" onClick={closeSidebar} end />
+                <NavItem to="/inventory" icon={Warehouse} label="Inventory Levels" onClick={closeSidebar} end />
                 <NavItem to="/products" icon={Package} label="Products" onClick={closeSidebar} />
               </NavGroup>
 
@@ -243,16 +154,17 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 <NavItem to="/co-roasting/billing" icon={Receipt} label="Billing" onClick={closeSidebar} />
               </NavGroup>
 
-              {/* Relationships */}
-              <NavGroup label="Relationships" open={relOpen} onOpenChange={setRelOpen}>
+              {/* Prospects — standalone */}
+              <li>
                 <NavItem to="/prospects" icon={UserPlus} label="Prospects" onClick={closeSidebar} />
-              </NavGroup>
+              </li>
 
               {/* Admin — ADMIN only */}
               {authUser?.role === 'ADMIN' && (
                 <NavGroup label="Admin" open={adminOpen} onOpenChange={setAdminOpen}>
                   <NavItem to="/admin/users" icon={Users2} label="Users & Access" onClick={closeSidebar} />
                   <NavItem to="/admin-tools" icon={Wrench} label="Admin Tools" onClick={closeSidebar} />
+                  <NavItem to="/inventory/ledger" icon={BookOpen} label="Ledger" onClick={closeSidebar} />
                 </NavGroup>
               )}
             </ul>
