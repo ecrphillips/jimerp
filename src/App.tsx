@@ -210,6 +210,23 @@ const App = () => (
               </ProtectedRoute>
             } />
 
+            {/* Member Portal (CLIENT users linked to coroast_members) */}
+            <Route path="/member-portal" element={
+              <ProtectedRoute allowedRoles={['CLIENT']}>
+                <MemberPortalLayout><MemberSchedule /></MemberPortalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/member-portal/billing" element={
+              <ProtectedRoute allowedRoles={['CLIENT']}>
+                <MemberPortalLayout><MemberBilling /></MemberPortalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/member-portal/account" element={
+              <ProtectedRoute allowedRoles={['CLIENT']}>
+                <MemberPortalLayout><MemberAccount /></MemberPortalLayout>
+              </ProtectedRoute>
+            } />
+
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
