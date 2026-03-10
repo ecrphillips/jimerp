@@ -90,55 +90,6 @@ function NavItem({ to, icon: Icon, label, onClick, end }: NavItemProps) {
   );
 }
 
-interface NestedNavGroupProps {
-  icon: React.ElementType;
-  label: string;
-  isRoute: boolean;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  items: { to: string; label: string; icon: React.ElementType; end?: boolean }[];
-  onItemClick?: () => void;
-}
-
-function NestedNavGroup({ icon: Icon, label, isRoute, open, onOpenChange, items, onItemClick }: NestedNavGroupProps) {
-  return (
-    <Collapsible open={open} onOpenChange={onOpenChange}>
-      <CollapsibleTrigger asChild>
-        <button
-          className={cn(
-            "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
-            isRoute ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/85"
-          )}
-        >
-          <Icon className="h-5 w-5" />
-          {label}
-          {open ? (
-            <ChevronDown className="ml-auto h-4 w-4" />
-          ) : (
-            <ChevronRight className="ml-auto h-4 w-4" />
-          )}
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-1 space-y-1 pl-4">
-        {items.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            onClick={onItemClick}
-            className={({ isActive }) => cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
-              isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/85"
-            )}
-          >
-            <item.icon className="h-4 w-4" />
-            {item.label}
-          </NavLink>
-        ))}
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
 
 export function InternalLayout({ children }: InternalLayoutProps) {
   const { authUser, signOut } = useAuth();
