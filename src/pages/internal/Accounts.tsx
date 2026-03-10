@@ -118,7 +118,7 @@ export default function Accounts() {
 
       const { data, error } = await supabase
         .from('accounts')
-        .insert(payload)
+        .insert(payload as any)
         .select('id')
         .single();
       if (error) throw error;
