@@ -403,7 +403,7 @@ export default function NewOrder() {
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
-          client_id: authUser.clientId,
+          client_id: authUser.accountId,
           location_id: selectedLocationId || null,
           order_number: '',
           status: 'SUBMITTED',
