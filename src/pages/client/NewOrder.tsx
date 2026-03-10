@@ -217,7 +217,7 @@ export default function NewOrder() {
       const { data: lastOrder } = await supabase
         .from('orders')
         .select('id, order_line_items(product_id, quantity_units)')
-        .eq('client_id', authUser.clientId)
+        .eq('client_id', authUser.accountId)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'])
         .order('created_at', { ascending: false })
         .limit(1)
