@@ -108,27 +108,33 @@ export default function CoRoastBilling() {
     createMissing();
   }, [members, billingPeriods, selectedMonth, refetchPeriods]);
 
+  // Query bookings directly with billable status filter for current month
   const { data: bookings = [] } = useQuery({
-    queryKey: ['coroast-billing-bookings', selectedMonth],
+    queryKey: ['coroast-billing-bookings', periodStart, periodEnd],
     queryFn: async () => {
+      console.log('[Billing] Querying bookings for period:', periodStart, 'to', periodEnd);
       const { data, error } = await supabase
         .from('coroast_bookings')
         .select('id, member_id, booking_date, start_time, end_time, duration_hours, status')
         .gte('booking_date', periodStart)
-        .lte('booking_date', periodEnd);
+        .lte('booking_date', periodEnd)
+        .in('status', BILLABLE_STATUSES);
       if (error) throw error;
+      console.log('[Billing] Bookings returned:', data?.length, 'rows', data?.map(b => ({ member: b.member_id, date: b.booking_date, hours: b.duration_hours, status: b.status })));
       return data;
     },
   });
 
+  // Query bookings for previous month (for upgrade recommendation)
   const { data: prevBookings = [] } = useQuery({
-    queryKey: ['coroast-billing-bookings-prev', prevMonth],
+    queryKey: ['coroast-billing-bookings-prev', prevPeriodStart, prevPeriodEnd],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_bookings')
         .select('id, member_id, start_time, end_time, duration_hours, status')
         .gte('booking_date', prevPeriodStart)
-        .lte('booking_date', prevPeriodEnd);
+        .lte('booking_date', prevPeriodEnd)
+        .in('status', BILLABLE_STATUSES);
       if (error) throw error;
       return data;
     },
