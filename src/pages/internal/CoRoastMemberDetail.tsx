@@ -738,3 +738,68 @@ function StatItem({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+function InvoiceHistorySection({ memberId }: { memberId: string }) {
+  const { data: invoiceHistory, isLoading } = useQuery({
+    queryKey: ['coroast-invoice-history', memberId],
+    queryFn: async () => {
+      const { data: invoices, error } = await supabase
+        .from('coroast_invoices')
+        .select('id, period_start, period_end, total_amount, created_at, created_by')
+        .eq('member_id', memberId)
+        .order('period_start', { ascending: false });
+      if (error) throw error;
+
+      // Resolve creator names
+      const creatorIds = [...new Set((invoices ?? []).map((i) => i.created_by).filter(Boolean))] as string[];
+      let profileMap: Record<string, string> = {};
+      if (creatorIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('user_id, name')
+          .in('user_id', creatorIds);
+        if (profiles) {
+          profileMap = Object.fromEntries(profiles.map((p) => [p.user_id, p.name]));
+        }
+      }
+
+      return (invoices ?? []).map((inv) => ({
+        ...inv,
+        creator_name: inv.created_by ? profileMap[inv.created_by] || 'Unknown' : 'System',
+      }));
+    },
+    enabled: !!memberId,
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Invoice History</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : !invoiceHistory || invoiceHistory.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">No invoices recorded yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {invoiceHistory.map((inv) => {
+              const periodLabel = format(new Date(inv.period_start + 'T00:00:00'), 'MMMM yyyy');
+              return (
+                <div key={inv.id} className="flex items-center justify-between border-b last:border-0 py-2">
+                  <div>
+                    <p className="text-sm font-medium">{periodLabel}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Recorded {format(new Date(inv.created_at), 'MMM d, yyyy')} by {inv.creator_name}
+                    </p>
+                  </div>
+                  <p className="text-sm font-semibold">${Number(inv.total_amount).toFixed(2)}</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
