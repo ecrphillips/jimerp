@@ -88,8 +88,8 @@ export default function QuickBooksInstructionsModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={() => { /* prevent close on overlay/escape — force explicit choice */ }}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>QuickBooks Invoice Instructions</DialogTitle>
         </DialogHeader>
@@ -188,10 +188,10 @@ export default function QuickBooksInstructionsModal({
 
         <DialogFooter className="gap-2 sm:gap-0 mt-4">
           <Button variant="outline" onClick={onClose} disabled={isPending}>
-            Go Back
+            Cancel
           </Button>
           <Button onClick={onConfirm} disabled={isPending}>
-            {isPending ? 'Saving…' : 'Confirm — Mark as Ready to Invoice'}
+            {isPending ? 'Saving…' : 'Confirm — Invoice Entered in QuickBooks'}
           </Button>
         </DialogFooter>
       </DialogContent>

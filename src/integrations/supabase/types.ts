@@ -237,10 +237,13 @@ export type Database = {
           exceeded_6hrs: boolean
           id: string
           included_hours: number
+          is_closed: boolean
           member_id: string
           overage_rate_per_hr: number
           period_end: string
           period_start: string
+          prorated_base_fee: number | null
+          proration_note: string | null
           tier_snapshot: Database["public"]["Enums"]["coroast_tier"]
           upgrade_nudge_sent: boolean
         }
@@ -250,10 +253,13 @@ export type Database = {
           exceeded_6hrs?: boolean
           id?: string
           included_hours: number
+          is_closed?: boolean
           member_id: string
           overage_rate_per_hr: number
           period_end: string
           period_start: string
+          prorated_base_fee?: number | null
+          proration_note?: string | null
           tier_snapshot: Database["public"]["Enums"]["coroast_tier"]
           upgrade_nudge_sent?: boolean
         }
@@ -263,10 +269,13 @@ export type Database = {
           exceeded_6hrs?: boolean
           id?: string
           included_hours?: number
+          is_closed?: boolean
           member_id?: string
           overage_rate_per_hr?: number
           period_end?: string
           period_start?: string
+          prorated_base_fee?: number | null
+          proration_note?: string | null
           tier_snapshot?: Database["public"]["Enums"]["coroast_tier"]
           upgrade_nudge_sent?: boolean
         }
