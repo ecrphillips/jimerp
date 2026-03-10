@@ -103,7 +103,21 @@ export default function ProspectDetail() {
     },
   });
 
-  // Linked member/client names
+  // Linked account
+  const { data: linkedAccount } = useQuery({
+    queryKey: ['account-name', prospect?.converted_to_account_id],
+    enabled: !!prospect?.converted_to_account_id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('accounts')
+        .select('id, account_name')
+        .eq('id', prospect!.converted_to_account_id!)
+        .single();
+      return data;
+    },
+  });
+
+  // Legacy linked member/client (for old conversions)
   const { data: linkedMember } = useQuery({
     queryKey: ['coroast-member-name', prospect?.converted_to_member_id],
     enabled: !!prospect?.converted_to_member_id,
