@@ -14,23 +14,24 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   const { user, authUser, loading, signOut } = useAuth();
   const location = useLocation();
 
-  // Check if CLIENT user is linked to a coroast_members record
-  const { data: coroastLink, isLoading: linkLoading } = useQuery({
-    queryKey: ['coroast-member-link', authUser?.clientId],
+  // For CLIENT users with an accountId, check if the account has COROASTING in programs
+  const { data: accountPrograms, isLoading: programsLoading } = useQuery({
+    queryKey: ['account-programs', authUser?.accountId],
     queryFn: async () => {
       const { data } = await supabase
-        .from('coroast_members')
-        .select('id')
-        .eq('client_id', authUser!.clientId!)
-        .eq('is_active', true)
+        .from('accounts')
+        .select('programs')
+        .eq('id', authUser!.accountId!)
         .maybeSingle();
-      return data;
+      return data?.programs ?? [];
     },
-    enabled: !!authUser && authUser.role === 'CLIENT' && !!authUser.clientId,
+    enabled: !!authUser && authUser.role === 'CLIENT' && !!authUser.accountId,
     staleTime: 5 * 60 * 1000,
   });
 
-  if (loading || (authUser?.role === 'CLIENT' && authUser?.clientId && linkLoading)) {
+  const isCoroastMember = authUser?.canBookRoaster && accountPrograms?.includes('COROASTING');
+
+  if (loading || (authUser?.role === 'CLIENT' && authUser?.accountId && programsLoading)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -76,14 +77,19 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   // Check role access
   if (allowedRoles && !allowedRoles.includes(authUser.role)) {
     if (authUser.role === 'CLIENT') {
-      return <Navigate to={coroastLink ? '/member-portal' : '/portal/new-order'} replace />;
+      // If user only has coroast access (no place orders), go to member portal
+      if (isCoroastMember && !authUser.canPlaceOrders) {
+        return <Navigate to="/member-portal" replace />;
+      }
+      // Default to manufacturing portal
+      return <Navigate to="/portal/new-order" replace />;
     } else {
       return <Navigate to="/dashboard" replace />;
     }
   }
 
-  // CLIENT user on standard portal routes but linked to coroast — redirect to member portal
-  if (authUser.role === 'CLIENT' && coroastLink && location.pathname.startsWith('/portal')) {
+  // CLIENT user on standard portal routes but is coroast-only — redirect to member portal
+  if (authUser.role === 'CLIENT' && isCoroastMember && !authUser.canPlaceOrders && location.pathname.startsWith('/portal')) {
     return <Navigate to="/member-portal" replace />;
   }
 

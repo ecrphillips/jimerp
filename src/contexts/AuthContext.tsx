@@ -10,6 +10,14 @@ interface AuthUser {
   clientId: string | null;
   profile: Profile | null;
   isActive: boolean;
+  // New account_users fields (populated for CLIENT users)
+  accountId: string | null;
+  isOwner: boolean;
+  canPlaceOrders: boolean;
+  canBookRoaster: boolean;
+  canManageLocations: boolean;
+  canInviteUsers: boolean;
+  locationAccess: string;
 }
 
 interface AuthContextType {
@@ -63,6 +71,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
 
+      // Default account_users fields
+      let accountId: string | null = null;
+      let isOwner = false;
+      let canPlaceOrders = false;
+      let canBookRoaster = false;
+      let canManageLocations = false;
+      let canInviteUsers = false;
+      let locationAccess = 'ALL';
+
+      // For CLIENT users, look up account_users record
+      if (roleData.role === 'CLIENT') {
+        const { data: accountUser, error: auError } = await supabase
+          .from('account_users')
+          .select('account_id, is_owner, can_place_orders, can_book_roaster, can_manage_locations, can_invite_users, location_access')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (auError) {
+          console.error('Error fetching account_users:', auError);
+        }
+
+        if (accountUser) {
+          accountId = accountUser.account_id;
+          isOwner = accountUser.is_owner;
+          canPlaceOrders = accountUser.can_place_orders;
+          canBookRoaster = accountUser.can_book_roaster;
+          canManageLocations = accountUser.can_manage_locations;
+          canInviteUsers = accountUser.can_invite_users;
+          locationAccess = accountUser.location_access;
+        }
+      }
+
       return {
         id: userId,
         email,
@@ -70,6 +111,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clientId: roleData.client_id,
         profile: profileData as Profile | null,
         isActive: profileData?.is_active ?? true,
+        accountId,
+        isOwner,
+        canPlaceOrders,
+        canBookRoaster,
+        canManageLocations,
+        canInviteUsers,
+        locationAccess,
       };
     } catch (error) {
       console.error('Error in fetchUserData:', error);
