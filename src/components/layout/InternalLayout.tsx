@@ -48,7 +48,7 @@ function NavGroup({ label, open, onOpenChange, children }: NavGroupProps) {
     <li>
       <Collapsible open={open} onOpenChange={onOpenChange}>
         <CollapsibleTrigger asChild>
-          <button className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground/80">
+          <button className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground transition-colors hover:text-sidebar-foreground/80">
             {label}
             {open ? (
               <ChevronDown className="ml-auto h-3 w-3" />
@@ -57,7 +57,7 @@ function NavGroup({ label, open, onOpenChange, children }: NavGroupProps) {
             )}
           </button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="mt-0.5 space-y-0.5">
+        <CollapsibleContent className="mt-0.5 space-y-0.5 pl-3">
           {children}
         </CollapsibleContent>
       </Collapsible>
