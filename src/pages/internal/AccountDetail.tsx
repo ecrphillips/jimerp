@@ -68,7 +68,7 @@ function ProfileTab({ account, refetch }: { account: any; refetch: () => void })
         payload.coroast_certified_by = form.coroast_certified_by || null;
       }
 
-      const { error } = await supabase.from('accounts').update(payload).eq('id', account.id);
+      const { error } = await supabase.from('accounts').update(payload as any).eq('id', account.id);
       if (error) throw error;
     },
     onSuccess: () => {
