@@ -23,6 +23,9 @@ import {
   UserPlus,
   Calendar,
   Receipt,
+  Factory,
+  Handshake,
+  Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -34,17 +37,19 @@ interface InternalLayoutProps {
 
 interface NavGroupProps {
   label: string;
+  icon: React.ElementType;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
 }
 
-function NavGroup({ label, open, onOpenChange, children }: NavGroupProps) {
+function NavGroup({ label, icon: Icon, open, onOpenChange, children }: NavGroupProps) {
   return (
     <li>
       <Collapsible open={open} onOpenChange={onOpenChange}>
         <CollapsibleTrigger asChild>
           <button className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground transition-colors hover:text-sidebar-foreground/80">
+            <Icon className="h-4 w-4" />
             {label}
             {open ? (
               <ChevronDown className="ml-auto h-3 w-3" />
@@ -138,7 +143,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
               </li>
 
               {/* Contract Manufacturing */}
-              <NavGroup label="Contract Manufacturing" open={cmOpen} onOpenChange={setCmOpen}>
+              <NavGroup label="Contract Manufacturing" icon={Factory} open={cmOpen} onOpenChange={setCmOpen}>
                 <NavItem to="/clients" icon={Users} label="Clients" onClick={closeSidebar} />
                 <NavItem to="/orders" icon={ShoppingCart} label="Orders" onClick={closeSidebar} />
                 <NavItem to="/production" icon={Flame} label="Run Sheet" onClick={closeSidebar} end />
@@ -147,7 +152,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
               </NavGroup>
 
               {/* Co-Roasting */}
-              <NavGroup label="Co-Roasting" open={coroastOpen} onOpenChange={setCoroastOpen}>
+              <NavGroup label="Co-Roasting" icon={Handshake} open={coroastOpen} onOpenChange={setCoroastOpen}>
                 <NavItem to="/co-roasting/members" icon={Users} label="Members" onClick={closeSidebar} />
                 <NavItem to="/co-roasting/bookings" icon={Calendar} label="Booking Calendar" onClick={closeSidebar} />
                 <NavItem to="/co-roasting/loring-schedule" icon={Calendar} label="Loring Schedule" onClick={closeSidebar} />
@@ -156,12 +161,12 @@ export function InternalLayout({ children }: InternalLayoutProps) {
 
               {/* Prospects — standalone */}
               <li>
-                <NavItem to="/prospects" icon={UserPlus} label="Prospects" onClick={closeSidebar} />
+                <NavItem to="/prospects" icon={UserPlus} label="Relationships" onClick={closeSidebar} />
               </li>
 
               {/* Admin — ADMIN only */}
               {authUser?.role === 'ADMIN' && (
-                <NavGroup label="Admin" open={adminOpen} onOpenChange={setAdminOpen}>
+                <NavGroup label="Admin" icon={Settings} open={adminOpen} onOpenChange={setAdminOpen}>
                   <NavItem to="/admin/users" icon={Users2} label="Users & Access" onClick={closeSidebar} />
                   <NavItem to="/admin-tools" icon={Wrench} label="Admin Tools" onClick={closeSidebar} />
                   <NavItem to="/inventory/ledger" icon={BookOpen} label="Ledger" onClick={closeSidebar} />
