@@ -9,6 +9,7 @@ interface UpdateRequest {
   user_id: string;
   role?: 'ADMIN' | 'OPS' | 'CLIENT';
   client_id?: string | null;
+  coroast_member_id?: string | null;
   is_active?: boolean;
   name?: string;
 }
