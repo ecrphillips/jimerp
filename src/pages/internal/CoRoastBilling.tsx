@@ -170,25 +170,30 @@ export default function CoRoastBilling() {
     enabled: billingPeriods.length > 0,
   });
 
+  // Calculate hours from duration_hours, falling back to time diff
   function calcBookingHours(bk: { duration_hours: number | null; start_time: string; end_time: string }) {
-    if (bk.duration_hours != null && Number(bk.duration_hours) > 0) return Number(bk.duration_hours);
-    return (timeToMinutes(bk.end_time) - timeToMinutes(bk.start_time)) / 60;
+    const dh = Number(bk.duration_hours);
+    if (!isNaN(dh) && dh > 0) return dh;
+    const diff = (timeToMinutes(bk.end_time) - timeToMinutes(bk.start_time)) / 60;
+    return diff > 0 ? diff : 0;
   }
 
+  // Sum hours per member from bookings (already filtered to billable statuses)
   const memberHoursUsed = useMemo(() => {
     const map = new Map<string, number>();
     for (const bk of bookings) {
-      if (!BILLABLE_STATUSES.includes(bk.status)) continue;
-      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + calcBookingHours(bk));
+      const hours = calcBookingHours(bk);
+      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + hours);
     }
+    console.log('[Billing] memberHoursUsed:', Object.fromEntries(map));
     return map;
   }, [bookings]);
 
   const prevMemberHoursUsed = useMemo(() => {
     const map = new Map<string, number>();
     for (const bk of prevBookings) {
-      if (!BILLABLE_STATUSES.includes(bk.status)) continue;
-      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + calcBookingHours(bk as any));
+      const hours = calcBookingHours(bk as any);
+      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + hours);
     }
     return map;
   }, [prevBookings]);
