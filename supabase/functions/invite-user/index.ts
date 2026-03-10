@@ -13,6 +13,7 @@ interface InviteRequest {
   email: string;
   role: 'ADMIN' | 'OPS' | 'CLIENT';
   client_id?: string;
+  coroast_member_id?: string;
   name?: string;
   generate_link_only?: boolean; // DEV: return link instead of sending email
 }
@@ -67,7 +68,7 @@ Deno.serve(async (req) => {
 
     // Parse request
     const body: InviteRequest = await req.json();
-    const { email, role, client_id, name, generate_link_only = false } = body;
+    const { email, role, client_id, coroast_member_id, name, generate_link_only = false } = body;
 
     console.log('[invite-user] Invite requested for:', email, 'role:', role, 'generate_link_only:', generate_link_only);
 
@@ -388,6 +389,18 @@ Deno.serve(async (req) => {
 
     if (profileError) {
       console.error('[invite-user] Profile insert error (non-fatal):', profileError.message);
+    }
+
+    // Link coroast member if specified
+    if (role === 'CLIENT' && coroast_member_id && client_id) {
+      const { error: memberLinkError } = await adminClient
+        .from('coroast_members')
+        .update({ client_id: client_id })
+        .eq('id', coroast_member_id);
+
+      if (memberLinkError) {
+        console.error('[invite-user] Co-roast member link error (non-fatal):', memberLinkError.message);
+      }
     }
 
     console.log('[invite-user] SUCCESS - User invited:', inviteData.user.id, 'email_sent:', emailWasSent);

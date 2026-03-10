@@ -65,11 +65,13 @@ export default function UsersAccess() {
   const [inviteName, setInviteName] = useState('');
   const [inviteRole, setInviteRole] = useState<AppRole>('OPS');
   const [inviteClientId, setInviteClientId] = useState<string>('');
+  const [inviteMemberId, setInviteMemberId] = useState<string>('');
   const [isInviting, setIsInviting] = useState(false);
 
   // Edit form state
   const [editRole, setEditRole] = useState<AppRole>('OPS');
   const [editClientId, setEditClientId] = useState<string>('');
+  const [editMemberId, setEditMemberId] = useState<string>('');
   const [editName, setEditName] = useState('');
   const [isEditing, setIsEditing] = useState(false);
 
@@ -145,6 +147,21 @@ export default function UsersAccess() {
     },
   });
 
+  // Fetch active co-roast members for linking
+  const { data: coroastMembers } = useQuery({
+    queryKey: ['admin-coroast-members-list'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('coroast_members')
+        .select('id, business_name, client_id')
+        .eq('is_active', true)
+        .order('business_name');
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const handleInvite = async () => {
     if (!inviteEmail || !inviteRole) {
       toast.error('Email and role are required');
@@ -169,6 +186,7 @@ export default function UsersAccess() {
           email: inviteEmail,
           role: inviteRole,
           client_id: inviteRole === 'CLIENT' ? inviteClientId : undefined,
+          coroast_member_id: inviteRole === 'CLIENT' && inviteMemberId ? inviteMemberId : undefined,
           name: inviteName || undefined,
         },
       });
@@ -232,6 +250,7 @@ export default function UsersAccess() {
           user_id: selectedUser.user_id,
           role: editRole,
           client_id: editRole === 'CLIENT' ? editClientId : null,
+          coroast_member_id: editRole === 'CLIENT' && editMemberId ? editMemberId : null,
           name: editName || undefined,
         },
       });
@@ -398,6 +417,7 @@ export default function UsersAccess() {
     setInviteName('');
     setInviteRole('OPS');
     setInviteClientId('');
+    setInviteMemberId('');
   };
 
   const openEditModal = (user: UserWithDetails) => {
@@ -405,6 +425,9 @@ export default function UsersAccess() {
     setEditRole(user.role);
     setEditClientId(user.client_id || '');
     setEditName(user.name || '');
+    // Find if this client is linked to a coroast member
+    const linkedMember = coroastMembers?.find(m => m.client_id === user.client_id);
+    setEditMemberId(linkedMember?.id || '');
     setShowEditModal(true);
   };
 
@@ -614,21 +637,43 @@ export default function UsersAccess() {
               </Select>
             </div>
             {inviteRole === 'CLIENT' && (
-              <div className="space-y-2">
-                <Label htmlFor="invite-client">Client *</Label>
-                <Select value={inviteClientId} onValueChange={setInviteClientId}>
-                  <SelectTrigger id="invite-client">
-                    <SelectValue placeholder="Select a client" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients?.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="invite-client">Client *</Label>
+                  <Select value={inviteClientId} onValueChange={setInviteClientId}>
+                    <SelectTrigger id="invite-client">
+                      <SelectValue placeholder="Select a client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients?.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="invite-member">Link to Co-Roast Member</Label>
+                  <Select value={inviteMemberId || 'none'} onValueChange={(v) => setInviteMemberId(v === 'none' ? '' : v)}>
+                    <SelectTrigger id="invite-member">
+                      <SelectValue placeholder="None (standard client)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None (standard client)</SelectItem>
+                      {coroastMembers?.filter(m => !m.client_id || m.client_id === inviteClientId).map((member) => (
+                        <SelectItem key={member.id} value={member.id}>
+                          {member.business_name}
+                          {member.client_id ? ' (already linked)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Links this user to the member portal for co-roasting scheduling and billing.
+                  </p>
+                </div>
+              </>
             )}
           </div>
           <DialogFooter>
@@ -681,21 +726,43 @@ export default function UsersAccess() {
               </Select>
             </div>
             {editRole === 'CLIENT' && (
-              <div className="space-y-2">
-                <Label htmlFor="edit-client">Client</Label>
-                <Select value={editClientId} onValueChange={setEditClientId}>
-                  <SelectTrigger id="edit-client">
-                    <SelectValue placeholder="Select a client" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients?.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-client">Client</Label>
+                  <Select value={editClientId} onValueChange={setEditClientId}>
+                    <SelectTrigger id="edit-client">
+                      <SelectValue placeholder="Select a client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients?.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-member">Link to Co-Roast Member</Label>
+                  <Select value={editMemberId || 'none'} onValueChange={(v) => setEditMemberId(v === 'none' ? '' : v)}>
+                    <SelectTrigger id="edit-member">
+                      <SelectValue placeholder="None (standard client)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None (standard client)</SelectItem>
+                      {coroastMembers?.filter(m => !m.client_id || m.client_id === editClientId).map((member) => (
+                        <SelectItem key={member.id} value={member.id}>
+                          {member.business_name}
+                          {member.client_id ? ' (already linked)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Links this user to the member portal for co-roasting scheduling and billing.
+                  </p>
+                </div>
+              </>
             )}
           </div>
           <DialogFooter>
