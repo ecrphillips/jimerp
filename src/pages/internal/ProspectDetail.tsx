@@ -226,67 +226,53 @@ export default function ProspectDetail() {
     onError: () => toast.error('Failed to add note'),
   });
 
-  const handleConvertToMember = async () => {
+  const openConvertModal = () => {
     if (!prospect) return;
-    setConvertLoading('member');
-    try {
-      // Parse email/phone from contact_info
-      const info = prospect.contact_info || '';
-
-      const { data: member, error } = await supabase
-        .from('coroast_members')
-        .insert({
-          business_name: prospect.business_name,
-          contact_name: prospect.contact_name || null,
-          contact_email: info.includes('@') ? info.split('|')[0]?.trim() || null : null,
-          contact_phone: !info.includes('@') ? info.trim() || null : info.split('|')[1]?.trim() || null,
-        })
-        .select('id')
-        .single();
-      if (error) throw error;
-
-      await supabase
-        .from('prospects')
-        .update({ converted: true, converted_to_member_id: member.id })
-        .eq('id', id!);
-
-      toast.success('Converted to Co-Roasting Member');
-      navigate(`/co-roasting/members/${member.id}`);
-    } catch {
-      toast.error('Failed to convert');
-    } finally {
-      setConvertLoading(null);
-    }
+    setConvertName(prospect.business_name);
+    const stream = prospect.stream as ProspectStream;
+    setConvertMfg(stream === 'CONTRACT' || stream === 'BOTH');
+    setConvertCoroast(stream === 'CO_ROAST' || stream === 'BOTH');
+    setConvertTier('ACCESS');
+    setConvertOpen(true);
   };
 
-  const handleConvertToClient = async () => {
-    if (!prospect) return;
-    setConvertLoading('client');
+  const handleConvertToAccount = async () => {
+    if (!prospect || (!convertMfg && !convertCoroast)) return;
+    setConvertLoading(true);
     try {
-      const code = prospect.business_name.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, 'X');
-      const { data: client, error } = await supabase
-        .from('clients')
-        .insert({
-          name: prospect.business_name,
-          client_code: code + Math.floor(Math.random() * 100),
-          billing_contact_name: prospect.contact_name || null,
-          billing_email: prospect.contact_info?.includes('@') ? prospect.contact_info.split('|')[0]?.trim() : null,
-        })
+      const programs: string[] = [];
+      if (convertMfg) programs.push('MANUFACTURING');
+      if (convertCoroast) programs.push('COROASTING');
+
+      const payload: Record<string, unknown> = {
+        account_name: convertName.trim(),
+        programs,
+        is_active: true,
+        relationship_id: prospect.id,
+      };
+      if (convertCoroast) {
+        payload.coroast_tier = convertTier;
+        payload.coroast_joined_date = new Date().toISOString().split('T')[0];
+      }
+
+      const { data: account, error } = await supabase
+        .from('accounts')
+        .insert(payload as any)
         .select('id')
         .single();
       if (error) throw error;
 
       await supabase
         .from('prospects')
-        .update({ converted: true, converted_to_client_id: client.id })
+        .update({ converted: true, converted_to_account_id: account.id } as any)
         .eq('id', id!);
 
-      toast.success('Converted to Client');
-      navigate(`/clients`);
+      toast.success('Converted to Account');
+      navigate(`/accounts/${account.id}`);
     } catch {
       toast.error('Failed to convert');
     } finally {
-      setConvertLoading(null);
+      setConvertLoading(false);
     }
   };
 
