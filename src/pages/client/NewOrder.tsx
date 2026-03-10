@@ -226,7 +226,7 @@ export default function NewOrder() {
       const { data: recentOrders } = await supabase
         .from('orders')
         .select('id')
-        .eq('client_id', authUser.clientId)
+        .eq('client_id', authUser.accountId)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'])
         .order('created_at', { ascending: false })
         .limit(5);
