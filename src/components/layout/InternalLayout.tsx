@@ -162,7 +162,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
 
               {/* Contract Manufacturing */}
               <NavGroup label="Manufacturing" icon={Factory} open={cmOpen} onOpenChange={setCmOpen}>
-                <NavItem to="/clients" icon={Users} label="Clients" onClick={closeSidebar} />
+                
                 <NavItem to="/orders" icon={ShoppingCart} label="Orders" onClick={closeSidebar} />
                 <NavItem to="/production" icon={Flame} label="Run Sheet" onClick={closeSidebar} end />
                 <NavItem to="/inventory" icon={Warehouse} label="Inventory Levels" onClick={closeSidebar} end />
@@ -171,7 +171,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
 
               {/* Co-Roasting */}
               <NavGroup label="Co-Roasting" icon={Handshake} open={coroastOpen} onOpenChange={setCoroastOpen}>
-                <NavItem to="/co-roasting/members" icon={Users} label="Members" onClick={closeSidebar} />
+                
                 <NavItem to="/co-roasting/bookings" icon={Calendar} label="Booking Calendar" onClick={closeSidebar} />
                 <NavItem to="/co-roasting/loring-schedule" icon={Calendar} label="Loring Schedule" onClick={closeSidebar} />
                 <NavItem to="/co-roasting/billing" icon={Receipt} label="Billing" onClick={closeSidebar} />
