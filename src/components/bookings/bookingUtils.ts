@@ -103,6 +103,11 @@ export const TIER_RATES: Record<string, { base: number; includedHours: number; o
   GROWTH: { base: 1000, includedHours: 10, overageRate: 115 },
 };
 
+export const STORAGE_RATES: Record<string, { includedPallets: number; ratePerPallet: number }> = {
+  ACCESS: { includedPallets: 0, ratePerPallet: 225 },
+  GROWTH: { includedPallets: 1, ratePerPallet: 175 },
+};
+
 export const HOUR_START = 5;
 export const HOUR_END = 22;
 export const TOTAL_HOURS = HOUR_END - HOUR_START;

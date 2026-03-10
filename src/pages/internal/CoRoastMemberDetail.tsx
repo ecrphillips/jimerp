@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ArrowLeft, Link2, X, ChevronsUpDown, ShieldCheck, Copy, Check, FileText, Plus } from 'lucide-react';
+import MemberStorageSection from '@/components/coroast/MemberStorageSection';
 import type { Database } from '@/integrations/supabase/types';
 
 type CoroastTier = Database['public']['Enums']['coroast_tier'];
@@ -611,7 +612,10 @@ export default function CoRoastMemberDetail() {
         </CardContent>
       </Card>
 
-      {/* SECTION 3 — Notes */}
+      {/* SECTION 3 — Storage */}
+      <MemberStorageSection memberId={id!} tier={member.tier} />
+
+      {/* SECTION 4 — Notes */}
       <Card>
         <CardHeader>
           <CardTitle>Notes</CardTitle>
