@@ -186,6 +186,7 @@ export default function UsersAccess() {
           email: inviteEmail,
           role: inviteRole,
           client_id: inviteRole === 'CLIENT' ? inviteClientId : undefined,
+          coroast_member_id: inviteRole === 'CLIENT' && inviteMemberId ? inviteMemberId : undefined,
           name: inviteName || undefined,
         },
       });
