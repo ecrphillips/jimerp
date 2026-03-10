@@ -157,6 +157,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
               {/* Accounts */}
               <NavGroup label="Accounts" icon={Building2} open={accountsOpen} onOpenChange={setAccountsOpen}>
                 <NavItem to="/accounts" icon={Building2} label="Accounts" onClick={closeSidebar} />
+                <NavItem to="/prospects" icon={UserPlus} label="Relationships" onClick={closeSidebar} />
               </NavGroup>
 
               {/* Contract Manufacturing */}
