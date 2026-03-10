@@ -105,17 +105,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
   // Group open states
   const [cmOpen, setCmOpen] = React.useState(true);
   const [coroastOpen, setCoroastOpen] = React.useState(true);
-  const [relOpen, setRelOpen] = React.useState(true);
   const [adminOpen, setAdminOpen] = React.useState(true);
-
-  // Nested dropdown states
-  const isProductionRoute = location.pathname.startsWith('/production');
-  const isInventoryRoute = location.pathname.startsWith('/inventory');
-  const [productionOpen, setProductionOpen] = React.useState(isProductionRoute);
-  const [inventoryOpen, setInventoryOpen] = React.useState(isInventoryRoute);
-
-  React.useEffect(() => { if (isProductionRoute) setProductionOpen(true); }, [isProductionRoute]);
-  React.useEffect(() => { if (isInventoryRoute) setInventoryOpen(true); }, [isInventoryRoute]);
 
   const handleSignOut = async () => {
     await signOut();
