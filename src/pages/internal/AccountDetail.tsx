@@ -715,7 +715,7 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
       // Check if all 7 are now complete
       const allItems = [...checklist.filter((c: any) => c.item_number !== itemNumber), { item_number: itemNumber, completed }];
       const allComplete = CHECKLIST_ITEMS.every((_, i) => {
-        const item = allItems.find((c: any) => c.item_number === i);
+        const item = allItems.find((c: any) => c.item_number === i + 1);
         return item?.completed;
       });
 
@@ -738,7 +738,7 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
   });
 
   const getItemChecked = (index: number) => {
-    const item = checklist.find((c: any) => c.item_number === index);
+    const item = checklist.find((c: any) => c.item_number === index + 1);
     return item?.completed || false;
   };
 
@@ -758,7 +758,7 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
             <div key={i} className="flex items-start gap-2">
               <Checkbox
                 checked={getItemChecked(i)}
-                onCheckedChange={(v) => toggleItem.mutate({ itemNumber: i, completed: !!v })}
+                onCheckedChange={(v) => toggleItem.mutate({ itemNumber: i + 1, completed: !!v })}
                 className="mt-0.5"
               />
               <span className="text-sm flex-1">{item}</span>
