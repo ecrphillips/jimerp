@@ -726,21 +726,43 @@ export default function UsersAccess() {
               </Select>
             </div>
             {editRole === 'CLIENT' && (
-              <div className="space-y-2">
-                <Label htmlFor="edit-client">Client</Label>
-                <Select value={editClientId} onValueChange={setEditClientId}>
-                  <SelectTrigger id="edit-client">
-                    <SelectValue placeholder="Select a client" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients?.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-client">Client</Label>
+                  <Select value={editClientId} onValueChange={setEditClientId}>
+                    <SelectTrigger id="edit-client">
+                      <SelectValue placeholder="Select a client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients?.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-member">Link to Co-Roast Member</Label>
+                  <Select value={editMemberId || 'none'} onValueChange={(v) => setEditMemberId(v === 'none' ? '' : v)}>
+                    <SelectTrigger id="edit-member">
+                      <SelectValue placeholder="None (standard client)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None (standard client)</SelectItem>
+                      {coroastMembers?.filter(m => !m.client_id || m.client_id === editClientId).map((member) => (
+                        <SelectItem key={member.id} value={member.id}>
+                          {member.business_name}
+                          {member.client_id ? ' (already linked)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Links this user to the member portal for co-roasting scheduling and billing.
+                  </p>
+                </div>
+              </>
             )}
           </div>
           <DialogFooter>

@@ -100,6 +100,44 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Link/unlink coroast member if provided
+    if (role === 'CLIENT' && coroast_member_id !== undefined) {
+      // First, clear any existing link from other members pointing to this client
+      if (client_id) {
+        await adminClient
+          .from('coroast_members')
+          .update({ client_id: null })
+          .eq('client_id', client_id);
+      }
+
+      // Set the new link
+      if (coroast_member_id) {
+        const { error: memberError } = await adminClient
+          .from('coroast_members')
+          .update({ client_id: client_id })
+          .eq('id', coroast_member_id);
+
+        if (memberError) {
+          console.error('Co-roast member link error:', memberError);
+          // Non-fatal, continue
+        }
+      }
+    } else if (role && role !== 'CLIENT') {
+      // If changing away from CLIENT, clear any coroast member links for the old client_id
+      const { data: oldRole } = await adminClient
+        .from('user_roles')
+        .select('client_id')
+        .eq('user_id', user_id)
+        .single();
+
+      if (oldRole?.client_id) {
+        await adminClient
+          .from('coroast_members')
+          .update({ client_id: null })
+          .eq('client_id', oldRole.client_id);
+      }
+    }
+
     // Update profile if is_active or name provided
     if (is_active !== undefined || name !== undefined) {
       const profileUpdate: any = { updated_at: new Date().toISOString() };
