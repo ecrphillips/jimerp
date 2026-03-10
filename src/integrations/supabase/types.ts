@@ -1649,33 +1649,60 @@ export type Database = {
           business_name: string
           contact_info: string | null
           contact_name: string | null
+          converted: boolean
+          converted_to_client_id: string | null
+          converted_to_member_id: string | null
           created_at: string
           created_by: string
           id: string
           stage: Database["public"]["Enums"]["prospect_stage"]
+          stream: Database["public"]["Enums"]["prospect_stream"]
           updated_at: string
         }
         Insert: {
           business_name: string
           contact_info?: string | null
           contact_name?: string | null
+          converted?: boolean
+          converted_to_client_id?: string | null
+          converted_to_member_id?: string | null
           created_at?: string
           created_by: string
           id?: string
           stage?: Database["public"]["Enums"]["prospect_stage"]
+          stream?: Database["public"]["Enums"]["prospect_stream"]
           updated_at?: string
         }
         Update: {
           business_name?: string
           contact_info?: string | null
           contact_name?: string | null
+          converted?: boolean
+          converted_to_client_id?: string | null
+          converted_to_member_id?: string | null
           created_at?: string
           created_by?: string
           id?: string
           stage?: Database["public"]["Enums"]["prospect_stage"]
+          stream?: Database["public"]["Enums"]["prospect_stream"]
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "prospects_converted_to_client_id_fkey"
+            columns: ["converted_to_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospects_converted_to_member_id_fkey"
+            columns: ["converted_to_member_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       roast_exception_events: {
         Row: {
@@ -2249,6 +2276,7 @@ export type Database = {
         | "CONVERSATION"
         | "AGREEMENT_SENT"
         | "ONBOARDED"
+      prospect_stream: "CO_ROAST" | "CONTRACT" | "BOTH" | "INDUSTRY_CONTACT"
       roasted_batch_status: "PLANNED" | "ROASTED"
       roaster_machine: "SAMIAC" | "LORING"
       ship_priority: "NORMAL" | "TIME_SENSITIVE"
@@ -2467,6 +2495,7 @@ export const Constants = {
         "AGREEMENT_SENT",
         "ONBOARDED",
       ],
+      prospect_stream: ["CO_ROAST", "CONTRACT", "BOTH", "INDUSTRY_CONTACT"],
       roasted_batch_status: ["PLANNED", "ROASTED"],
       roaster_machine: ["SAMIAC", "LORING"],
       ship_priority: ["NORMAL", "TIME_SENSITIVE"],
