@@ -637,21 +637,43 @@ export default function UsersAccess() {
               </Select>
             </div>
             {inviteRole === 'CLIENT' && (
-              <div className="space-y-2">
-                <Label htmlFor="invite-client">Client *</Label>
-                <Select value={inviteClientId} onValueChange={setInviteClientId}>
-                  <SelectTrigger id="invite-client">
-                    <SelectValue placeholder="Select a client" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients?.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="invite-client">Client *</Label>
+                  <Select value={inviteClientId} onValueChange={setInviteClientId}>
+                    <SelectTrigger id="invite-client">
+                      <SelectValue placeholder="Select a client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients?.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="invite-member">Link to Co-Roast Member</Label>
+                  <Select value={inviteMemberId} onValueChange={setInviteMemberId}>
+                    <SelectTrigger id="invite-member">
+                      <SelectValue placeholder="None (standard client)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None (standard client)</SelectItem>
+                      {coroastMembers?.filter(m => !m.client_id || m.client_id === inviteClientId).map((member) => (
+                        <SelectItem key={member.id} value={member.id}>
+                          {member.business_name}
+                          {member.client_id ? ' (already linked)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Links this user to the member portal for co-roasting scheduling and billing.
+                  </p>
+                </div>
+              </>
             )}
           </div>
           <DialogFooter>
