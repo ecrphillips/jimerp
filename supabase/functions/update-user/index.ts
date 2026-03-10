@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
     }
 
     const body: UpdateRequest = await req.json();
-    const { user_id, role, client_id, is_active, name } = body;
+    const { user_id, role, client_id, coroast_member_id, is_active, name } = body;
 
     if (!user_id) {
       return new Response(
