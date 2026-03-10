@@ -7,6 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { TIER_RATES, timeToMinutes } from '@/components/bookings/bookingUtils';
+import type { Database } from '@/integrations/supabase/types';
+
+const BILLABLE_STATUSES: Database['public']['Enums']['coroast_booking_status'][] = ['CONFIRMED', 'COMPLETED', 'NO_SHOW'];
 
 const GST_RATE = 0.05;
 const BILLABLE_STATUSES = ['CONFIRMED', 'COMPLETED', 'NO_SHOW'];
