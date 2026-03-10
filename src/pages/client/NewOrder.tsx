@@ -82,7 +82,7 @@ export default function NewOrder() {
     multiplier: number;
   } | null>(null);
 
-  const { constraints, isLoading: constraintsLoading } = useClientOrderingConstraints(authUser?.clientId);
+  const { constraints, isLoading: constraintsLoading } = useClientOrderingConstraints(authUser?.accountId);
 
   // Fetch allowed products with packaging type join
   const { data: products, isLoading: productsLoading } = useQuery({
