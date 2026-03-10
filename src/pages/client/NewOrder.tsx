@@ -332,8 +332,8 @@ export default function NewOrder() {
   };
 
   const handleSubmitClick = async () => {
-    if (!authUser?.clientId) {
-      toast.error('No client linked to your account');
+    if (!authUser?.accountId) {
+      toast.error('No account linked to your user');
       return;
     }
     if (lineItems.length === 0) {
