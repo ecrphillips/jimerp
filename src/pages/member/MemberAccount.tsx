@@ -4,19 +4,18 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
-import { ShieldCheck, Mail, Phone, Building2, CalendarDays } from 'lucide-react';
+import { ShieldCheck, Mail, Building2, CalendarDays } from 'lucide-react';
 
 export default function MemberAccount() {
   const { authUser } = useAuth();
 
-  const { data: member, isLoading } = useQuery({
+  const { data: account, isLoading } = useQuery({
     queryKey: ['my-coroast-account', authUser?.accountId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('coroast_members')
-        .select('*')
-        .eq('client_id', authUser!.accountId!)
-        .eq('is_active', true)
+        .from('accounts')
+        .select('id, account_name, coroast_tier, coroast_certified, coroast_joined_date, billing_contact_name, billing_email')
+        .eq('id', authUser!.accountId!)
         .maybeSingle();
       if (error) throw error;
       return data;
@@ -28,8 +27,8 @@ export default function MemberAccount() {
     return <div className="p-6"><p className="text-muted-foreground">Loading…</p></div>;
   }
 
-  if (!member) {
-    return <div className="p-6"><p className="text-destructive">No member record found.</p></div>;
+  if (!account) {
+    return <div className="p-6"><p className="text-destructive">No account record found.</p></div>;
   }
 
   return (
@@ -42,10 +41,10 @@ export default function MemberAccount() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">{member.business_name}</CardTitle>
+            <CardTitle className="text-lg">{account.account_name}</CardTitle>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="font-mono text-xs">{member.tier}</Badge>
-              {member.certified && (
+              <Badge variant="outline" className="font-mono text-xs">{account.coroast_tier || '—'}</Badge>
+              {account.coroast_certified && (
                 <Badge variant="default" className="text-xs gap-1">
                   <ShieldCheck className="h-3 w-3" />
                   Certified
@@ -56,42 +55,35 @@ export default function MemberAccount() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {member.contact_name && (
+            {account.billing_contact_name && (
               <div className="flex items-start gap-3">
                 <Building2 className="h-4 w-4 mt-0.5 text-muted-foreground" />
                 <div>
-                  <p className="text-xs text-muted-foreground">Contact Name</p>
-                  <p className="text-sm font-medium">{member.contact_name}</p>
+                  <p className="text-xs text-muted-foreground">Billing Contact</p>
+                  <p className="text-sm font-medium">{account.billing_contact_name}</p>
                 </div>
               </div>
             )}
-            {member.contact_email && (
+            {account.billing_email && (
               <div className="flex items-start gap-3">
                 <Mail className="h-4 w-4 mt-0.5 text-muted-foreground" />
                 <div>
                   <p className="text-xs text-muted-foreground">Email</p>
-                  <p className="text-sm font-medium">{member.contact_email}</p>
+                  <p className="text-sm font-medium">{account.billing_email}</p>
                 </div>
               </div>
             )}
-            {member.contact_phone && (
+            {account.coroast_joined_date && (
               <div className="flex items-start gap-3">
-                <Phone className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                <CalendarDays className="h-4 w-4 mt-0.5 text-muted-foreground" />
                 <div>
-                  <p className="text-xs text-muted-foreground">Phone</p>
-                  <p className="text-sm font-medium">{member.contact_phone}</p>
+                  <p className="text-xs text-muted-foreground">Member Since</p>
+                  <p className="text-sm font-medium">
+                    {format(new Date(account.coroast_joined_date + 'T00:00:00'), 'MMMM d, yyyy')}
+                  </p>
                 </div>
               </div>
             )}
-            <div className="flex items-start gap-3">
-              <CalendarDays className="h-4 w-4 mt-0.5 text-muted-foreground" />
-              <div>
-                <p className="text-xs text-muted-foreground">Member Since</p>
-                <p className="text-sm font-medium">
-                  {format(new Date(member.joined_date + 'T00:00:00'), 'MMMM d, yyyy')}
-                </p>
-              </div>
-            </div>
           </div>
 
           <div className="border-t pt-4 mt-4">

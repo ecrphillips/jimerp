@@ -17,13 +17,12 @@ export default function MemberBilling() {
   const { authUser } = useAuth();
 
   const { data: member } = useQuery({
-    queryKey: ['my-coroast-member-billing', authUser?.accountId],
+    queryKey: ['my-account-billing', authUser?.accountId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('coroast_members')
-        .select('id, business_name, tier, joined_date')
-        .eq('client_id', authUser!.accountId!)
-        .eq('is_active', true)
+        .from('accounts')
+        .select('id, account_name, coroast_tier, coroast_joined_date')
+        .eq('id', authUser!.accountId!)
         .maybeSingle();
       if (error) throw error;
       return data;
@@ -31,8 +30,8 @@ export default function MemberBilling() {
     enabled: !!authUser?.accountId,
   });
 
-  const memberId = member?.id;
-  const tier = member?.tier ?? 'ACCESS';
+  const accountId = authUser?.accountId;
+  const tier = member?.coroast_tier ?? 'ACCESS';
   const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
 
   const now = new Date();
@@ -42,19 +41,19 @@ export default function MemberBilling() {
 
   // Current month bookings
   const { data: currentBookings = [] } = useQuery({
-    queryKey: ['member-billing-current', memberId, currentMonthStart],
+    queryKey: ['member-billing-current', accountId, currentMonthStart],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_bookings')
         .select('id, booking_date, start_time, end_time, duration_hours, status')
-        .eq('member_id', memberId!)
+        .eq('account_id', accountId!)
         .gte('booking_date', currentMonthStart)
         .lte('booking_date', currentMonthEnd)
         .in('status', BILLABLE_STATUSES);
       if (error) throw error;
       return data;
     },
-    enabled: !!memberId,
+    enabled: !!accountId,
   });
 
   const hoursUsed = useMemo(() => {
@@ -82,17 +81,17 @@ export default function MemberBilling() {
 
   // Billing history
   const { data: billingHistory = [] } = useQuery({
-    queryKey: ['member-billing-history', memberId],
+    queryKey: ['member-billing-history', accountId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_invoices')
         .select('id, period_start, period_end, base_fee, used_hours, overage_hours, overage_charge, storage_charge, total_amount, created_at')
-        .eq('member_id', memberId!)
+        .eq('account_id', accountId!)
         .order('period_start', { ascending: false });
       if (error) throw error;
       return data;
     },
-    enabled: !!memberId,
+    enabled: !!accountId,
   });
 
   if (!member) {
@@ -105,7 +104,7 @@ export default function MemberBilling() {
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold">My Hours & Billing</h1>
-        <p className="text-sm text-muted-foreground">{member.business_name} · {tier} tier</p>
+        <p className="text-sm text-muted-foreground">{member.account_name} · {tier} tier</p>
       </div>
 
       {/* Current Month */}

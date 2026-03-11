@@ -69,15 +69,14 @@ export default function MemberSchedule() {
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
 
-  // Fetch member record linked to this client user
+  // Fetch account record for this member
   const { data: member } = useQuery({
-    queryKey: ['my-coroast-member', authUser?.accountId],
+    queryKey: ['my-account-schedule', authUser?.accountId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('coroast_members')
-        .select('id, business_name, tier, is_active, joined_date')
-        .eq('client_id', authUser!.accountId!)
-        .eq('is_active', true)
+        .from('accounts')
+        .select('id, account_name, coroast_tier, is_active, coroast_joined_date')
+        .eq('id', authUser!.accountId!)
         .maybeSingle();
       if (error) throw error;
       return data;
@@ -85,8 +84,8 @@ export default function MemberSchedule() {
     enabled: !!authUser?.accountId,
   });
 
-  const memberId = member?.id;
-  const tier = member?.tier ?? 'ACCESS';
+  const memberId = authUser?.accountId;
+  const tier = member?.coroast_tier ?? 'ACCESS';
   const isGrowth = tier === 'GROWTH';
   const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
 
@@ -289,10 +288,11 @@ export default function MemberSchedule() {
     const { data: created, error } = await supabase
       .from('coroast_billing_periods')
       .insert({
-        member_id: memberId,
+        member_id: memberId!,
+        account_id: memberId,
         period_start: monthStart,
         period_end: monthEnd,
-        tier_snapshot: tier,
+        tier_snapshot: tier as any,
         included_hours: rates.includedHours,
         overage_rate_per_hr: rates.overageRate,
         base_fee: rates.base,
@@ -443,7 +443,7 @@ export default function MemberSchedule() {
         <div>
           <h1 className="text-2xl font-bold">My Schedule</h1>
           <p className="text-sm text-muted-foreground">
-            {member.business_name} · {tier} tier · {hoursUsedThisMonth.toFixed(1)}h used of {rates.includedHours}h this month
+            {member.account_name} · {tier} tier · {hoursUsedThisMonth.toFixed(1)}h used of {rates.includedHours}h this month
           </p>
         </div>
       </div>
