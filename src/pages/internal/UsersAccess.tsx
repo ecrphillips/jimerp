@@ -162,6 +162,48 @@ export default function UsersAccess() {
     },
   });
 
+  // Fetch account users (invited via invite-account-user edge function)
+  const { data: accountUsers, isLoading: accountUsersLoading } = useQuery({
+    queryKey: ['admin-account-users'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('account_users')
+        .select(`
+          id,
+          user_id,
+          account_id,
+          is_owner,
+          can_place_orders,
+          can_book_roaster,
+          can_manage_locations,
+          can_invite_users,
+          location_access,
+          is_active,
+          created_at,
+          accounts:account_id (account_name)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Get profiles for these users
+      const userIds = data?.map(au => au.user_id) || [];
+      if (userIds.length === 0) return [];
+
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('user_id, name, email')
+        .in('user_id', userIds);
+
+      return (data || []).map(au => ({
+        ...au,
+        account_name: (au.accounts as any)?.account_name || 'Unknown',
+        email: profiles?.find(p => p.user_id === au.user_id)?.email || 'Unknown',
+        name: profiles?.find(p => p.user_id === au.user_id)?.name || null,
+      }));
+    },
+  });
+
   const handleInvite = async () => {
     if (!inviteEmail || !inviteRole) {
       toast.error('Email and role are required');
