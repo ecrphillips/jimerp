@@ -481,15 +481,28 @@ function UsersTab({ accountId }: { accountId: string }) {
           if (locError) throw locError;
         }
       } else {
-        // For new invites, we'd call the invite edge function
-        // For now, create the account_user record placeholder
-        toast.info('User invitation flow will be connected to the invite edge function.');
+        // Call invite-account-user edge function
+        const { data, error: fnError } = await supabase.functions.invoke('invite-account-user', {
+          body: {
+            email: form.email,
+            account_id: accountId,
+            is_owner: form.is_owner,
+            can_place_orders: form.can_place_orders,
+            can_book_roaster: form.can_book_roaster,
+            can_manage_locations: form.can_manage_locations,
+            can_invite_users: form.can_invite_users,
+            location_access: form.location_access,
+            assigned_locations: form.location_access === 'ASSIGNED' ? form.assigned_locations : [],
+          },
+        });
+        if (fnError) throw new Error(fnError.message || 'Failed to invite user');
+        if (data?.error) throw new Error(data.error);
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['account-users'] });
       queryClient.invalidateQueries({ queryKey: ['account-user-locations'] });
-      toast.success(editId ? 'User updated' : 'User invited');
+      toast.success(editId ? 'User updated' : `Invitation sent to ${form.email}`);
       resetForm();
     },
     onError: (err: Error) => toast.error(err.message),
