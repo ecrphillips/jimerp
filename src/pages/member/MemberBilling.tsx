@@ -81,17 +81,17 @@ export default function MemberBilling() {
 
   // Billing history
   const { data: billingHistory = [] } = useQuery({
-    queryKey: ['member-billing-history', memberId],
+    queryKey: ['member-billing-history', accountId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_invoices')
         .select('id, period_start, period_end, base_fee, used_hours, overage_hours, overage_charge, storage_charge, total_amount, created_at')
-        .eq('member_id', memberId!)
+        .eq('account_id', accountId!)
         .order('period_start', { ascending: false });
       if (error) throw error;
       return data;
     },
-    enabled: !!memberId,
+    enabled: !!accountId,
   });
 
   if (!member) {
