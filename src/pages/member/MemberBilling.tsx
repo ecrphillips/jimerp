@@ -41,19 +41,19 @@ export default function MemberBilling() {
 
   // Current month bookings
   const { data: currentBookings = [] } = useQuery({
-    queryKey: ['member-billing-current', memberId, currentMonthStart],
+    queryKey: ['member-billing-current', accountId, currentMonthStart],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_bookings')
         .select('id, booking_date, start_time, end_time, duration_hours, status')
-        .eq('member_id', memberId!)
+        .eq('account_id', accountId!)
         .gte('booking_date', currentMonthStart)
         .lte('booking_date', currentMonthEnd)
         .in('status', BILLABLE_STATUSES);
       if (error) throw error;
       return data;
     },
-    enabled: !!memberId,
+    enabled: !!accountId,
   });
 
   const hoursUsed = useMemo(() => {
