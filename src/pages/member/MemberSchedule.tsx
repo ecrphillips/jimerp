@@ -288,10 +288,11 @@ export default function MemberSchedule() {
     const { data: created, error } = await supabase
       .from('coroast_billing_periods')
       .insert({
-        member_id: memberId,
+        member_id: memberId!,
+        account_id: memberId,
         period_start: monthStart,
         period_end: monthEnd,
-        tier_snapshot: tier,
+        tier_snapshot: tier as any,
         included_hours: rates.includedHours,
         overage_rate_per_hr: rates.overageRate,
         base_fee: rates.base,
