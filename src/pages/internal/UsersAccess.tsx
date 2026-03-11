@@ -636,6 +636,98 @@ export default function UsersAccess() {
         </CardContent>
       </Card>
 
+      {/* Account Users Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Account Users</CardTitle>
+          <CardDescription>
+            Users invited via account management — linked to specific accounts with granular permissions.
+            {accountUsers?.length ? ` ${accountUsers.length} account user${accountUsers.length === 1 ? '' : 's'}.` : ''}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {accountUsersLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : !accountUsers?.length ? (
+            <p className="text-center text-muted-foreground py-8">No account users found</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Account</TableHead>
+                  <TableHead>Permissions</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Added</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {accountUsers.map((au) => (
+                  <TableRow key={au.id} className={!au.is_active ? 'opacity-50' : ''}>
+                    <TableCell className="font-medium">{au.email}</TableCell>
+                    <TableCell>{au.name || '—'}</TableCell>
+                    <TableCell>{au.account_name}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        {au.is_owner && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Owner</Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>Account Owner</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {au.can_place_orders && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <ShoppingCart className="h-3.5 w-3.5 text-muted-foreground" />
+                              </TooltipTrigger>
+                              <TooltipContent>Can place orders</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {au.can_book_roaster && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Flame className="h-3.5 w-3.5 text-muted-foreground" />
+                              </TooltipTrigger>
+                              <TooltipContent>Can book roaster</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {au.is_active ? (
+                        <Badge variant="outline" className="text-primary border-primary">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Active
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">
+                          <Ban className="h-3 w-3 mr-1" />
+                          Disabled
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {new Date(au.created_at).toLocaleDateString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Invite User Modal */}
       <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
         <DialogContent>
