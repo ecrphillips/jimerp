@@ -502,7 +502,7 @@ function UsersTab({ accountId }: { accountId: string }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['account-users'] });
       queryClient.invalidateQueries({ queryKey: ['account-user-locations'] });
-      toast.success(editId ? 'User updated' : 'User invited');
+      toast.success(editId ? 'User updated' : `Invitation sent to ${form.email}`);
       resetForm();
     },
     onError: (err: Error) => toast.error(err.message),
