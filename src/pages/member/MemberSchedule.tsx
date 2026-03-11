@@ -442,7 +442,7 @@ export default function MemberSchedule() {
         <div>
           <h1 className="text-2xl font-bold">My Schedule</h1>
           <p className="text-sm text-muted-foreground">
-            {member.business_name} · {tier} tier · {hoursUsedThisMonth.toFixed(1)}h used of {rates.includedHours}h this month
+            {member.account_name} · {tier} tier · {hoursUsedThisMonth.toFixed(1)}h used of {rates.includedHours}h this month
           </p>
         </div>
       </div>
