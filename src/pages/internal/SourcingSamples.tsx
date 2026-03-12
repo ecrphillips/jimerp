@@ -436,6 +436,7 @@ function SampleDetailPanel({
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const storagePrice = getPriceForStorage();
       const { error } = await supabase
         .from('green_samples')
         .update({
@@ -446,7 +447,7 @@ function SampleDetailPanel({
           producer: form.producer?.trim() || null,
           variety: form.variety?.trim() || null,
           category: form.category!,
-          indicative_price_usd: form.indicative_price_usd ?? null,
+          indicative_price_usd: storagePrice,
           warehouse_location: form.warehouse_location?.trim() || null,
           bag_size_kg: form.bag_size_kg ?? null,
           num_bags: (form as any).num_bags ?? null,
