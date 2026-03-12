@@ -1597,6 +1597,38 @@ export type Database = {
           },
         ]
       }
+      green_sample_notes: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          note: string
+          sample_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note: string
+          sample_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string
+          sample_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_sample_notes_sample_id_fkey"
+            columns: ["sample_id"]
+            isOneToOne: false
+            referencedRelation: "green_samples"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       green_sample_roast_profile_links: {
         Row: {
           created_at: string
@@ -1642,8 +1674,10 @@ export type Database = {
           id: string
           indicative_price_usd: number | null
           name: string
+          num_bags: number | null
           origin: string | null
           producer: string | null
+          region: string | null
           rejected_reason: string | null
           score: number | null
           status: Database["public"]["Enums"]["sample_status"]
@@ -1661,8 +1695,10 @@ export type Database = {
           id?: string
           indicative_price_usd?: number | null
           name: string
+          num_bags?: number | null
           origin?: string | null
           producer?: string | null
+          region?: string | null
           rejected_reason?: string | null
           score?: number | null
           status?: Database["public"]["Enums"]["sample_status"]
@@ -1680,8 +1716,10 @@ export type Database = {
           id?: string
           indicative_price_usd?: number | null
           name?: string
+          num_bags?: number | null
           origin?: string | null
           producer?: string | null
+          region?: string | null
           rejected_reason?: string | null
           score?: number | null
           status?: Database["public"]["Enums"]["sample_status"]
