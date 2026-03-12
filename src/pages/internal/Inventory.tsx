@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { Package, Scale, Plus, Minus, History, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { PackagingBadge } from '@/components/PackagingBadge';
 import { format } from 'date-fns';
+import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 
 type WipAdjustmentReason = 'LOSS' | 'COUNT_ADJUSTMENT' | 'CONTAMINATION' | 'OTHER';
 
