@@ -1276,7 +1276,6 @@ export type Database = {
       }
       green_contracts: {
         Row: {
-          bag_marks: string | null
           bag_size_kg: number | null
           category: Database["public"]["Enums"]["green_coffee_category"]
           contracted_price_currency: string | null
@@ -1287,6 +1286,7 @@ export type Database = {
           crop_year: string | null
           id: string
           internal_contract_number: string | null
+          lot_identifier: string | null
           name: string
           notes: string | null
           num_bags: number | null
@@ -1304,7 +1304,6 @@ export type Database = {
           warehouse_location: string | null
         }
         Insert: {
-          bag_marks?: string | null
           bag_size_kg?: number | null
           category: Database["public"]["Enums"]["green_coffee_category"]
           contracted_price_currency?: string | null
@@ -1315,6 +1314,7 @@ export type Database = {
           crop_year?: string | null
           id?: string
           internal_contract_number?: string | null
+          lot_identifier?: string | null
           name: string
           notes?: string | null
           num_bags?: number | null
@@ -1332,7 +1332,6 @@ export type Database = {
           warehouse_location?: string | null
         }
         Update: {
-          bag_marks?: string | null
           bag_size_kg?: number | null
           category?: Database["public"]["Enums"]["green_coffee_category"]
           contracted_price_currency?: string | null
@@ -1343,6 +1342,7 @@ export type Database = {
           crop_year?: string | null
           id?: string
           internal_contract_number?: string | null
+          lot_identifier?: string | null
           name?: string
           notes?: string | null
           num_bags?: number | null
@@ -1537,7 +1537,6 @@ export type Database = {
         Row: {
           arrival_snoozed_until: string | null
           available_to_members: boolean
-          bag_marks: string | null
           bag_size_kg: number
           bags_released: number
           book_value_per_kg: number | null
@@ -1591,6 +1590,7 @@ export type Database = {
           lot_fx_rate: number | null
           lot_fx_rate_confirmed_at: string | null
           lot_fx_rate_confirmed_by: string | null
+          lot_identifier: string | null
           lot_number: string
           market_value_per_kg: number | null
           member_facing_notes: string | null
@@ -1617,7 +1617,6 @@ export type Database = {
         Insert: {
           arrival_snoozed_until?: string | null
           available_to_members?: boolean
-          bag_marks?: string | null
           bag_size_kg: number
           bags_released: number
           book_value_per_kg?: number | null
@@ -1671,6 +1670,7 @@ export type Database = {
           lot_fx_rate?: number | null
           lot_fx_rate_confirmed_at?: string | null
           lot_fx_rate_confirmed_by?: string | null
+          lot_identifier?: string | null
           lot_number: string
           market_value_per_kg?: number | null
           member_facing_notes?: string | null
@@ -1697,7 +1697,6 @@ export type Database = {
         Update: {
           arrival_snoozed_until?: string | null
           available_to_members?: boolean
-          bag_marks?: string | null
           bag_size_kg?: number
           bags_released?: number
           book_value_per_kg?: number | null
@@ -1751,6 +1750,7 @@ export type Database = {
           lot_fx_rate?: number | null
           lot_fx_rate_confirmed_at?: string | null
           lot_fx_rate_confirmed_by?: string | null
+          lot_identifier?: string | null
           lot_number?: string
           market_value_per_kg?: number | null
           member_facing_notes?: string | null
@@ -1982,6 +1982,7 @@ export type Database = {
       }
       green_vendors: {
         Row: {
+          abbreviation: string | null
           contact_email: string | null
           contact_name: string | null
           contact_phone: string | null
@@ -1994,6 +1995,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          abbreviation?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: string | null
@@ -2006,6 +2008,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          abbreviation?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: string | null
