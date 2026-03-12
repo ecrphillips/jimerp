@@ -410,7 +410,7 @@ function LotDetailPanel({
   const [estDaysConsume, setEstDaysConsume] = useState<number | null>(null);
 
   // Editable lot fields
-  const [editBagMarks, setEditBagMarks] = useState('');
+  const [editLotIdentifier, setEditLotIdentifier] = useState('');
   const [editVendorInvoice, setEditVendorInvoice] = useState('');
 
   // Sync from DB
