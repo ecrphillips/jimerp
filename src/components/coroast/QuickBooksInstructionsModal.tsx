@@ -70,8 +70,8 @@ export default function QuickBooksInstructionsModal({
     lineItems.push({
       name: `Co-Roasting — Roast Hours Overage (${tierLabel})`,
       qty: overageHours.toFixed(1),
-      rate: `$${overageRate}`,
-      amount: `$${overageCharge.toFixed(2)}`,
+      rate: formatMoney(overageRate),
+      amount: formatMoney(overageCharge),
     });
   }
 
