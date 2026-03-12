@@ -1552,6 +1552,7 @@ export type Database = {
           contract_id: string
           costing_complete: boolean
           costing_completed_at: string | null
+          costing_status: string
           created_at: string
           created_by: string | null
           duties_cad: number | null
@@ -1601,7 +1602,7 @@ export type Database = {
           other_costs_description: string | null
           po_number: string | null
           received_date: string | null
-          status: Database["public"]["Enums"]["lot_status"]
+          status: string
           transaction_fees_cad: number | null
           transaction_fees_cad_confirmed_at: string | null
           transaction_fees_cad_confirmed_by: string | null
@@ -1631,6 +1632,7 @@ export type Database = {
           contract_id: string
           costing_complete?: boolean
           costing_completed_at?: string | null
+          costing_status?: string
           created_at?: string
           created_by?: string | null
           duties_cad?: number | null
@@ -1680,7 +1682,7 @@ export type Database = {
           other_costs_description?: string | null
           po_number?: string | null
           received_date?: string | null
-          status?: Database["public"]["Enums"]["lot_status"]
+          status?: string
           transaction_fees_cad?: number | null
           transaction_fees_cad_confirmed_at?: string | null
           transaction_fees_cad_confirmed_by?: string | null
@@ -1710,6 +1712,7 @@ export type Database = {
           contract_id?: string
           costing_complete?: boolean
           costing_completed_at?: string | null
+          costing_status?: string
           created_at?: string
           created_by?: string | null
           duties_cad?: number | null
@@ -1759,7 +1762,7 @@ export type Database = {
           other_costs_description?: string | null
           po_number?: string | null
           received_date?: string | null
-          status?: Database["public"]["Enums"]["lot_status"]
+          status?: string
           transaction_fees_cad?: number | null
           transaction_fees_cad_confirmed_at?: string | null
           transaction_fees_cad_confirmed_by?: string | null

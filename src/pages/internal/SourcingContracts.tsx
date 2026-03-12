@@ -119,26 +119,21 @@ function ContractStatusBadge({ status }: { status: ContractStatus }) {
 }
 
 function LotStatusBadge({ status }: { status: string }) {
-  const labels: Record<string, string> = {
-    EN_ROUTE: 'En Route',
-    RECEIVED: 'Received',
-    COSTING_INCOMPLETE: 'Costing Incomplete',
-    COSTING_COMPLETE: 'Costing Complete',
-  };
   const cls = status === 'EN_ROUTE'
     ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
-    : status === 'COSTING_INCOMPLETE'
-    ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
-    : status === 'COSTING_COMPLETE'
-    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
     : 'bg-muted text-muted-foreground';
-  return <Badge variant="outline" className={`${cls} border-0 text-xs`}>{labels[status] || status}</Badge>;
+  return <Badge variant="outline" className={`${cls} border-0 text-xs`}>{status === 'EN_ROUTE' ? 'En Route' : 'Received'}</Badge>;
 }
 
 function formatPrice(value: number | null, currency: string | null) {
   if (value == null) return '—';
   const prefix = currency === 'CAD' ? 'CAD' : 'USD';
   return `${prefix} $${value.toFixed(4)}/kg`;
+}
+
+function formatMoney(value: number | null) {
+  if (value == null) return '—';
+  return `$${value.toFixed(2)}`;
 }
 
 // ─── Main Page ─────────────────────────────────────────────
@@ -541,7 +536,7 @@ function ContractDetailPanel({
   const receiveMutation = useMutation({
     mutationFn: async () => {
       if (!receiveLotId) return;
-      const updateData: any = { status: 'COSTING_INCOMPLETE', received_date: format(new Date(), 'yyyy-MM-dd') };
+      const updateData: any = { status: 'RECEIVED', received_date: format(new Date(), 'yyyy-MM-dd') };
       if (!receiveAsExpected) { updateData.exceptions_noted = true; updateData.exceptions_notes = exceptionsNotes.trim(); }
       const { error } = await supabase.from('green_lots').update(updateData).eq('id', receiveLotId);
       if (error) throw error;

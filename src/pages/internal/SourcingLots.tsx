@@ -25,7 +25,8 @@ interface LotRow {
   bag_size_kg: number;
   kg_received: number | null;
   kg_on_hand: number;
-  status: string;
+  status: 'EN_ROUTE' | 'RECEIVED';
+  costing_status: 'INCOMPLETE' | 'COMPLETE';
   expected_delivery_date: string | null;
   received_date: string | null;
   carrier: string | null;
@@ -96,29 +97,26 @@ interface LotNote {
 
 // ─── Badges ────────────────────────────────────────────────
 
-const LOT_STATUS_LABELS: Record<string, string> = {
-  EN_ROUTE: 'En Route',
-  RECEIVED: 'Received',
-  COSTING_INCOMPLETE: 'Costing Incomplete',
-  COSTING_COMPLETE: 'Costing Complete',
-};
-
-function LotStatusBadge({ status }: { status: string }) {
+function PhysicalStatusBadge({ status }: { status: string }) {
   const cls = status === 'EN_ROUTE'
     ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
-    : status === 'COSTING_INCOMPLETE'
-    ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
-    : status === 'COSTING_COMPLETE'
-    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
     : 'bg-muted text-muted-foreground';
-  return <Badge variant="outline" className={`${cls} border-0 text-xs`}>{LOT_STATUS_LABELS[status] || status}</Badge>;
+  return <Badge variant="outline" className={`${cls} border-0 text-xs`}>{status === 'EN_ROUTE' ? 'En Route' : 'Received'}</Badge>;
+}
+
+function CostingStatusBadge({ costingStatus }: { costingStatus: string }) {
+  const cls = costingStatus === 'COMPLETE'
+    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+    : 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
+  return <Badge variant="outline" className={`${cls} border-0 text-xs`}>{costingStatus === 'COMPLETE' ? 'Costed' : 'Not Costed'}</Badge>;
 }
 
 // ─── Main Page ─────────────────────────────────────────────
 
 export default function SourcingLots() {
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [physicalFilter, setPhysicalFilter] = useState<string>('ALL');
+  const [costingFilter, setCostingFilter] = useState<string>('ALL');
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
 
   const { data: lots = [], isLoading } = useQuery({
@@ -154,7 +152,9 @@ export default function SourcingLots() {
 
   const filtered = useMemo(() => {
     return sorted.filter(l => {
-      if (statusFilter !== 'ALL' && l.status !== statusFilter) return false;
+      if (physicalFilter !== 'ALL' && l.status !== physicalFilter) return false;
+      if (costingFilter === 'INCOMPLETE' && l.costing_status !== 'INCOMPLETE') return false;
+      if (costingFilter === 'COMPLETE' && l.costing_status !== 'COMPLETE') return false;
       if (search) {
         const s = search.toLowerCase();
         const c = contractMap[l.contract_id];
@@ -165,7 +165,7 @@ export default function SourcingLots() {
       }
       return true;
     });
-  }, [sorted, statusFilter, search, contractMap]);
+  }, [sorted, physicalFilter, costingFilter, search, contractMap]);
 
   return (
     <div className="page-container space-y-6">
@@ -178,15 +178,24 @@ export default function SourcingLots() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative max-w-sm flex-1">
+      <div className="flex flex-col gap-3">
+        <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search lots…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <div className="flex gap-1.5">
-          {['ALL', 'EN_ROUTE', 'RECEIVED', 'COSTING_INCOMPLETE', 'COSTING_COMPLETE'].map(s => (
-            <Button key={s} variant={statusFilter === s ? 'default' : 'outline'} size="sm" onClick={() => setStatusFilter(s)}>
-              {s === 'ALL' ? 'All' : LOT_STATUS_LABELS[s]}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground font-medium w-16">Status:</span>
+          {['ALL', 'EN_ROUTE', 'RECEIVED'].map(s => (
+            <Button key={s} variant={physicalFilter === s ? 'default' : 'outline'} size="sm" onClick={() => setPhysicalFilter(s)}>
+              {s === 'ALL' ? 'All' : s === 'EN_ROUTE' ? 'En Route' : 'Received'}
+            </Button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground font-medium w-16">Costing:</span>
+          {[{ key: 'ALL', label: 'All' }, { key: 'INCOMPLETE', label: 'Not Costed' }, { key: 'COMPLETE', label: 'Costed' }].map(({ key, label }) => (
+            <Button key={key} variant={costingFilter === key ? 'default' : 'outline'} size="sm" onClick={() => setCostingFilter(key)}>
+              {label}
             </Button>
           ))}
         </div>
@@ -195,7 +204,7 @@ export default function SourcingLots() {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : filtered.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{search || statusFilter !== 'ALL' ? 'No lots match your filters.' : 'No lots yet. Release coffee from a contract to create lots.'}</p>
+        <p className="text-sm text-muted-foreground">{search || physicalFilter !== 'ALL' || costingFilter !== 'ALL' ? 'No lots match your filters.' : 'No lots yet. Release coffee from a contract to create lots.'}</p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map(lot => {
@@ -207,14 +216,15 @@ export default function SourcingLots() {
                   <p className="font-semibold text-base leading-tight">{lot.lot_number}</p>
                   {c && <p className="text-sm text-muted-foreground">{c.name}</p>}
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <LotStatusBadge status={lot.status} />
+                    <PhysicalStatusBadge status={lot.status} />
+                    <CostingStatusBadge costingStatus={lot.costing_status} />
                     {lot.exceptions_noted && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
                   </div>
                   <p className="text-sm">{lot.bags_released} bags · {kgReceived.toLocaleString()} kg</p>
                   {lot.status === 'EN_ROUTE' && lot.expected_delivery_date && (
                     <p className="text-xs text-muted-foreground">Arriving {format(new Date(lot.expected_delivery_date + 'T00:00:00'), 'MMM d, yyyy')}</p>
                   )}
-                  {lot.status === 'COSTING_COMPLETE' && lot.book_value_per_kg != null && (
+                  {lot.costing_status === 'COMPLETE' && lot.book_value_per_kg != null && (
                     <p className="text-sm font-medium">CAD ${lot.book_value_per_kg.toFixed(4)}/kg</p>
                   )}
                   <div className="pt-1">
@@ -269,8 +279,8 @@ function CostField({
             <Pencil className="h-3 w-3" /> Edit
           </Button>
         </div>
-        <p className="text-sm font-medium">{displayCurrency} ${(displayVal ?? 0).toFixed(4)}</p>
-        {isUsd && fxRate && <p className="text-xs text-muted-foreground">= CAD ${(value ?? 0).toFixed(4)} @ {fxRate.toFixed(4)}</p>}
+        <p className="text-sm font-medium">{displayCurrency} ${(displayVal ?? 0).toFixed(2)}</p>
+        {isUsd && fxRate && <p className="text-xs text-muted-foreground">= CAD ${(value ?? 0).toFixed(2)} @ {fxRate.toFixed(4)}</p>}
         {descriptionValue && <p className="text-xs text-muted-foreground italic">{descriptionValue}</p>}
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <CheckCircle2 className="h-3 w-3 text-green-600 dark:text-green-400" />
@@ -286,8 +296,8 @@ function CostField({
       <div className="flex gap-2">
         <Input
           type="number"
-          step="0.0001"
-          placeholder="0.0000"
+          step="0.01"
+          placeholder="0.00"
           value={value != null ? String(value) : ''}
           onChange={(e) => onChange(e.target.value ? parseFloat(e.target.value) : null)}
           className="flex-1"
@@ -442,6 +452,7 @@ function LotDetailPanel({
       if (error) throw error;
     },
     onSuccess: () => {
+      toast.success('Saved');
       refetchLot();
       queryClient.invalidateQueries({ queryKey: ['green-lots'] });
     },
@@ -457,8 +468,8 @@ function LotDetailPanel({
       [`${fieldPrefix}_confirmed_by`]: null,
       [`${fieldPrefix}_confirmed_at`]: null,
     };
-    if (lot?.status === 'COSTING_COMPLETE') {
-      updates.status = 'COSTING_INCOMPLETE';
+    if (lot?.costing_status === 'COMPLETE') {
+      updates.costing_status = 'INCOMPLETE';
     }
     fieldSaveMutation.mutate(updates);
     toast.info('Confirmation cleared — field unlocked for editing');
@@ -521,15 +532,12 @@ function LotDetailPanel({
         const totalCosts = storedInvoice + storedCarry + storedFreight + (duties ?? 0) + (txFees ?? 0) + (otherCosts ?? 0);
         const bvPerKg = kgReceived > 0 ? totalCosts / kgReceived : 0;
         updates.book_value_per_kg = bvPerKg;
-        updates.status = 'COSTING_COMPLETE';
+        updates.costing_status = 'COMPLETE';
 
-        if (paymentTerms != null && estDaysConsume != null) {
-          const avgDaysFinanced = (estDaysConsume - paymentTerms) / 2;
-          const financingCostPerKg = bvPerKg * 0.12 * (avgDaysFinanced / 365);
-          updates.market_value_per_kg = bvPerKg + financingCostPerKg;
-        } else {
-          updates.market_value_per_kg = bvPerKg;
-        }
+        // TODO: Revisit financing calculation — hardcoded 60 days at 12% APR, needs proper inputs and audit trail
+        const avgDaysFinanced = 60;
+        const financingCostPerKg = bvPerKg * 0.12 * (avgDaysFinanced / 365);
+        updates.market_value_per_kg = bvPerKg + financingCostPerKg;
       }
 
       const { error } = await supabase.from('green_lots').update(updates as any).eq('id', lotId!);
@@ -563,16 +571,17 @@ function LotDetailPanel({
     const totalCosts = fields.reduce((sum, f) => sum + (f.cad ?? 0), 0);
     const bvPerKg = kgReceived > 0 ? totalCosts / kgReceived : null;
 
+    // TODO: Revisit financing calculation — hardcoded 60 days at 12% APR, needs proper inputs and audit trail
     let financingCostPerKg: number | null = null;
     let mvPerKg: number | null = null;
-    if (bvPerKg != null && paymentTerms != null && estDaysConsume != null) {
-      const avgDaysFinanced = (estDaysConsume - paymentTerms) / 2;
+    if (bvPerKg != null) {
+      const avgDaysFinanced = 60;
       financingCostPerKg = bvPerKg * 0.12 * (avgDaysFinanced / 365);
       mvPerKg = bvPerKg + financingCostPerKg;
     }
 
     return { fields, totalCosts, bvPerKg, financingCostPerKg, mvPerKg };
-  }, [lot, invoiceAmt, invoiceIsUsd, carryFees, carryFeesIsUsd, freight, freightIsUsd, duties, txFees, otherCosts, fxRate, kgReceived, paymentTerms, estDaysConsume, toCad]);
+  }, [lot, invoiceAmt, invoiceIsUsd, carryFees, carryFeesIsUsd, freight, freightIsUsd, duties, txFees, otherCosts, fxRate, kgReceived, toCad]);
 
   const hasUnconfirmedWithValue = lot ? (
     (fxRate != null && !lot.fx_rate_confirmed_at) ||
@@ -605,6 +614,12 @@ function LotDetailPanel({
     onError: () => toast.error('Failed to add note'),
   });
 
+  // Save & Close
+  const handleSaveAndClose = () => {
+    saveCostValues();
+    onClose();
+  };
+
   // Brief Me
   const [briefCopied, setBriefCopied] = useState(false);
   const handleBriefMe = async () => {
@@ -623,7 +638,8 @@ function LotDetailPanel({
     if (c?.producer) lines.push(`Producer: ${c.producer}`);
     if (c?.variety) lines.push(`Variety: ${c.variety}`);
     if (c?.crop_year) lines.push(`Crop Year: ${c.crop_year}`);
-    lines.push(`Status: ${LOT_STATUS_LABELS[lot.status] || lot.status}`);
+    lines.push(`Status: ${lot.status === 'EN_ROUTE' ? 'En Route' : 'Received'}`);
+    lines.push(`Costing: ${lot.costing_status === 'COMPLETE' ? 'Complete' : 'Incomplete'}`);
     lines.push(`Bags: ${lot.bags_released}`);
     lines.push(`Bag Size: ${lot.bag_size_kg} kg`);
     lines.push(`kg Received: ${kgReceived}`);
@@ -640,12 +656,12 @@ function LotDetailPanel({
       return ` (confirmed by ${profileMap[by || ''] || 'Unknown'} on ${format(new Date(at), 'MMM d, yyyy')})`;
     };
     if (lot.fx_rate != null) lines.push(`FX Rate: ${lot.fx_rate.toFixed(4)}${confirmStamp(lot.fx_rate_confirmed_by, lot.fx_rate_confirmed_at)}`);
-    if (lot.invoice_amount_cad != null) lines.push(`Invoice: CAD $${lot.invoice_amount_cad.toFixed(4)}${confirmStamp(lot.invoice_confirmed_by, lot.invoice_confirmed_at)}`);
-    if (lot.carry_fees_cad != null) lines.push(`Carry Fees: CAD $${lot.carry_fees_cad.toFixed(4)}${confirmStamp(lot.carry_fees_confirmed_by, lot.carry_fees_confirmed_at)}`);
-    if (lot.freight_cad != null) lines.push(`Freight: CAD $${lot.freight_cad.toFixed(4)}${confirmStamp(lot.freight_confirmed_by, lot.freight_confirmed_at)}`);
-    if (lot.duties_cad != null) lines.push(`Duties: CAD $${lot.duties_cad.toFixed(4)}${confirmStamp(lot.duties_confirmed_by, lot.duties_confirmed_at)}`);
-    if (lot.transaction_fees_cad != null) lines.push(`Transaction Fees: CAD $${lot.transaction_fees_cad.toFixed(4)}${confirmStamp(lot.transaction_fees_confirmed_by, lot.transaction_fees_confirmed_at)}`);
-    if (lot.other_costs_cad != null) lines.push(`Other Costs: CAD $${lot.other_costs_cad.toFixed(4)}${lot.other_costs_description ? ` (${lot.other_costs_description})` : ''}${confirmStamp(lot.other_costs_confirmed_by, lot.other_costs_confirmed_at)}`);
+    if (lot.invoice_amount_cad != null) lines.push(`Invoice: CAD $${lot.invoice_amount_cad.toFixed(2)}${confirmStamp(lot.invoice_confirmed_by, lot.invoice_confirmed_at)}`);
+    if (lot.carry_fees_cad != null) lines.push(`Carry Fees: CAD $${lot.carry_fees_cad.toFixed(2)}${confirmStamp(lot.carry_fees_confirmed_by, lot.carry_fees_confirmed_at)}`);
+    if (lot.freight_cad != null) lines.push(`Freight: CAD $${lot.freight_cad.toFixed(2)}${confirmStamp(lot.freight_confirmed_by, lot.freight_confirmed_at)}`);
+    if (lot.duties_cad != null) lines.push(`Duties: CAD $${lot.duties_cad.toFixed(2)}${confirmStamp(lot.duties_confirmed_by, lot.duties_confirmed_at)}`);
+    if (lot.transaction_fees_cad != null) lines.push(`Transaction Fees: CAD $${lot.transaction_fees_cad.toFixed(2)}${confirmStamp(lot.transaction_fees_confirmed_by, lot.transaction_fees_confirmed_at)}`);
+    if (lot.other_costs_cad != null) lines.push(`Other Costs: CAD $${lot.other_costs_cad.toFixed(2)}${lot.other_costs_description ? ` (${lot.other_costs_description})` : ''}${confirmStamp(lot.other_costs_confirmed_by, lot.other_costs_confirmed_at)}`);
     if (lot.book_value_per_kg != null) lines.push(`Book Value: CAD $${lot.book_value_per_kg.toFixed(4)}/kg`);
     if (lot.market_value_per_kg != null) lines.push(`Market Value: CAD $${lot.market_value_per_kg.toFixed(4)}/kg`);
     if (lot.importer_payment_terms_days != null) lines.push(`Payment Terms: ${lot.importer_payment_terms_days} days`);
@@ -671,12 +687,18 @@ function LotDetailPanel({
         <SheetHeader className="flex-row items-center justify-between gap-2 pr-2">
           <div className="flex items-center gap-2">
             <SheetTitle className="text-lg">{lot?.lot_number || 'Lot'}</SheetTitle>
-            {lot && <LotStatusBadge status={lot.status} />}
+            {lot && <PhysicalStatusBadge status={lot.status} />}
+            {lot && <CostingStatusBadge costingStatus={lot.costing_status} />}
           </div>
-          <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={handleBriefMe}>
-            {briefCopied ? <Check className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
-            {briefCopied ? 'Copied' : 'Brief Me'}
-          </Button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleSaveAndClose}>
+              Save & Close
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleBriefMe}>
+              {briefCopied ? <Check className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+              {briefCopied ? 'Copied' : 'Brief Me'}
+            </Button>
+          </div>
         </SheetHeader>
 
         {lot && (
@@ -811,7 +833,7 @@ function LotDetailPanel({
             <div className="space-y-4">
               <h3 className="text-sm font-semibold">Cost Confirmation</h3>
 
-              {lot.status === 'COSTING_COMPLETE' && allFieldsConfirmed && (
+              {lot.costing_status === 'COMPLETE' && allFieldsConfirmed && (
                 <div className="rounded-lg border border-green-300 bg-green-50 dark:bg-green-950/30 dark:border-green-800 px-4 py-3 flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
                   <p className="text-sm font-medium text-green-800 dark:text-green-200">Costing complete — all fields confirmed.</p>
@@ -850,13 +872,13 @@ function LotDetailPanel({
                     {liveSummary.fields.map(f => (
                       <div key={f.label} className={`flex justify-between text-sm ${!f.confirmed && f.cad != null ? 'italic text-muted-foreground' : ''}`}>
                         <span>{f.label} {!f.confirmed && f.cad != null && <span className="text-xs">(pending)</span>}</span>
-                        <span>{f.cad != null ? `CAD $${f.cad.toFixed(4)}` : '—'}</span>
+                        <span>{f.cad != null ? `CAD $${f.cad.toFixed(2)}` : '—'}</span>
                       </div>
                     ))}
                     <Separator className="my-2" />
                     <div className="flex justify-between text-sm font-medium">
                       <span>Total Costs (CAD)</span>
-                      <span>CAD ${liveSummary.totalCosts.toFixed(4)}</span>
+                      <span>CAD ${liveSummary.totalCosts.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>kg Received</span>
@@ -877,13 +899,13 @@ function LotDetailPanel({
                       </div>
                     )}
                     {liveSummary.mvPerKg != null && (
-                      <div className="flex justify-between text-base font-bold">
-                        <span>Market Value/kg</span>
-                        <span>CAD ${liveSummary.mvPerKg.toFixed(4)}/kg</span>
-                      </div>
-                    )}
-                    {liveSummary.mvPerKg == null && paymentTerms == null && (
-                      <p className="text-xs text-muted-foreground">Set financing inputs to calculate market value.</p>
+                      <>
+                        <div className="flex justify-between text-base font-bold">
+                          <span>Market Value/kg</span>
+                          <span>CAD ${liveSummary.mvPerKg.toFixed(4)}/kg</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground italic">Financing estimate: 60 days @ 12% APR — placeholder, to be revisited.</p>
+                      </>
                     )}
                   </CardContent>
                 </Card>
