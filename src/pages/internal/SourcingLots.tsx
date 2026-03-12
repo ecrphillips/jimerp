@@ -34,7 +34,7 @@ interface LotRow {
   warehouse_location: string | null;
   exceptions_noted: boolean;
   exceptions_notes: string | null;
-  bag_marks: string | null;
+  lot_identifier: string | null;
   po_number: string | null;
   vendor_invoice_number: string | null;
   // cost fields
