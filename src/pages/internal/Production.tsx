@@ -12,6 +12,7 @@ import {
   getVancouverNow,
 } from '@/lib/productionScheduling';
 import type { DateFilterConfig } from '@/components/production/types';
+import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 
 type StationView = 'roast' | 'pack' | 'ship';
 type DateFilterMode = 'today' | 'tomorrow' | 'all';
