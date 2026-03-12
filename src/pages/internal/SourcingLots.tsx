@@ -269,8 +269,9 @@ function CostField({
   const isConfirmed = !!confirmedAt;
 
   if (isConfirmed) {
-    const displayVal = isUsd && fxRate ? value! / fxRate : value;
+    const displayVal = isUsd && fxRate ? (value ?? 0) / fxRate : (value ?? 0);
     const displayCurrency = isUsd ? 'USD' : 'CAD';
+    const isZero = displayVal === 0;
     return (
       <div className="space-y-1">
         <div className="flex items-center justify-between">
@@ -279,8 +280,12 @@ function CostField({
             <Pencil className="h-3 w-3" /> Edit
           </Button>
         </div>
-        <p className="text-sm font-medium">{displayCurrency} ${(displayVal ?? 0).toFixed(2)}</p>
-        {isUsd && fxRate && <p className="text-xs text-muted-foreground">= CAD ${(value ?? 0).toFixed(2)} @ {fxRate.toFixed(4)}</p>}
+        {isZero ? (
+          <p className="text-sm text-muted-foreground">—</p>
+        ) : (
+          <p className="text-sm font-medium">{displayCurrency} ${displayVal.toFixed(2)}</p>
+        )}
+        {!isZero && isUsd && fxRate && <p className="text-xs text-muted-foreground">= CAD ${(value ?? 0).toFixed(2)} @ {fxRate.toFixed(4)}</p>}
         {descriptionValue && <p className="text-xs text-muted-foreground italic">{descriptionValue}</p>}
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <CheckCircle2 className="h-3 w-3 text-green-600 dark:text-green-400" />
