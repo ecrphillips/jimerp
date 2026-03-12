@@ -1091,7 +1091,7 @@ Home Island Coffee Partners`;
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button
-            disabled={!bagMarks.trim() || !bags || !parseInt(bags) || !expectedDate || createMutation.isPending}
+            disabled={!bags || !parseInt(bags) || !expectedDate || createMutation.isPending}
             onClick={() => createMutation.mutate()}
           >
             {createMutation.isPending ? 'Releasing…' : 'Release Coffee'}
