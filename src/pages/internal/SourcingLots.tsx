@@ -34,7 +34,7 @@ interface LotRow {
   warehouse_location: string | null;
   exceptions_noted: boolean;
   exceptions_notes: string | null;
-  bag_marks: string | null;
+  lot_identifier: string | null;
   po_number: string | null;
   vendor_invoice_number: string | null;
   // cost fields
@@ -410,7 +410,7 @@ function LotDetailPanel({
   const [estDaysConsume, setEstDaysConsume] = useState<number | null>(null);
 
   // Editable lot fields
-  const [editBagMarks, setEditBagMarks] = useState('');
+  const [editLotIdentifier, setEditLotIdentifier] = useState('');
   const [editVendorInvoice, setEditVendorInvoice] = useState('');
 
   // Sync from DB
@@ -441,7 +441,7 @@ function LotDetailPanel({
       setOtherCostsDesc(lot.other_costs_description || '');
       setPaymentTerms(lot.importer_payment_terms_days);
       setEstDaysConsume(lot.estimated_days_to_consume);
-      setEditBagMarks(lot.bag_marks || '');
+      setEditLotIdentifier(lot.lot_identifier || '');
       setEditVendorInvoice(lot.vendor_invoice_number || '');
     }
   }, [lot]);
@@ -634,7 +634,7 @@ function LotDetailPanel({
     const lines: string[] = [];
     lines.push(`Lot Number: ${lot.lot_number}`);
     if (lot.po_number) lines.push(`PO Number: ${lot.po_number}`);
-    if (lot.bag_marks) lines.push(`Bag Marks: ${lot.bag_marks}`);
+    if (lot.lot_identifier) lines.push(`Lot Identifier: ${lot.lot_identifier}`);
     if (lot.vendor_invoice_number) lines.push(`Vendor Invoice #: ${lot.vendor_invoice_number}`);
     lines.push(`Contract: ${c?.name || '—'}`);
     if (c?.internal_contract_number) lines.push(`Internal Contract #: ${c.internal_contract_number}`);
@@ -716,16 +716,16 @@ function LotDetailPanel({
               {/* Editable lot-level fields at top */}
               <div className="space-y-3">
                 <div>
-                  <Label className="text-xs text-muted-foreground">Bag Marks</Label>
+                  <Label className="text-xs text-muted-foreground">Lot Identifier</Label>
                   <Input
-                    value={editBagMarks}
-                    onChange={(e) => setEditBagMarks(e.target.value)}
+                    value={editLotIdentifier}
+                    onChange={(e) => setEditLotIdentifier(e.target.value)}
                     onBlur={() => {
-                      if (editBagMarks !== (lot.bag_marks || '')) {
-                        saveFinancingField('bag_marks', editBagMarks.trim() || null);
+                      if (editLotIdentifier !== (lot.lot_identifier || '')) {
+                        saveFinancingField('lot_identifier', editLotIdentifier.trim() || null);
                       }
                     }}
-                    placeholder="Bag marks"
+                    placeholder="Lot identifier"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">

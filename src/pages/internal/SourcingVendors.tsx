@@ -19,6 +19,7 @@ import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 interface Vendor {
   id: string;
   name: string;
+  abbreviation: string | null;
   contact_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
@@ -219,6 +220,7 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
     if (vendor) {
       setForm({
         name: vendor.name,
+        abbreviation: vendor.abbreviation,
         contact_name: vendor.contact_name,
         contact_email: vendor.contact_email,
         contact_phone: vendor.contact_phone,
@@ -241,6 +243,7 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
         .from('green_vendors')
         .update({
           name: (form.name || '').trim(),
+          abbreviation: (form as any).abbreviation?.trim() || null,
           contact_name: form.contact_name?.trim() || null,
           contact_email: form.contact_email?.trim() || null,
           contact_phone: form.contact_phone?.trim() || null,
@@ -345,9 +348,15 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
           <div className="space-y-6 pt-4">
             {/* Editable fields */}
             <div className="space-y-4">
-              <div>
-                <Label>Name *</Label>
-                <Input value={form.name || ''} onChange={(e) => updateField('name', e.target.value)} />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Name *</Label>
+                  <Input value={form.name || ''} onChange={(e) => updateField('name', e.target.value)} />
+                </div>
+                <div>
+                  <Label>Abbreviation</Label>
+                  <Input value={(form as any).abbreviation || ''} onChange={(e) => updateField('abbreviation', e.target.value)} placeholder="e.g. CON" />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -465,6 +474,7 @@ function AddVendorModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
+  const [abbreviation, setAbbreviation] = useState('');
   const [contactName, setContactName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
@@ -473,6 +483,7 @@ function AddVendorModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
 
   const reset = () => {
     setName('');
+    setAbbreviation('');
     setContactName('');
     setContactEmail('');
     setContactPhone('');
@@ -486,6 +497,7 @@ function AddVendorModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
         .from('green_vendors')
         .insert({
           name: name.trim(),
+          abbreviation: abbreviation.trim() || null,
           contact_name: contactName.trim() || null,
           contact_email: contactEmail.trim() || null,
           contact_phone: contactPhone.trim() || null,
@@ -521,9 +533,15 @@ function AddVendorModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
           <DialogTitle>Add Vendor</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div>
-            <Label>Name *</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Vendor name" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Name *</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Vendor name" />
+            </div>
+            <div>
+              <Label>Abbreviation</Label>
+              <Input value={abbreviation} onChange={(e) => setAbbreviation(e.target.value)} placeholder="e.g. CON" />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
