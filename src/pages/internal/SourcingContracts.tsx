@@ -599,10 +599,18 @@ function ContractDetailPanel({
                   <Label>Origin Country</Label>
                   <Select value={form.origin_country || '_none'} onValueChange={(v) => updateField('origin_country', v === '_none' ? null : v)}>
                     <SelectTrigger><SelectValue placeholder="Select country" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_none">None</SelectItem>
-                      {COFFEE_ORIGIN_COUNTRIES.map(c => <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>)}
-                    </SelectContent>
+                     <SelectContent>
+                       <SelectItem value="_none">None</SelectItem>
+                       <SelectGroup>
+                         <SelectLabel>Common Origins</SelectLabel>
+                         {COMMON_ORIGINS.map(c => <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>)}
+                       </SelectGroup>
+                       <SelectSeparator />
+                       <SelectGroup>
+                         <SelectLabel>Other Origins</SelectLabel>
+                         {OTHER_ORIGINS.map(c => <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>)}
+                       </SelectGroup>
+                     </SelectContent>
                   </Select>
                 </div>
 
