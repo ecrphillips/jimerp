@@ -1220,7 +1220,7 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
         internal_contract_number: internalNumber,
         vendor_contract_number: vendorContractNumber.trim() || null,
         origin_country: originCountry || null,
-        bag_marks: bagMarks.trim() || null,
+        lot_identifier: lotIdentifier.trim() || null,
       } as any).select('id').single();
       if (error) throw error;
 
