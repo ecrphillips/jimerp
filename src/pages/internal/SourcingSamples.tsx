@@ -1144,7 +1144,7 @@ function SampleDetailPanel({
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Stored: {getPriceForStorage().currency} ${getPriceForStorage().price?.toFixed(4) ?? '-'} / kg
+                  Stored: {getPriceForStorage().price != null ? formatPerKg(getPriceForStorage().price!, (getPriceForStorage().currency === 'CAD' ? 'CAD' : 'USD') as 'CAD' | 'USD') : '—'}
                 </p>
               </div>
               <div>
