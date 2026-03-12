@@ -924,6 +924,10 @@ function AddSampleModal({
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      // Convert price to $/kg for storage
+      const priceVal = price ? parseFloat(price) : null;
+      const storagePrice = priceVal && priceUnit === 'lb' ? priceVal * 2.20462 : priceVal;
+
       const { data: sample, error } = await supabase
         .from('green_samples')
         .insert({
@@ -934,7 +938,7 @@ function AddSampleModal({
           producer: producer.trim() || null,
           variety: variety.trim() || null,
           category: category as GreenCategory,
-          indicative_price_usd: price ? parseFloat(price) : null,
+          indicative_price_usd: storagePrice,
           warehouse_location: warehouse.trim() || null,
           bag_size_kg: bagSize ? parseFloat(bagSize) : null,
           num_bags: numBags ? parseInt(numBags) : null,
@@ -955,11 +959,11 @@ function AddSampleModal({
         if (linkErr) throw linkErr;
       }
 
-      // Initial note
-      if (initialNote.trim()) {
+      // Other notes
+      if (otherNotes.trim()) {
         const { error: noteErr } = await supabase
           .from('green_sample_notes')
-          .insert({ sample_id: sample.id, note: initialNote.trim(), created_by: authUser!.id });
+          .insert({ sample_id: sample.id, note: otherNotes.trim(), created_by: authUser!.id });
         if (noteErr) throw noteErr;
       }
     },
