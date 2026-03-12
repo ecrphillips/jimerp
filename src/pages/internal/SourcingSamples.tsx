@@ -917,7 +917,7 @@ function AddSampleModal({
   const [variety, setVariety] = useState('');
   const [category, setCategory] = useState<GreenCategory | ''>('');
   const [price, setPrice] = useState('');
-  const [priceUnit, setPriceUnit] = useState<'kg' | 'lb'>('kg');
+  const [priceUnit, setPriceUnit] = useState<'usd_kg' | 'usd_lb' | 'cad_kg'>('usd_kg');
   const [warehouse, setWarehouse] = useState('');
   const [bagSize, setBagSize] = useState('');
   const [numBags, setNumBags] = useState('');
