@@ -884,7 +884,7 @@ function LotDetailPanel({
                     <Separator className="my-2" />
                     <div className="flex justify-between text-sm font-medium">
                       <span>Total Costs (CAD)</span>
-                      <span>CAD ${liveSummary.totalCosts.toFixed(2)}</span>
+                      <span>{formatMoney(liveSummary.totalCosts)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>kg Received</span>
