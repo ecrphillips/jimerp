@@ -716,16 +716,16 @@ function LotDetailPanel({
               {/* Editable lot-level fields at top */}
               <div className="space-y-3">
                 <div>
-                  <Label className="text-xs text-muted-foreground">Bag Marks</Label>
+                  <Label className="text-xs text-muted-foreground">Lot Identifier</Label>
                   <Input
-                    value={editBagMarks}
-                    onChange={(e) => setEditBagMarks(e.target.value)}
+                    value={editLotIdentifier}
+                    onChange={(e) => setEditLotIdentifier(e.target.value)}
                     onBlur={() => {
-                      if (editBagMarks !== (lot.bag_marks || '')) {
-                        saveFinancingField('bag_marks', editBagMarks.trim() || null);
+                      if (editLotIdentifier !== (lot.lot_identifier || '')) {
+                        saveFinancingField('lot_identifier', editLotIdentifier.trim() || null);
                       }
                     }}
-                    placeholder="Bag marks"
+                    placeholder="Lot identifier"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">

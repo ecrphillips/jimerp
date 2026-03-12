@@ -1296,8 +1296,8 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
             <Input value={vendorContractNumber} onChange={(e) => setVendorContractNumber(e.target.value)} placeholder="Vendor's contract reference (optional)" />
           </div>
           <div>
-            <Label>Bag Marks</Label>
-            <Input value={bagMarks} onChange={(e) => setBagMarks(e.target.value)} placeholder="As they appear on bags, invoice, and delivery order" />
+            <Label>Lot Identifier</Label>
+            <Input value={lotIdentifier} onChange={(e) => setLotIdentifier(e.target.value)} placeholder="As it appears on bags, invoice, and delivery order" />
           </div>
           <div>
             <Label>Name *</Label>
