@@ -1,0 +1,1 @@
+ALTER TABLE public.green_samples ADD COLUMN indicative_price_currency text DEFAULT 'USD';
