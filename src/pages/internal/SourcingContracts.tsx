@@ -975,7 +975,7 @@ Home Island Coffee Partners`;
         vendor_release_communicated_by: authUser!.id,
         kg_on_hand: 0,
         created_by: authUser!.id,
-        bag_marks: bagMarks.trim() || null,
+        lot_identifier: lotIdentifier.trim() || null,
         po_number: poNumber,
       } as any).select('id').single();
       if (error) throw error;
