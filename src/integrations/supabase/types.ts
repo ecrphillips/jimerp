@@ -1242,41 +1242,500 @@ export type Database = {
           },
         ]
       }
-      green_coffee_lots: {
+      green_contracts: {
+        Row: {
+          bag_size_kg: number | null
+          category: Database["public"]["Enums"]["green_coffee_category"]
+          contracted_price_usd: number | null
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          notes: string | null
+          num_bags: number | null
+          origin: string | null
+          producer: string | null
+          sample_id: string | null
+          status: Database["public"]["Enums"]["contract_status"]
+          total_kg: number | null
+          updated_at: string
+          variety: string | null
+          vendor_id: string
+          warehouse_location: string
+        }
+        Insert: {
+          bag_size_kg?: number | null
+          category: Database["public"]["Enums"]["green_coffee_category"]
+          contracted_price_usd?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          num_bags?: number | null
+          origin?: string | null
+          producer?: string | null
+          sample_id?: string | null
+          status?: Database["public"]["Enums"]["contract_status"]
+          total_kg?: number | null
+          updated_at?: string
+          variety?: string | null
+          vendor_id: string
+          warehouse_location: string
+        }
+        Update: {
+          bag_size_kg?: number | null
+          category?: Database["public"]["Enums"]["green_coffee_category"]
+          contracted_price_usd?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          num_bags?: number | null
+          origin?: string | null
+          producer?: string | null
+          sample_id?: string | null
+          status?: Database["public"]["Enums"]["contract_status"]
+          total_kg?: number | null
+          updated_at?: string
+          variety?: string | null
+          vendor_id?: string
+          warehouse_location?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_contracts_sample_id_fkey"
+            columns: ["sample_id"]
+            isOneToOne: false
+            referencedRelation: "green_samples"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "green_contracts_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "green_vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      green_inventory_snapshots: {
+        Row: {
+          book_value_per_kg: number | null
+          created_at: string
+          created_by: string | null
+          id: string
+          kg_on_hand: number
+          lot_id: string
+          snapshot_date: string
+          total_book_value: number | null
+        }
+        Insert: {
+          book_value_per_kg?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kg_on_hand: number
+          lot_id: string
+          snapshot_date: string
+          total_book_value?: number | null
+        }
+        Update: {
+          book_value_per_kg?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kg_on_hand?: number
+          lot_id?: string
+          snapshot_date?: string
+          total_book_value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_inventory_snapshots_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "green_lots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      green_lot_consumption_log: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          kg_consumed: number
+          lot_id: string
+          notes: string | null
+          roasted_batch_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kg_consumed: number
+          lot_id: string
+          notes?: string | null
+          roasted_batch_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kg_consumed?: number
+          lot_id?: string
+          notes?: string | null
+          roasted_batch_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_lot_consumption_log_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "green_lots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "green_lot_consumption_log_roasted_batch_id_fkey"
+            columns: ["roasted_batch_id"]
+            isOneToOne: false
+            referencedRelation: "roasted_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      green_lot_roast_group_links: {
         Row: {
           created_at: string
           id: string
-          kg_on_hand: number
-          kg_received: number
-          name: string
-          notes_internal: string | null
-          origin: string | null
-          received_date: string | null
-          supplier: string | null
-          updated_at: string
+          lot_id: string
+          pct_of_lot: number | null
+          roast_group: string
         }
         Insert: {
           created_at?: string
           id?: string
-          kg_on_hand?: number
-          kg_received?: number
-          name: string
-          notes_internal?: string | null
-          origin?: string | null
-          received_date?: string | null
-          supplier?: string | null
-          updated_at?: string
+          lot_id: string
+          pct_of_lot?: number | null
+          roast_group: string
         }
         Update: {
           created_at?: string
           id?: string
+          lot_id?: string
+          pct_of_lot?: number | null
+          roast_group?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_lot_roast_group_links_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "green_lots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "green_lot_roast_group_links_roast_group_fkey"
+            columns: ["roast_group"]
+            isOneToOne: false
+            referencedRelation: "roast_groups"
+            referencedColumns: ["roast_group"]
+          },
+        ]
+      }
+      green_lots: {
+        Row: {
+          available_to_members: boolean
+          bag_size_kg: number
+          bags_released: number
+          carrier: string | null
+          carry_fees_usd: number | null
+          carry_fees_usd_confirmed_at: string | null
+          carry_fees_usd_confirmed_by: string | null
+          contract_id: string
+          costing_complete: boolean
+          costing_completed_at: string | null
+          created_at: string
+          created_by: string | null
+          duties_cad: number | null
+          duties_cad_confirmed_at: string | null
+          duties_cad_confirmed_by: string | null
+          estimated_days_to_consume: number | null
+          expected_delivery_date: string | null
+          financing_apr: number | null
+          freight_cad: number | null
+          freight_cad_confirmed_at: string | null
+          freight_cad_confirmed_by: string | null
+          handling_cad: number | null
+          handling_cad_confirmed_at: string | null
+          handling_cad_confirmed_by: string | null
+          id: string
+          importer_payment_terms_days: number | null
+          invoice_amount_usd: number | null
+          invoice_amount_usd_confirmed_at: string | null
+          invoice_amount_usd_confirmed_by: string | null
+          kg_on_hand: number
+          kg_received: number | null
+          lot_fx_rate: number | null
+          lot_fx_rate_confirmed_at: string | null
+          lot_fx_rate_confirmed_by: string | null
+          lot_number: string
+          member_facing_notes: string | null
+          member_markup_pct: number | null
+          notes_internal: string | null
+          received_date: string | null
+          status: Database["public"]["Enums"]["lot_status"]
+          transaction_fees_cad: number | null
+          transaction_fees_cad_confirmed_at: string | null
+          transaction_fees_cad_confirmed_by: string | null
+          updated_at: string
+          warehouse_location: string | null
+        }
+        Insert: {
+          available_to_members?: boolean
+          bag_size_kg: number
+          bags_released: number
+          carrier?: string | null
+          carry_fees_usd?: number | null
+          carry_fees_usd_confirmed_at?: string | null
+          carry_fees_usd_confirmed_by?: string | null
+          contract_id: string
+          costing_complete?: boolean
+          costing_completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          duties_cad?: number | null
+          duties_cad_confirmed_at?: string | null
+          duties_cad_confirmed_by?: string | null
+          estimated_days_to_consume?: number | null
+          expected_delivery_date?: string | null
+          financing_apr?: number | null
+          freight_cad?: number | null
+          freight_cad_confirmed_at?: string | null
+          freight_cad_confirmed_by?: string | null
+          handling_cad?: number | null
+          handling_cad_confirmed_at?: string | null
+          handling_cad_confirmed_by?: string | null
+          id?: string
+          importer_payment_terms_days?: number | null
+          invoice_amount_usd?: number | null
+          invoice_amount_usd_confirmed_at?: string | null
+          invoice_amount_usd_confirmed_by?: string | null
           kg_on_hand?: number
-          kg_received?: number
-          name?: string
+          kg_received?: number | null
+          lot_fx_rate?: number | null
+          lot_fx_rate_confirmed_at?: string | null
+          lot_fx_rate_confirmed_by?: string | null
+          lot_number: string
+          member_facing_notes?: string | null
+          member_markup_pct?: number | null
           notes_internal?: string | null
-          origin?: string | null
           received_date?: string | null
-          supplier?: string | null
+          status?: Database["public"]["Enums"]["lot_status"]
+          transaction_fees_cad?: number | null
+          transaction_fees_cad_confirmed_at?: string | null
+          transaction_fees_cad_confirmed_by?: string | null
+          updated_at?: string
+          warehouse_location?: string | null
+        }
+        Update: {
+          available_to_members?: boolean
+          bag_size_kg?: number
+          bags_released?: number
+          carrier?: string | null
+          carry_fees_usd?: number | null
+          carry_fees_usd_confirmed_at?: string | null
+          carry_fees_usd_confirmed_by?: string | null
+          contract_id?: string
+          costing_complete?: boolean
+          costing_completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          duties_cad?: number | null
+          duties_cad_confirmed_at?: string | null
+          duties_cad_confirmed_by?: string | null
+          estimated_days_to_consume?: number | null
+          expected_delivery_date?: string | null
+          financing_apr?: number | null
+          freight_cad?: number | null
+          freight_cad_confirmed_at?: string | null
+          freight_cad_confirmed_by?: string | null
+          handling_cad?: number | null
+          handling_cad_confirmed_at?: string | null
+          handling_cad_confirmed_by?: string | null
+          id?: string
+          importer_payment_terms_days?: number | null
+          invoice_amount_usd?: number | null
+          invoice_amount_usd_confirmed_at?: string | null
+          invoice_amount_usd_confirmed_by?: string | null
+          kg_on_hand?: number
+          kg_received?: number | null
+          lot_fx_rate?: number | null
+          lot_fx_rate_confirmed_at?: string | null
+          lot_fx_rate_confirmed_by?: string | null
+          lot_number?: string
+          member_facing_notes?: string | null
+          member_markup_pct?: number | null
+          notes_internal?: string | null
+          received_date?: string | null
+          status?: Database["public"]["Enums"]["lot_status"]
+          transaction_fees_cad?: number | null
+          transaction_fees_cad_confirmed_at?: string | null
+          transaction_fees_cad_confirmed_by?: string | null
+          updated_at?: string
+          warehouse_location?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_lots_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "green_contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      green_sample_roast_profile_links: {
+        Row: {
+          created_at: string
+          id: string
+          roast_group: string
+          sample_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          roast_group: string
+          sample_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          roast_group?: string
+          sample_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_sample_roast_profile_links_roast_group_fkey"
+            columns: ["roast_group"]
+            isOneToOne: false
+            referencedRelation: "roast_groups"
+            referencedColumns: ["roast_group"]
+          },
+          {
+            foreignKeyName: "green_sample_roast_profile_links_sample_id_fkey"
+            columns: ["sample_id"]
+            isOneToOne: false
+            referencedRelation: "green_samples"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      green_samples: {
+        Row: {
+          bag_size_kg: number | null
+          category: Database["public"]["Enums"]["green_coffee_category"]
+          created_at: string
+          created_by: string | null
+          id: string
+          indicative_price_usd: number | null
+          name: string
+          origin: string | null
+          producer: string | null
+          rejected_reason: string | null
+          score: number | null
+          status: Database["public"]["Enums"]["sample_status"]
+          tasting_notes: string | null
+          updated_at: string
+          variety: string | null
+          vendor_id: string | null
+          warehouse_location: string | null
+        }
+        Insert: {
+          bag_size_kg?: number | null
+          category: Database["public"]["Enums"]["green_coffee_category"]
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          indicative_price_usd?: number | null
+          name: string
+          origin?: string | null
+          producer?: string | null
+          rejected_reason?: string | null
+          score?: number | null
+          status?: Database["public"]["Enums"]["sample_status"]
+          tasting_notes?: string | null
+          updated_at?: string
+          variety?: string | null
+          vendor_id?: string | null
+          warehouse_location?: string | null
+        }
+        Update: {
+          bag_size_kg?: number | null
+          category?: Database["public"]["Enums"]["green_coffee_category"]
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          indicative_price_usd?: number | null
+          name?: string
+          origin?: string | null
+          producer?: string | null
+          rejected_reason?: string | null
+          score?: number | null
+          status?: Database["public"]["Enums"]["sample_status"]
+          tasting_notes?: string | null
+          updated_at?: string
+          variety?: string | null
+          vendor_id?: string | null
+          warehouse_location?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_samples_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "green_vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      green_vendors: {
+        Row: {
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          notes: string | null
+          payment_terms_days: number | null
+          updated_at: string
+        }
+        Insert: {
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          payment_terms_days?: number | null
+          updated_at?: string
+        }
+        Update: {
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          payment_terms_days?: number | null
           updated_at?: string
         }
         Relationships: []
@@ -2068,6 +2527,7 @@ export type Database = {
         Row: {
           component_roast_group: string
           created_at: string
+          default_lot_id: string | null
           display_order: number
           id: string
           parent_roast_group: string
@@ -2076,6 +2536,7 @@ export type Database = {
         Insert: {
           component_roast_group: string
           created_at?: string
+          default_lot_id?: string | null
           display_order?: number
           id?: string
           parent_roast_group: string
@@ -2084,6 +2545,7 @@ export type Database = {
         Update: {
           component_roast_group?: string
           created_at?: string
+          default_lot_id?: string | null
           display_order?: number
           id?: string
           parent_roast_group?: string
@@ -2096,6 +2558,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "roast_groups"
             referencedColumns: ["roast_group"]
+          },
+          {
+            foreignKeyName: "roast_group_components_default_lot_id_fkey"
+            columns: ["default_lot_id"]
+            isOneToOne: false
+            referencedRelation: "green_lots"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "roast_group_components_parent_roast_group_fkey"
@@ -2510,6 +2979,7 @@ export type Database = {
     Enums: {
       app_role: "ADMIN" | "OPS" | "CLIENT"
       board_source: "MATCHSTICK" | "FUNK" | "NOSMOKE"
+      contract_status: "ACTIVE" | "DEPLETED" | "CANCELLED"
       coroast_booking_status:
         | "CONFIRMED"
         | "CANCELLED_CHARGED"
@@ -2545,6 +3015,7 @@ export type Database = {
         | "WIP_ADJUSTMENT"
         | "DECONSTRUCT"
         | "OTHER"
+      green_coffee_category: "BULK_BLENDER" | "SINGLE_ORIGIN" | "SUPER_NICE"
       grind_option: "WHOLE_BEAN" | "ESPRESSO" | "FILTER"
       inventory_transaction_type:
         | "ROAST_OUTPUT"
@@ -2553,6 +3024,11 @@ export type Database = {
         | "SHIP_CONSUME_FG"
         | "ADJUSTMENT"
         | "LOSS"
+      lot_status:
+        | "PENDING_DELIVERY"
+        | "RECEIVED"
+        | "COSTING_INCOMPLETE"
+        | "COSTING_COMPLETE"
       order_status:
         | "DRAFT"
         | "SUBMITTED"
@@ -2589,6 +3065,7 @@ export type Database = {
       prospect_stream: "CO_ROAST" | "CONTRACT" | "BOTH" | "INDUSTRY_CONTACT"
       roasted_batch_status: "PLANNED" | "ROASTED"
       roaster_machine: "SAMIAC" | "LORING"
+      sample_status: "PENDING" | "APPROVED" | "REJECTED"
       ship_priority: "NORMAL" | "TIME_SENSITIVE"
       wip_adjustment_reason:
         | "LOSS"
@@ -2733,6 +3210,7 @@ export const Constants = {
     Enums: {
       app_role: ["ADMIN", "OPS", "CLIENT"],
       board_source: ["MATCHSTICK", "FUNK", "NOSMOKE"],
+      contract_status: ["ACTIVE", "DEPLETED", "CANCELLED"],
       coroast_booking_status: [
         "CONFIRMED",
         "CANCELLED_CHARGED",
@@ -2765,6 +3243,7 @@ export const Constants = {
         "DECONSTRUCT",
         "OTHER",
       ],
+      green_coffee_category: ["BULK_BLENDER", "SINGLE_ORIGIN", "SUPER_NICE"],
       grind_option: ["WHOLE_BEAN", "ESPRESSO", "FILTER"],
       inventory_transaction_type: [
         "ROAST_OUTPUT",
@@ -2773,6 +3252,12 @@ export const Constants = {
         "SHIP_CONSUME_FG",
         "ADJUSTMENT",
         "LOSS",
+      ],
+      lot_status: [
+        "PENDING_DELIVERY",
+        "RECEIVED",
+        "COSTING_INCOMPLETE",
+        "COSTING_COMPLETE",
       ],
       order_status: [
         "DRAFT",
@@ -2808,6 +3293,7 @@ export const Constants = {
       prospect_stream: ["CO_ROAST", "CONTRACT", "BOTH", "INDUSTRY_CONTACT"],
       roasted_batch_status: ["PLANNED", "ROASTED"],
       roaster_machine: ["SAMIAC", "LORING"],
+      sample_status: ["PENDING", "APPROVED", "REJECTED"],
       ship_priority: ["NORMAL", "TIME_SENSITIVE"],
       wip_adjustment_reason: [
         "LOSS",
