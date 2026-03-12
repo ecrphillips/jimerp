@@ -414,24 +414,24 @@ function LotDetailPanel({
       if (lot.invoice_is_usd && lot.fx_rate && lot.invoice_amount_cad != null) {
         setInvoiceAmt(lot.invoice_amount_cad / lot.fx_rate);
       } else {
-        setInvoiceAmt(lot.invoice_amount_cad);
+        setInvoiceAmt(lot.invoice_amount_cad ?? 0);
       }
       setInvoiceIsUsd(lot.invoice_is_usd);
       if (lot.carry_fees_is_usd && lot.fx_rate && lot.carry_fees_cad != null) {
         setCarryFees(lot.carry_fees_cad / lot.fx_rate);
       } else {
-        setCarryFees(lot.carry_fees_cad);
+        setCarryFees(lot.carry_fees_cad ?? 0);
       }
       setCarryFeesIsUsd(lot.carry_fees_is_usd);
       if (lot.freight_is_usd && lot.fx_rate && lot.freight_cad != null) {
         setFreight(lot.freight_cad / lot.fx_rate);
       } else {
-        setFreight(lot.freight_cad);
+        setFreight(lot.freight_cad ?? 0);
       }
       setFreightIsUsd(lot.freight_is_usd);
-      setDuties(lot.duties_cad);
-      setTxFees(lot.transaction_fees_cad);
-      setOtherCosts(lot.other_costs_cad);
+      setDuties(lot.duties_cad ?? 0);
+      setTxFees(lot.transaction_fees_cad ?? 0);
+      setOtherCosts(lot.other_costs_cad ?? 0);
       setOtherCostsDesc(lot.other_costs_description || '');
       setPaymentTerms(lot.importer_payment_terms_days);
       setEstDaysConsume(lot.estimated_days_to_consume);
