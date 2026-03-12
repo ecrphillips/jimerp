@@ -1527,7 +1527,12 @@ export type Database = {
           available_to_members: boolean
           bag_size_kg: number
           bags_released: number
+          book_value_per_kg: number | null
           carrier: string | null
+          carry_fees_cad: number | null
+          carry_fees_confirmed_at: string | null
+          carry_fees_confirmed_by: string | null
+          carry_fees_is_usd: boolean
           carry_fees_usd: number | null
           carry_fees_usd_confirmed_at: string | null
           carry_fees_usd_confirmed_by: string | null
@@ -1539,6 +1544,8 @@ export type Database = {
           duties_cad: number | null
           duties_cad_confirmed_at: string | null
           duties_cad_confirmed_by: string | null
+          duties_confirmed_at: string | null
+          duties_confirmed_by: string | null
           estimated_days_to_consume: number | null
           exceptions_noted: boolean
           exceptions_notes: string | null
@@ -1547,28 +1554,45 @@ export type Database = {
           freight_cad: number | null
           freight_cad_confirmed_at: string | null
           freight_cad_confirmed_by: string | null
+          freight_confirmed_at: string | null
+          freight_confirmed_by: string | null
+          freight_is_usd: boolean
+          fx_rate: number | null
+          fx_rate_confirmed_at: string | null
+          fx_rate_confirmed_by: string | null
           handling_cad: number | null
           handling_cad_confirmed_at: string | null
           handling_cad_confirmed_by: string | null
           id: string
           importer_payment_terms_days: number | null
+          invoice_amount_cad: number | null
           invoice_amount_usd: number | null
           invoice_amount_usd_confirmed_at: string | null
           invoice_amount_usd_confirmed_by: string | null
+          invoice_confirmed_at: string | null
+          invoice_confirmed_by: string | null
+          invoice_is_usd: boolean
           kg_on_hand: number
           kg_received: number | null
           lot_fx_rate: number | null
           lot_fx_rate_confirmed_at: string | null
           lot_fx_rate_confirmed_by: string | null
           lot_number: string
+          market_value_per_kg: number | null
           member_facing_notes: string | null
           member_markup_pct: number | null
           notes_internal: string | null
+          other_costs_cad: number | null
+          other_costs_confirmed_at: string | null
+          other_costs_confirmed_by: string | null
+          other_costs_description: string | null
           received_date: string | null
           status: Database["public"]["Enums"]["lot_status"]
           transaction_fees_cad: number | null
           transaction_fees_cad_confirmed_at: string | null
           transaction_fees_cad_confirmed_by: string | null
+          transaction_fees_confirmed_at: string | null
+          transaction_fees_confirmed_by: string | null
           updated_at: string
           vendor_release_communicated_at: string | null
           vendor_release_communicated_by: string | null
@@ -1579,7 +1603,12 @@ export type Database = {
           available_to_members?: boolean
           bag_size_kg: number
           bags_released: number
+          book_value_per_kg?: number | null
           carrier?: string | null
+          carry_fees_cad?: number | null
+          carry_fees_confirmed_at?: string | null
+          carry_fees_confirmed_by?: string | null
+          carry_fees_is_usd?: boolean
           carry_fees_usd?: number | null
           carry_fees_usd_confirmed_at?: string | null
           carry_fees_usd_confirmed_by?: string | null
@@ -1591,6 +1620,8 @@ export type Database = {
           duties_cad?: number | null
           duties_cad_confirmed_at?: string | null
           duties_cad_confirmed_by?: string | null
+          duties_confirmed_at?: string | null
+          duties_confirmed_by?: string | null
           estimated_days_to_consume?: number | null
           exceptions_noted?: boolean
           exceptions_notes?: string | null
@@ -1599,28 +1630,45 @@ export type Database = {
           freight_cad?: number | null
           freight_cad_confirmed_at?: string | null
           freight_cad_confirmed_by?: string | null
+          freight_confirmed_at?: string | null
+          freight_confirmed_by?: string | null
+          freight_is_usd?: boolean
+          fx_rate?: number | null
+          fx_rate_confirmed_at?: string | null
+          fx_rate_confirmed_by?: string | null
           handling_cad?: number | null
           handling_cad_confirmed_at?: string | null
           handling_cad_confirmed_by?: string | null
           id?: string
           importer_payment_terms_days?: number | null
+          invoice_amount_cad?: number | null
           invoice_amount_usd?: number | null
           invoice_amount_usd_confirmed_at?: string | null
           invoice_amount_usd_confirmed_by?: string | null
+          invoice_confirmed_at?: string | null
+          invoice_confirmed_by?: string | null
+          invoice_is_usd?: boolean
           kg_on_hand?: number
           kg_received?: number | null
           lot_fx_rate?: number | null
           lot_fx_rate_confirmed_at?: string | null
           lot_fx_rate_confirmed_by?: string | null
           lot_number: string
+          market_value_per_kg?: number | null
           member_facing_notes?: string | null
           member_markup_pct?: number | null
           notes_internal?: string | null
+          other_costs_cad?: number | null
+          other_costs_confirmed_at?: string | null
+          other_costs_confirmed_by?: string | null
+          other_costs_description?: string | null
           received_date?: string | null
           status?: Database["public"]["Enums"]["lot_status"]
           transaction_fees_cad?: number | null
           transaction_fees_cad_confirmed_at?: string | null
           transaction_fees_cad_confirmed_by?: string | null
+          transaction_fees_confirmed_at?: string | null
+          transaction_fees_confirmed_by?: string | null
           updated_at?: string
           vendor_release_communicated_at?: string | null
           vendor_release_communicated_by?: string | null
@@ -1631,7 +1679,12 @@ export type Database = {
           available_to_members?: boolean
           bag_size_kg?: number
           bags_released?: number
+          book_value_per_kg?: number | null
           carrier?: string | null
+          carry_fees_cad?: number | null
+          carry_fees_confirmed_at?: string | null
+          carry_fees_confirmed_by?: string | null
+          carry_fees_is_usd?: boolean
           carry_fees_usd?: number | null
           carry_fees_usd_confirmed_at?: string | null
           carry_fees_usd_confirmed_by?: string | null
@@ -1643,6 +1696,8 @@ export type Database = {
           duties_cad?: number | null
           duties_cad_confirmed_at?: string | null
           duties_cad_confirmed_by?: string | null
+          duties_confirmed_at?: string | null
+          duties_confirmed_by?: string | null
           estimated_days_to_consume?: number | null
           exceptions_noted?: boolean
           exceptions_notes?: string | null
@@ -1651,28 +1706,45 @@ export type Database = {
           freight_cad?: number | null
           freight_cad_confirmed_at?: string | null
           freight_cad_confirmed_by?: string | null
+          freight_confirmed_at?: string | null
+          freight_confirmed_by?: string | null
+          freight_is_usd?: boolean
+          fx_rate?: number | null
+          fx_rate_confirmed_at?: string | null
+          fx_rate_confirmed_by?: string | null
           handling_cad?: number | null
           handling_cad_confirmed_at?: string | null
           handling_cad_confirmed_by?: string | null
           id?: string
           importer_payment_terms_days?: number | null
+          invoice_amount_cad?: number | null
           invoice_amount_usd?: number | null
           invoice_amount_usd_confirmed_at?: string | null
           invoice_amount_usd_confirmed_by?: string | null
+          invoice_confirmed_at?: string | null
+          invoice_confirmed_by?: string | null
+          invoice_is_usd?: boolean
           kg_on_hand?: number
           kg_received?: number | null
           lot_fx_rate?: number | null
           lot_fx_rate_confirmed_at?: string | null
           lot_fx_rate_confirmed_by?: string | null
           lot_number?: string
+          market_value_per_kg?: number | null
           member_facing_notes?: string | null
           member_markup_pct?: number | null
           notes_internal?: string | null
+          other_costs_cad?: number | null
+          other_costs_confirmed_at?: string | null
+          other_costs_confirmed_by?: string | null
+          other_costs_description?: string | null
           received_date?: string | null
           status?: Database["public"]["Enums"]["lot_status"]
           transaction_fees_cad?: number | null
           transaction_fees_cad_confirmed_at?: string | null
           transaction_fees_cad_confirmed_by?: string | null
+          transaction_fees_confirmed_at?: string | null
+          transaction_fees_confirmed_by?: string | null
           updated_at?: string
           vendor_release_communicated_at?: string | null
           vendor_release_communicated_by?: string | null
