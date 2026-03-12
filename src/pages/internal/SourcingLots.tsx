@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { formatMoney, formatPerKg } from '@/lib/formatMoney';
 import { format } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -225,7 +226,7 @@ export default function SourcingLots() {
                     <p className="text-xs text-muted-foreground">Arriving {format(new Date(lot.expected_delivery_date + 'T00:00:00'), 'MMM d, yyyy')}</p>
                   )}
                   {lot.costing_status === 'COMPLETE' && lot.book_value_per_kg != null && (
-                    <p className="text-sm font-medium">CAD ${lot.book_value_per_kg.toFixed(4)}/kg</p>
+                    <p className="text-sm font-medium">{formatPerKg(lot.book_value_per_kg)}</p>
                   )}
                   <div className="pt-1">
                     <Button variant="outline" size="sm" onClick={() => setSelectedLotId(lot.id)}>View</Button>
@@ -283,9 +284,9 @@ function CostField({
         {isZero ? (
           <p className="text-sm text-muted-foreground">—</p>
         ) : (
-          <p className="text-sm font-medium">{displayCurrency} ${displayVal.toFixed(2)}</p>
+          <p className="text-sm font-medium">{formatMoney(displayVal, displayCurrency)}</p>
         )}
-        {!isZero && isUsd && fxRate && <p className="text-xs text-muted-foreground">= CAD ${(value ?? 0).toFixed(2)} @ {fxRate.toFixed(4)}</p>}
+        {!isZero && isUsd && fxRate && <p className="text-xs text-muted-foreground">= {formatMoney(value ?? 0)} @ {fxRate.toFixed(4)}</p>}
         {descriptionValue && <p className="text-xs text-muted-foreground italic">{descriptionValue}</p>}
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <CheckCircle2 className="h-3 w-3 text-green-600 dark:text-green-400" />
@@ -661,14 +662,14 @@ function LotDetailPanel({
       return ` (confirmed by ${profileMap[by || ''] || 'Unknown'} on ${format(new Date(at), 'MMM d, yyyy')})`;
     };
     if (lot.fx_rate != null) lines.push(`FX Rate: ${lot.fx_rate.toFixed(4)}${confirmStamp(lot.fx_rate_confirmed_by, lot.fx_rate_confirmed_at)}`);
-    if (lot.invoice_amount_cad != null) lines.push(`Invoice: CAD $${lot.invoice_amount_cad.toFixed(2)}${confirmStamp(lot.invoice_confirmed_by, lot.invoice_confirmed_at)}`);
-    if (lot.carry_fees_cad != null) lines.push(`Carry Fees: CAD $${lot.carry_fees_cad.toFixed(2)}${confirmStamp(lot.carry_fees_confirmed_by, lot.carry_fees_confirmed_at)}`);
-    if (lot.freight_cad != null) lines.push(`Freight: CAD $${lot.freight_cad.toFixed(2)}${confirmStamp(lot.freight_confirmed_by, lot.freight_confirmed_at)}`);
-    if (lot.duties_cad != null) lines.push(`Duties: CAD $${lot.duties_cad.toFixed(2)}${confirmStamp(lot.duties_confirmed_by, lot.duties_confirmed_at)}`);
-    if (lot.transaction_fees_cad != null) lines.push(`Transaction Fees: CAD $${lot.transaction_fees_cad.toFixed(2)}${confirmStamp(lot.transaction_fees_confirmed_by, lot.transaction_fees_confirmed_at)}`);
-    if (lot.other_costs_cad != null) lines.push(`Other Costs: CAD $${lot.other_costs_cad.toFixed(2)}${lot.other_costs_description ? ` (${lot.other_costs_description})` : ''}${confirmStamp(lot.other_costs_confirmed_by, lot.other_costs_confirmed_at)}`);
-    if (lot.book_value_per_kg != null) lines.push(`Book Value: CAD $${lot.book_value_per_kg.toFixed(4)}/kg`);
-    if (lot.market_value_per_kg != null) lines.push(`Market Value: CAD $${lot.market_value_per_kg.toFixed(4)}/kg`);
+    if (lot.invoice_amount_cad != null) lines.push(`Invoice: ${formatMoney(lot.invoice_amount_cad)}${confirmStamp(lot.invoice_confirmed_by, lot.invoice_confirmed_at)}`);
+    if (lot.carry_fees_cad != null) lines.push(`Carry Fees: ${formatMoney(lot.carry_fees_cad)}${confirmStamp(lot.carry_fees_confirmed_by, lot.carry_fees_confirmed_at)}`);
+    if (lot.freight_cad != null) lines.push(`Freight: ${formatMoney(lot.freight_cad)}${confirmStamp(lot.freight_confirmed_by, lot.freight_confirmed_at)}`);
+    if (lot.duties_cad != null) lines.push(`Duties: ${formatMoney(lot.duties_cad)}${confirmStamp(lot.duties_confirmed_by, lot.duties_confirmed_at)}`);
+    if (lot.transaction_fees_cad != null) lines.push(`Transaction Fees: ${formatMoney(lot.transaction_fees_cad)}${confirmStamp(lot.transaction_fees_confirmed_by, lot.transaction_fees_confirmed_at)}`);
+    if (lot.other_costs_cad != null) lines.push(`Other Costs: ${formatMoney(lot.other_costs_cad)}${lot.other_costs_description ? ` (${lot.other_costs_description})` : ''}${confirmStamp(lot.other_costs_confirmed_by, lot.other_costs_confirmed_at)}`);
+    if (lot.book_value_per_kg != null) lines.push(`Book Value: ${formatPerKg(lot.book_value_per_kg)}`);
+    if (lot.market_value_per_kg != null) lines.push(`Market Value: ${formatPerKg(lot.market_value_per_kg)}`);
     if (lot.importer_payment_terms_days != null) lines.push(`Payment Terms: ${lot.importer_payment_terms_days} days`);
     if (lot.estimated_days_to_consume != null) lines.push(`Est. Days to Consume: ${lot.estimated_days_to_consume}`);
 
@@ -877,13 +878,13 @@ function LotDetailPanel({
                     {liveSummary.fields.map(f => (
                       <div key={f.label} className={`flex justify-between text-sm ${!f.confirmed && f.cad != null && f.cad > 0 ? 'italic text-muted-foreground' : ''}`}>
                         <span>{f.label} {!f.confirmed && f.cad != null && f.cad > 0 && <span className="text-xs">(pending)</span>}</span>
-                        <span className={f.cad == null || f.cad === 0 ? 'text-muted-foreground' : ''}>{f.cad != null && f.cad > 0 ? `CAD $${f.cad.toFixed(2)}` : '—'}</span>
+                        <span className={f.cad == null || f.cad === 0 ? 'text-muted-foreground' : ''}>{f.cad != null && f.cad > 0 ? formatMoney(f.cad) : '—'}</span>
                       </div>
                     ))}
                     <Separator className="my-2" />
                     <div className="flex justify-between text-sm font-medium">
                       <span>Total Costs (CAD)</span>
-                      <span>CAD ${liveSummary.totalCosts.toFixed(2)}</span>
+                      <span>{formatMoney(liveSummary.totalCosts)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>kg Received</span>
@@ -892,7 +893,7 @@ function LotDetailPanel({
                     <Separator className="my-2" />
                     <div className="flex justify-between text-base font-bold">
                       <span>Book Value/kg</span>
-                      <span>{liveSummary.bvPerKg != null ? `CAD $${liveSummary.bvPerKg.toFixed(4)}/kg` : '—'}</span>
+                      <span>{liveSummary.bvPerKg != null ? formatPerKg(liveSummary.bvPerKg) : '—'}</span>
                     </div>
                     {liveSummary.bvPerKg == null && (
                       <p className="text-xs text-muted-foreground">Confirm cost fields above to calculate.</p>
@@ -900,14 +901,14 @@ function LotDetailPanel({
                     {liveSummary.financingCostPerKg != null && (
                       <div className="flex justify-between text-sm text-muted-foreground">
                         <span>Financing Cost/kg</span>
-                        <span>CAD ${liveSummary.financingCostPerKg.toFixed(4)}/kg</span>
+                        <span>{formatPerKg(liveSummary.financingCostPerKg)}</span>
                       </div>
                     )}
                     {liveSummary.mvPerKg != null && (
                       <>
                         <div className="flex justify-between text-base font-bold">
                           <span>Market Value/kg</span>
-                          <span>CAD ${liveSummary.mvPerKg.toFixed(4)}/kg</span>
+                          <span>{formatPerKg(liveSummary.mvPerKg)}</span>
                         </div>
                         <p className="text-xs text-muted-foreground italic">Financing estimate: 60 days @ 12% APR — placeholder, to be revisited.</p>
                       </>

@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { formatPerKg } from '@/lib/formatMoney';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -127,13 +128,8 @@ function LotStatusBadge({ status }: { status: string }) {
 
 function formatPrice(value: number | null, currency: string | null) {
   if (value == null) return '—';
-  const prefix = currency === 'CAD' ? 'CAD' : 'USD';
-  return `${prefix} $${value.toFixed(4)}/kg`;
-}
-
-function formatMoney(value: number | null) {
-  if (value == null) return '—';
-  return `$${value.toFixed(2)}`;
+  const cur = (currency === 'CAD' ? 'CAD' : 'USD') as 'CAD' | 'USD';
+  return formatPerKg(value, cur);
 }
 
 // ─── Main Page ─────────────────────────────────────────────

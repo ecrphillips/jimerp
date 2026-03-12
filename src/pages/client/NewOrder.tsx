@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { formatMoney } from '@/lib/formatMoney';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -791,7 +792,7 @@ export default function NewOrder() {
                           )}
                           <span className="text-muted-foreground">
                             {li.price !== null
-                              ? `$${(li.price * li.quantity).toFixed(2)}`
+                              ? formatMoney(li.price * li.quantity)
                               : 'No price'}
                           </span>
                         </div>

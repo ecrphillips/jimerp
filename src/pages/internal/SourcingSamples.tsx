@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { formatPerKg } from '@/lib/formatMoney';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -916,7 +917,7 @@ function SampleDetailPanel({
     }
     if (sample.indicative_price_usd != null) {
       const curr = sample.indicative_price_currency || 'USD';
-      lines.push(`Indicative Price: ${curr} $${sample.indicative_price_usd.toFixed(4)}/kg`);
+      lines.push(`Indicative Price: ${formatPerKg(sample.indicative_price_usd, (curr === 'CAD' ? 'CAD' : 'USD') as 'CAD' | 'USD')}`);
     }
     if (sample.bag_size_kg != null) lines.push(`Bag Size: ${sample.bag_size_kg} kg`);
     if (sample.num_bags != null) lines.push(`Number of Bags: ${sample.num_bags}`);
@@ -1143,7 +1144,7 @@ function SampleDetailPanel({
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Stored: {getPriceForStorage().currency} ${getPriceForStorage().price?.toFixed(4) ?? '-'} / kg
+                  Stored: {getPriceForStorage().price != null ? formatPerKg(getPriceForStorage().price!, (getPriceForStorage().currency === 'CAD' ? 'CAD' : 'USD') as 'CAD' | 'USD') : '—'}
                 </p>
               </div>
               <div>
@@ -1623,7 +1624,7 @@ function AddSampleModal({
             </div>
             {price && (
               <p className="text-xs text-muted-foreground mt-1">
-                Stored: {priceUnit === 'cad_kg' ? 'CAD' : 'USD'} ${(priceUnit === 'usd_lb' ? parseFloat(price) * 2.20462 : parseFloat(price)).toFixed(4)} / kg
+                Stored: {formatPerKg(priceUnit === 'usd_lb' ? parseFloat(price) * 2.20462 : parseFloat(price), priceUnit === 'cad_kg' ? 'CAD' : 'USD')}
               </p>
             )}
           </div>

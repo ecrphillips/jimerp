@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import { formatMoney } from '@/lib/formatMoney';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -403,9 +404,9 @@ export default function CoRoastMemberDetail() {
       if (stats.lastCompleted) lines.push(`Last Completed Session: ${format(new Date(stats.lastCompleted + 'T00:00:00'), 'MMM d, yyyy')}`);
       lines.push(`Total Sessions: ${stats.totalSessions}`);
       lines.push(`Total Hours Scheduled: ${stats.totalHours.toFixed(1)}h`);
-      lines.push(`Total Billed (All Time): $${stats.totalBilledAllTime.toFixed(2)}`);
-      lines.push(`Total Billed (Last 12 Months): $${stats.totalBilledT12.toFixed(2)}`);
-      lines.push(`Total Billed (YTD): $${stats.totalBilledYTD.toFixed(2)}`);
+      lines.push(`Total Billed (All Time): ${formatMoney(stats.totalBilledAllTime)}`);
+      lines.push(`Total Billed (Last 12 Months): ${formatMoney(stats.totalBilledT12)}`);
+      lines.push(`Total Billed (YTD): ${formatMoney(stats.totalBilledYTD)}`);
 
       // Linked client
       if (member.client_id && clientMap.get(member.client_id)) {
@@ -697,9 +698,9 @@ export default function CoRoastMemberDetail() {
               <StatItem label="Last Completed Session" value={stats.lastCompleted ? format(new Date(stats.lastCompleted + 'T00:00:00'), 'MMM d, yyyy') : 'None'} />
               <StatItem label="Total Sessions" value={String(stats.totalSessions)} />
               <StatItem label="Total Hours Scheduled" value={`${stats.totalHours.toFixed(1)}h`} />
-              <StatItem label="Total Billed (All Time)" value={`$${stats.totalBilledAllTime.toFixed(2)}`} />
-              <StatItem label="Total Billed (T12)" value={`$${stats.totalBilledT12.toFixed(2)}`} />
-              <StatItem label="Total Billed (YTD)" value={`$${stats.totalBilledYTD.toFixed(2)}`} />
+              <StatItem label="Total Billed (All Time)" value={formatMoney(stats.totalBilledAllTime)} />
+              <StatItem label="Total Billed (T12)" value={formatMoney(stats.totalBilledT12)} />
+              <StatItem label="Total Billed (YTD)" value={formatMoney(stats.totalBilledYTD)} />
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Loading stats…</p>

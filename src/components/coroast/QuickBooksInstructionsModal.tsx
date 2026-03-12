@@ -1,4 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { formatMoney } from '@/lib/formatMoney';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
@@ -69,8 +70,8 @@ export default function QuickBooksInstructionsModal({
     lineItems.push({
       name: `Co-Roasting — Roast Hours Overage (${tierLabel})`,
       qty: overageHours.toFixed(1),
-      rate: `$${overageRate}`,
-      amount: `$${overageCharge.toFixed(2)}`,
+      rate: formatMoney(overageRate),
+      amount: formatMoney(overageCharge),
     });
   }
 
@@ -82,8 +83,8 @@ export default function QuickBooksInstructionsModal({
     lineItems.push({
       name: storageLabel,
       qty: String(paidPallets),
-      rate: `$${palletRate}`,
-      amount: `$${storageCharge.toFixed(2)}`,
+      rate: formatMoney(palletRate),
+      amount: formatMoney(storageCharge),
     });
   }
 

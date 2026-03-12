@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { formatMoney } from '@/lib/formatMoney';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -199,7 +200,7 @@ export default function MemberStorageSection({ memberId, tier }: MemberStorageSe
             <div>
               <Label className="text-xs text-muted-foreground">Monthly Storage Charge</Label>
               <p className="text-sm font-semibold mt-0.5">
-                {storageCharge > 0 ? `$${storageCharge.toFixed(2)}` : '$0.00'}
+                {storageCharge > 0 ? formatMoney(storageCharge) : '—'}
               </p>
               {paidPallets > 0 && (
                 <p className="text-xs text-muted-foreground">
@@ -281,7 +282,7 @@ export default function MemberStorageSection({ memberId, tier }: MemberStorageSe
                         <td className="py-2 text-right">{s.paid_pallets}</td>
                         <td className="py-2 text-right">{s.pallets_in_use}</td>
                         <td className="py-2 text-right">
-                          {charge > 0 ? `$${charge.toFixed(2)}` : '—'}
+                          {charge > 0 ? formatMoney(charge) : '—'}
                         </td>
                       </tr>
                     );
