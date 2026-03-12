@@ -953,6 +953,7 @@ function AddSampleModal({
           variety: variety.trim() || null,
           category: category as GreenCategory,
           indicative_price_usd: storagePrice,
+          indicative_price_currency: storagePrice != null ? storageCurrency : null,
           warehouse_location: warehouse.trim() || null,
           bag_size_kg: bagSize ? parseFloat(bagSize) : null,
           num_bags: numBags ? parseInt(numBags) : null,
