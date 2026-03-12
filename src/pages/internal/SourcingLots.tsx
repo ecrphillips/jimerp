@@ -304,7 +304,7 @@ function CostField({
           step="0.01"
           placeholder="0.00"
           value={value != null ? String(value) : ''}
-          onChange={(e) => onChange(e.target.value ? parseFloat(e.target.value) : null)}
+          onChange={(e) => onChange(e.target.value !== '' ? parseFloat(e.target.value) : 0)}
           className="flex-1"
         />
         {hasCurrencyToggle && onToggleUsd && (
