@@ -25,7 +25,10 @@ import Products from "@/pages/internal/Products";
 import Pricing from "@/pages/internal/Pricing";
 import Prospects from "@/pages/internal/Prospects";
 import Production from "@/pages/internal/Production";
-import GreenCoffee from "@/pages/internal/GreenCoffee";
+import SourcingVendors from "@/pages/internal/SourcingVendors";
+import SourcingSamples from "@/pages/internal/SourcingSamples";
+import SourcingContracts from "@/pages/internal/SourcingContracts";
+import SourcingLots from "@/pages/internal/SourcingLots";
 import CoRoastMembers from "@/pages/internal/CoRoastMembers";
 import CoRoastMemberDetail from "@/pages/internal/CoRoastMemberDetail";
 import CoRoastLoringSchedule from "@/pages/internal/CoRoastLoringSchedule";
@@ -144,9 +147,25 @@ const App = () => (
                 <InternalLayout><BoardsDisabled /></InternalLayout>
               </ProtectedRoute>
             } />
-            <Route path="/green-coffee" element={
+            <Route path="/green-coffee" element={<Navigate to="/sourcing/vendors" replace />} />
+            <Route path="/sourcing/vendors" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
-                <InternalLayout><GreenCoffee /></InternalLayout>
+                <InternalLayout><SourcingVendors /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/sourcing/samples" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><SourcingSamples /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/sourcing/contracts" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><SourcingContracts /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/sourcing/lots" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><SourcingLots /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/inventory" element={

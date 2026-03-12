@@ -27,6 +27,10 @@ import {
   Handshake,
   Settings,
   Building2,
+  Binoculars,
+  FlaskConical,
+  FileSignature,
+  Boxes,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -107,6 +111,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
   // Group open states
   const [accountsOpen, setAccountsOpen] = React.useState(true);
   const [cmOpen, setCmOpen] = React.useState(true);
+  const [sourcingOpen, setSourcingOpen] = React.useState(true);
   const [coroastOpen, setCoroastOpen] = React.useState(true);
   const [adminOpen, setAdminOpen] = React.useState(true);
 
@@ -167,6 +172,14 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 <NavItem to="/production" icon={Flame} label="Run Sheet" onClick={closeSidebar} end />
                 <NavItem to="/inventory" icon={Warehouse} label="Inventory Levels" onClick={closeSidebar} end />
                 <NavItem to="/products" icon={Package} label="Products" onClick={closeSidebar} />
+              </NavGroup>
+
+              {/* Sourcing */}
+              <NavGroup label="Sourcing" icon={Binoculars} open={sourcingOpen} onOpenChange={setSourcingOpen}>
+                <NavItem to="/sourcing/vendors" icon={Users} label="Vendors" onClick={closeSidebar} />
+                <NavItem to="/sourcing/samples" icon={FlaskConical} label="Samples" onClick={closeSidebar} />
+                <NavItem to="/sourcing/contracts" icon={FileSignature} label="Contracts" onClick={closeSidebar} />
+                <NavItem to="/sourcing/lots" icon={Boxes} label="Lots" onClick={closeSidebar} />
               </NavGroup>
 
               {/* Co-Roasting */}
