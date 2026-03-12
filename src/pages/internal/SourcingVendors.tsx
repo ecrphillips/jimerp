@@ -220,6 +220,7 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
     if (vendor) {
       setForm({
         name: vendor.name,
+        abbreviation: vendor.abbreviation,
         contact_name: vendor.contact_name,
         contact_email: vendor.contact_email,
         contact_phone: vendor.contact_phone,
