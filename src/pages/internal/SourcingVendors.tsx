@@ -14,6 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Search, Plus, Copy, Check, FileText, X } from 'lucide-react';
+import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 
 interface Vendor {
   id: string;
