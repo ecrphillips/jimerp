@@ -949,7 +949,7 @@ function ReleaseCoffeeModal({
 
   const emailBody = `Hello,
 
-Please release ${bags || '___'} bags of ${originCountryName || '[origin country]'} - ${contract.name} - ${bagMarks.trim() || '[bag marks]'} from contract ${vendorContractNum}. Please confirm upon receipt and copy orders@homeislandcoffee.com on DO's to warehouse, and payments@homeislandcoffee.com with the invoice. Please include our PO ${poNumber} on all documents.
+Please release ${bags || '___'} bags of ${originCountryName || '[origin country]'} - ${contract.name} - ${lotIdentifier.trim() || '[lot identifier]'} from contract ${vendorContractNum}. Please confirm upon receipt and copy orders@homeislandcoffee.com on DO's to warehouse, and payments@homeislandcoffee.com with the invoice. Please include our PO ${poNumber} on all documents.
 
 Thank you,
 Home Island Coffee Partners`;
