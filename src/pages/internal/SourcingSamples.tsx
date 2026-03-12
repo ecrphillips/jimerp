@@ -1034,8 +1034,31 @@ function AddSampleModal({
             </Select>
           </div>
           <div>
-            <Label>Indicative Price (USD/kg)</Label>
-            <Input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
+            <Label>Indicative Price</Label>
+            <div className="flex items-center gap-2">
+              <Input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} className="flex-1" />
+              <div className="flex border rounded-md overflow-hidden">
+                <button
+                  type="button"
+                  className={`px-3 py-2 text-sm ${priceUnit === 'kg' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                  onClick={() => setPriceUnit('kg')}
+                >
+                  $/kg
+                </button>
+                <button
+                  type="button"
+                  className={`px-3 py-2 text-sm ${priceUnit === 'lb' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                  onClick={() => setPriceUnit('lb')}
+                >
+                  $/lb
+                </button>
+              </div>
+            </div>
+            {price && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Stored: ${(priceUnit === 'lb' ? parseFloat(price) * 2.20462 : parseFloat(price)).toFixed(4)} / kg
+              </p>
+            )}
           </div>
           <div>
             <Label>Warehouse Location</Label>
