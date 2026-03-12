@@ -933,17 +933,13 @@ function ReleaseCoffeeModal({
     }
   }, [open, existingLotCount, contract.lot_identifier]);
 
-  // Compute lot number live
+  // Compute lot number live: VENDOR_ABBR-ORIGIN-POXXX
   const computedLotNumber = useMemo(() => {
+    const vendorAbbr = vendor?.abbreviation || '???';
     const country = contract.origin_country || '???';
-    const marksSuffix = bagMarks.trim()
-      ? bagMarks.trim().length >= 4
-        ? bagMarks.trim().slice(-4).toUpperCase()
-        : bagMarks.trim().toUpperCase()
-      : '';
-    if (!marksSuffix) return '';
-    return `${country}-${poNumber}-${marksSuffix}`;
-  }, [contract.origin_country, poNumber, bagMarks]);
+    if (!poNumber) return '';
+    return `${vendorAbbr}-${country}-${poNumber}`;
+  }, [vendor?.abbreviation, contract.origin_country, poNumber]);
 
   const originCountryName = getCountryName(contract.origin_country);
 
