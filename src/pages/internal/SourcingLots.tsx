@@ -269,8 +269,9 @@ function CostField({
   const isConfirmed = !!confirmedAt;
 
   if (isConfirmed) {
-    const displayVal = isUsd && fxRate ? value! / fxRate : value;
+    const displayVal = isUsd && fxRate ? (value ?? 0) / fxRate : (value ?? 0);
     const displayCurrency = isUsd ? 'USD' : 'CAD';
+    const isZero = displayVal === 0;
     return (
       <div className="space-y-1">
         <div className="flex items-center justify-between">
@@ -279,8 +280,12 @@ function CostField({
             <Pencil className="h-3 w-3" /> Edit
           </Button>
         </div>
-        <p className="text-sm font-medium">{displayCurrency} ${(displayVal ?? 0).toFixed(2)}</p>
-        {isUsd && fxRate && <p className="text-xs text-muted-foreground">= CAD ${(value ?? 0).toFixed(2)} @ {fxRate.toFixed(4)}</p>}
+        {isZero ? (
+          <p className="text-sm text-muted-foreground">—</p>
+        ) : (
+          <p className="text-sm font-medium">{displayCurrency} ${displayVal.toFixed(2)}</p>
+        )}
+        {!isZero && isUsd && fxRate && <p className="text-xs text-muted-foreground">= CAD ${(value ?? 0).toFixed(2)} @ {fxRate.toFixed(4)}</p>}
         {descriptionValue && <p className="text-xs text-muted-foreground italic">{descriptionValue}</p>}
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <CheckCircle2 className="h-3 w-3 text-green-600 dark:text-green-400" />
@@ -299,7 +304,7 @@ function CostField({
           step="0.01"
           placeholder="0.00"
           value={value != null ? String(value) : ''}
-          onChange={(e) => onChange(e.target.value ? parseFloat(e.target.value) : null)}
+          onChange={(e) => onChange(e.target.value !== '' ? parseFloat(e.target.value) : 0)}
           className="flex-1"
         />
         {hasCurrencyToggle && onToggleUsd && (
@@ -390,15 +395,15 @@ function LotDetailPanel({
 
   // ─── Local cost state ────────────────────────────────────
   const [fxRate, setFxRate] = useState<number | null>(null);
-  const [invoiceAmt, setInvoiceAmt] = useState<number | null>(null);
+  const [invoiceAmt, setInvoiceAmt] = useState<number>(0);
   const [invoiceIsUsd, setInvoiceIsUsd] = useState(false);
-  const [carryFees, setCarryFees] = useState<number | null>(null);
+  const [carryFees, setCarryFees] = useState<number>(0);
   const [carryFeesIsUsd, setCarryFeesIsUsd] = useState(false);
-  const [freight, setFreight] = useState<number | null>(null);
+  const [freight, setFreight] = useState<number>(0);
   const [freightIsUsd, setFreightIsUsd] = useState(false);
-  const [duties, setDuties] = useState<number | null>(null);
-  const [txFees, setTxFees] = useState<number | null>(null);
-  const [otherCosts, setOtherCosts] = useState<number | null>(null);
+  const [duties, setDuties] = useState<number>(0);
+  const [txFees, setTxFees] = useState<number>(0);
+  const [otherCosts, setOtherCosts] = useState<number>(0);
   const [otherCostsDesc, setOtherCostsDesc] = useState('');
   const [paymentTerms, setPaymentTerms] = useState<number | null>(null);
   const [estDaysConsume, setEstDaysConsume] = useState<number | null>(null);
@@ -414,24 +419,24 @@ function LotDetailPanel({
       if (lot.invoice_is_usd && lot.fx_rate && lot.invoice_amount_cad != null) {
         setInvoiceAmt(lot.invoice_amount_cad / lot.fx_rate);
       } else {
-        setInvoiceAmt(lot.invoice_amount_cad);
+        setInvoiceAmt(lot.invoice_amount_cad ?? 0);
       }
       setInvoiceIsUsd(lot.invoice_is_usd);
       if (lot.carry_fees_is_usd && lot.fx_rate && lot.carry_fees_cad != null) {
         setCarryFees(lot.carry_fees_cad / lot.fx_rate);
       } else {
-        setCarryFees(lot.carry_fees_cad);
+        setCarryFees(lot.carry_fees_cad ?? 0);
       }
       setCarryFeesIsUsd(lot.carry_fees_is_usd);
       if (lot.freight_is_usd && lot.fx_rate && lot.freight_cad != null) {
         setFreight(lot.freight_cad / lot.fx_rate);
       } else {
-        setFreight(lot.freight_cad);
+        setFreight(lot.freight_cad ?? 0);
       }
       setFreightIsUsd(lot.freight_is_usd);
-      setDuties(lot.duties_cad);
-      setTxFees(lot.transaction_fees_cad);
-      setOtherCosts(lot.other_costs_cad);
+      setDuties(lot.duties_cad ?? 0);
+      setTxFees(lot.transaction_fees_cad ?? 0);
+      setOtherCosts(lot.other_costs_cad ?? 0);
       setOtherCostsDesc(lot.other_costs_description || '');
       setPaymentTerms(lot.importer_payment_terms_days);
       setEstDaysConsume(lot.estimated_days_to_consume);
@@ -514,16 +519,16 @@ function LotDetailPanel({
       };
 
       if (fxRate != null && !lot.fx_rate_confirmed_at) { updates.fx_rate_confirmed_by = uid; updates.fx_rate_confirmed_at = now; }
-      if (invoiceAmt != null && !lot.invoice_confirmed_at) { updates.invoice_confirmed_by = uid; updates.invoice_confirmed_at = now; }
-      if (carryFees != null && !lot.carry_fees_confirmed_at) { updates.carry_fees_confirmed_by = uid; updates.carry_fees_confirmed_at = now; }
-      if (freight != null && !lot.freight_confirmed_at) { updates.freight_confirmed_by = uid; updates.freight_confirmed_at = now; }
-      if (duties != null && !lot.duties_confirmed_at) { updates.duties_confirmed_by = uid; updates.duties_confirmed_at = now; }
-      if (txFees != null && !lot.transaction_fees_confirmed_at) { updates.transaction_fees_confirmed_by = uid; updates.transaction_fees_confirmed_at = now; }
-      if (otherCosts != null && !lot.other_costs_confirmed_at) { updates.other_costs_confirmed_by = uid; updates.other_costs_confirmed_at = now; }
+      if (!lot.invoice_confirmed_at) { updates.invoice_confirmed_by = uid; updates.invoice_confirmed_at = now; }
+      if (!lot.carry_fees_confirmed_at) { updates.carry_fees_confirmed_by = uid; updates.carry_fees_confirmed_at = now; }
+      if (!lot.freight_confirmed_at) { updates.freight_confirmed_by = uid; updates.freight_confirmed_at = now; }
+      if (!lot.duties_confirmed_at) { updates.duties_confirmed_by = uid; updates.duties_confirmed_at = now; }
+      if (!lot.transaction_fees_confirmed_at) { updates.transaction_fees_confirmed_by = uid; updates.transaction_fees_confirmed_at = now; }
+      if (!lot.other_costs_confirmed_at) { updates.other_costs_confirmed_by = uid; updates.other_costs_confirmed_at = now; }
 
       const allConfirmedAfter =
-        (fxRate != null) && (invoiceAmt != null) && (carryFees != null) &&
-        (freight != null) && (duties != null) && (txFees != null) && (otherCosts != null);
+        (fxRate != null) && (invoiceAmt !== null) && (carryFees !== null) &&
+        (freight !== null) && (duties !== null) && (txFees !== null) && (otherCosts !== null);
 
       if (allConfirmedAfter) {
         const storedInvoice = toCad(invoiceAmt, invoiceIsUsd, fxRate) ?? 0;
@@ -585,12 +590,12 @@ function LotDetailPanel({
 
   const hasUnconfirmedWithValue = lot ? (
     (fxRate != null && !lot.fx_rate_confirmed_at) ||
-    (invoiceAmt != null && !lot.invoice_confirmed_at) ||
-    (carryFees != null && !lot.carry_fees_confirmed_at) ||
-    (freight != null && !lot.freight_confirmed_at) ||
-    (duties != null && !lot.duties_confirmed_at) ||
-    (txFees != null && !lot.transaction_fees_confirmed_at) ||
-    (otherCosts != null && !lot.other_costs_confirmed_at)
+    (invoiceAmt !== null && !lot.invoice_confirmed_at) ||
+    (carryFees !== null && !lot.carry_fees_confirmed_at) ||
+    (freight !== null && !lot.freight_confirmed_at) ||
+    (duties !== null && !lot.duties_confirmed_at) ||
+    (txFees !== null && !lot.transaction_fees_confirmed_at) ||
+    (otherCosts !== null && !lot.other_costs_confirmed_at)
   ) : false;
 
   const allFieldsConfirmed = lot ? (
@@ -870,9 +875,9 @@ function LotDetailPanel({
                   <CardContent className="p-4 space-y-2">
                     <h4 className="text-sm font-semibold">Cost Summary</h4>
                     {liveSummary.fields.map(f => (
-                      <div key={f.label} className={`flex justify-between text-sm ${!f.confirmed && f.cad != null ? 'italic text-muted-foreground' : ''}`}>
-                        <span>{f.label} {!f.confirmed && f.cad != null && <span className="text-xs">(pending)</span>}</span>
-                        <span>{f.cad != null ? `CAD $${f.cad.toFixed(2)}` : '—'}</span>
+                      <div key={f.label} className={`flex justify-between text-sm ${!f.confirmed && f.cad != null && f.cad > 0 ? 'italic text-muted-foreground' : ''}`}>
+                        <span>{f.label} {!f.confirmed && f.cad != null && f.cad > 0 && <span className="text-xs">(pending)</span>}</span>
+                        <span className={f.cad == null || f.cad === 0 ? 'text-muted-foreground' : ''}>{f.cad != null && f.cad > 0 ? `CAD $${f.cad.toFixed(2)}` : '—'}</span>
                       </div>
                     ))}
                     <Separator className="my-2" />
