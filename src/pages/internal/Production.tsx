@@ -60,6 +60,7 @@ export default function Production() {
 
   return (
     <div className="page-container">
+      <GreenCoffeeAlerts />
       <div className="page-header">
         <div className="space-y-1">
           <h1 className="page-title">Production</h1>

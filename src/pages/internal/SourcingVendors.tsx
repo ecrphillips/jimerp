@@ -64,6 +64,7 @@ export default function SourcingVendors() {
 
   return (
     <div className="page-container space-y-6">
+      <GreenCoffeeAlerts />
       <div className="page-header">
         <div>
           <h1 className="page-title">Vendors</h1>

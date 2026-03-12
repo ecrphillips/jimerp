@@ -368,6 +368,7 @@ export default function Inventory() {
 
   return (
     <div className="p-6 space-y-6">
+      <GreenCoffeeAlerts />
       {/* Context-aware back navigation */}
       {showBackToPack && (
         <Link 

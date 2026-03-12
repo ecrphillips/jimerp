@@ -238,6 +238,7 @@ export default function Orders() {
 
   return (
     <div className="page-container">
+      <GreenCoffeeAlerts />
       <div className="page-header flex items-center justify-between">
         <h1 className="page-title">Orders</h1>
         <Button onClick={() => navigate('/orders/new')}>
