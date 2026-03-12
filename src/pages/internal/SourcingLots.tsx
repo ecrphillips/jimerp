@@ -901,7 +901,7 @@ function LotDetailPanel({
                     {liveSummary.financingCostPerKg != null && (
                       <div className="flex justify-between text-sm text-muted-foreground">
                         <span>Financing Cost/kg</span>
-                        <span>CAD ${liveSummary.financingCostPerKg.toFixed(4)}/kg</span>
+                        <span>{formatPerKg(liveSummary.financingCostPerKg)}</span>
                       </div>
                     )}
                     {liveSummary.mvPerKg != null && (
