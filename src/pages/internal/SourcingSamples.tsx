@@ -399,7 +399,7 @@ function SampleDetailPanel({
   // Form state
   const [form, setForm] = useState<Partial<Sample>>({});
   const [dirty, setDirty] = useState(false);
-  const [priceUnit, setPriceUnit] = useState<'kg' | 'lb'>('kg');
+  const [priceUnit, setPriceUnit] = useState<'usd_kg' | 'usd_lb' | 'cad_kg'>('usd_kg');
 
   useEffect(() => {
     if (sample) {
@@ -419,7 +419,7 @@ function SampleDetailPanel({
         tasting_notes: sample.tasting_notes,
       });
       setDirty(false);
-      setPriceUnit('kg');
+      setPriceUnit(sample.indicative_price_currency === 'CAD' ? 'cad_kg' : 'usd_kg');
     }
   }, [sample]);
 
@@ -430,9 +430,10 @@ function SampleDetailPanel({
 
   const getPriceForStorage = () => {
     const val = form.indicative_price_usd;
-    if (val == null) return null;
-    if (priceUnit === 'lb') return val * 2.20462;
-    return val;
+    if (val == null) return { price: null, currency: 'USD' };
+    if (priceUnit === 'usd_lb') return { price: val * 2.20462, currency: 'USD' };
+    if (priceUnit === 'cad_kg') return { price: val, currency: 'CAD' };
+    return { price: val, currency: 'USD' };
   };
 
   const saveMutation = useMutation({
