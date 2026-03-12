@@ -634,7 +634,7 @@ function LotDetailPanel({
     const lines: string[] = [];
     lines.push(`Lot Number: ${lot.lot_number}`);
     if (lot.po_number) lines.push(`PO Number: ${lot.po_number}`);
-    if (lot.bag_marks) lines.push(`Bag Marks: ${lot.bag_marks}`);
+    if (lot.lot_identifier) lines.push(`Lot Identifier: ${lot.lot_identifier}`);
     if (lot.vendor_invoice_number) lines.push(`Vendor Invoice #: ${lot.vendor_invoice_number}`);
     lines.push(`Contract: ${c?.name || '—'}`);
     if (c?.internal_contract_number) lines.push(`Internal Contract #: ${c.internal_contract_number}`);
