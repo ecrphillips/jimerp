@@ -1169,7 +1169,7 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
     setOrigin(''); setRegion(''); setProducer(''); setVariety('');
     setCropYear(null); setPriceInput(''); setPriceUnit('usd_kg');
     setNumBags(''); setBagSize(''); setWarehouse(''); setNotes('');
-    setPrefilled(new Set()); setOriginCountry(null); setVendorContractNumber('');
+    setPrefilled(new Set()); setOriginCountry(null); setVendorContractNumber(''); setBagMarks('');
   };
 
   const handleSampleSelect = (id: string | null) => {
