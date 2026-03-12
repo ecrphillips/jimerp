@@ -13,13 +13,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel, SelectSeparator } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Search, Plus, Check, FileText, AlertTriangle, Copy, Mail, CalendarIcon, PackageCheck } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
-import { COFFEE_ORIGIN_COUNTRIES, getCountryName, getCountryDisplayLabel } from '@/lib/coffeeOrigins';
+import { COFFEE_ORIGIN_COUNTRIES, COMMON_ORIGINS, OTHER_ORIGINS, getCountryName, getCountryDisplayLabel } from '@/lib/coffeeOrigins';
 
 type ContractStatus = 'ACTIVE' | 'DEPLETED' | 'CANCELLED';
 type GreenCategory = 'BLENDER' | 'SINGLE_ORIGIN';
@@ -599,10 +599,18 @@ function ContractDetailPanel({
                   <Label>Origin Country</Label>
                   <Select value={form.origin_country || '_none'} onValueChange={(v) => updateField('origin_country', v === '_none' ? null : v)}>
                     <SelectTrigger><SelectValue placeholder="Select country" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_none">None</SelectItem>
-                      {COFFEE_ORIGIN_COUNTRIES.map(c => <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>)}
-                    </SelectContent>
+                     <SelectContent>
+                       <SelectItem value="_none">None</SelectItem>
+                       <SelectGroup>
+                         <SelectLabel>Common Origins</SelectLabel>
+                         {COMMON_ORIGINS.map(c => <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>)}
+                       </SelectGroup>
+                       <SelectSeparator />
+                       <SelectGroup>
+                         <SelectLabel>Other Origins</SelectLabel>
+                         {OTHER_ORIGINS.map(c => <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>)}
+                       </SelectGroup>
+                     </SelectContent>
                   </Select>
                 </div>
 
@@ -1278,10 +1286,18 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
             <Label>Origin Country</Label>
             <Select value={originCountry || '_none'} onValueChange={(v) => setOriginCountry(v === '_none' ? null : v)}>
               <SelectTrigger><SelectValue placeholder="Select country" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none">None</SelectItem>
-                {COFFEE_ORIGIN_COUNTRIES.map(c => <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>)}
-              </SelectContent>
+               <SelectContent>
+                 <SelectItem value="_none">None</SelectItem>
+                 <SelectGroup>
+                   <SelectLabel>Common Origins</SelectLabel>
+                   {COMMON_ORIGINS.map(c => <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>)}
+                 </SelectGroup>
+                 <SelectSeparator />
+                 <SelectGroup>
+                   <SelectLabel>Other Origins</SelectLabel>
+                   {OTHER_ORIGINS.map(c => <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>)}
+                 </SelectGroup>
+               </SelectContent>
             </Select>
           </div>
           <div>
