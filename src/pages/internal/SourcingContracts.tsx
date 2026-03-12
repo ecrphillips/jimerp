@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Search, Plus, Check, FileText, AlertTriangle, Copy, Mail, CalendarIcon, PackageCheck } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
+import { COFFEE_ORIGIN_COUNTRIES, getCountryName, getCountryDisplayLabel } from '@/lib/coffeeOrigins';
 
 type ContractStatus = 'ACTIVE' | 'DEPLETED' | 'CANCELLED';
 type GreenCategory = 'BLENDER' | 'SINGLE_ORIGIN';
@@ -47,6 +48,9 @@ interface Contract {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  internal_contract_number: string | null;
+  vendor_contract_number: string | null;
+  origin_country: string | null;
 }
 
 interface Vendor {
@@ -145,7 +149,6 @@ export default function SourcingContracts() {
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
 
-  // Fetch contracts
   const { data: contracts = [], isLoading } = useQuery({
     queryKey: ['green-contracts'],
     queryFn: async () => {
@@ -154,11 +157,10 @@ export default function SourcingContracts() {
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data as Contract[];
+      return data as unknown as Contract[];
     },
   });
 
-  // Fetch vendors for display
   const { data: vendors = [] } = useQuery({
     queryKey: ['green-vendors'],
     queryFn: async () => {
@@ -169,7 +171,6 @@ export default function SourcingContracts() {
   });
   const vendorMap = useMemo(() => Object.fromEntries(vendors.map(v => [v.id, v])), [vendors]);
 
-  // Fetch lots for all contracts (for bag counts and en route indicator)
   const { data: allLots = [] } = useQuery({
     queryKey: ['green-lots-all'],
     queryFn: async () => {
@@ -218,7 +219,6 @@ export default function SourcingContracts() {
         </Button>
       </div>
 
-      {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -272,7 +272,12 @@ function ContractCard({ contract, vendor, lots, onView }: { contract: Contract; 
   return (
     <Card className={contract.status === 'CANCELLED' ? 'opacity-50' : ''}>
       <CardContent className="p-4 space-y-2">
-        <p className="font-semibold text-base leading-tight">{vendor?.name || <span className="text-muted-foreground">No vendor</span>}</p>
+        <div className="flex items-center justify-between">
+          <p className="font-semibold text-base leading-tight">{vendor?.name || <span className="text-muted-foreground">No vendor</span>}</p>
+          {contract.internal_contract_number && (
+            <span className="text-xs text-muted-foreground font-mono">{contract.internal_contract_number}</span>
+          )}
+        </div>
         {(contract.origin || contract.region) && (
           <p className="text-sm text-muted-foreground">{[contract.origin, contract.region].filter(Boolean).join(' — ')}</p>
         )}
@@ -331,14 +336,13 @@ function ContractDetailPanel({
     queryFn: async () => {
       const { data, error } = await supabase.from('green_contracts').select('*').eq('id', contractId!).single();
       if (error) throw error;
-      return data as Contract;
+      return data as unknown as Contract;
     },
   });
 
   const contractLots = contractId ? (lotsByContract[contractId] || []) : [];
   const bagsReleased = contractLots.reduce((sum, l) => sum + l.bags_released, 0);
 
-  // Notes
   const { data: notes = [] } = useQuery({
     queryKey: ['contract-notes', contractId],
     enabled: !!contractId,
@@ -355,7 +359,6 @@ function ContractDetailPanel({
     },
   });
 
-  // Linked sample
   const { data: linkedSample } = useQuery({
     queryKey: ['linked-sample', contract?.sample_id],
     enabled: !!contract?.sample_id,
@@ -387,6 +390,8 @@ function ContractDetailPanel({
         bag_size_kg: contract.bag_size_kg,
         warehouse_location: contract.warehouse_location,
         notes: contract.notes,
+        origin_country: contract.origin_country,
+        vendor_contract_number: contract.vendor_contract_number,
       });
       setPriceUnit(contract.contracted_price_currency === 'CAD' ? 'cad_kg' : 'usd_kg');
       setPriceInput(contract.contracted_price_per_kg != null ? String(contract.contracted_price_per_kg) : '');
@@ -424,6 +429,8 @@ function ContractDetailPanel({
         contracted_price_currency: currency,
         warehouse_location: (form as any).warehouse_location?.trim() || null,
         notes: form.notes?.trim() || null,
+        origin_country: form.origin_country || null,
+        vendor_contract_number: form.vendor_contract_number?.trim() || null,
       } as any).eq('id', contractId!);
       if (error) throw error;
     },
@@ -475,6 +482,8 @@ function ContractDetailPanel({
     if (!contract) return;
     const vendor = contract.vendor_id ? vendorMap[contract.vendor_id] : null;
     const lines: string[] = [];
+    if (contract.internal_contract_number) lines.push(`Internal Contract #: ${contract.internal_contract_number}`);
+    if (contract.vendor_contract_number) lines.push(`Vendor Contract #: ${contract.vendor_contract_number}`);
     if (vendor) {
       lines.push(`Vendor: ${vendor.name}`);
       if (vendor.contact_name) lines.push(`Contact: ${vendor.contact_name}`);
@@ -482,6 +491,7 @@ function ContractDetailPanel({
     } else {
       lines.push('Vendor: Not set');
     }
+    if (contract.origin_country) lines.push(`Origin Country: ${getCountryDisplayLabel(contract.origin_country)}`);
     lines.push(`Origin: ${contract.origin || '—'}`);
     lines.push(`Region: ${contract.region || '—'}`);
     lines.push(`Contract Name: ${contract.name}`);
@@ -573,6 +583,35 @@ function ContractDetailPanel({
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Internal Contract Number — read-only */}
+                {contract.internal_contract_number && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Internal Contract #</Label>
+                    <div className="mt-1">
+                      <Badge variant="outline" className="text-xs font-mono">{contract.internal_contract_number}</Badge>
+                    </div>
+                  </div>
+                )}
+
+                {/* Origin Country */}
+                <div>
+                  <Label>Origin Country</Label>
+                  <Select value={form.origin_country || '_none'} onValueChange={(v) => updateField('origin_country', v === '_none' ? null : v)}>
+                    <SelectTrigger><SelectValue placeholder="Select country" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">None</SelectItem>
+                      {COFFEE_ORIGIN_COUNTRIES.map(c => <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Vendor Contract Number */}
+                <div>
+                  <Label>Vendor Contract #</Label>
+                  <Input value={form.vendor_contract_number || ''} onChange={(e) => updateField('vendor_contract_number', e.target.value)} placeholder="Vendor's contract reference" />
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Origin</Label>
@@ -788,16 +827,16 @@ function ContractDetailPanel({
         />
       )}
 
-      {/* Receive Lot Modal (from panel) */}
+      {/* Receive Lot Modal */}
       <Dialog open={!!receiveLotId} onOpenChange={(o) => { if (!o) setReceiveLotId(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Receive Lot</DialogTitle>
+            <DialogTitle>Mark Lot Received</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <Checkbox checked={receiveAsExpected} onCheckedChange={(v) => setReceiveAsExpected(!!v)} />
-              <Label className="mb-0">Everything arrived as expected</Label>
+            <div className="flex items-center gap-2">
+              <Checkbox id="recv-ok" checked={receiveAsExpected} onCheckedChange={(c) => setReceiveAsExpected(!!c)} />
+              <Label htmlFor="recv-ok" className="mb-0">Everything arrived as expected</Label>
             </div>
             {!receiveAsExpected && (
               <div>
@@ -839,44 +878,91 @@ function ReleaseCoffeeModal({
   const queryClient = useQueryClient();
   const remaining = (contract.num_bags || 0) - bagsReleased;
 
-  // Auto-generate lot number
-  const suffixLetter = String.fromCharCode(65 + existingLotCount); // A, B, C…
-  const contractCode = contract.name.replace(/\s+/g, '_').substring(0, 10).toUpperCase();
-  const defaultLotNumber = `${contractCode}-${suffixLetter}`;
-
-  const [lotNumber, setLotNumber] = useState(defaultLotNumber);
+  const [bagMarks, setBagMarks] = useState('');
   const [bags, setBags] = useState('');
   const [expectedDate, setExpectedDate] = useState<Date | undefined>();
   const [carrier, setCarrier] = useState('');
   const [notes, setNotes] = useState('');
   const [msgCopied, setMsgCopied] = useState(false);
+  const [poNumber, setPoNumber] = useState('');
+  const [poLoading, setPoLoading] = useState(false);
 
+  // Fetch PO number on modal open
   useEffect(() => {
     if (open) {
-      const suffix = String.fromCharCode(65 + existingLotCount);
-      const code = contract.name.replace(/\s+/g, '_').substring(0, 10).toUpperCase();
-      setLotNumber(`${code}-${suffix}`);
+      setBagMarks('');
       setBags('');
       setExpectedDate(undefined);
       setCarrier('');
       setNotes('');
       setMsgCopied(false);
+      setPoNumber('');
+      setPoLoading(true);
+
+      // Fetch next PO sequence value
+      (async () => {
+        try {
+          const { data, error } = await supabase.rpc('nextval_text' as any, { seq_name: 'po_number_seq' });
+          if (error) {
+            // Fallback: use raw SQL
+            const { data: rawData, error: rawError } = await supabase
+              .from('green_lots')
+              .select('po_number')
+              .not('po_number', 'is', null)
+              .order('po_number', { ascending: false })
+              .limit(1);
+            // Simple fallback
+            const nextNum = existingLotCount + 1;
+            setPoNumber(`PO-${String(nextNum).padStart(3, '0')}`);
+          } else {
+            const seqVal = typeof data === 'number' ? data : parseInt(String(data));
+            setPoNumber(`PO-${String(seqVal).padStart(3, '0')}`);
+          }
+        } catch {
+          const nextNum = existingLotCount + 1;
+          setPoNumber(`PO-${String(nextNum).padStart(3, '0')}`);
+        } finally {
+          setPoLoading(false);
+        }
+      })();
     }
-  }, [open, existingLotCount, contract.name]);
+  }, [open, existingLotCount]);
 
-  const firstName = authUser?.profile?.name?.split(' ')[0] || 'Team';
+  // Compute lot number live
+  const computedLotNumber = useMemo(() => {
+    const country = contract.origin_country || '???';
+    const marksSuffix = bagMarks.trim()
+      ? bagMarks.trim().length >= 4
+        ? bagMarks.trim().slice(-4).toUpperCase()
+        : bagMarks.trim().toUpperCase()
+      : '';
+    if (!marksSuffix) return '';
+    return `${country}-${poNumber}-${marksSuffix}`;
+  }, [contract.origin_country, poNumber, bagMarks]);
 
-  const originParts = [contract.origin, contract.region, contract.producer].filter(Boolean).join(', ');
-  const cannedMsg = `Hi ${vendor?.contact_name || 'there'}, we'd like to call for the release of ${bags || '___'} bags of ${contract.name}${originParts ? ` (${originParts})` : ''}. Please confirm the expected ship date and any relevant details. Thanks, ${firstName}`;
+  const originCountryName = getCountryName(contract.origin_country);
+
+  const vendorContractNum = contract.vendor_contract_number || '[vendor contract number not set]';
+
+  const emailSubject = `Release Request — ${vendorContractNum} — ${bagMarks.trim() || '[bag marks]'}`;
+
+  const emailBody = `Hello,
+
+Please release ${bags || '___'} bags of ${originCountryName || '[origin country]'} - ${contract.name} - ${bagMarks.trim() || '[bag marks]'} from contract ${vendorContractNum}. Please confirm upon receipt and copy orders@homeislandcoffee.com on DO's to warehouse, and payments@homeislandcoffee.com with the invoice. Please include our PO ${poNumber} on all documents.
+
+Thank you,
+Home Island Coffee Partners`;
 
   const mailtoLink = vendor?.contact_email
-    ? `mailto:${vendor.contact_email}?subject=Release%20Request%20-%20${encodeURIComponent(contract.name)}&body=${encodeURIComponent(cannedMsg)}`
+    ? `mailto:${vendor.contact_email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`
     : null;
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      const lotNumber = computedLotNumber || `${contract.origin_country || '???'}-${poNumber}`;
+
       const { data: lot, error } = await supabase.from('green_lots').insert({
-        lot_number: lotNumber.trim(),
+        lot_number: lotNumber,
         contract_id: contract.id,
         bags_released: parseInt(bags),
         bag_size_kg: contract.bag_size_kg || 0,
@@ -888,6 +974,8 @@ function ReleaseCoffeeModal({
         vendor_release_communicated_by: authUser!.id,
         kg_on_hand: 0,
         created_by: authUser!.id,
+        bag_marks: bagMarks.trim() || null,
+        po_number: poNumber,
       } as any).select('id').single();
       if (error) throw error;
 
@@ -903,10 +991,11 @@ function ReleaseCoffeeModal({
       toast.success('Coffee released');
       onOpenChange(false);
       queryClient.invalidateQueries({ queryKey: ['green-lots-all'] });
+      queryClient.invalidateQueries({ queryKey: ['green-lots'] });
       queryClient.invalidateQueries({ queryKey: ['green-contracts'] });
       queryClient.invalidateQueries({ queryKey: ['green-contract'] });
     },
-    onError: () => toast.error('Failed to release coffee'),
+    onError: (err: any) => toast.error(`Failed to release coffee: ${err?.message || 'Unknown error'}`),
   });
 
   return (
@@ -917,8 +1006,9 @@ function ReleaseCoffeeModal({
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <Label>Lot Number</Label>
-            <Input value={lotNumber} onChange={(e) => setLotNumber(e.target.value)} />
+            <Label>Bag Marks *</Label>
+            <Input value={bagMarks} onChange={(e) => setBagMarks(e.target.value)} placeholder="As they appear on bags, invoice, and delivery order" />
+            <p className="text-xs text-muted-foreground mt-1">As they appear on the bags, invoice, and delivery order.</p>
           </div>
           <div>
             <Label>Number of Bags *</Label>
@@ -948,6 +1038,23 @@ function ReleaseCoffeeModal({
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes…" rows={2} />
           </div>
 
+          {/* Auto-generated fields */}
+          <div className="rounded-lg bg-muted/50 border p-4 space-y-2">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Auto-generated</h4>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">PO Number</span>
+              <Badge variant="outline" className="font-mono text-xs">{poLoading ? '…' : poNumber}</Badge>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Lot Number</span>
+              {computedLotNumber ? (
+                <Badge variant="outline" className="font-mono text-xs">{computedLotNumber}</Badge>
+              ) : (
+                <span className="text-xs text-muted-foreground italic">Enter bag marks above</span>
+              )}
+            </div>
+          </div>
+
           {/* Vendor Contact Section */}
           <div className="border-t pt-4">
             <h4 className="text-sm font-semibold mb-2">Vendor Contact</h4>
@@ -961,10 +1068,14 @@ function ReleaseCoffeeModal({
             ) : (
               <p className="text-sm text-muted-foreground mb-3">No vendor set</p>
             )}
-            <div className="rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap mb-2">{cannedMsg}</div>
+            <div className="rounded-md border bg-muted/30 p-3 space-y-2 mb-2">
+              <p className="text-xs font-medium text-muted-foreground">Subject: {emailSubject}</p>
+              <p className="text-sm whitespace-pre-wrap">{emailBody}</p>
+            </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
-                await navigator.clipboard.writeText(cannedMsg);
+                const fullMsg = `Subject: ${emailSubject}\n\n${emailBody}`;
+                await navigator.clipboard.writeText(fullMsg);
                 setMsgCopied(true);
                 toast.success('Message copied');
                 setTimeout(() => setMsgCopied(false), 2000);
@@ -983,7 +1094,7 @@ function ReleaseCoffeeModal({
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button
-            disabled={!bags || !parseInt(bags) || !expectedDate || !lotNumber.trim() || createMutation.isPending}
+            disabled={!bagMarks.trim() || !bags || !parseInt(bags) || !expectedDate || createMutation.isPending}
             onClick={() => createMutation.mutate()}
           >
             {createMutation.isPending ? 'Releasing…' : 'Release Coffee'}
@@ -1016,6 +1127,8 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
   const [warehouse, setWarehouse] = useState('');
   const [notes, setNotes] = useState('');
   const [prefilled, setPrefilled] = useState<Set<string>>(new Set());
+  const [originCountry, setOriginCountry] = useState<string | null>(null);
+  const [vendorContractNumber, setVendorContractNumber] = useState('');
 
   // Approved samples
   const { data: approvedSamples = [] } = useQuery({
@@ -1037,7 +1150,7 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
     setOrigin(''); setRegion(''); setProducer(''); setVariety('');
     setCropYear(null); setPriceInput(''); setPriceUnit('usd_kg');
     setNumBags(''); setBagSize(''); setWarehouse(''); setNotes('');
-    setPrefilled(new Set());
+    setPrefilled(new Set()); setOriginCountry(null); setVendorContractNumber('');
   };
 
   const handleSampleSelect = (id: string | null) => {
@@ -1070,6 +1183,23 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      // First, get next internal contract number from sequence
+      let internalNumber = '';
+      try {
+        const { data: seqData, error: seqError } = await supabase.rpc('nextval_text' as any, { seq_name: 'internal_contract_number_seq' });
+        if (seqError || seqData == null) {
+          // Fallback: count existing contracts
+          const { count } = await supabase.from('green_contracts').select('id', { count: 'exact', head: true });
+          internalNumber = `CO-${String((count || 0) + 1).padStart(3, '0')}`;
+        } else {
+          const seqVal = typeof seqData === 'number' ? seqData : parseInt(String(seqData));
+          internalNumber = `CO-${String(seqVal).padStart(3, '0')}`;
+        }
+      } catch {
+        const { count } = await supabase.from('green_contracts').select('id', { count: 'exact', head: true });
+        internalNumber = `CO-${String((count || 0) + 1).padStart(3, '0')}`;
+      }
+
       const { price, currency } = getPriceForStorage();
       const { data: contract, error } = await supabase.from('green_contracts').insert({
         name: name.trim(),
@@ -1089,6 +1219,9 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
         warehouse_location: warehouse.trim() || null,
         status: 'ACTIVE',
         created_by: authUser!.id,
+        internal_contract_number: internalNumber,
+        vendor_contract_number: vendorContractNumber.trim() || null,
+        origin_country: originCountry || null,
       } as any).select('id').single();
       if (error) throw error;
 
@@ -1106,7 +1239,7 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
       reset();
       onOpenChange(false);
     },
-    onError: () => toast.error('Failed to create contract'),
+    onError: (err: any) => toast.error(`Failed to create contract: ${err?.message || 'Unknown error'}`),
   });
 
   const prefilledCls = (field: string) => prefilled.has(field) ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800' : '';
@@ -1140,6 +1273,20 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
               </Select>
               {prefilled.has('vendor_id') && <span className="absolute right-10 top-1/2 -translate-y-1/2 text-[10px] text-blue-600 dark:text-blue-400">Pre-filled</span>}
             </div>
+          </div>
+          <div>
+            <Label>Origin Country</Label>
+            <Select value={originCountry || '_none'} onValueChange={(v) => setOriginCountry(v === '_none' ? null : v)}>
+              <SelectTrigger><SelectValue placeholder="Select country" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">None</SelectItem>
+                {COFFEE_ORIGIN_COUNTRIES.map(c => <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Vendor Contract #</Label>
+            <Input value={vendorContractNumber} onChange={(e) => setVendorContractNumber(e.target.value)} placeholder="Vendor's contract reference (optional)" />
           </div>
           <div>
             <Label>Name *</Label>
