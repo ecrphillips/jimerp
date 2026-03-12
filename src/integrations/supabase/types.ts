@@ -1671,6 +1671,7 @@ export type Database = {
           category: Database["public"]["Enums"]["green_coffee_category"]
           created_at: string
           created_by: string | null
+          crop_year: string | null
           id: string
           indicative_price_currency: string | null
           indicative_price_usd: number | null
@@ -1680,6 +1681,9 @@ export type Database = {
           producer: string | null
           region: string | null
           rejected_reason: string | null
+          related_lot_id: string | null
+          same_coffee_as_previous: boolean | null
+          sample_relationship: string | null
           score: number | null
           status: Database["public"]["Enums"]["sample_status"]
           tasting_notes: string | null
@@ -1693,6 +1697,7 @@ export type Database = {
           category: Database["public"]["Enums"]["green_coffee_category"]
           created_at?: string
           created_by?: string | null
+          crop_year?: string | null
           id?: string
           indicative_price_currency?: string | null
           indicative_price_usd?: number | null
@@ -1702,6 +1707,9 @@ export type Database = {
           producer?: string | null
           region?: string | null
           rejected_reason?: string | null
+          related_lot_id?: string | null
+          same_coffee_as_previous?: boolean | null
+          sample_relationship?: string | null
           score?: number | null
           status?: Database["public"]["Enums"]["sample_status"]
           tasting_notes?: string | null
@@ -1715,6 +1723,7 @@ export type Database = {
           category?: Database["public"]["Enums"]["green_coffee_category"]
           created_at?: string
           created_by?: string | null
+          crop_year?: string | null
           id?: string
           indicative_price_currency?: string | null
           indicative_price_usd?: number | null
@@ -1724,6 +1733,9 @@ export type Database = {
           producer?: string | null
           region?: string | null
           rejected_reason?: string | null
+          related_lot_id?: string | null
+          same_coffee_as_previous?: boolean | null
+          sample_relationship?: string | null
           score?: number | null
           status?: Database["public"]["Enums"]["sample_status"]
           tasting_notes?: string | null
@@ -1733,6 +1745,13 @@ export type Database = {
           warehouse_location?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "green_samples_related_lot_id_fkey"
+            columns: ["related_lot_id"]
+            isOneToOne: false
+            referencedRelation: "green_lots"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "green_samples_vendor_id_fkey"
             columns: ["vendor_id"]
@@ -3088,7 +3107,7 @@ export type Database = {
         | "WIP_ADJUSTMENT"
         | "DECONSTRUCT"
         | "OTHER"
-      green_coffee_category: "BULK_BLENDER" | "SINGLE_ORIGIN" | "SUPER_NICE"
+      green_coffee_category: "BLENDER" | "SINGLE_ORIGIN"
       grind_option: "WHOLE_BEAN" | "ESPRESSO" | "FILTER"
       inventory_transaction_type:
         | "ROAST_OUTPUT"
@@ -3316,7 +3335,7 @@ export const Constants = {
         "DECONSTRUCT",
         "OTHER",
       ],
-      green_coffee_category: ["BULK_BLENDER", "SINGLE_ORIGIN", "SUPER_NICE"],
+      green_coffee_category: ["BLENDER", "SINGLE_ORIGIN"],
       grind_option: ["WHOLE_BEAN", "ESPRESSO", "FILTER"],
       inventory_transaction_type: [
         "ROAST_OUTPUT",
