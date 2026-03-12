@@ -552,7 +552,10 @@ function SampleDetailPanel({
     if (sample.variety) lines.push(`Variety: ${sample.variety}`);
     lines.push(`Category: ${CATEGORY_LABELS[sample.category]}`);
     lines.push(`Status: ${STATUS_LABELS[sample.status]}`);
-    if (sample.indicative_price_usd != null) lines.push(`Indicative Price: $${sample.indicative_price_usd.toFixed(4)}/kg USD`);
+    if (sample.indicative_price_usd != null) {
+      const curr = (sample as any).indicative_price_currency || 'USD';
+      lines.push(`Indicative Price: ${curr} $${sample.indicative_price_usd.toFixed(4)}/kg`);
+    }
     if (sample.bag_size_kg != null) lines.push(`Bag Size: ${sample.bag_size_kg} kg`);
     if (sample.num_bags != null) lines.push(`Number of Bags: ${sample.num_bags}`);
     if (sample.bag_size_kg != null && sample.num_bags != null) lines.push(`Total: ${sample.bag_size_kg * sample.num_bags} kg`);
