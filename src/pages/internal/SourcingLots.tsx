@@ -585,12 +585,12 @@ function LotDetailPanel({
 
   const hasUnconfirmedWithValue = lot ? (
     (fxRate != null && !lot.fx_rate_confirmed_at) ||
-    (invoiceAmt != null && !lot.invoice_confirmed_at) ||
-    (carryFees != null && !lot.carry_fees_confirmed_at) ||
-    (freight != null && !lot.freight_confirmed_at) ||
-    (duties != null && !lot.duties_confirmed_at) ||
-    (txFees != null && !lot.transaction_fees_confirmed_at) ||
-    (otherCosts != null && !lot.other_costs_confirmed_at)
+    (invoiceAmt !== null && !lot.invoice_confirmed_at) ||
+    (carryFees !== null && !lot.carry_fees_confirmed_at) ||
+    (freight !== null && !lot.freight_confirmed_at) ||
+    (duties !== null && !lot.duties_confirmed_at) ||
+    (txFees !== null && !lot.transaction_fees_confirmed_at) ||
+    (otherCosts !== null && !lot.other_costs_confirmed_at)
   ) : false;
 
   const allFieldsConfirmed = lot ? (
