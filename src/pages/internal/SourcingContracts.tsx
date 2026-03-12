@@ -945,7 +945,7 @@ function ReleaseCoffeeModal({
 
   const vendorContractNum = contract.vendor_contract_number || '[vendor contract number not set]';
 
-  const emailSubject = `Release Request — ${vendorContractNum} — ${bagMarks.trim() || '[bag marks]'}`;
+  const emailSubject = `Release Request — ${vendorContractNum} — ${lotIdentifier.trim() || '[lot identifier]'}`;
 
   const emailBody = `Hello,
 
