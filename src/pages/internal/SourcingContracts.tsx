@@ -51,6 +51,7 @@ interface Contract {
   internal_contract_number: string | null;
   vendor_contract_number: string | null;
   origin_country: string | null;
+  bag_marks: string | null;
 }
 
 interface Vendor {
@@ -392,6 +393,7 @@ function ContractDetailPanel({
         notes: contract.notes,
         origin_country: contract.origin_country,
         vendor_contract_number: contract.vendor_contract_number,
+        bag_marks: contract.bag_marks,
       });
       setPriceUnit(contract.contracted_price_currency === 'CAD' ? 'cad_kg' : 'usd_kg');
       setPriceInput(contract.contracted_price_per_kg != null ? String(contract.contracted_price_per_kg) : '');
@@ -431,6 +433,7 @@ function ContractDetailPanel({
         notes: form.notes?.trim() || null,
         origin_country: form.origin_country || null,
         vendor_contract_number: form.vendor_contract_number?.trim() || null,
+        bag_marks: form.bag_marks?.trim() || null,
       } as any).eq('id', contractId!);
       if (error) throw error;
     },
@@ -484,6 +487,7 @@ function ContractDetailPanel({
     const lines: string[] = [];
     if (contract.internal_contract_number) lines.push(`Internal Contract #: ${contract.internal_contract_number}`);
     if (contract.vendor_contract_number) lines.push(`Vendor Contract #: ${contract.vendor_contract_number}`);
+    if (contract.bag_marks) lines.push(`Bag Marks: ${contract.bag_marks}`);
     if (vendor) {
       lines.push(`Vendor: ${vendor.name}`);
       if (vendor.contact_name) lines.push(`Contact: ${vendor.contact_name}`);
@@ -618,6 +622,12 @@ function ContractDetailPanel({
                 <div>
                   <Label>Vendor Contract #</Label>
                   <Input value={form.vendor_contract_number || ''} onChange={(e) => updateField('vendor_contract_number', e.target.value)} placeholder="Vendor's contract reference" />
+                </div>
+
+                {/* Bag Marks */}
+                <div>
+                  <Label>Bag Marks</Label>
+                  <Input value={form.bag_marks || ''} onChange={(e) => updateField('bag_marks', e.target.value)} placeholder="As they appear on bags, invoice, and delivery order" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -898,7 +908,7 @@ function ReleaseCoffeeModal({
   // Fetch PO number on modal open
   useEffect(() => {
     if (open) {
-      setBagMarks('');
+      setBagMarks(contract.bag_marks ?? '');
       setBags('');
       setExpectedDate(undefined);
       setCarrier('');
@@ -934,7 +944,7 @@ function ReleaseCoffeeModal({
         }
       })();
     }
-  }, [open, existingLotCount]);
+  }, [open, existingLotCount, contract.bag_marks]);
 
   // Compute lot number live
   const computedLotNumber = useMemo(() => {
@@ -1137,6 +1147,7 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
   const [prefilled, setPrefilled] = useState<Set<string>>(new Set());
   const [originCountry, setOriginCountry] = useState<string | null>(null);
   const [vendorContractNumber, setVendorContractNumber] = useState('');
+  const [bagMarks, setBagMarks] = useState('');
 
   // Approved samples
   const { data: approvedSamples = [] } = useQuery({
@@ -1158,7 +1169,7 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
     setOrigin(''); setRegion(''); setProducer(''); setVariety('');
     setCropYear(null); setPriceInput(''); setPriceUnit('usd_kg');
     setNumBags(''); setBagSize(''); setWarehouse(''); setNotes('');
-    setPrefilled(new Set()); setOriginCountry(null); setVendorContractNumber('');
+    setPrefilled(new Set()); setOriginCountry(null); setVendorContractNumber(''); setBagMarks('');
   };
 
   const handleSampleSelect = (id: string | null) => {
@@ -1230,6 +1241,7 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
         internal_contract_number: internalNumber,
         vendor_contract_number: vendorContractNumber.trim() || null,
         origin_country: originCountry || null,
+        bag_marks: bagMarks.trim() || null,
       } as any).select('id').single();
       if (error) throw error;
 
@@ -1303,6 +1315,10 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
           <div>
             <Label>Vendor Contract #</Label>
             <Input value={vendorContractNumber} onChange={(e) => setVendorContractNumber(e.target.value)} placeholder="Vendor's contract reference (optional)" />
+          </div>
+          <div>
+            <Label>Bag Marks</Label>
+            <Input value={bagMarks} onChange={(e) => setBagMarks(e.target.value)} placeholder="As they appear on bags, invoice, and delivery order" />
           </div>
           <div>
             <Label>Name *</Label>
