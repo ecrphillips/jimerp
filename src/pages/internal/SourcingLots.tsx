@@ -284,9 +284,9 @@ function CostField({
         {isZero ? (
           <p className="text-sm text-muted-foreground">—</p>
         ) : (
-          <p className="text-sm font-medium">{displayCurrency} ${displayVal.toFixed(2)}</p>
+          <p className="text-sm font-medium">{formatMoney(displayVal, displayCurrency)}</p>
         )}
-        {!isZero && isUsd && fxRate && <p className="text-xs text-muted-foreground">= CAD ${(value ?? 0).toFixed(2)} @ {fxRate.toFixed(4)}</p>}
+        {!isZero && isUsd && fxRate && <p className="text-xs text-muted-foreground">= {formatMoney(value ?? 0)} @ {fxRate.toFixed(4)}</p>}
         {descriptionValue && <p className="text-xs text-muted-foreground italic">{descriptionValue}</p>}
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <CheckCircle2 className="h-3 w-3 text-green-600 dark:text-green-400" />
