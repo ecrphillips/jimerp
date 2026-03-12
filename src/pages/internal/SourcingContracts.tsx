@@ -274,7 +274,10 @@ function ContractCard({ contract, vendor, lots, onView }: { contract: Contract; 
         {(contract.origin || contract.region) && (
           <p className="text-sm text-muted-foreground">{[contract.origin, contract.region].filter(Boolean).join(' — ')}</p>
         )}
-        <p className="text-sm">{contract.name}</p>
+         {contract.lot_identifier && (
+           <p className="text-sm text-muted-foreground/80">{contract.lot_identifier}</p>
+         )}
+         <p className="text-sm">{contract.name}</p>
         {contract.producer && <p className="text-xs text-muted-foreground">{contract.producer}</p>}
         {contract.variety && <p className="text-xs text-muted-foreground italic">{contract.variety}</p>}
         <div className="flex flex-wrap items-center gap-1.5">
