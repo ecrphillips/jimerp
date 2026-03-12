@@ -1048,11 +1048,7 @@ Home Island Coffee Partners`;
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Lot Number</span>
-              {computedLotNumber ? (
-                <Badge variant="outline" className="font-mono text-xs">{computedLotNumber}</Badge>
-              ) : (
-                <span className="text-xs text-muted-foreground italic">Enter bag marks above</span>
-              )}
+              <Badge variant="outline" className="font-mono text-xs">{computedLotNumber || '…'}</Badge>
             </div>
           </div>
 
