@@ -1101,8 +1101,8 @@ function AddSampleModal({
             <Textarea value={tastingNotes} onChange={(e) => setTastingNotes(e.target.value)} rows={2} />
           </div>
           <div>
-            <Label>Initial Note</Label>
-            <Input value={initialNote} onChange={(e) => setInitialNote(e.target.value)} placeholder="Optional note on arrival…" />
+            <Label>Other Notes</Label>
+            <Input value={otherNotes} onChange={(e) => setOtherNotes(e.target.value)} placeholder="Any other notes on arrival…" />
           </div>
         </div>
         <DialogFooter>
