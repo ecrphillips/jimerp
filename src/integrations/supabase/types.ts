@@ -1285,10 +1285,12 @@ export type Database = {
           created_by: string | null
           crop_year: string | null
           id: string
+          internal_contract_number: string | null
           name: string
           notes: string | null
           num_bags: number | null
           origin: string | null
+          origin_country: string | null
           producer: string | null
           region: string | null
           sample_id: string | null
@@ -1296,6 +1298,7 @@ export type Database = {
           total_kg: number | null
           updated_at: string
           variety: string | null
+          vendor_contract_number: string | null
           vendor_id: string | null
           warehouse_location: string | null
         }
@@ -1309,10 +1312,12 @@ export type Database = {
           created_by?: string | null
           crop_year?: string | null
           id?: string
+          internal_contract_number?: string | null
           name: string
           notes?: string | null
           num_bags?: number | null
           origin?: string | null
+          origin_country?: string | null
           producer?: string | null
           region?: string | null
           sample_id?: string | null
@@ -1320,6 +1325,7 @@ export type Database = {
           total_kg?: number | null
           updated_at?: string
           variety?: string | null
+          vendor_contract_number?: string | null
           vendor_id?: string | null
           warehouse_location?: string | null
         }
@@ -1333,10 +1339,12 @@ export type Database = {
           created_by?: string | null
           crop_year?: string | null
           id?: string
+          internal_contract_number?: string | null
           name?: string
           notes?: string | null
           num_bags?: number | null
           origin?: string | null
+          origin_country?: string | null
           producer?: string | null
           region?: string | null
           sample_id?: string | null
@@ -1344,6 +1352,7 @@ export type Database = {
           total_kg?: number | null
           updated_at?: string
           variety?: string | null
+          vendor_contract_number?: string | null
           vendor_id?: string | null
           warehouse_location?: string | null
         }
@@ -1525,6 +1534,7 @@ export type Database = {
         Row: {
           arrival_snoozed_until: string | null
           available_to_members: boolean
+          bag_marks: string | null
           bag_size_kg: number
           bags_released: number
           book_value_per_kg: number | null
@@ -1586,6 +1596,7 @@ export type Database = {
           other_costs_confirmed_at: string | null
           other_costs_confirmed_by: string | null
           other_costs_description: string | null
+          po_number: string | null
           received_date: string | null
           status: Database["public"]["Enums"]["lot_status"]
           transaction_fees_cad: number | null
@@ -1594,6 +1605,7 @@ export type Database = {
           transaction_fees_confirmed_at: string | null
           transaction_fees_confirmed_by: string | null
           updated_at: string
+          vendor_invoice_number: string | null
           vendor_release_communicated_at: string | null
           vendor_release_communicated_by: string | null
           warehouse_location: string | null
@@ -1601,6 +1613,7 @@ export type Database = {
         Insert: {
           arrival_snoozed_until?: string | null
           available_to_members?: boolean
+          bag_marks?: string | null
           bag_size_kg: number
           bags_released: number
           book_value_per_kg?: number | null
@@ -1662,6 +1675,7 @@ export type Database = {
           other_costs_confirmed_at?: string | null
           other_costs_confirmed_by?: string | null
           other_costs_description?: string | null
+          po_number?: string | null
           received_date?: string | null
           status?: Database["public"]["Enums"]["lot_status"]
           transaction_fees_cad?: number | null
@@ -1670,6 +1684,7 @@ export type Database = {
           transaction_fees_confirmed_at?: string | null
           transaction_fees_confirmed_by?: string | null
           updated_at?: string
+          vendor_invoice_number?: string | null
           vendor_release_communicated_at?: string | null
           vendor_release_communicated_by?: string | null
           warehouse_location?: string | null
@@ -1677,6 +1692,7 @@ export type Database = {
         Update: {
           arrival_snoozed_until?: string | null
           available_to_members?: boolean
+          bag_marks?: string | null
           bag_size_kg?: number
           bags_released?: number
           book_value_per_kg?: number | null
@@ -1738,6 +1754,7 @@ export type Database = {
           other_costs_confirmed_at?: string | null
           other_costs_confirmed_by?: string | null
           other_costs_description?: string | null
+          po_number?: string | null
           received_date?: string | null
           status?: Database["public"]["Enums"]["lot_status"]
           transaction_fees_cad?: number | null
@@ -1746,6 +1763,7 @@ export type Database = {
           transaction_fees_confirmed_at?: string | null
           transaction_fees_confirmed_by?: string | null
           updated_at?: string
+          vendor_invoice_number?: string | null
           vendor_release_communicated_at?: string | null
           vendor_release_communicated_by?: string | null
           warehouse_location?: string | null
@@ -3230,6 +3248,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      nextval_text: { Args: { seq_name: string }; Returns: number }
     }
     Enums: {
       app_role: "ADMIN" | "OPS" | "CLIENT"

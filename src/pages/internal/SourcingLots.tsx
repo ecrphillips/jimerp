@@ -32,6 +32,9 @@ interface LotRow {
   warehouse_location: string | null;
   exceptions_noted: boolean;
   exceptions_notes: string | null;
+  bag_marks: string | null;
+  po_number: string | null;
+  vendor_invoice_number: string | null;
   // cost fields
   fx_rate: number | null;
   invoice_amount_cad: number | null;
@@ -64,7 +67,7 @@ interface LotRow {
   transaction_fees_confirmed_at: string | null;
   other_costs_confirmed_by: string | null;
   other_costs_confirmed_at: string | null;
-  // lot-level timestamps
+  // timestamps
   created_at: string;
   updated_at: string;
 }
@@ -78,6 +81,8 @@ interface ContractInfo {
   variety: string | null;
   crop_year: string | null;
   category: string;
+  vendor_contract_number: string | null;
+  internal_contract_number: string | null;
 }
 
 interface LotNote {
@@ -116,7 +121,6 @@ export default function SourcingLots() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
 
-  // Fetch lots
   const { data: lots = [], isLoading } = useQuery({
     queryKey: ['green-lots'],
     queryFn: async () => {
@@ -129,18 +133,16 @@ export default function SourcingLots() {
     },
   });
 
-  // Fetch contracts for display
   const { data: contracts = [] } = useQuery({
     queryKey: ['green-contracts-for-lots'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('green_contracts').select('id, name, origin, region, producer, variety, crop_year, category');
+      const { data, error } = await supabase.from('green_contracts').select('id, name, origin, region, producer, variety, crop_year, category, vendor_contract_number, internal_contract_number');
       if (error) throw error;
-      return (data ?? []) as ContractInfo[];
+      return (data ?? []) as unknown as ContractInfo[];
     },
   });
   const contractMap = useMemo(() => Object.fromEntries(contracts.map(c => [c.id, c])), [contracts]);
 
-  // Sort: received DESC, then created_at DESC for en-route
   const sorted = useMemo(() => {
     return [...lots].sort((a, b) => {
       if (a.received_date && b.received_date) return b.received_date.localeCompare(a.received_date);
@@ -176,7 +178,6 @@ export default function SourcingLots() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -258,7 +259,6 @@ function CostField({
   const isConfirmed = !!confirmedAt;
 
   if (isConfirmed) {
-    // USD fields: show the USD equivalent for display
     const displayVal = isUsd && fxRate ? value! / fxRate : value;
     const displayCurrency = isUsd ? 'USD' : 'CAD';
     return (
@@ -356,7 +356,7 @@ function LotDetailPanel({
     },
   });
 
-  // Profile map for confirmed-by names
+  // Profile map
   const { data: profileMap = {} } = useQuery({
     queryKey: ['profiles-map'],
     queryFn: async () => {
@@ -393,11 +393,14 @@ function LotDetailPanel({
   const [paymentTerms, setPaymentTerms] = useState<number | null>(null);
   const [estDaysConsume, setEstDaysConsume] = useState<number | null>(null);
 
+  // Editable lot fields
+  const [editBagMarks, setEditBagMarks] = useState('');
+  const [editVendorInvoice, setEditVendorInvoice] = useState('');
+
   // Sync from DB
   useEffect(() => {
     if (lot) {
       setFxRate(lot.fx_rate);
-      // For USD fields: reverse-convert from stored CAD to original USD for editing
       if (lot.invoice_is_usd && lot.fx_rate && lot.invoice_amount_cad != null) {
         setInvoiceAmt(lot.invoice_amount_cad / lot.fx_rate);
       } else {
@@ -422,17 +425,17 @@ function LotDetailPanel({
       setOtherCostsDesc(lot.other_costs_description || '');
       setPaymentTerms(lot.importer_payment_terms_days);
       setEstDaysConsume(lot.estimated_days_to_consume);
+      setEditBagMarks(lot.bag_marks || '');
+      setEditVendorInvoice(lot.vendor_invoice_number || '');
     }
   }, [lot]);
 
-  // Convert to CAD for storage
   const toCad = useCallback((val: number | null, isUsd: boolean, rate: number | null) => {
     if (val == null) return null;
     if (isUsd && rate) return val * rate;
     return val;
   }, []);
 
-  // Save single field updates
   const fieldSaveMutation = useMutation({
     mutationFn: async (updates: Record<string, any>) => {
       const { error } = await supabase.from('green_lots').update(updates as any).eq('id', lotId!);
@@ -445,18 +448,15 @@ function LotDetailPanel({
     onError: () => toast.error('Failed to save'),
   });
 
-  // Save financing fields on blur
-  const saveFinancingField = (field: string, value: number | null) => {
+  const saveFinancingField = (field: string, value: any) => {
     fieldSaveMutation.mutate({ [field]: value });
   };
 
-  // Clear a confirmation
   const clearConfirmation = (fieldPrefix: string) => {
     const updates: Record<string, any> = {
       [`${fieldPrefix}_confirmed_by`]: null,
       [`${fieldPrefix}_confirmed_at`]: null,
     };
-    // If lot was COSTING_COMPLETE, revert to COSTING_INCOMPLETE
     if (lot?.status === 'COSTING_COMPLETE') {
       updates.status = 'COSTING_INCOMPLETE';
     }
@@ -464,7 +464,6 @@ function LotDetailPanel({
     toast.info('Confirmation cleared — field unlocked for editing');
   };
 
-  // Save cost field values (non-confirmation)
   const saveCostValues = useCallback(() => {
     if (!lotId) return;
     const updates: Record<string, any> = {
@@ -483,14 +482,12 @@ function LotDetailPanel({
     fieldSaveMutation.mutate(updates);
   }, [lotId, fxRate, invoiceAmt, invoiceIsUsd, carryFees, carryFeesIsUsd, freight, freightIsUsd, duties, txFees, otherCosts, otherCostsDesc, toCad, fieldSaveMutation]);
 
-  // Confirm all unconfirmed fields
   const confirmCostsMutation = useMutation({
     mutationFn: async () => {
       if (!lot || !authUser) return;
       const now = new Date().toISOString();
       const uid = authUser.id;
 
-      // First save current values
       const updates: Record<string, any> = {
         fx_rate: fxRate,
         invoice_amount_cad: toCad(invoiceAmt, invoiceIsUsd, fxRate),
@@ -505,43 +502,19 @@ function LotDetailPanel({
         other_costs_description: otherCostsDesc.trim() || null,
       };
 
-      // Confirm each field that has a value and is not yet confirmed
-      if (fxRate != null && !lot.fx_rate_confirmed_at) {
-        updates.fx_rate_confirmed_by = uid;
-        updates.fx_rate_confirmed_at = now;
-      }
-      if (invoiceAmt != null && !lot.invoice_confirmed_at) {
-        updates.invoice_confirmed_by = uid;
-        updates.invoice_confirmed_at = now;
-      }
-      if (carryFees != null && !lot.carry_fees_confirmed_at) {
-        updates.carry_fees_confirmed_by = uid;
-        updates.carry_fees_confirmed_at = now;
-      }
-      if (freight != null && !lot.freight_confirmed_at) {
-        updates.freight_confirmed_by = uid;
-        updates.freight_confirmed_at = now;
-      }
-      if (duties != null && !lot.duties_confirmed_at) {
-        updates.duties_confirmed_by = uid;
-        updates.duties_confirmed_at = now;
-      }
-      if (txFees != null && !lot.transaction_fees_confirmed_at) {
-        updates.transaction_fees_confirmed_by = uid;
-        updates.transaction_fees_confirmed_at = now;
-      }
-      if (otherCosts != null && !lot.other_costs_confirmed_at) {
-        updates.other_costs_confirmed_by = uid;
-        updates.other_costs_confirmed_at = now;
-      }
+      if (fxRate != null && !lot.fx_rate_confirmed_at) { updates.fx_rate_confirmed_by = uid; updates.fx_rate_confirmed_at = now; }
+      if (invoiceAmt != null && !lot.invoice_confirmed_at) { updates.invoice_confirmed_by = uid; updates.invoice_confirmed_at = now; }
+      if (carryFees != null && !lot.carry_fees_confirmed_at) { updates.carry_fees_confirmed_by = uid; updates.carry_fees_confirmed_at = now; }
+      if (freight != null && !lot.freight_confirmed_at) { updates.freight_confirmed_by = uid; updates.freight_confirmed_at = now; }
+      if (duties != null && !lot.duties_confirmed_at) { updates.duties_confirmed_by = uid; updates.duties_confirmed_at = now; }
+      if (txFees != null && !lot.transaction_fees_confirmed_at) { updates.transaction_fees_confirmed_by = uid; updates.transaction_fees_confirmed_at = now; }
+      if (otherCosts != null && !lot.other_costs_confirmed_at) { updates.other_costs_confirmed_by = uid; updates.other_costs_confirmed_at = now; }
 
-      // Check if all 7 fields will be confirmed after this
       const allConfirmedAfter =
         (fxRate != null) && (invoiceAmt != null) && (carryFees != null) &&
         (freight != null) && (duties != null) && (txFees != null) && (otherCosts != null);
 
       if (allConfirmedAfter) {
-        // Compute book value
         const storedInvoice = toCad(invoiceAmt, invoiceIsUsd, fxRate) ?? 0;
         const storedCarry = toCad(carryFees, carryFeesIsUsd, fxRate) ?? 0;
         const storedFreight = toCad(freight, freightIsUsd, fxRate) ?? 0;
@@ -550,7 +523,6 @@ function LotDetailPanel({
         updates.book_value_per_kg = bvPerKg;
         updates.status = 'COSTING_COMPLETE';
 
-        // Market value
         if (paymentTerms != null && estDaysConsume != null) {
           const avgDaysFinanced = (estDaysConsume - paymentTerms) / 2;
           const financingCostPerKg = bvPerKg * 0.12 * (avgDaysFinanced / 365);
@@ -572,7 +544,7 @@ function LotDetailPanel({
     onError: () => toast.error('Failed to confirm costs'),
   });
 
-  // Compute live summary
+  // Live summary
   const liveSummary = useMemo(() => {
     if (!lot) return null;
     const storedInvoice = toCad(invoiceAmt, invoiceIsUsd, fxRate);
@@ -602,7 +574,6 @@ function LotDetailPanel({
     return { fields, totalCosts, bvPerKg, financingCostPerKg, mvPerKg };
   }, [lot, invoiceAmt, invoiceIsUsd, carryFees, carryFeesIsUsd, freight, freightIsUsd, duties, txFees, otherCosts, fxRate, kgReceived, paymentTerms, estDaysConsume, toCad]);
 
-  // Has any unconfirmed field with a value
   const hasUnconfirmedWithValue = lot ? (
     (fxRate != null && !lot.fx_rate_confirmed_at) ||
     (invoiceAmt != null && !lot.invoice_confirmed_at) ||
@@ -641,7 +612,12 @@ function LotDetailPanel({
     const c = contract;
     const lines: string[] = [];
     lines.push(`Lot Number: ${lot.lot_number}`);
+    if (lot.po_number) lines.push(`PO Number: ${lot.po_number}`);
+    if (lot.bag_marks) lines.push(`Bag Marks: ${lot.bag_marks}`);
+    if (lot.vendor_invoice_number) lines.push(`Vendor Invoice #: ${lot.vendor_invoice_number}`);
     lines.push(`Contract: ${c?.name || '—'}`);
+    if (c?.internal_contract_number) lines.push(`Internal Contract #: ${c.internal_contract_number}`);
+    if (c?.vendor_contract_number) lines.push(`Vendor Contract #: ${c.vendor_contract_number}`);
     lines.push(`Origin: ${c?.origin || '—'}`);
     if (c?.region) lines.push(`Region: ${c.region}`);
     if (c?.producer) lines.push(`Producer: ${c.producer}`);
@@ -675,7 +651,6 @@ function LotDetailPanel({
     if (lot.importer_payment_terms_days != null) lines.push(`Payment Terms: ${lot.importer_payment_terms_days} days`);
     if (lot.estimated_days_to_consume != null) lines.push(`Est. Days to Consume: ${lot.estimated_days_to_consume}`);
 
-    // Notes
     const { data: allNotes } = await supabase.from('green_lot_notes').select('note, created_by, created_at').eq('lot_id', lotId!).order('created_at', { ascending: true });
     if (allNotes && allNotes.length > 0) {
       lines.push('', '--- Notes ---');
@@ -709,6 +684,63 @@ function LotDetailPanel({
             {/* SECTION 1 — LOT INFO */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold">Lot Info</h3>
+
+              {/* Editable lot-level fields at top */}
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Bag Marks</Label>
+                  <Input
+                    value={editBagMarks}
+                    onChange={(e) => setEditBagMarks(e.target.value)}
+                    onBlur={() => {
+                      if (editBagMarks !== (lot.bag_marks || '')) {
+                        saveFinancingField('bag_marks', editBagMarks.trim() || null);
+                      }
+                    }}
+                    placeholder="Bag marks"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">PO Number</Label>
+                    <div className="mt-1">
+                      {lot.po_number ? (
+                        <Badge variant="outline" className="text-xs font-mono">{lot.po_number}</Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Lot Number</Label>
+                    <div className="mt-1">
+                      <Badge variant="outline" className="text-xs font-mono">{lot.lot_number}</Badge>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Vendor Invoice #</Label>
+                  <Input
+                    value={editVendorInvoice}
+                    onChange={(e) => setEditVendorInvoice(e.target.value)}
+                    onBlur={() => {
+                      if (editVendorInvoice !== (lot.vendor_invoice_number || '')) {
+                        saveFinancingField('vendor_invoice_number', editVendorInvoice.trim() || null);
+                      }
+                    }}
+                    placeholder="Vendor invoice number"
+                  />
+                </div>
+                {contract?.vendor_contract_number && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Vendor Contract #</Label>
+                    <p className="text-sm mt-1">{contract.vendor_contract_number}</p>
+                  </div>
+                )}
+              </div>
+
+              <Separator className="my-2" />
+
               <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                 <div><span className="text-muted-foreground">Contract:</span> {contract?.name || '—'}</div>
                 <div><span className="text-muted-foreground">Origin:</span> {contract?.origin || '—'}</div>
@@ -791,104 +823,15 @@ function LotDetailPanel({
               )}
 
               <div className="space-y-4">
-                {/* FX Rate */}
-                <CostField
-                  label="FX Rate (USD → CAD)"
-                  value={fxRate}
-                  onChange={setFxRate}
-                  confirmedBy={lot.fx_rate_confirmed_by}
-                  confirmedAt={lot.fx_rate_confirmed_at}
-                  confirmedByName={profileMap[lot.fx_rate_confirmed_by || ''] || null}
-                  onClearConfirmation={() => clearConfirmation('fx_rate')}
-                  fxRate={fxRate}
-                  fxRateConfirmed={!!lot.fx_rate_confirmed_at}
-                />
-                {/* Invoice */}
-                <CostField
-                  label="Invoice Amount"
-                  value={invoiceAmt}
-                  onChange={setInvoiceAmt}
-                  confirmedBy={lot.invoice_confirmed_by}
-                  confirmedAt={lot.invoice_confirmed_at}
-                  confirmedByName={profileMap[lot.invoice_confirmed_by || ''] || null}
-                  onClearConfirmation={() => clearConfirmation('invoice')}
-                  hasCurrencyToggle
-                  isUsd={invoiceIsUsd}
-                  onToggleUsd={setInvoiceIsUsd}
-                  fxRate={fxRate}
-                  fxRateConfirmed={!!lot.fx_rate_confirmed_at}
-                />
-                {/* Carry Fees */}
-                <CostField
-                  label="Carry / Financing Fees"
-                  value={carryFees}
-                  onChange={setCarryFees}
-                  confirmedBy={lot.carry_fees_confirmed_by}
-                  confirmedAt={lot.carry_fees_confirmed_at}
-                  confirmedByName={profileMap[lot.carry_fees_confirmed_by || ''] || null}
-                  onClearConfirmation={() => clearConfirmation('carry_fees')}
-                  hasCurrencyToggle
-                  isUsd={carryFeesIsUsd}
-                  onToggleUsd={setCarryFeesIsUsd}
-                  fxRate={fxRate}
-                  fxRateConfirmed={!!lot.fx_rate_confirmed_at}
-                />
-                {/* Freight */}
-                <CostField
-                  label="Freight"
-                  value={freight}
-                  onChange={setFreight}
-                  confirmedBy={lot.freight_confirmed_by}
-                  confirmedAt={lot.freight_confirmed_at}
-                  confirmedByName={profileMap[lot.freight_confirmed_by || ''] || null}
-                  onClearConfirmation={() => clearConfirmation('freight')}
-                  hasCurrencyToggle
-                  isUsd={freightIsUsd}
-                  onToggleUsd={setFreightIsUsd}
-                  fxRate={fxRate}
-                  fxRateConfirmed={!!lot.fx_rate_confirmed_at}
-                />
-                {/* Duties */}
-                <CostField
-                  label="Duties & Taxes"
-                  value={duties}
-                  onChange={setDuties}
-                  confirmedBy={lot.duties_confirmed_by}
-                  confirmedAt={lot.duties_confirmed_at}
-                  confirmedByName={profileMap[lot.duties_confirmed_by || ''] || null}
-                  onClearConfirmation={() => clearConfirmation('duties')}
-                  fxRate={fxRate}
-                  fxRateConfirmed={!!lot.fx_rate_confirmed_at}
-                />
-                {/* Transaction Fees */}
-                <CostField
-                  label="Transaction Fees"
-                  value={txFees}
-                  onChange={setTxFees}
-                  confirmedBy={lot.transaction_fees_confirmed_by}
-                  confirmedAt={lot.transaction_fees_confirmed_at}
-                  confirmedByName={profileMap[lot.transaction_fees_confirmed_by || ''] || null}
-                  onClearConfirmation={() => clearConfirmation('transaction_fees')}
-                  fxRate={fxRate}
-                  fxRateConfirmed={!!lot.fx_rate_confirmed_at}
-                />
-                {/* Other Costs */}
-                <CostField
-                  label="Other Costs"
-                  value={otherCosts}
-                  onChange={setOtherCosts}
-                  confirmedBy={lot.other_costs_confirmed_by}
-                  confirmedAt={lot.other_costs_confirmed_at}
-                  confirmedByName={profileMap[lot.other_costs_confirmed_by || ''] || null}
-                  onClearConfirmation={() => clearConfirmation('other_costs')}
-                  fxRate={fxRate}
-                  fxRateConfirmed={!!lot.fx_rate_confirmed_at}
-                  descriptionValue={otherCostsDesc}
-                  onDescriptionChange={setOtherCostsDesc}
-                />
+                <CostField label="FX Rate (USD → CAD)" value={fxRate} onChange={setFxRate} confirmedBy={lot.fx_rate_confirmed_by} confirmedAt={lot.fx_rate_confirmed_at} confirmedByName={profileMap[lot.fx_rate_confirmed_by || ''] || null} onClearConfirmation={() => clearConfirmation('fx_rate')} fxRate={fxRate} fxRateConfirmed={!!lot.fx_rate_confirmed_at} />
+                <CostField label="Invoice Amount" value={invoiceAmt} onChange={setInvoiceAmt} confirmedBy={lot.invoice_confirmed_by} confirmedAt={lot.invoice_confirmed_at} confirmedByName={profileMap[lot.invoice_confirmed_by || ''] || null} onClearConfirmation={() => clearConfirmation('invoice')} hasCurrencyToggle isUsd={invoiceIsUsd} onToggleUsd={setInvoiceIsUsd} fxRate={fxRate} fxRateConfirmed={!!lot.fx_rate_confirmed_at} />
+                <CostField label="Carry / Financing Fees" value={carryFees} onChange={setCarryFees} confirmedBy={lot.carry_fees_confirmed_by} confirmedAt={lot.carry_fees_confirmed_at} confirmedByName={profileMap[lot.carry_fees_confirmed_by || ''] || null} onClearConfirmation={() => clearConfirmation('carry_fees')} hasCurrencyToggle isUsd={carryFeesIsUsd} onToggleUsd={setCarryFeesIsUsd} fxRate={fxRate} fxRateConfirmed={!!lot.fx_rate_confirmed_at} />
+                <CostField label="Freight" value={freight} onChange={setFreight} confirmedBy={lot.freight_confirmed_by} confirmedAt={lot.freight_confirmed_at} confirmedByName={profileMap[lot.freight_confirmed_by || ''] || null} onClearConfirmation={() => clearConfirmation('freight')} hasCurrencyToggle isUsd={freightIsUsd} onToggleUsd={setFreightIsUsd} fxRate={fxRate} fxRateConfirmed={!!lot.fx_rate_confirmed_at} />
+                <CostField label="Duties & Taxes" value={duties} onChange={setDuties} confirmedBy={lot.duties_confirmed_by} confirmedAt={lot.duties_confirmed_at} confirmedByName={profileMap[lot.duties_confirmed_by || ''] || null} onClearConfirmation={() => clearConfirmation('duties')} fxRate={fxRate} fxRateConfirmed={!!lot.fx_rate_confirmed_at} />
+                <CostField label="Transaction Fees" value={txFees} onChange={setTxFees} confirmedBy={lot.transaction_fees_confirmed_by} confirmedAt={lot.transaction_fees_confirmed_at} confirmedByName={profileMap[lot.transaction_fees_confirmed_by || ''] || null} onClearConfirmation={() => clearConfirmation('transaction_fees')} fxRate={fxRate} fxRateConfirmed={!!lot.fx_rate_confirmed_at} />
+                <CostField label="Other Costs" value={otherCosts} onChange={setOtherCosts} confirmedBy={lot.other_costs_confirmed_by} confirmedAt={lot.other_costs_confirmed_at} confirmedByName={profileMap[lot.other_costs_confirmed_by || ''] || null} onClearConfirmation={() => clearConfirmation('other_costs')} fxRate={fxRate} fxRateConfirmed={!!lot.fx_rate_confirmed_at} descriptionValue={otherCostsDesc} onDescriptionChange={setOtherCostsDesc} />
               </div>
 
-              {/* Confirm button */}
               {hasUnconfirmedWithValue && !allFieldsConfirmed && (
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" onClick={saveCostValues} disabled={fieldSaveMutation.isPending}>
@@ -900,7 +843,6 @@ function LotDetailPanel({
                 </div>
               )}
 
-              {/* Live Cost Summary */}
               {liveSummary && (
                 <Card className="mt-4">
                   <CardContent className="p-4 space-y-2">
