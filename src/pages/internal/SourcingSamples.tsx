@@ -904,19 +904,20 @@ function AddSampleModal({
   const [variety, setVariety] = useState('');
   const [category, setCategory] = useState<GreenCategory | ''>('');
   const [price, setPrice] = useState('');
+  const [priceUnit, setPriceUnit] = useState<'kg' | 'lb'>('kg');
   const [warehouse, setWarehouse] = useState('');
   const [bagSize, setBagSize] = useState('');
   const [numBags, setNumBags] = useState('');
   const [score, setScore] = useState('');
   const [tastingNotes, setTastingNotes] = useState('');
   const [selectedRgs, setSelectedRgs] = useState<string[]>([]);
-  const [initialNote, setInitialNote] = useState('');
+  const [otherNotes, setOtherNotes] = useState('');
 
   const reset = () => {
     setName(''); setVendorId(null); setOrigin(''); setRegion('');
-    setProducer(''); setVariety(''); setCategory(''); setPrice('');
+    setProducer(''); setVariety(''); setCategory(''); setPrice(''); setPriceUnit('kg');
     setWarehouse(''); setBagSize(''); setNumBags(''); setScore('');
-    setTastingNotes(''); setSelectedRgs([]); setInitialNote('');
+    setTastingNotes(''); setSelectedRgs([]); setOtherNotes('');
   };
 
   const totalKg = bagSize && numBags ? parseFloat(bagSize) * parseInt(numBags) : null;
