@@ -27,6 +27,10 @@ import {
   Handshake,
   Settings,
   Building2,
+  Binoculars,
+  FlaskConical,
+  FileSignature,
+  Boxes,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
