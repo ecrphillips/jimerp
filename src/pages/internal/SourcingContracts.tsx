@@ -487,6 +487,7 @@ function ContractDetailPanel({
     const lines: string[] = [];
     if (contract.internal_contract_number) lines.push(`Internal Contract #: ${contract.internal_contract_number}`);
     if (contract.vendor_contract_number) lines.push(`Vendor Contract #: ${contract.vendor_contract_number}`);
+    if (contract.bag_marks) lines.push(`Bag Marks: ${contract.bag_marks}`);
     if (vendor) {
       lines.push(`Vendor: ${vendor.name}`);
       if (vendor.contact_name) lines.push(`Contact: ${vendor.contact_name}`);
