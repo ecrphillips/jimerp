@@ -1242,19 +1242,55 @@ export type Database = {
           },
         ]
       }
+      green_contract_notes: {
+        Row: {
+          contract_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          note: string
+        }
+        Insert: {
+          contract_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note: string
+        }
+        Update: {
+          contract_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_contract_notes_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "green_contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       green_contracts: {
         Row: {
           bag_size_kg: number | null
           category: Database["public"]["Enums"]["green_coffee_category"]
+          contracted_price_currency: string | null
+          contracted_price_per_kg: number | null
           contracted_price_usd: number | null
           created_at: string
           created_by: string | null
+          crop_year: string | null
           id: string
           name: string
           notes: string | null
           num_bags: number | null
           origin: string | null
           producer: string | null
+          region: string | null
           sample_id: string | null
           status: Database["public"]["Enums"]["contract_status"]
           total_kg: number | null
@@ -1266,15 +1302,19 @@ export type Database = {
         Insert: {
           bag_size_kg?: number | null
           category: Database["public"]["Enums"]["green_coffee_category"]
+          contracted_price_currency?: string | null
+          contracted_price_per_kg?: number | null
           contracted_price_usd?: number | null
           created_at?: string
           created_by?: string | null
+          crop_year?: string | null
           id?: string
           name: string
           notes?: string | null
           num_bags?: number | null
           origin?: string | null
           producer?: string | null
+          region?: string | null
           sample_id?: string | null
           status?: Database["public"]["Enums"]["contract_status"]
           total_kg?: number | null
@@ -1286,15 +1326,19 @@ export type Database = {
         Update: {
           bag_size_kg?: number | null
           category?: Database["public"]["Enums"]["green_coffee_category"]
+          contracted_price_currency?: string | null
+          contracted_price_per_kg?: number | null
           contracted_price_usd?: number | null
           created_at?: string
           created_by?: string | null
+          crop_year?: string | null
           id?: string
           name?: string
           notes?: string | null
           num_bags?: number | null
           origin?: string | null
           producer?: string | null
+          region?: string | null
           sample_id?: string | null
           status?: Database["public"]["Enums"]["contract_status"]
           total_kg?: number | null
@@ -1406,6 +1450,38 @@ export type Database = {
           },
         ]
       }
+      green_lot_notes: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          lot_id: string
+          note: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lot_id: string
+          note: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lot_id?: string
+          note?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_lot_notes_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "green_lots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       green_lot_roast_group_links: {
         Row: {
           created_at: string
@@ -1447,6 +1523,7 @@ export type Database = {
       }
       green_lots: {
         Row: {
+          arrival_snoozed_until: string | null
           available_to_members: boolean
           bag_size_kg: number
           bags_released: number
@@ -1463,6 +1540,8 @@ export type Database = {
           duties_cad_confirmed_at: string | null
           duties_cad_confirmed_by: string | null
           estimated_days_to_consume: number | null
+          exceptions_noted: boolean
+          exceptions_notes: string | null
           expected_delivery_date: string | null
           financing_apr: number | null
           freight_cad: number | null
@@ -1491,9 +1570,12 @@ export type Database = {
           transaction_fees_cad_confirmed_at: string | null
           transaction_fees_cad_confirmed_by: string | null
           updated_at: string
+          vendor_release_communicated_at: string | null
+          vendor_release_communicated_by: string | null
           warehouse_location: string | null
         }
         Insert: {
+          arrival_snoozed_until?: string | null
           available_to_members?: boolean
           bag_size_kg: number
           bags_released: number
@@ -1510,6 +1592,8 @@ export type Database = {
           duties_cad_confirmed_at?: string | null
           duties_cad_confirmed_by?: string | null
           estimated_days_to_consume?: number | null
+          exceptions_noted?: boolean
+          exceptions_notes?: string | null
           expected_delivery_date?: string | null
           financing_apr?: number | null
           freight_cad?: number | null
@@ -1538,9 +1622,12 @@ export type Database = {
           transaction_fees_cad_confirmed_at?: string | null
           transaction_fees_cad_confirmed_by?: string | null
           updated_at?: string
+          vendor_release_communicated_at?: string | null
+          vendor_release_communicated_by?: string | null
           warehouse_location?: string | null
         }
         Update: {
+          arrival_snoozed_until?: string | null
           available_to_members?: boolean
           bag_size_kg?: number
           bags_released?: number
@@ -1557,6 +1644,8 @@ export type Database = {
           duties_cad_confirmed_at?: string | null
           duties_cad_confirmed_by?: string | null
           estimated_days_to_consume?: number | null
+          exceptions_noted?: boolean
+          exceptions_notes?: string | null
           expected_delivery_date?: string | null
           financing_apr?: number | null
           freight_cad?: number | null
@@ -1585,6 +1674,8 @@ export type Database = {
           transaction_fees_cad_confirmed_at?: string | null
           transaction_fees_cad_confirmed_by?: string | null
           updated_at?: string
+          vendor_release_communicated_at?: string | null
+          vendor_release_communicated_by?: string | null
           warehouse_location?: string | null
         }
         Relationships: [
@@ -3117,7 +3208,7 @@ export type Database = {
         | "ADJUSTMENT"
         | "LOSS"
       lot_status:
-        | "PENDING_DELIVERY"
+        | "EN_ROUTE"
         | "RECEIVED"
         | "COSTING_INCOMPLETE"
         | "COSTING_COMPLETE"
@@ -3346,7 +3437,7 @@ export const Constants = {
         "LOSS",
       ],
       lot_status: [
-        "PENDING_DELIVERY",
+        "EN_ROUTE",
         "RECEIVED",
         "COSTING_INCOMPLETE",
         "COSTING_COMPLETE",
