@@ -1701,6 +1701,38 @@ export type Database = {
           },
         ]
       }
+      green_vendor_notes: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          note: string
+          vendor_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note: string
+          vendor_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_vendor_notes_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "green_vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       green_vendors: {
         Row: {
           contact_email: string | null
