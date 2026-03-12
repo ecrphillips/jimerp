@@ -662,14 +662,14 @@ function LotDetailPanel({
       return ` (confirmed by ${profileMap[by || ''] || 'Unknown'} on ${format(new Date(at), 'MMM d, yyyy')})`;
     };
     if (lot.fx_rate != null) lines.push(`FX Rate: ${lot.fx_rate.toFixed(4)}${confirmStamp(lot.fx_rate_confirmed_by, lot.fx_rate_confirmed_at)}`);
-    if (lot.invoice_amount_cad != null) lines.push(`Invoice: CAD $${lot.invoice_amount_cad.toFixed(2)}${confirmStamp(lot.invoice_confirmed_by, lot.invoice_confirmed_at)}`);
-    if (lot.carry_fees_cad != null) lines.push(`Carry Fees: CAD $${lot.carry_fees_cad.toFixed(2)}${confirmStamp(lot.carry_fees_confirmed_by, lot.carry_fees_confirmed_at)}`);
-    if (lot.freight_cad != null) lines.push(`Freight: CAD $${lot.freight_cad.toFixed(2)}${confirmStamp(lot.freight_confirmed_by, lot.freight_confirmed_at)}`);
-    if (lot.duties_cad != null) lines.push(`Duties: CAD $${lot.duties_cad.toFixed(2)}${confirmStamp(lot.duties_confirmed_by, lot.duties_confirmed_at)}`);
-    if (lot.transaction_fees_cad != null) lines.push(`Transaction Fees: CAD $${lot.transaction_fees_cad.toFixed(2)}${confirmStamp(lot.transaction_fees_confirmed_by, lot.transaction_fees_confirmed_at)}`);
-    if (lot.other_costs_cad != null) lines.push(`Other Costs: CAD $${lot.other_costs_cad.toFixed(2)}${lot.other_costs_description ? ` (${lot.other_costs_description})` : ''}${confirmStamp(lot.other_costs_confirmed_by, lot.other_costs_confirmed_at)}`);
-    if (lot.book_value_per_kg != null) lines.push(`Book Value: CAD $${lot.book_value_per_kg.toFixed(4)}/kg`);
-    if (lot.market_value_per_kg != null) lines.push(`Market Value: CAD $${lot.market_value_per_kg.toFixed(4)}/kg`);
+    if (lot.invoice_amount_cad != null) lines.push(`Invoice: ${formatMoney(lot.invoice_amount_cad)}${confirmStamp(lot.invoice_confirmed_by, lot.invoice_confirmed_at)}`);
+    if (lot.carry_fees_cad != null) lines.push(`Carry Fees: ${formatMoney(lot.carry_fees_cad)}${confirmStamp(lot.carry_fees_confirmed_by, lot.carry_fees_confirmed_at)}`);
+    if (lot.freight_cad != null) lines.push(`Freight: ${formatMoney(lot.freight_cad)}${confirmStamp(lot.freight_confirmed_by, lot.freight_confirmed_at)}`);
+    if (lot.duties_cad != null) lines.push(`Duties: ${formatMoney(lot.duties_cad)}${confirmStamp(lot.duties_confirmed_by, lot.duties_confirmed_at)}`);
+    if (lot.transaction_fees_cad != null) lines.push(`Transaction Fees: ${formatMoney(lot.transaction_fees_cad)}${confirmStamp(lot.transaction_fees_confirmed_by, lot.transaction_fees_confirmed_at)}`);
+    if (lot.other_costs_cad != null) lines.push(`Other Costs: ${formatMoney(lot.other_costs_cad)}${lot.other_costs_description ? ` (${lot.other_costs_description})` : ''}${confirmStamp(lot.other_costs_confirmed_by, lot.other_costs_confirmed_at)}`);
+    if (lot.book_value_per_kg != null) lines.push(`Book Value: ${formatPerKg(lot.book_value_per_kg)}`);
+    if (lot.market_value_per_kg != null) lines.push(`Market Value: ${formatPerKg(lot.market_value_per_kg)}`);
     if (lot.importer_payment_terms_days != null) lines.push(`Payment Terms: ${lot.importer_payment_terms_days} days`);
     if (lot.estimated_days_to_consume != null) lines.push(`Est. Days to Consume: ${lot.estimated_days_to_consume}`);
 
