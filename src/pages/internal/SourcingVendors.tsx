@@ -474,6 +474,7 @@ function AddVendorModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
+  const [abbreviation, setAbbreviation] = useState('');
   const [contactName, setContactName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
