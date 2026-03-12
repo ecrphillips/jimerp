@@ -624,6 +624,12 @@ function ContractDetailPanel({
                   <Input value={form.vendor_contract_number || ''} onChange={(e) => updateField('vendor_contract_number', e.target.value)} placeholder="Vendor's contract reference" />
                 </div>
 
+                {/* Bag Marks */}
+                <div>
+                  <Label>Bag Marks</Label>
+                  <Input value={form.bag_marks || ''} onChange={(e) => updateField('bag_marks', e.target.value)} placeholder="As they appear on bags, invoice, and delivery order" />
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Origin</Label>
