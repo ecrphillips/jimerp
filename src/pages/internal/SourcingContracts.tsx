@@ -531,7 +531,7 @@ function ContractDetailPanel({
   const receiveMutation = useMutation({
     mutationFn: async () => {
       if (!receiveLotId) return;
-      const updateData: any = { status: 'COSTING_INCOMPLETE', received_date: format(new Date(), 'yyyy-MM-dd') };
+      const updateData: any = { status: 'RECEIVED', received_date: format(new Date(), 'yyyy-MM-dd') };
       if (!receiveAsExpected) { updateData.exceptions_noted = true; updateData.exceptions_notes = exceptionsNotes.trim(); }
       const { error } = await supabase.from('green_lots').update(updateData).eq('id', receiveLotId);
       if (error) throw error;
