@@ -1007,9 +1007,9 @@ Home Island Coffee Partners`;
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <Label>Bag Marks *</Label>
-            <Input value={bagMarks} onChange={(e) => setBagMarks(e.target.value)} placeholder="As they appear on bags, invoice, and delivery order" />
-            <p className="text-xs text-muted-foreground mt-1">As they appear on the bags, invoice, and delivery order.</p>
+            <Label>Lot Identifier</Label>
+            <Input value={lotIdentifier} onChange={(e) => setLotIdentifier(e.target.value)} placeholder="As it appears on bags, invoice, and delivery order" />
+            <p className="text-xs text-muted-foreground mt-1">As it appears on the bags, invoice, and delivery order.</p>
           </div>
           <div>
             <Label>Number of Bags *</Label>
