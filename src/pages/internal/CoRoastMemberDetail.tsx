@@ -698,9 +698,9 @@ export default function CoRoastMemberDetail() {
               <StatItem label="Last Completed Session" value={stats.lastCompleted ? format(new Date(stats.lastCompleted + 'T00:00:00'), 'MMM d, yyyy') : 'None'} />
               <StatItem label="Total Sessions" value={String(stats.totalSessions)} />
               <StatItem label="Total Hours Scheduled" value={`${stats.totalHours.toFixed(1)}h`} />
-              <StatItem label="Total Billed (All Time)" value={`$${stats.totalBilledAllTime.toFixed(2)}`} />
-              <StatItem label="Total Billed (T12)" value={`$${stats.totalBilledT12.toFixed(2)}`} />
-              <StatItem label="Total Billed (YTD)" value={`$${stats.totalBilledYTD.toFixed(2)}`} />
+              <StatItem label="Total Billed (All Time)" value={formatMoney(stats.totalBilledAllTime)} />
+              <StatItem label="Total Billed (T12)" value={formatMoney(stats.totalBilledT12)} />
+              <StatItem label="Total Billed (YTD)" value={formatMoney(stats.totalBilledYTD)} />
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Loading stats…</p>

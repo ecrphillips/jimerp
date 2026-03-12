@@ -83,8 +83,8 @@ export default function QuickBooksInstructionsModal({
     lineItems.push({
       name: storageLabel,
       qty: String(paidPallets),
-      rate: `$${palletRate}`,
-      amount: `$${storageCharge.toFixed(2)}`,
+      rate: formatMoney(palletRate),
+      amount: formatMoney(storageCharge),
     });
   }
 

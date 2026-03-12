@@ -1624,7 +1624,7 @@ function AddSampleModal({
             </div>
             {price && (
               <p className="text-xs text-muted-foreground mt-1">
-                Stored: {priceUnit === 'cad_kg' ? 'CAD' : 'USD'} ${(priceUnit === 'usd_lb' ? parseFloat(price) * 2.20462 : parseFloat(price)).toFixed(4)} / kg
+                Stored: {formatPerKg(priceUnit === 'usd_lb' ? parseFloat(price) * 2.20462 : parseFloat(price), priceUnit === 'cad_kg' ? 'CAD' : 'USD')}
               </p>
             )}
           </div>

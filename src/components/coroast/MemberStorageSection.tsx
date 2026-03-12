@@ -282,7 +282,7 @@ export default function MemberStorageSection({ memberId, tier }: MemberStorageSe
                         <td className="py-2 text-right">{s.paid_pallets}</td>
                         <td className="py-2 text-right">{s.pallets_in_use}</td>
                         <td className="py-2 text-right">
-                          {charge > 0 ? `$${charge.toFixed(2)}` : '—'}
+                          {charge > 0 ? formatMoney(charge) : '—'}
                         </td>
                       </tr>
                     );

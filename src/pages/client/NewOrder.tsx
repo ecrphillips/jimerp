@@ -792,7 +792,7 @@ export default function NewOrder() {
                           )}
                           <span className="text-muted-foreground">
                             {li.price !== null
-                              ? `$${(li.price * li.quantity).toFixed(2)}`
+                              ? formatMoney(li.price * li.quantity)
                               : 'No price'}
                           </span>
                         </div>

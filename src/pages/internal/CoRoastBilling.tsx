@@ -553,7 +553,7 @@ export default function CoRoastBilling() {
                         {d.includedPallets} incl + {d.paidPallets} paid
                         {d.storageCharge > 0 && (
                           <span className="text-destructive ml-1">
-                            (${d.storageCharge.toFixed(2)})
+                            (${fmt(d.storageCharge)})
                           </span>
                         )}
                       </>

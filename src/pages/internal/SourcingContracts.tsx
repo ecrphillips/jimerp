@@ -128,13 +128,8 @@ function LotStatusBadge({ status }: { status: string }) {
 
 function formatPrice(value: number | null, currency: string | null) {
   if (value == null) return '—';
-  const prefix = currency === 'CAD' ? 'CAD' : 'USD';
-  return `${prefix} $${value.toFixed(4)}/kg`;
-}
-
-function formatMoney(value: number | null) {
-  if (value == null) return '—';
-  return `$${value.toFixed(2)}`;
+  const cur = (currency === 'CAD' ? 'CAD' : 'USD') as 'CAD' | 'USD';
+  return formatPerKg(value, cur);
 }
 
 // ─── Main Page ─────────────────────────────────────────────

@@ -908,7 +908,7 @@ function LotDetailPanel({
                       <>
                         <div className="flex justify-between text-base font-bold">
                           <span>Market Value/kg</span>
-                          <span>CAD ${liveSummary.mvPerKg.toFixed(4)}/kg</span>
+                          <span>{formatPerKg(liveSummary.mvPerKg)}</span>
                         </div>
                         <p className="text-xs text-muted-foreground italic">Financing estimate: 60 days @ 12% APR — placeholder, to be revisited.</p>
                       </>
