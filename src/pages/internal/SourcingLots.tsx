@@ -441,7 +441,7 @@ function LotDetailPanel({
       setOtherCostsDesc(lot.other_costs_description || '');
       setPaymentTerms(lot.importer_payment_terms_days);
       setEstDaysConsume(lot.estimated_days_to_consume);
-      setEditBagMarks(lot.bag_marks || '');
+      setEditLotIdentifier(lot.lot_identifier || '');
       setEditVendorInvoice(lot.vendor_invoice_number || '');
     }
   }, [lot]);
