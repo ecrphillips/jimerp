@@ -398,6 +398,7 @@ function SampleDetailPanel({
   // Form state
   const [form, setForm] = useState<Partial<Sample>>({});
   const [dirty, setDirty] = useState(false);
+  const [priceUnit, setPriceUnit] = useState<'kg' | 'lb'>('kg');
 
   useEffect(() => {
     if (sample) {
@@ -417,6 +418,7 @@ function SampleDetailPanel({
         tasting_notes: sample.tasting_notes,
       });
       setDirty(false);
+      setPriceUnit('kg');
     }
   }, [sample]);
 
@@ -425,8 +427,16 @@ function SampleDetailPanel({
     setDirty(true);
   };
 
+  const getPriceForStorage = () => {
+    const val = form.indicative_price_usd;
+    if (val == null) return null;
+    if (priceUnit === 'lb') return val * 2.20462;
+    return val;
+  };
+
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const storagePrice = getPriceForStorage();
       const { error } = await supabase
         .from('green_samples')
         .update({
@@ -437,7 +447,7 @@ function SampleDetailPanel({
           producer: form.producer?.trim() || null,
           variety: form.variety?.trim() || null,
           category: form.category!,
-          indicative_price_usd: form.indicative_price_usd ?? null,
+          indicative_price_usd: storagePrice,
           warehouse_location: form.warehouse_location?.trim() || null,
           bag_size_kg: form.bag_size_kg ?? null,
           num_bags: (form as any).num_bags ?? null,
@@ -539,7 +549,7 @@ function SampleDetailPanel({
     if (sample.variety) lines.push(`Variety: ${sample.variety}`);
     lines.push(`Category: ${CATEGORY_LABELS[sample.category]}`);
     lines.push(`Status: ${STATUS_LABELS[sample.status]}`);
-    if (sample.indicative_price_usd != null) lines.push(`Indicative Price: $${sample.indicative_price_usd}/kg USD`);
+    if (sample.indicative_price_usd != null) lines.push(`Indicative Price: $${sample.indicative_price_usd.toFixed(4)}/kg USD`);
     if (sample.bag_size_kg != null) lines.push(`Bag Size: ${sample.bag_size_kg} kg`);
     if (sample.num_bags != null) lines.push(`Number of Bags: ${sample.num_bags}`);
     if (sample.bag_size_kg != null && sample.num_bags != null) lines.push(`Total: ${sample.bag_size_kg * sample.num_bags} kg`);
@@ -657,13 +667,35 @@ function SampleDetailPanel({
                 </Select>
               </div>
               <div>
-                <Label>Indicative Price (USD/kg)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={form.indicative_price_usd ?? ''}
-                  onChange={(e) => updateField('indicative_price_usd', e.target.value ? parseFloat(e.target.value) : null)}
-                />
+                <Label>Indicative Price</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={form.indicative_price_usd ?? ''}
+                    onChange={(e) => updateField('indicative_price_usd', e.target.value ? parseFloat(e.target.value) : null)}
+                    className="flex-1"
+                  />
+                  <div className="flex border rounded-md overflow-hidden">
+                    <button
+                      type="button"
+                      className={`px-3 py-2 text-sm ${priceUnit === 'kg' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                      onClick={() => { setPriceUnit('kg'); setDirty(true); }}
+                    >
+                      $/kg
+                    </button>
+                    <button
+                      type="button"
+                      className={`px-3 py-2 text-sm ${priceUnit === 'lb' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                      onClick={() => { setPriceUnit('lb'); setDirty(true); }}
+                    >
+                      $/lb
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Stored: ${getPriceForStorage()?.toFixed(4) ?? '-'} / kg
+                </p>
               </div>
               <div>
                 <Label>Warehouse Location</Label>
@@ -872,25 +904,30 @@ function AddSampleModal({
   const [variety, setVariety] = useState('');
   const [category, setCategory] = useState<GreenCategory | ''>('');
   const [price, setPrice] = useState('');
+  const [priceUnit, setPriceUnit] = useState<'kg' | 'lb'>('kg');
   const [warehouse, setWarehouse] = useState('');
   const [bagSize, setBagSize] = useState('');
   const [numBags, setNumBags] = useState('');
   const [score, setScore] = useState('');
   const [tastingNotes, setTastingNotes] = useState('');
   const [selectedRgs, setSelectedRgs] = useState<string[]>([]);
-  const [initialNote, setInitialNote] = useState('');
+  const [otherNotes, setOtherNotes] = useState('');
 
   const reset = () => {
     setName(''); setVendorId(null); setOrigin(''); setRegion('');
-    setProducer(''); setVariety(''); setCategory(''); setPrice('');
+    setProducer(''); setVariety(''); setCategory(''); setPrice(''); setPriceUnit('kg');
     setWarehouse(''); setBagSize(''); setNumBags(''); setScore('');
-    setTastingNotes(''); setSelectedRgs([]); setInitialNote('');
+    setTastingNotes(''); setSelectedRgs([]); setOtherNotes('');
   };
 
   const totalKg = bagSize && numBags ? parseFloat(bagSize) * parseInt(numBags) : null;
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      // Convert price to $/kg for storage
+      const priceVal = price ? parseFloat(price) : null;
+      const storagePrice = priceVal && priceUnit === 'lb' ? priceVal * 2.20462 : priceVal;
+
       const { data: sample, error } = await supabase
         .from('green_samples')
         .insert({
@@ -901,7 +938,7 @@ function AddSampleModal({
           producer: producer.trim() || null,
           variety: variety.trim() || null,
           category: category as GreenCategory,
-          indicative_price_usd: price ? parseFloat(price) : null,
+          indicative_price_usd: storagePrice,
           warehouse_location: warehouse.trim() || null,
           bag_size_kg: bagSize ? parseFloat(bagSize) : null,
           num_bags: numBags ? parseInt(numBags) : null,
@@ -922,11 +959,11 @@ function AddSampleModal({
         if (linkErr) throw linkErr;
       }
 
-      // Initial note
-      if (initialNote.trim()) {
+      // Other notes
+      if (otherNotes.trim()) {
         const { error: noteErr } = await supabase
           .from('green_sample_notes')
-          .insert({ sample_id: sample.id, note: initialNote.trim(), created_by: authUser!.id });
+          .insert({ sample_id: sample.id, note: otherNotes.trim(), created_by: authUser!.id });
         if (noteErr) throw noteErr;
       }
     },
@@ -997,8 +1034,31 @@ function AddSampleModal({
             </Select>
           </div>
           <div>
-            <Label>Indicative Price (USD/kg)</Label>
-            <Input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
+            <Label>Indicative Price</Label>
+            <div className="flex items-center gap-2">
+              <Input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} className="flex-1" />
+              <div className="flex border rounded-md overflow-hidden">
+                <button
+                  type="button"
+                  className={`px-3 py-2 text-sm ${priceUnit === 'kg' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                  onClick={() => setPriceUnit('kg')}
+                >
+                  $/kg
+                </button>
+                <button
+                  type="button"
+                  className={`px-3 py-2 text-sm ${priceUnit === 'lb' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                  onClick={() => setPriceUnit('lb')}
+                >
+                  $/lb
+                </button>
+              </div>
+            </div>
+            {price && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Stored: ${(priceUnit === 'lb' ? parseFloat(price) * 2.20462 : parseFloat(price)).toFixed(4)} / kg
+              </p>
+            )}
           </div>
           <div>
             <Label>Warehouse Location</Label>
@@ -1041,8 +1101,8 @@ function AddSampleModal({
             <Textarea value={tastingNotes} onChange={(e) => setTastingNotes(e.target.value)} rows={2} />
           </div>
           <div>
-            <Label>Initial Note</Label>
-            <Input value={initialNote} onChange={(e) => setInitialNote(e.target.value)} placeholder="Optional note on arrival…" />
+            <Label>Other Notes</Label>
+            <Input value={otherNotes} onChange={(e) => setOtherNotes(e.target.value)} placeholder="Any other notes on arrival…" />
           </div>
         </div>
         <DialogFooter>
