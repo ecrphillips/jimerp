@@ -226,7 +226,7 @@ export default function SourcingLots() {
                     <p className="text-xs text-muted-foreground">Arriving {format(new Date(lot.expected_delivery_date + 'T00:00:00'), 'MMM d, yyyy')}</p>
                   )}
                   {lot.costing_status === 'COMPLETE' && lot.book_value_per_kg != null && (
-                    <p className="text-sm font-medium">CAD ${lot.book_value_per_kg.toFixed(4)}/kg</p>
+                    <p className="text-sm font-medium">{formatPerKg(lot.book_value_per_kg)}</p>
                   )}
                   <div className="pt-1">
                     <Button variant="outline" size="sm" onClick={() => setSelectedLotId(lot.id)}>View</Button>
