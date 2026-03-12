@@ -28,6 +28,7 @@ interface Sample {
   variety: string | null;
   category: GreenCategory;
   indicative_price_usd: number | null;
+  indicative_price_currency: string | null;
   bag_size_kg: number | null;
   num_bags: number | null;
   warehouse_location: string | null;
@@ -398,7 +399,7 @@ function SampleDetailPanel({
   // Form state
   const [form, setForm] = useState<Partial<Sample>>({});
   const [dirty, setDirty] = useState(false);
-  const [priceUnit, setPriceUnit] = useState<'kg' | 'lb'>('kg');
+  const [priceUnit, setPriceUnit] = useState<'usd_kg' | 'usd_lb' | 'cad_kg'>('usd_kg');
 
   useEffect(() => {
     if (sample) {
@@ -418,7 +419,7 @@ function SampleDetailPanel({
         tasting_notes: sample.tasting_notes,
       });
       setDirty(false);
-      setPriceUnit('kg');
+      setPriceUnit(sample.indicative_price_currency === 'CAD' ? 'cad_kg' : 'usd_kg');
     }
   }, [sample]);
 
@@ -429,14 +430,15 @@ function SampleDetailPanel({
 
   const getPriceForStorage = () => {
     const val = form.indicative_price_usd;
-    if (val == null) return null;
-    if (priceUnit === 'lb') return val * 2.20462;
-    return val;
+    if (val == null) return { price: null, currency: 'USD' };
+    if (priceUnit === 'usd_lb') return { price: val * 2.20462, currency: 'USD' };
+    if (priceUnit === 'cad_kg') return { price: val, currency: 'CAD' };
+    return { price: val, currency: 'USD' };
   };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const storagePrice = getPriceForStorage();
+      const { price: storagePrice, currency } = getPriceForStorage();
       const { error } = await supabase
         .from('green_samples')
         .update({
@@ -448,12 +450,13 @@ function SampleDetailPanel({
           variety: form.variety?.trim() || null,
           category: form.category!,
           indicative_price_usd: storagePrice,
+          indicative_price_currency: storagePrice != null ? currency : null,
           warehouse_location: form.warehouse_location?.trim() || null,
           bag_size_kg: form.bag_size_kg ?? null,
           num_bags: (form as any).num_bags ?? null,
           score: form.score ?? null,
           tasting_notes: form.tasting_notes?.trim() || null,
-        })
+        } as any)
         .eq('id', sampleId!);
       if (error) throw error;
     },
@@ -549,7 +552,10 @@ function SampleDetailPanel({
     if (sample.variety) lines.push(`Variety: ${sample.variety}`);
     lines.push(`Category: ${CATEGORY_LABELS[sample.category]}`);
     lines.push(`Status: ${STATUS_LABELS[sample.status]}`);
-    if (sample.indicative_price_usd != null) lines.push(`Indicative Price: $${sample.indicative_price_usd.toFixed(4)}/kg USD`);
+    if (sample.indicative_price_usd != null) {
+      const curr = (sample as any).indicative_price_currency || 'USD';
+      lines.push(`Indicative Price: ${curr} $${sample.indicative_price_usd.toFixed(4)}/kg`);
+    }
     if (sample.bag_size_kg != null) lines.push(`Bag Size: ${sample.bag_size_kg} kg`);
     if (sample.num_bags != null) lines.push(`Number of Bags: ${sample.num_bags}`);
     if (sample.bag_size_kg != null && sample.num_bags != null) lines.push(`Total: ${sample.bag_size_kg * sample.num_bags} kg`);
@@ -679,22 +685,29 @@ function SampleDetailPanel({
                   <div className="flex border rounded-md overflow-hidden">
                     <button
                       type="button"
-                      className={`px-3 py-2 text-sm ${priceUnit === 'kg' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
-                      onClick={() => { setPriceUnit('kg'); setDirty(true); }}
+                      className={`px-2.5 py-2 text-xs ${priceUnit === 'usd_kg' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                      onClick={() => { setPriceUnit('usd_kg'); setDirty(true); }}
                     >
-                      $/kg
+                      USD/kg
                     </button>
                     <button
                       type="button"
-                      className={`px-3 py-2 text-sm ${priceUnit === 'lb' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
-                      onClick={() => { setPriceUnit('lb'); setDirty(true); }}
+                      className={`px-2.5 py-2 text-xs ${priceUnit === 'usd_lb' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                      onClick={() => { setPriceUnit('usd_lb'); setDirty(true); }}
                     >
-                      $/lb
+                      USD/lb
+                    </button>
+                    <button
+                      type="button"
+                      className={`px-2.5 py-2 text-xs ${priceUnit === 'cad_kg' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                      onClick={() => { setPriceUnit('cad_kg'); setDirty(true); }}
+                    >
+                      CAD/kg
                     </button>
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Stored: ${getPriceForStorage()?.toFixed(4) ?? '-'} / kg
+                  Stored: {getPriceForStorage().currency} ${getPriceForStorage().price?.toFixed(4) ?? '-'} / kg
                 </p>
               </div>
               <div>
@@ -904,7 +917,7 @@ function AddSampleModal({
   const [variety, setVariety] = useState('');
   const [category, setCategory] = useState<GreenCategory | ''>('');
   const [price, setPrice] = useState('');
-  const [priceUnit, setPriceUnit] = useState<'kg' | 'lb'>('kg');
+  const [priceUnit, setPriceUnit] = useState<'usd_kg' | 'usd_lb' | 'cad_kg'>('usd_kg');
   const [warehouse, setWarehouse] = useState('');
   const [bagSize, setBagSize] = useState('');
   const [numBags, setNumBags] = useState('');
@@ -915,7 +928,7 @@ function AddSampleModal({
 
   const reset = () => {
     setName(''); setVendorId(null); setOrigin(''); setRegion('');
-    setProducer(''); setVariety(''); setCategory(''); setPrice(''); setPriceUnit('kg');
+    setProducer(''); setVariety(''); setCategory(''); setPrice(''); setPriceUnit('usd_kg');
     setWarehouse(''); setBagSize(''); setNumBags(''); setScore('');
     setTastingNotes(''); setSelectedRgs([]); setOtherNotes('');
   };
@@ -926,7 +939,8 @@ function AddSampleModal({
     mutationFn: async () => {
       // Convert price to $/kg for storage
       const priceVal = price ? parseFloat(price) : null;
-      const storagePrice = priceVal && priceUnit === 'lb' ? priceVal * 2.20462 : priceVal;
+      const storagePrice = priceVal && priceUnit === 'usd_lb' ? priceVal * 2.20462 : priceVal;
+      const storageCurrency = priceUnit === 'cad_kg' ? 'CAD' : 'USD';
 
       const { data: sample, error } = await supabase
         .from('green_samples')
@@ -939,6 +953,7 @@ function AddSampleModal({
           variety: variety.trim() || null,
           category: category as GreenCategory,
           indicative_price_usd: storagePrice,
+          indicative_price_currency: storagePrice != null ? storageCurrency : null,
           warehouse_location: warehouse.trim() || null,
           bag_size_kg: bagSize ? parseFloat(bagSize) : null,
           num_bags: numBags ? parseInt(numBags) : null,
@@ -1040,23 +1055,30 @@ function AddSampleModal({
               <div className="flex border rounded-md overflow-hidden">
                 <button
                   type="button"
-                  className={`px-3 py-2 text-sm ${priceUnit === 'kg' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
-                  onClick={() => setPriceUnit('kg')}
+                  className={`px-2.5 py-2 text-xs ${priceUnit === 'usd_kg' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                  onClick={() => setPriceUnit('usd_kg')}
                 >
-                  $/kg
+                  USD/kg
                 </button>
                 <button
                   type="button"
-                  className={`px-3 py-2 text-sm ${priceUnit === 'lb' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
-                  onClick={() => setPriceUnit('lb')}
+                  className={`px-2.5 py-2 text-xs ${priceUnit === 'usd_lb' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                  onClick={() => setPriceUnit('usd_lb')}
                 >
-                  $/lb
+                  USD/lb
+                </button>
+                <button
+                  type="button"
+                  className={`px-2.5 py-2 text-xs ${priceUnit === 'cad_kg' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                  onClick={() => setPriceUnit('cad_kg')}
+                >
+                  CAD/kg
                 </button>
               </div>
             </div>
             {price && (
               <p className="text-xs text-muted-foreground mt-1">
-                Stored: ${(priceUnit === 'lb' ? parseFloat(price) * 2.20462 : parseFloat(price)).toFixed(4)} / kg
+                Stored: {priceUnit === 'cad_kg' ? 'CAD' : 'USD'} ${(priceUnit === 'usd_lb' ? parseFloat(price) * 2.20462 : parseFloat(price)).toFixed(4)} / kg
               </p>
             )}
           </div>

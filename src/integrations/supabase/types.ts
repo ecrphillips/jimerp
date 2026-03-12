@@ -1672,6 +1672,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          indicative_price_currency: string | null
           indicative_price_usd: number | null
           name: string
           num_bags: number | null
@@ -1693,6 +1694,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          indicative_price_currency?: string | null
           indicative_price_usd?: number | null
           name: string
           num_bags?: number | null
@@ -1714,6 +1716,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          indicative_price_currency?: string | null
           indicative_price_usd?: number | null
           name?: string
           num_bags?: number | null
