@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { formatMoney } from '@/lib/formatMoney';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
