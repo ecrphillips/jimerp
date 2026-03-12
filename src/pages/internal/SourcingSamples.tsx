@@ -928,7 +928,7 @@ function AddSampleModal({
 
   const reset = () => {
     setName(''); setVendorId(null); setOrigin(''); setRegion('');
-    setProducer(''); setVariety(''); setCategory(''); setPrice(''); setPriceUnit('kg');
+    setProducer(''); setVariety(''); setCategory(''); setPrice(''); setPriceUnit('usd_kg');
     setWarehouse(''); setBagSize(''); setNumBags(''); setScore('');
     setTastingNotes(''); setSelectedRgs([]); setOtherNotes('');
   };
