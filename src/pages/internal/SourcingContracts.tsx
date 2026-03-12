@@ -52,7 +52,7 @@ interface Contract {
   internal_contract_number: string | null;
   vendor_contract_number: string | null;
   origin_country: string | null;
-  bag_marks: string | null;
+  lot_identifier: string | null;
 }
 
 interface Vendor {
