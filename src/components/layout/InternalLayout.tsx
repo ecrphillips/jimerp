@@ -174,6 +174,14 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 <NavItem to="/products" icon={Package} label="Products" onClick={closeSidebar} />
               </NavGroup>
 
+              {/* Sourcing */}
+              <NavGroup label="Sourcing" icon={Binoculars} open={sourcingOpen} onOpenChange={setSourcingOpen}>
+                <NavItem to="/sourcing/vendors" icon={Users} label="Vendors" onClick={closeSidebar} />
+                <NavItem to="/sourcing/samples" icon={FlaskConical} label="Samples" onClick={closeSidebar} />
+                <NavItem to="/sourcing/contracts" icon={FileSignature} label="Contracts" onClick={closeSidebar} />
+                <NavItem to="/sourcing/lots" icon={Boxes} label="Lots" onClick={closeSidebar} />
+              </NavGroup>
+
               {/* Co-Roasting */}
               <NavGroup label="Co-Roasting" icon={Handshake} open={coroastOpen} onOpenChange={setCoroastOpen}>
                 
