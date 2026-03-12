@@ -514,16 +514,16 @@ function LotDetailPanel({
       };
 
       if (fxRate != null && !lot.fx_rate_confirmed_at) { updates.fx_rate_confirmed_by = uid; updates.fx_rate_confirmed_at = now; }
-      if (invoiceAmt != null && !lot.invoice_confirmed_at) { updates.invoice_confirmed_by = uid; updates.invoice_confirmed_at = now; }
-      if (carryFees != null && !lot.carry_fees_confirmed_at) { updates.carry_fees_confirmed_by = uid; updates.carry_fees_confirmed_at = now; }
-      if (freight != null && !lot.freight_confirmed_at) { updates.freight_confirmed_by = uid; updates.freight_confirmed_at = now; }
-      if (duties != null && !lot.duties_confirmed_at) { updates.duties_confirmed_by = uid; updates.duties_confirmed_at = now; }
-      if (txFees != null && !lot.transaction_fees_confirmed_at) { updates.transaction_fees_confirmed_by = uid; updates.transaction_fees_confirmed_at = now; }
-      if (otherCosts != null && !lot.other_costs_confirmed_at) { updates.other_costs_confirmed_by = uid; updates.other_costs_confirmed_at = now; }
+      if (!lot.invoice_confirmed_at) { updates.invoice_confirmed_by = uid; updates.invoice_confirmed_at = now; }
+      if (!lot.carry_fees_confirmed_at) { updates.carry_fees_confirmed_by = uid; updates.carry_fees_confirmed_at = now; }
+      if (!lot.freight_confirmed_at) { updates.freight_confirmed_by = uid; updates.freight_confirmed_at = now; }
+      if (!lot.duties_confirmed_at) { updates.duties_confirmed_by = uid; updates.duties_confirmed_at = now; }
+      if (!lot.transaction_fees_confirmed_at) { updates.transaction_fees_confirmed_by = uid; updates.transaction_fees_confirmed_at = now; }
+      if (!lot.other_costs_confirmed_at) { updates.other_costs_confirmed_by = uid; updates.other_costs_confirmed_at = now; }
 
       const allConfirmedAfter =
-        (fxRate != null) && (invoiceAmt != null) && (carryFees != null) &&
-        (freight != null) && (duties != null) && (txFees != null) && (otherCosts != null);
+        (fxRate != null) && (invoiceAmt !== null) && (carryFees !== null) &&
+        (freight !== null) && (duties !== null) && (txFees !== null) && (otherCosts !== null);
 
       if (allConfirmedAfter) {
         const storedInvoice = toCad(invoiceAmt, invoiceIsUsd, fxRate) ?? 0;
