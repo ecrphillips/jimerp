@@ -1126,7 +1126,7 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
   const [prefilled, setPrefilled] = useState<Set<string>>(new Set());
   const [originCountry, setOriginCountry] = useState<string | null>(null);
   const [vendorContractNumber, setVendorContractNumber] = useState('');
-  const [bagMarks, setBagMarks] = useState('');
+  const [lotIdentifier, setLotIdentifier] = useState('');
 
   // Approved samples
   const { data: approvedSamples = [] } = useQuery({
