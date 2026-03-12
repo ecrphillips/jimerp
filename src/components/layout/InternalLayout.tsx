@@ -111,6 +111,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
   // Group open states
   const [accountsOpen, setAccountsOpen] = React.useState(true);
   const [cmOpen, setCmOpen] = React.useState(true);
+  const [sourcingOpen, setSourcingOpen] = React.useState(true);
   const [coroastOpen, setCoroastOpen] = React.useState(true);
   const [adminOpen, setAdminOpen] = React.useState(true);
 
