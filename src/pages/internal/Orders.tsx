@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
 import { SetDeadlineModal } from '@/components/orders/SetDeadlineModal';
 import { OrderProgressBar, DeadlineStatus } from '@/components/orders/OrderProgressBar';
+import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 
 type SortDirection = 'asc' | 'desc';
 
