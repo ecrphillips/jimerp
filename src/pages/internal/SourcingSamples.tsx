@@ -1055,23 +1055,30 @@ function AddSampleModal({
               <div className="flex border rounded-md overflow-hidden">
                 <button
                   type="button"
-                  className={`px-3 py-2 text-sm ${priceUnit === 'kg' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
-                  onClick={() => setPriceUnit('kg')}
+                  className={`px-2.5 py-2 text-xs ${priceUnit === 'usd_kg' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                  onClick={() => setPriceUnit('usd_kg')}
                 >
-                  $/kg
+                  USD/kg
                 </button>
                 <button
                   type="button"
-                  className={`px-3 py-2 text-sm ${priceUnit === 'lb' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
-                  onClick={() => setPriceUnit('lb')}
+                  className={`px-2.5 py-2 text-xs ${priceUnit === 'usd_lb' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                  onClick={() => setPriceUnit('usd_lb')}
                 >
-                  $/lb
+                  USD/lb
+                </button>
+                <button
+                  type="button"
+                  className={`px-2.5 py-2 text-xs ${priceUnit === 'cad_kg' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                  onClick={() => setPriceUnit('cad_kg')}
+                >
+                  CAD/kg
                 </button>
               </div>
             </div>
             {price && (
               <p className="text-xs text-muted-foreground mt-1">
-                Stored: ${(priceUnit === 'lb' ? parseFloat(price) * 2.20462 : parseFloat(price)).toFixed(4)} / kg
+                Stored: {priceUnit === 'cad_kg' ? 'CAD' : 'USD'} ${(priceUnit === 'usd_lb' ? parseFloat(price) * 2.20462 : parseFloat(price)).toFixed(4)} / kg
               </p>
             )}
           </div>
