@@ -1286,10 +1286,18 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
             <Label>Origin Country</Label>
             <Select value={originCountry || '_none'} onValueChange={(v) => setOriginCountry(v === '_none' ? null : v)}>
               <SelectTrigger><SelectValue placeholder="Select country" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none">None</SelectItem>
-                {COFFEE_ORIGIN_COUNTRIES.map(c => <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>)}
-              </SelectContent>
+               <SelectContent>
+                 <SelectItem value="_none">None</SelectItem>
+                 <SelectGroup>
+                   <SelectLabel>Common Origins</SelectLabel>
+                   {COMMON_ORIGINS.map(c => <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>)}
+                 </SelectGroup>
+                 <SelectSeparator />
+                 <SelectGroup>
+                   <SelectLabel>Other Origins</SelectLabel>
+                   {OTHER_ORIGINS.map(c => <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>)}
+                 </SelectGroup>
+               </SelectContent>
             </Select>
           </div>
           <div>
