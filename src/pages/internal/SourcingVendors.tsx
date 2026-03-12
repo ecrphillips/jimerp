@@ -243,6 +243,7 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
         .from('green_vendors')
         .update({
           name: (form.name || '').trim(),
+          abbreviation: (form as any).abbreviation?.trim() || null,
           contact_name: form.contact_name?.trim() || null,
           contact_email: form.contact_email?.trim() || null,
           contact_phone: form.contact_phone?.trim() || null,
