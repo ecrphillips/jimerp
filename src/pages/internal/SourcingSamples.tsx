@@ -15,6 +15,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, Plus, Check, FileText, X } from 'lucide-react';
+import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 
 type SampleStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 type GreenCategory = 'BLENDER' | 'SINGLE_ORIGIN';
@@ -384,6 +385,7 @@ export default function SourcingSamples() {
 
   return (
     <div className="page-container space-y-6">
+      <GreenCoffeeAlerts />
       <div className="page-header">
         <div>
           <h1 className="page-title">Samples</h1>

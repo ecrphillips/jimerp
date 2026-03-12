@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
 import { SetDeadlineModal } from '@/components/orders/SetDeadlineModal';
 import { OrderProgressBar, DeadlineStatus } from '@/components/orders/OrderProgressBar';
+import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 
 type SortDirection = 'asc' | 'desc';
 
@@ -237,6 +238,7 @@ export default function Orders() {
 
   return (
     <div className="page-container">
+      <GreenCoffeeAlerts />
       <div className="page-header flex items-center justify-between">
         <h1 className="page-title">Orders</h1>
         <Button onClick={() => navigate('/orders/new')}>

@@ -12,6 +12,7 @@ import {
   getVancouverNow,
 } from '@/lib/productionScheduling';
 import type { DateFilterConfig } from '@/components/production/types';
+import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 
 type StationView = 'roast' | 'pack' | 'ship';
 type DateFilterMode = 'today' | 'tomorrow' | 'all';
@@ -59,6 +60,7 @@ export default function Production() {
 
   return (
     <div className="page-container">
+      <GreenCoffeeAlerts />
       <div className="page-header">
         <div className="space-y-1">
           <h1 className="page-title">Production</h1>
