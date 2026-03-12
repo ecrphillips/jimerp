@@ -200,7 +200,7 @@ export default function MemberStorageSection({ memberId, tier }: MemberStorageSe
             <div>
               <Label className="text-xs text-muted-foreground">Monthly Storage Charge</Label>
               <p className="text-sm font-semibold mt-0.5">
-                {storageCharge > 0 ? `$${storageCharge.toFixed(2)}` : '$0.00'}
+                {storageCharge > 0 ? formatMoney(storageCharge) : '—'}
               </p>
               {paidPallets > 0 && (
                 <p className="text-xs text-muted-foreground">
