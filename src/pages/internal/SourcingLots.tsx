@@ -390,15 +390,15 @@ function LotDetailPanel({
 
   // ─── Local cost state ────────────────────────────────────
   const [fxRate, setFxRate] = useState<number | null>(null);
-  const [invoiceAmt, setInvoiceAmt] = useState<number | null>(null);
+  const [invoiceAmt, setInvoiceAmt] = useState<number>(0);
   const [invoiceIsUsd, setInvoiceIsUsd] = useState(false);
-  const [carryFees, setCarryFees] = useState<number | null>(null);
+  const [carryFees, setCarryFees] = useState<number>(0);
   const [carryFeesIsUsd, setCarryFeesIsUsd] = useState(false);
-  const [freight, setFreight] = useState<number | null>(null);
+  const [freight, setFreight] = useState<number>(0);
   const [freightIsUsd, setFreightIsUsd] = useState(false);
-  const [duties, setDuties] = useState<number | null>(null);
-  const [txFees, setTxFees] = useState<number | null>(null);
-  const [otherCosts, setOtherCosts] = useState<number | null>(null);
+  const [duties, setDuties] = useState<number>(0);
+  const [txFees, setTxFees] = useState<number>(0);
+  const [otherCosts, setOtherCosts] = useState<number>(0);
   const [otherCostsDesc, setOtherCostsDesc] = useState('');
   const [paymentTerms, setPaymentTerms] = useState<number | null>(null);
   const [estDaysConsume, setEstDaysConsume] = useState<number | null>(null);
