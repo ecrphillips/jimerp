@@ -497,6 +497,7 @@ function AddVendorModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
         .from('green_vendors')
         .insert({
           name: name.trim(),
+          abbreviation: abbreviation.trim() || null,
           contact_name: contactName.trim() || null,
           contact_email: contactEmail.trim() || null,
           contact_phone: contactPhone.trim() || null,
