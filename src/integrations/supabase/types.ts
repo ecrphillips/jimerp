@@ -3248,6 +3248,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      nextval_text: { Args: { seq_name: string }; Returns: number }
     }
     Enums: {
       app_role: "ADMIN" | "OPS" | "CLIENT"
