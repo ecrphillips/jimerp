@@ -878,7 +878,7 @@ function LotDetailPanel({
                     {liveSummary.fields.map(f => (
                       <div key={f.label} className={`flex justify-between text-sm ${!f.confirmed && f.cad != null && f.cad > 0 ? 'italic text-muted-foreground' : ''}`}>
                         <span>{f.label} {!f.confirmed && f.cad != null && f.cad > 0 && <span className="text-xs">(pending)</span>}</span>
-                        <span className={f.cad == null || f.cad === 0 ? 'text-muted-foreground' : ''}>{f.cad != null && f.cad > 0 ? `CAD $${f.cad.toFixed(2)}` : '—'}</span>
+                        <span className={f.cad == null || f.cad === 0 ? 'text-muted-foreground' : ''}>{f.cad != null && f.cad > 0 ? formatMoney(f.cad) : '—'}</span>
                       </div>
                     ))}
                     <Separator className="my-2" />
