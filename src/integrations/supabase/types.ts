@@ -1296,8 +1296,8 @@ export type Database = {
           total_kg: number | null
           updated_at: string
           variety: string | null
-          vendor_id: string
-          warehouse_location: string
+          vendor_id: string | null
+          warehouse_location: string | null
         }
         Insert: {
           bag_size_kg?: number | null
@@ -1320,8 +1320,8 @@ export type Database = {
           total_kg?: number | null
           updated_at?: string
           variety?: string | null
-          vendor_id: string
-          warehouse_location: string
+          vendor_id?: string | null
+          warehouse_location?: string | null
         }
         Update: {
           bag_size_kg?: number | null
@@ -1344,8 +1344,8 @@ export type Database = {
           total_kg?: number | null
           updated_at?: string
           variety?: string | null
-          vendor_id?: string
-          warehouse_location?: string
+          vendor_id?: string | null
+          warehouse_location?: string | null
         }
         Relationships: [
           {
