@@ -908,7 +908,7 @@ function ReleaseCoffeeModal({
   // Fetch PO number on modal open
   useEffect(() => {
     if (open) {
-      setBagMarks('');
+      setBagMarks(contract.bag_marks ?? '');
       setBags('');
       setExpectedDate(undefined);
       setCarrier('');
@@ -944,7 +944,7 @@ function ReleaseCoffeeModal({
         }
       })();
     }
-  }, [open, existingLotCount]);
+  }, [open, existingLotCount, contract.bag_marks]);
 
   // Compute lot number live
   const computedLotNumber = useMemo(() => {
