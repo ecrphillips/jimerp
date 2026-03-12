@@ -348,9 +348,15 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
           <div className="space-y-6 pt-4">
             {/* Editable fields */}
             <div className="space-y-4">
-              <div>
-                <Label>Name *</Label>
-                <Input value={form.name || ''} onChange={(e) => updateField('name', e.target.value)} />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Name *</Label>
+                  <Input value={form.name || ''} onChange={(e) => updateField('name', e.target.value)} />
+                </div>
+                <div>
+                  <Label>Abbreviation</Label>
+                  <Input value={(form as any).abbreviation || ''} onChange={(e) => updateField('abbreviation', e.target.value)} placeholder="e.g. CON" />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
