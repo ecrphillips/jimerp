@@ -891,7 +891,7 @@ function ReleaseCoffeeModal({
   const queryClient = useQueryClient();
   const remaining = (contract.num_bags || 0) - bagsReleased;
 
-  const [bagMarks, setBagMarks] = useState('');
+  const [lotIdentifier, setLotIdentifier] = useState('');
   const [bags, setBags] = useState('');
   const [expectedDate, setExpectedDate] = useState<Date | undefined>();
   const [carrier, setCarrier] = useState('');
