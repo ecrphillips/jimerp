@@ -1276,6 +1276,7 @@ export type Database = {
       }
       green_contracts: {
         Row: {
+          bag_marks: string | null
           bag_size_kg: number | null
           category: Database["public"]["Enums"]["green_coffee_category"]
           contracted_price_currency: string | null
@@ -1303,6 +1304,7 @@ export type Database = {
           warehouse_location: string | null
         }
         Insert: {
+          bag_marks?: string | null
           bag_size_kg?: number | null
           category: Database["public"]["Enums"]["green_coffee_category"]
           contracted_price_currency?: string | null
@@ -1330,6 +1332,7 @@ export type Database = {
           warehouse_location?: string | null
         }
         Update: {
+          bag_marks?: string | null
           bag_size_kg?: number | null
           category?: Database["public"]["Enums"]["green_coffee_category"]
           contracted_price_currency?: string | null
