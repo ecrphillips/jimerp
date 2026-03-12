@@ -28,6 +28,7 @@ interface Sample {
   variety: string | null;
   category: GreenCategory;
   indicative_price_usd: number | null;
+  indicative_price_currency: string | null;
   bag_size_kg: number | null;
   num_bags: number | null;
   warehouse_location: string | null;
