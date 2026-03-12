@@ -428,7 +428,7 @@ function ContractDetailPanel({
         notes: form.notes?.trim() || null,
         origin_country: form.origin_country || null,
         vendor_contract_number: form.vendor_contract_number?.trim() || null,
-        bag_marks: form.bag_marks?.trim() || null,
+        lot_identifier: (form as any).lot_identifier?.trim() || null,
       } as any).eq('id', contractId!);
       if (error) throw error;
     },
