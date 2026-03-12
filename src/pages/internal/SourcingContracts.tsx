@@ -131,6 +131,11 @@ function formatPrice(value: number | null, currency: string | null) {
   return `${prefix} $${value.toFixed(4)}/kg`;
 }
 
+function formatMoney(value: number | null) {
+  if (value == null) return '—';
+  return `$${value.toFixed(2)}`;
+}
+
 // ─── Main Page ─────────────────────────────────────────────
 
 export default function SourcingContracts() {
