@@ -893,7 +893,7 @@ function LotDetailPanel({
                     <Separator className="my-2" />
                     <div className="flex justify-between text-base font-bold">
                       <span>Book Value/kg</span>
-                      <span>{liveSummary.bvPerKg != null ? `CAD $${liveSummary.bvPerKg.toFixed(4)}/kg` : '—'}</span>
+                      <span>{liveSummary.bvPerKg != null ? formatPerKg(liveSummary.bvPerKg) : '—'}</span>
                     </div>
                     {liveSummary.bvPerKg == null && (
                       <p className="text-xs text-muted-foreground">Confirm cost fields above to calculate.</p>
