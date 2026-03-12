@@ -483,6 +483,7 @@ function AddVendorModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
 
   const reset = () => {
     setName('');
+    setAbbreviation('');
     setContactName('');
     setContactEmail('');
     setContactPhone('');
