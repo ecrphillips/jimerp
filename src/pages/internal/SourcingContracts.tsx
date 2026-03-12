@@ -903,7 +903,7 @@ function ReleaseCoffeeModal({
   // Fetch PO number on modal open
   useEffect(() => {
     if (open) {
-      setBagMarks(contract.bag_marks ?? '');
+      setLotIdentifier(contract.lot_identifier ?? '');
       setBags('');
       setExpectedDate(undefined);
       setCarrier('');
@@ -917,14 +917,6 @@ function ReleaseCoffeeModal({
         try {
           const { data, error } = await supabase.rpc('nextval_text' as any, { seq_name: 'po_number_seq' });
           if (error) {
-            // Fallback: use raw SQL
-            const { data: rawData, error: rawError } = await supabase
-              .from('green_lots')
-              .select('po_number')
-              .not('po_number', 'is', null)
-              .order('po_number', { ascending: false })
-              .limit(1);
-            // Simple fallback
             const nextNum = existingLotCount + 1;
             setPoNumber(`PO-${String(nextNum).padStart(3, '0')}`);
           } else {
@@ -939,7 +931,7 @@ function ReleaseCoffeeModal({
         }
       })();
     }
-  }, [open, existingLotCount, contract.bag_marks]);
+  }, [open, existingLotCount, contract.lot_identifier]);
 
   // Compute lot number live
   const computedLotNumber = useMemo(() => {
