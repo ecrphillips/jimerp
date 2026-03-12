@@ -61,8 +61,9 @@ export function GreenCoffeeAlerts() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('green_lots')
-        .select('id, lot_number, contract_id, status, expected_delivery_date')
-        .eq('status', 'COSTING_INCOMPLETE');
+        .select('id, lot_number, contract_id, status, expected_delivery_date, costing_status')
+        .eq('costing_status', 'INCOMPLETE')
+        .eq('status', 'RECEIVED');
       if (error) throw error;
       const contractIds = [...new Set((data ?? []).map(l => l.contract_id))];
       if (contractIds.length === 0) return [];

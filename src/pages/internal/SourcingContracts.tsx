@@ -119,20 +119,10 @@ function ContractStatusBadge({ status }: { status: ContractStatus }) {
 }
 
 function LotStatusBadge({ status }: { status: string }) {
-  const labels: Record<string, string> = {
-    EN_ROUTE: 'En Route',
-    RECEIVED: 'Received',
-    COSTING_INCOMPLETE: 'Costing Incomplete',
-    COSTING_COMPLETE: 'Costing Complete',
-  };
   const cls = status === 'EN_ROUTE'
     ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
-    : status === 'COSTING_INCOMPLETE'
-    ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
-    : status === 'COSTING_COMPLETE'
-    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
     : 'bg-muted text-muted-foreground';
-  return <Badge variant="outline" className={`${cls} border-0 text-xs`}>{labels[status] || status}</Badge>;
+  return <Badge variant="outline" className={`${cls} border-0 text-xs`}>{status === 'EN_ROUTE' ? 'En Route' : 'Received'}</Badge>;
 }
 
 function formatPrice(value: number | null, currency: string | null) {
