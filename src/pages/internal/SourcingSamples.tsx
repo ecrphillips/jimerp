@@ -685,22 +685,29 @@ function SampleDetailPanel({
                   <div className="flex border rounded-md overflow-hidden">
                     <button
                       type="button"
-                      className={`px-3 py-2 text-sm ${priceUnit === 'kg' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
-                      onClick={() => { setPriceUnit('kg'); setDirty(true); }}
+                      className={`px-2.5 py-2 text-xs ${priceUnit === 'usd_kg' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                      onClick={() => { setPriceUnit('usd_kg'); setDirty(true); }}
                     >
-                      $/kg
+                      USD/kg
                     </button>
                     <button
                       type="button"
-                      className={`px-3 py-2 text-sm ${priceUnit === 'lb' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
-                      onClick={() => { setPriceUnit('lb'); setDirty(true); }}
+                      className={`px-2.5 py-2 text-xs ${priceUnit === 'usd_lb' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                      onClick={() => { setPriceUnit('usd_lb'); setDirty(true); }}
                     >
-                      $/lb
+                      USD/lb
+                    </button>
+                    <button
+                      type="button"
+                      className={`px-2.5 py-2 text-xs ${priceUnit === 'cad_kg' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+                      onClick={() => { setPriceUnit('cad_kg'); setDirty(true); }}
+                    >
+                      CAD/kg
                     </button>
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Stored: ${getPriceForStorage()?.toFixed(4) ?? '-'} / kg
+                  Stored: {getPriceForStorage().currency} ${getPriceForStorage().price?.toFixed(4) ?? '-'} / kg
                 </p>
               </div>
               <div>
