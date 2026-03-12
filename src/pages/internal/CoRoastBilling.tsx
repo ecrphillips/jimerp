@@ -537,7 +537,7 @@ export default function CoRoastBilling() {
                 <div>
                   <p className="text-muted-foreground text-xs">Overage Charge</p>
                   <p className="font-semibold">
-                    {d.overageCharge > 0 ? `$${d.overageCharge.toFixed(2)}` : '—'}
+                    {d.overageCharge > 0 ? fmt(d.overageCharge) : '—'}
                     {d.overageCharge > 0 && (
                       <span className="text-muted-foreground text-xs ml-1">
                         @ ${d.overageRate}/hr
