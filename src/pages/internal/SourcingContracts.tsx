@@ -393,6 +393,7 @@ function ContractDetailPanel({
         notes: contract.notes,
         origin_country: contract.origin_country,
         vendor_contract_number: contract.vendor_contract_number,
+        bag_marks: contract.bag_marks,
       });
       setPriceUnit(contract.contracted_price_currency === 'CAD' ? 'cad_kg' : 'usd_kg');
       setPriceInput(contract.contracted_price_per_kg != null ? String(contract.contracted_price_per_kg) : '');
