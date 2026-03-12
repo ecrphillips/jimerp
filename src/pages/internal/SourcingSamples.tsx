@@ -939,7 +939,8 @@ function AddSampleModal({
     mutationFn: async () => {
       // Convert price to $/kg for storage
       const priceVal = price ? parseFloat(price) : null;
-      const storagePrice = priceVal && priceUnit === 'lb' ? priceVal * 2.20462 : priceVal;
+      const storagePrice = priceVal && priceUnit === 'usd_lb' ? priceVal * 2.20462 : priceVal;
+      const storageCurrency = priceUnit === 'cad_kg' ? 'CAD' : 'USD';
 
       const { data: sample, error } = await supabase
         .from('green_samples')
