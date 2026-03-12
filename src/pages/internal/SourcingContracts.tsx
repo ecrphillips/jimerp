@@ -157,7 +157,7 @@ export default function SourcingContracts() {
   const { data: vendors = [] } = useQuery({
     queryKey: ['green-vendors'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('green_vendors').select('id, name, contact_name, contact_email, contact_phone').order('name');
+      const { data, error } = await supabase.from('green_vendors').select('id, name, abbreviation, contact_name, contact_email, contact_phone').order('name');
       if (error) throw error;
       return data as Vendor[];
     },
