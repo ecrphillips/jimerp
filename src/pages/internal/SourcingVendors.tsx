@@ -533,9 +533,15 @@ function AddVendorModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
           <DialogTitle>Add Vendor</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div>
-            <Label>Name *</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Vendor name" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Name *</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Vendor name" />
+            </div>
+            <div>
+              <Label>Abbreviation</Label>
+              <Input value={abbreviation} onChange={(e) => setAbbreviation(e.target.value)} placeholder="e.g. CON" />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
