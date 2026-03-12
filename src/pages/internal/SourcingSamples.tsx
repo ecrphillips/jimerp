@@ -917,7 +917,7 @@ function SampleDetailPanel({
     }
     if (sample.indicative_price_usd != null) {
       const curr = sample.indicative_price_currency || 'USD';
-      lines.push(`Indicative Price: ${curr} $${sample.indicative_price_usd.toFixed(4)}/kg`);
+      lines.push(`Indicative Price: ${formatPerKg(sample.indicative_price_usd, (curr === 'CAD' ? 'CAD' : 'USD') as 'CAD' | 'USD')}`);
     }
     if (sample.bag_size_kg != null) lines.push(`Bag Size: ${sample.bag_size_kg} kg`);
     if (sample.num_bags != null) lines.push(`Number of Bags: ${sample.num_bags}`);
