@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Search, Plus, Copy, Check, FileText, X } from 'lucide-react';
+import { Search, Plus, Check, FileText } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 
 interface Vendor {
@@ -40,13 +40,11 @@ interface VendorNote {
 }
 
 export default function SourcingVendors() {
-  const { authUser } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
 
-  // Fetch vendors
   const { data: vendors = [], isLoading } = useQuery({
     queryKey: ['green-vendors'],
     queryFn: async () => {
@@ -167,7 +165,6 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
     },
   });
 
-  // Contract stats
   const { data: contractStats } = useQuery({
     queryKey: ['vendor-contract-stats', vendorId],
     enabled: !!vendorId,
@@ -183,7 +180,6 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
     },
   });
 
-  // Notes
   const { data: notes = [] } = useQuery({
     queryKey: ['vendor-notes', vendorId],
     enabled: !!vendorId,
@@ -212,7 +208,6 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
     },
   });
 
-  // Editable form state
   const [form, setForm] = React.useState<Partial<Vendor>>({});
   const [dirty, setDirty] = React.useState(false);
 
@@ -243,7 +238,6 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
         .from('green_vendors')
         .update({
           name: (form.name || '').trim(),
-          abbreviation: (form as any).abbreviation?.trim() || null,
           contact_name: form.contact_name?.trim() || null,
           contact_email: form.contact_email?.trim() || null,
           contact_phone: form.contact_phone?.trim() || null,
@@ -263,7 +257,6 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
     onError: () => toast.error('Failed to update vendor'),
   });
 
-  // Add note
   const [noteText, setNoteText] = React.useState('');
 
   const addNoteMutation = useMutation({
@@ -283,7 +276,6 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
     onError: () => toast.error('Failed to add note'),
   });
 
-  // Brief Me
   const [briefCopied, setBriefCopied] = React.useState(false);
 
   const handleBriefMe = async () => {
@@ -298,7 +290,6 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
     lines.push(`Total Contracts: ${contractStats?.total ?? 0}`);
     lines.push(`Active Contracts: ${contractStats?.active ?? 0}`);
 
-    // Fetch all notes chronologically for brief
     const { data: allNotes } = await supabase
       .from('green_vendor_notes')
       .select('note, created_by, created_at')
@@ -346,7 +337,6 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
 
         {vendor && (
           <div className="space-y-6 pt-4">
-            {/* Editable fields */}
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -355,7 +345,8 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
                 </div>
                 <div>
                   <Label>Abbreviation</Label>
-                  <Input value={(form as any).abbreviation || ''} onChange={(e) => updateField('abbreviation', e.target.value)} placeholder="e.g. CON" />
+                  <p className="text-sm font-medium mt-1">{vendor.abbreviation || '—'}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Abbreviation cannot be changed after creation.</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -411,7 +402,6 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
               )}
             </div>
 
-            {/* Activity */}
             <div className="border-t pt-4">
               <h3 className="text-sm font-semibold mb-2">Activity</h3>
               <div className="grid grid-cols-2 gap-3">
@@ -426,7 +416,6 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
               </div>
             </div>
 
-            {/* Notes feed */}
             <div className="border-t pt-4">
               <h3 className="text-sm font-semibold mb-3">Notes</h3>
               <div className="space-y-3">
@@ -475,6 +464,9 @@ function AddVendorModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [abbreviation, setAbbreviation] = useState('');
+  const [abbrTouched, setAbbrTouched] = useState(false);
+  const [abbrError, setAbbrError] = useState('');
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [contactName, setContactName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
@@ -484,6 +476,9 @@ function AddVendorModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const reset = () => {
     setName('');
     setAbbreviation('');
+    setAbbrTouched(false);
+    setAbbrError('');
+    setSubmitAttempted(false);
     setContactName('');
     setContactEmail('');
     setContactPhone('');
@@ -491,13 +486,43 @@ function AddVendorModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
     setNotes('');
   };
 
+  const handleNameChange = (val: string) => {
+    setName(val);
+    if (!abbrTouched) {
+      setAbbreviation(val.replace(/\s/g, '').slice(0, 3).toUpperCase());
+      setAbbrError('');
+    }
+  };
+
+  const handleAbbrChange = (val: string) => {
+    const upper = val.toUpperCase().slice(0, 3);
+    setAbbreviation(upper);
+    setAbbrTouched(true);
+    setAbbrError('');
+  };
+
+  const handleAbbrBlur = async () => {
+    const trimmed = abbreviation.trim();
+    if (!trimmed) return;
+    const { data } = await supabase
+      .from('green_vendors')
+      .select('id')
+      .eq('abbreviation', trimmed)
+      .limit(1);
+    if (data && data.length > 0) {
+      setAbbrError('This abbreviation is already in use — please choose another.');
+    }
+  };
+
+  const canSubmit = name.trim() && abbreviation.trim() && !abbrError;
+
   const createMutation = useMutation({
     mutationFn: async () => {
       const { data: vendor, error } = await supabase
         .from('green_vendors')
         .insert({
           name: name.trim(),
-          abbreviation: abbreviation.trim() || null,
+          abbreviation: abbreviation.trim(),
           contact_name: contactName.trim() || null,
           contact_email: contactEmail.trim() || null,
           contact_phone: contactPhone.trim() || null,
@@ -508,7 +533,6 @@ function AddVendorModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
         .single();
       if (error) throw error;
 
-      // If notes provided, create first note
       if (notes.trim() && vendor) {
         await supabase.from('green_vendor_notes').insert({
           vendor_id: vendor.id,
@@ -526,8 +550,14 @@ function AddVendorModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
     onError: () => toast.error('Failed to create vendor'),
   });
 
+  const handleSubmit = () => {
+    setSubmitAttempted(true);
+    if (!canSubmit) return;
+    createMutation.mutate();
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Vendor</DialogTitle>
@@ -536,11 +566,24 @@ function AddVendorModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Name *</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Vendor name" />
+              <Input value={name} onChange={(e) => handleNameChange(e.target.value)} placeholder="Vendor name" />
             </div>
             <div>
-              <Label>Abbreviation</Label>
-              <Input value={abbreviation} onChange={(e) => setAbbreviation(e.target.value)} placeholder="e.g. CON" />
+              <Label>Abbreviation *</Label>
+              <Input
+                value={abbreviation}
+                onChange={(e) => handleAbbrChange(e.target.value)}
+                onBlur={handleAbbrBlur}
+                placeholder="e.g. CON"
+                maxLength={3}
+                className={abbrError || (submitAttempted && !abbreviation.trim()) ? 'border-destructive' : ''}
+              />
+              {abbrError && (
+                <p className="text-xs text-destructive mt-1">{abbrError}</p>
+              )}
+              {submitAttempted && !abbreviation.trim() && !abbrError && (
+                <p className="text-xs text-destructive mt-1">Abbreviation is required.</p>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -569,8 +612,8 @@ function AddVendorModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button disabled={!name.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>
+          <Button variant="outline" onClick={() => { reset(); onOpenChange(false); }}>Cancel</Button>
+          <Button disabled={createMutation.isPending} onClick={handleSubmit}>
             {createMutation.isPending ? 'Creating…' : 'Create Vendor'}
           </Button>
         </DialogFooter>
