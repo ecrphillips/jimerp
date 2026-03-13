@@ -156,6 +156,20 @@ export function RoastGroupDrawer({
   // Track drawer open state to detect reopen
   const prevExpandedRef = React.useRef(isExpanded);
   
+  // Green lot links for this roast group
+  const { data: linkedLots = [] } = useQuery({
+    queryKey: ['roast-group-lot-links', roastGroup],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('green_lot_roast_group_links')
+        .select('id, roast_group, lot_id, green_lots(id, lot_number, kg_on_hand, status, contract_id, green_contracts(name))')
+        .eq('roast_group', roastGroup);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30000,
+  });
+
   // For blends: fetch component batches that are linked to this blend
   const { data: componentBatches } = useQuery({
     queryKey: ['component-batches-for-blend', roastGroup],
