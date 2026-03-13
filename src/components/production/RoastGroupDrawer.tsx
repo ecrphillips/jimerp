@@ -156,6 +156,20 @@ export function RoastGroupDrawer({
   // Track drawer open state to detect reopen
   const prevExpandedRef = React.useRef(isExpanded);
   
+  // Green lot links for this roast group
+  const { data: linkedLots = [] } = useQuery({
+    queryKey: ['roast-group-lot-links', roastGroup],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('green_lot_roast_group_links')
+        .select('id, roast_group, lot_id, green_lots(id, lot_number, kg_on_hand, status, contract_id, green_contracts(name))')
+        .eq('roast_group', roastGroup);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30000,
+  });
+
   // For blends: fetch component batches that are linked to this blend
   const { data: componentBatches } = useQuery({
     queryKey: ['component-batches-for-blend', roastGroup],
@@ -892,6 +906,25 @@ export function RoastGroupDrawer({
                   </Button>
                 )}
               </div>
+
+              {/* Green Lot Inventory */}
+              {linkedLots.length === 0 ? (
+                <p className="text-xs text-amber-600">⚠ No green lot assigned</p>
+              ) : (
+                <div className="space-y-0.5">
+                  {linkedLots.map((link: any) => {
+                    const lot = link.green_lots;
+                    if (!lot) return null;
+                    const contractName = lot.green_contracts?.name || '—';
+                    const isWarning = lot.kg_on_hand === 0 || lot.status !== 'RECEIVED';
+                    return (
+                      <p key={link.id} className={`text-xs ${isWarning ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                        {contractName} · {lot.lot_number} · {Number(lot.kg_on_hand).toLocaleString()} kg available
+                      </p>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Batch Queue - different display for blends vs single origins */}
               {isBlend ? (
