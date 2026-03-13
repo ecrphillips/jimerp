@@ -2889,6 +2889,38 @@ export type Database = {
           },
         ]
       }
+      roast_group_notes: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          note_text: string
+          roast_group: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note_text: string
+          roast_group: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note_text?: string
+          roast_group?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roast_group_notes_roast_group_fkey"
+            columns: ["roast_group"]
+            isOneToOne: false
+            referencedRelation: "roast_groups"
+            referencedColumns: ["roast_group"]
+          },
+        ]
+      }
       roast_groups: {
         Row: {
           blend_name: string | null
