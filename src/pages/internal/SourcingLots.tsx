@@ -841,16 +841,50 @@ function LotDetailPanel({
               )}
 
               {/* Roast Group Links */}
-              <div>
+              <div className="space-y-2">
                 <Label className="text-sm text-muted-foreground">Linked Roast Groups</Label>
                 {rgLinks.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5 mt-1">
+                  <div className="space-y-1">
                     {rgLinks.map(rg => (
-                      <Badge key={rg.id} variant="outline" className="text-xs">{rg.roast_group}{rg.pct_of_lot ? ` (${rg.pct_of_lot}%)` : ''}</Badge>
+                      <div key={rg.id} className="flex items-center justify-between text-sm py-1 px-2 rounded bg-muted/40">
+                        <span>{rgDisplayMap[rg.roast_group] || rg.roast_group}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeRgLinkMutation.mutate(rg.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground mt-1">No roast groups linked.</p>
+                  <p className="text-xs text-muted-foreground">No roast groups linked.</p>
+                )}
+                {availableRoastGroups.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Select value={addRgKey} onValueChange={setAddRgKey}>
+                      <SelectTrigger className="h-8 text-xs flex-1">
+                        <SelectValue placeholder="Add roast group…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableRoastGroups.map(rg => (
+                          <SelectItem key={rg.roast_group} value={rg.roast_group} className="text-xs">
+                            {rg.display_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      className="h-8"
+                      disabled={!addRgKey || addRgLinkMutation.isPending}
+                      onClick={() => { if (addRgKey) addRgLinkMutation.mutate(addRgKey); }}
+                    >
+                      Add
+                    </Button>
+                  </div>
                 )}
               </div>
 
