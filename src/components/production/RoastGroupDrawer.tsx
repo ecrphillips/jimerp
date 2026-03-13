@@ -1196,6 +1196,9 @@ interface BatchRowProps {
   onInputChange: () => void;
   isUpdating: boolean;
   getRoasterBadgeColor: (roaster: RoasterMachine | null) => string;
+  linkedLots: any[];
+  selectedLotId: string;
+  onLotChange: (val: string) => void;
 }
 
 interface RoastBatch {
