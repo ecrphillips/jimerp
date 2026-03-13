@@ -137,6 +137,7 @@ export function RoastGroupDrawer({
   const [undoConfirmBatchId, setUndoConfirmBatchId] = useState<string | null>(null);
   const [deleteConfirmBatchId, setDeleteConfirmBatchId] = useState<string | null>(null);
   const [ohShitBatch, setOhShitBatch] = useState<RoastBatch | null>(null);
+  const [batchLotSelections, setBatchLotSelections] = useState<Record<string, string>>({});
   
   // Undo workflow modal state
   const [undoWorkflowTarget, setUndoWorkflowTarget] = useState<{
