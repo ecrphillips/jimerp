@@ -1413,9 +1413,9 @@ function BatchRow({
             )}
           </div>
 
-          {/* Inbound/Green kg */}
+          {/* Inbound Green kg */}
           <div className="flex items-center gap-1">
-            <span className="text-xs text-muted-foreground">Inbound/Green:</span>
+            <span className="text-xs text-muted-foreground">Inbound Green:</span>
             <Input
               type="number"
               step="0.1"
