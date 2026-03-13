@@ -137,6 +137,7 @@ export function RoastGroupDrawer({
   const [undoConfirmBatchId, setUndoConfirmBatchId] = useState<string | null>(null);
   const [deleteConfirmBatchId, setDeleteConfirmBatchId] = useState<string | null>(null);
   const [ohShitBatch, setOhShitBatch] = useState<RoastBatch | null>(null);
+  const [batchLotSelections, setBatchLotSelections] = useState<Record<string, string>>({});
   
   // Undo workflow modal state
   const [undoWorkflowTarget, setUndoWorkflowTarget] = useState<{
@@ -482,6 +483,27 @@ export function RoastGroupDrawer({
         });
       if (ledgerError) throw ledgerError;
       
+      // Log green lot consumption if a lot is selected
+      const selectedLotId = batchLotSelections[id];
+      if (selectedLotId) {
+        const { error: consumeError } = await supabase
+          .from('green_lot_consumption_log')
+          .insert({
+            lot_id: selectedLotId,
+            roasted_batch_id: id,
+            kg_consumed: actual_output_kg,
+            created_by: user?.id,
+            notes: `Batch ${id.slice(0, 8)}`,
+          });
+        if (consumeError) throw consumeError;
+
+        const { error: deductError } = await supabase.rpc('decrement_lot_kg', {
+          p_lot_id: selectedLotId,
+          p_kg: actual_output_kg,
+        });
+        if (deductError) throw deductError;
+      }
+      
       return { alreadyRoasted: false, actual_output_kg };
     },
     onSuccess: (result) => {
@@ -500,6 +522,8 @@ export function RoastGroupDrawer({
       queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
+      queryClient.invalidateQueries({ queryKey: ['roast-group-lot-links', roastGroup] });
+      queryClient.invalidateQueries({ queryKey: ['green-lots'] });
       // Refresh frozen batch order to reflect new status positions
       refreshFrozenBatches();
     },
@@ -1049,6 +1073,9 @@ export function RoastGroupDrawer({
                                   onInputChange={handleInputChange}
                                   isUpdating={updateBatchMutation.isPending}
                                   getRoasterBadgeColor={getRoasterBadgeColor}
+                                  linkedLots={linkedLots}
+                                  selectedLotId={batchLotSelections[batch.id] ?? ''}
+                                  onLotChange={(val) => setBatchLotSelections(prev => ({ ...prev, [batch.id]: val }))}
                                 />
                               ))
                             )}
@@ -1102,6 +1129,9 @@ export function RoastGroupDrawer({
                         onInputChange={handleInputChange}
                         isUpdating={updateBatchMutation.isPending}
                         getRoasterBadgeColor={getRoasterBadgeColor}
+                        linkedLots={linkedLots}
+                        selectedLotId={batchLotSelections[batch.id] ?? ''}
+                        onLotChange={(val) => setBatchLotSelections(prev => ({ ...prev, [batch.id]: val }))}
                       />
                     ))}
                   </div>
@@ -1195,6 +1225,9 @@ interface BatchRowProps {
   onInputChange: () => void;
   isUpdating: boolean;
   getRoasterBadgeColor: (roaster: RoasterMachine | null) => string;
+  linkedLots: any[];
+  selectedLotId: string;
+  onLotChange: (val: string) => void;
 }
 
 interface RoastBatch {
@@ -1227,6 +1260,9 @@ function BatchRow({
   onInputChange,
   isUpdating,
   getRoasterBadgeColor,
+  linkedLots,
+  selectedLotId,
+  onLotChange,
 }: BatchRowProps) {
   const [plannedKg, setPlannedKg] = useState(batch.planned_output_kg?.toString() ?? '');
   // Default actual output to expected output based on yield loss
@@ -1413,9 +1449,9 @@ function BatchRow({
             )}
           </div>
 
-          {/* Inbound/Green kg */}
+          {/* Inbound Green kg */}
           <div className="flex items-center gap-1">
-            <span className="text-xs text-muted-foreground">Inbound/Green:</span>
+            <span className="text-xs text-muted-foreground">Inbound Green:</span>
             <Input
               type="number"
               step="0.1"
@@ -1497,6 +1533,30 @@ function BatchRow({
               <SelectItem value="LORING">LORING</SelectItem>
             </SelectContent>
           </Select>
+
+          {/* Lot selector */}
+          {(() => {
+            const receivedLots = linkedLots.filter((l: any) => l.green_lots?.status === 'RECEIVED');
+            if (receivedLots.length === 0) return null;
+            return (
+              <Select value={selectedLotId} onValueChange={onLotChange}>
+                <SelectTrigger
+                  className="h-7 w-24 text-xs"
+                  onFocus={handleLocalInputFocus}
+                  onBlur={handleLocalInputBlur}
+                >
+                  <SelectValue placeholder="Lot" />
+                </SelectTrigger>
+                <SelectContent>
+                  {receivedLots.map((link: any) => (
+                    <SelectItem key={link.lot_id} value={link.lot_id} className="text-xs">
+                      {link.green_lots.lot_number}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            );
+          })()}
 
           {/* Cropster ID */}
           <div className="flex items-center gap-1">

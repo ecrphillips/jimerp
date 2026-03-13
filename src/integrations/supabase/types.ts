@@ -3245,6 +3245,10 @@ export type Database = {
         Args: { _client_id: string; _user_id: string }
         Returns: boolean
       }
+      decrement_lot_kg: {
+        Args: { p_kg: number; p_lot_id: string }
+        Returns: undefined
+      }
       delete_client_safe: {
         Args: { p_client_id: string; p_force?: boolean }
         Returns: Json
