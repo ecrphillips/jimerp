@@ -373,6 +373,51 @@ function LotDetailPanel({
     },
   });
 
+  // All active roast groups (for the add dropdown)
+  const { data: allRoastGroups = [] } = useQuery({
+    queryKey: ['active-roast-groups'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('roast_groups').select('roast_group, display_name, is_active').eq('is_active', true).order('display_name');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 300000,
+  });
+
+  const rgDisplayMap = useMemo(() => {
+    return Object.fromEntries(allRoastGroups.map(rg => [rg.roast_group, rg.display_name]));
+  }, [allRoastGroups]);
+
+  const availableRoastGroups = useMemo(() => {
+    const linkedKeys = new Set(rgLinks.map(l => l.roast_group));
+    return allRoastGroups.filter(rg => !linkedKeys.has(rg.roast_group));
+  }, [allRoastGroups, rgLinks]);
+
+  const [addRgKey, setAddRgKey] = useState<string>('');
+
+  const addRgLinkMutation = useMutation({
+    mutationFn: async (roastGroup: string) => {
+      const { error } = await supabase.from('green_lot_roast_group_links').insert({ lot_id: lotId!, roast_group: roastGroup });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lot-rg-links', lotId] });
+      setAddRgKey('');
+    },
+    onError: () => toast.error('Failed to add roast group link'),
+  });
+
+  const removeRgLinkMutation = useMutation({
+    mutationFn: async (linkId: string) => {
+      const { error } = await supabase.from('green_lot_roast_group_links').delete().eq('id', linkId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lot-rg-links', lotId] });
+    },
+    onError: () => toast.error('Failed to remove roast group link'),
+  });
+
   // Profile map
   const { data: profileMap = {} } = useQuery({
     queryKey: ['profiles-map'],
