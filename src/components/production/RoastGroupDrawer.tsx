@@ -907,6 +907,25 @@ export function RoastGroupDrawer({
                 )}
               </div>
 
+              {/* Green Lot Inventory */}
+              {linkedLots.length === 0 ? (
+                <p className="text-xs text-amber-600">⚠ No green lot assigned</p>
+              ) : (
+                <div className="space-y-0.5">
+                  {linkedLots.map((link: any) => {
+                    const lot = link.green_lots;
+                    if (!lot) return null;
+                    const contractName = lot.green_contracts?.name || '—';
+                    const isWarning = lot.kg_on_hand === 0 || lot.status !== 'RECEIVED';
+                    return (
+                      <p key={link.id} className={`text-xs ${isWarning ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                        {contractName} · {lot.lot_number} · {Number(lot.kg_on_hand).toLocaleString()} kg available
+                      </p>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* Batch Queue - different display for blends vs single origins */}
               {isBlend ? (
                 // For blends: show component batches grouped by component roast group
