@@ -13,7 +13,8 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Search, Check, FileText, AlertTriangle, CheckCircle2, Pencil } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Search, Check, FileText, AlertTriangle, CheckCircle2, Pencil, Trash2 } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 
 // ─── Types ─────────────────────────────────────────────────
@@ -370,6 +371,51 @@ function LotDetailPanel({
       if (error) throw error;
       return data ?? [];
     },
+  });
+
+  // All active roast groups (for the add dropdown)
+  const { data: allRoastGroups = [] } = useQuery({
+    queryKey: ['active-roast-groups'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('roast_groups').select('roast_group, display_name, is_active').eq('is_active', true).order('display_name');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 300000,
+  });
+
+  const rgDisplayMap = useMemo(() => {
+    return Object.fromEntries(allRoastGroups.map(rg => [rg.roast_group, rg.display_name]));
+  }, [allRoastGroups]);
+
+  const availableRoastGroups = useMemo(() => {
+    const linkedKeys = new Set(rgLinks.map(l => l.roast_group));
+    return allRoastGroups.filter(rg => !linkedKeys.has(rg.roast_group));
+  }, [allRoastGroups, rgLinks]);
+
+  const [addRgKey, setAddRgKey] = useState<string>('');
+
+  const addRgLinkMutation = useMutation({
+    mutationFn: async (roastGroup: string) => {
+      const { error } = await supabase.from('green_lot_roast_group_links').insert({ lot_id: lotId!, roast_group: roastGroup });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lot-rg-links', lotId] });
+      setAddRgKey('');
+    },
+    onError: () => toast.error('Failed to add roast group link'),
+  });
+
+  const removeRgLinkMutation = useMutation({
+    mutationFn: async (linkId: string) => {
+      const { error } = await supabase.from('green_lot_roast_group_links').delete().eq('id', linkId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lot-rg-links', lotId] });
+    },
+    onError: () => toast.error('Failed to remove roast group link'),
   });
 
   // Profile map
@@ -795,16 +841,50 @@ function LotDetailPanel({
               )}
 
               {/* Roast Group Links */}
-              <div>
+              <div className="space-y-2">
                 <Label className="text-sm text-muted-foreground">Linked Roast Groups</Label>
                 {rgLinks.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5 mt-1">
+                  <div className="space-y-1">
                     {rgLinks.map(rg => (
-                      <Badge key={rg.id} variant="outline" className="text-xs">{rg.roast_group}{rg.pct_of_lot ? ` (${rg.pct_of_lot}%)` : ''}</Badge>
+                      <div key={rg.id} className="flex items-center justify-between text-sm py-1 px-2 rounded bg-muted/40">
+                        <span>{rgDisplayMap[rg.roast_group] || rg.roast_group}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeRgLinkMutation.mutate(rg.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground mt-1">No roast groups linked.</p>
+                  <p className="text-xs text-muted-foreground">No roast groups linked.</p>
+                )}
+                {availableRoastGroups.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Select value={addRgKey} onValueChange={setAddRgKey}>
+                      <SelectTrigger className="h-8 text-xs flex-1">
+                        <SelectValue placeholder="Add roast group…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableRoastGroups.map(rg => (
+                          <SelectItem key={rg.roast_group} value={rg.roast_group} className="text-xs">
+                            {rg.display_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      className="h-8"
+                      disabled={!addRgKey || addRgLinkMutation.isPending}
+                      onClick={() => { if (addRgKey) addRgLinkMutation.mutate(addRgKey); }}
+                    >
+                      Add
+                    </Button>
+                  </div>
                 )}
               </div>
 
