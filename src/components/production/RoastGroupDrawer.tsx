@@ -297,6 +297,25 @@ export function RoastGroupDrawer({
     ? blendReadiness.stagedForBlendKg
     : plannedExpectedOutput;
 
+  const totalAvailableGreenKg = useMemo(() => {
+    return linkedLots.reduce((sum: number, link: any) => {
+      const lot = link.green_lots;
+      if (!lot || lot.status !== 'RECEIVED') return sum;
+      return sum + Number(lot.kg_on_hand ?? 0);
+    }, 0);
+  }, [linkedLots]);
+
+  const plannedGreenKgNeeded = useMemo(() => {
+    return batches
+      .filter(b => b.status === 'PLANNED')
+      .reduce((sum, b) => sum + (b.planned_output_kg ?? 0), 0);
+  }, [batches]);
+
+  const greenShortfallKg = useMemo(() => {
+    if (linkedLots.length === 0) return 0;
+    return Math.max(0, plannedGreenKgNeeded - totalAvailableGreenKg);
+  }, [linkedLots, plannedGreenKgNeeded, totalAvailableGreenKg]);
+
   // Sort batches helper function - STATIC ORDER by created_at only
   // No resorting by status - preserve user's "work down the list" flow
   const sortBatches = useCallback((batchList: RoastBatch[]) => {
@@ -923,6 +942,15 @@ export function RoastGroupDrawer({
                       </p>
                     );
                   })}
+                </div>
+              )}
+
+              {greenShortfallKg > 0 && linkedLots.length > 0 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-800 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-200">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Planned batches need {plannedGreenKgNeeded.toFixed(1)} kg green — only {totalAvailableGreenKg.toFixed(1)} kg available across linked lots. Assign a new lot in Sourcing or adjust your batch plan.
+                  </span>
                 </div>
               )}
 
