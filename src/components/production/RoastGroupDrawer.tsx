@@ -945,6 +945,15 @@ export function RoastGroupDrawer({
                 </div>
               )}
 
+              {greenShortfallKg > 0 && linkedLots.length > 0 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-800 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-200">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Planned batches need {plannedGreenKgNeeded.toFixed(1)} kg green — only {totalAvailableGreenKg.toFixed(1)} kg available across linked lots. Assign a new lot in Sourcing or adjust your batch plan.
+                  </span>
+                </div>
+              )}
+
               {/* Batch Queue - different display for blends vs single origins */}
               {isBlend ? (
                 // For blends: show component batches grouped by component roast group
