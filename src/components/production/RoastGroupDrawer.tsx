@@ -1050,6 +1050,9 @@ export function RoastGroupDrawer({
                                   onInputChange={handleInputChange}
                                   isUpdating={updateBatchMutation.isPending}
                                   getRoasterBadgeColor={getRoasterBadgeColor}
+                                  linkedLots={linkedLots}
+                                  selectedLotId={batchLotSelections[batch.id] ?? ''}
+                                  onLotChange={(val) => setBatchLotSelections(prev => ({ ...prev, [batch.id]: val }))}
                                 />
                               ))
                             )}
