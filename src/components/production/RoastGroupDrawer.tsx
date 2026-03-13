@@ -522,6 +522,8 @@ export function RoastGroupDrawer({
       queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
+      queryClient.invalidateQueries({ queryKey: ['roast-group-lot-links', roastGroup] });
+      queryClient.invalidateQueries({ queryKey: ['green-lots'] });
       // Refresh frozen batch order to reflect new status positions
       refreshFrozenBatches();
     },
