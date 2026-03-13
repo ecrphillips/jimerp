@@ -1,4 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
+import { Textarea } from '@/components/ui/textarea';
+import { format } from 'date-fns';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,6 +38,100 @@ interface RoastGroup {
 }
 
 const ROASTERS: DefaultRoaster[] = ['SAMIAC', 'LORING', 'EITHER'];
+
+function RoastGroupNotesSection({ roastGroup }: { roastGroup: string }) {
+  const { authUser } = useAuth();
+  const queryClient = useQueryClient();
+  const [newNote, setNewNote] = useState('');
+
+  const { data: notesData = [], isLoading: notesLoading } = useQuery({
+    queryKey: ['roast-group-notes', roastGroup],
+    enabled: !!roastGroup,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('roast_group_notes')
+        .select('*')
+        .eq('roast_group', roastGroup)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+
+      const userIds = [...new Set((data ?? []).map((n: any) => n.created_by).filter(Boolean))];
+      let profileMap: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('user_id, name')
+          .in('user_id', userIds);
+        if (profiles) {
+          profileMap = Object.fromEntries(profiles.map(p => [p.user_id, p.name]));
+        }
+      }
+
+      return (data ?? []).map((n: any) => ({
+        ...n,
+        author_name: profileMap[n.created_by] || 'Unknown',
+      }));
+    },
+  });
+
+  const addNoteMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('roast_group_notes').insert({
+        roast_group: roastGroup,
+        note_text: newNote.trim(),
+        created_by: authUser!.id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roast-group-notes', roastGroup] });
+      setNewNote('');
+    },
+    onError: () => toast.error('Failed to add note'),
+  });
+
+  const handleSubmit = () => {
+    if (newNote.trim()) addNoteMutation.mutate();
+  };
+
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <Label>Notes</Label>
+      {notesLoading ? (
+        <p className="text-xs text-muted-foreground">Loading notes…</p>
+      ) : notesData.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic">No notes yet.</p>
+      ) : (
+        <ul className="space-y-2 max-h-48 overflow-y-auto">
+          {notesData.map((note: any) => (
+            <li key={note.id} className="border-l-2 border-muted pl-3 py-1">
+              <p className="text-sm whitespace-pre-wrap">{note.note_text}</p>
+              <p className="text-xs text-muted-foreground">
+                {note.author_name} · {format(new Date(note.created_at), 'MMM d, yyyy h:mm a')}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex gap-2">
+        <Input
+          value={newNote}
+          onChange={(e) => setNewNote(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
+          placeholder="Add a note…"
+          className="text-sm"
+        />
+        <Button
+          size="sm"
+          onClick={handleSubmit}
+          disabled={!newNote.trim() || addNoteMutation.isPending}
+        >
+          {addNoteMutation.isPending ? 'Adding…' : 'Add Note'}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function RoastGroupsTab() {
   const queryClient = useQueryClient();
@@ -720,6 +816,11 @@ export function RoastGroupsTab() {
                 <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
                 <span>{saveError}</span>
               </div>
+            )}
+
+            {/* Notes Section (edit mode only) */}
+            {editingGroup && (
+              <RoastGroupNotesSection roastGroup={editingGroup.roast_group} />
             )}
 
             <div className="flex justify-end gap-2 pt-4">
