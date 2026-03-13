@@ -297,6 +297,25 @@ export function RoastGroupDrawer({
     ? blendReadiness.stagedForBlendKg
     : plannedExpectedOutput;
 
+  const totalAvailableGreenKg = useMemo(() => {
+    return linkedLots.reduce((sum: number, link: any) => {
+      const lot = link.green_lots;
+      if (!lot || lot.status !== 'RECEIVED') return sum;
+      return sum + Number(lot.kg_on_hand ?? 0);
+    }, 0);
+  }, [linkedLots]);
+
+  const plannedGreenKgNeeded = useMemo(() => {
+    return batches
+      .filter(b => b.status === 'PLANNED')
+      .reduce((sum, b) => sum + (b.planned_output_kg ?? 0), 0);
+  }, [batches]);
+
+  const greenShortfallKg = useMemo(() => {
+    if (linkedLots.length === 0) return 0;
+    return Math.max(0, plannedGreenKgNeeded - totalAvailableGreenKg);
+  }, [linkedLots, plannedGreenKgNeeded, totalAvailableGreenKg]);
+
   // Sort batches helper function - STATIC ORDER by created_at only
   // No resorting by status - preserve user's "work down the list" flow
   const sortBatches = useCallback((batchList: RoastBatch[]) => {
