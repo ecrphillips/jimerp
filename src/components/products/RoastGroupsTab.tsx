@@ -724,6 +724,11 @@ export function RoastGroupsTab() {
               </div>
             )}
 
+            {/* Notes Section (edit mode only) */}
+            {editingGroup && (
+              <RoastGroupNotesSection roastGroup={editingGroup.roast_group} />
+            )}
+
             <div className="flex justify-end gap-2 pt-4">
               <Button variant="outline" onClick={closeDialog} disabled={saveMutation.isPending}>
                 Cancel
