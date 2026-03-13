@@ -1231,6 +1231,9 @@ function BatchRow({
   onInputChange,
   isUpdating,
   getRoasterBadgeColor,
+  linkedLots,
+  selectedLotId,
+  onLotChange,
 }: BatchRowProps) {
   const [plannedKg, setPlannedKg] = useState(batch.planned_output_kg?.toString() ?? '');
   // Default actual output to expected output based on yield loss
