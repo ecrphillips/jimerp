@@ -1511,6 +1511,30 @@ function BatchRow({
             </SelectContent>
           </Select>
 
+          {/* Lot selector */}
+          {(() => {
+            const receivedLots = linkedLots.filter((l: any) => l.green_lots?.status === 'RECEIVED');
+            if (receivedLots.length === 0) return null;
+            return (
+              <Select value={selectedLotId} onValueChange={onLotChange}>
+                <SelectTrigger
+                  className="h-7 w-24 text-xs"
+                  onFocus={handleLocalInputFocus}
+                  onBlur={handleLocalInputBlur}
+                >
+                  <SelectValue placeholder="Lot" />
+                </SelectTrigger>
+                <SelectContent>
+                  {receivedLots.map((link: any) => (
+                    <SelectItem key={link.lot_id} value={link.lot_id} className="text-xs">
+                      {link.green_lots.lot_number}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            );
+          })()}
+
           {/* Cropster ID */}
           <div className="flex items-center gap-1">
             <span className="text-xs text-muted-foreground">Cropster:</span>
