@@ -483,6 +483,27 @@ export function RoastGroupDrawer({
         });
       if (ledgerError) throw ledgerError;
       
+      // Log green lot consumption if a lot is selected
+      const selectedLotId = batchLotSelections[id];
+      if (selectedLotId) {
+        const { error: consumeError } = await supabase
+          .from('green_lot_consumption_log')
+          .insert({
+            lot_id: selectedLotId,
+            roasted_batch_id: id,
+            kg_consumed: actual_output_kg,
+            created_by: user?.id,
+            notes: `Batch ${id.slice(0, 8)}`,
+          });
+        if (consumeError) throw consumeError;
+
+        const { error: deductError } = await supabase.rpc('decrement_lot_kg', {
+          p_lot_id: selectedLotId,
+          p_kg: actual_output_kg,
+        });
+        if (deductError) throw deductError;
+      }
+      
       return { alreadyRoasted: false, actual_output_kg };
     },
     onSuccess: (result) => {
