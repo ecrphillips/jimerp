@@ -107,6 +107,8 @@ export function InternalLayout({ children }: InternalLayoutProps) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = React.useState(false);
+  const [feedbackOpen, setFeedbackOpen] = React.useState(false);
+  const feedbackNewCount = authUser?.role === 'ADMIN' ? useFeedbackCount() : 0;
 
   useOrderNotifications();
 
