@@ -1169,6 +1169,42 @@ export type Database = {
           },
         ]
       }
+      feedback_submissions: {
+        Row: {
+          admin_note: string | null
+          category: string
+          created_at: string
+          created_by: string
+          id: string
+          message: string
+          status: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          admin_note?: string | null
+          category: string
+          created_at?: string
+          created_by: string
+          id?: string
+          message: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          admin_note?: string | null
+          category?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          message?: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       fg_inventory: {
         Row: {
           id: string

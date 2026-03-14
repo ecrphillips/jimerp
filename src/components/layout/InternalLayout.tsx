@@ -31,9 +31,13 @@ import {
   FlaskConical,
   FileSignature,
   Boxes,
+  MessageSquarePlus,
+  Megaphone,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { FeedbackModal } from '@/components/feedback/FeedbackModal';
+import { useFeedbackCount } from '@/hooks/useFeedbackCount';
 
 interface InternalLayoutProps {
   children: React.ReactNode;
@@ -103,6 +107,8 @@ export function InternalLayout({ children }: InternalLayoutProps) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = React.useState(false);
+  const [feedbackOpen, setFeedbackOpen] = React.useState(false);
+  const feedbackNewCount = useFeedbackCount();
 
   useOrderNotifications();
 
@@ -197,12 +203,35 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                   <NavItem to="/admin/users" icon={Users2} label="Users & Access" onClick={closeSidebar} />
                   <NavItem to="/admin-tools" icon={Wrench} label="Admin Tools" onClick={closeSidebar} />
                   <NavItem to="/inventory/ledger" icon={BookOpen} label="Ledger" onClick={closeSidebar} />
+                  <NavLink
+                    to="/admin/feedback"
+                    onClick={closeSidebar}
+                    className={({ isActive }) => cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
+                      isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/85"
+                    )}
+                  >
+                    <Megaphone className="h-5 w-5" />
+                    Feedback
+                    {feedbackNewCount > 0 && (
+                      <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+                        {feedbackNewCount}
+                      </span>
+                    )}
+                  </NavLink>
                 </NavGroup>
               )}
             </ul>
           </nav>
 
           <div className="border-t border-sidebar-border p-4">
+            <button
+              onClick={() => { setFeedbackOpen(true); closeSidebar(); }}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 mb-2 text-xs font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/85 hover:text-sidebar-foreground"
+            >
+              <MessageSquarePlus className="h-4 w-4" />
+              Give Feedback
+            </button>
             <button
               onClick={() => setAccountSheetOpen(true)}
               className="w-full mb-3 px-3 py-2 rounded-md text-left transition-colors hover:bg-sidebar-accent/85 group"
@@ -225,6 +254,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
       </aside>
 
       <AccountSheet open={accountSheetOpen} onOpenChange={setAccountSheetOpen} />
+      <FeedbackModal open={feedbackOpen} onOpenChange={setFeedbackOpen} />
 
       <div className="flex flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 lg:hidden">
