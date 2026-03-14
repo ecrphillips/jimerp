@@ -40,6 +40,7 @@ import Inventory from "@/pages/internal/Inventory";
 import InventoryLedger from "@/pages/internal/InventoryLedger";
 import AdminTools from "@/pages/internal/AdminTools";
 import UsersAccess from "@/pages/internal/UsersAccess";
+import AdminFeedback from "@/pages/internal/AdminFeedback";
 import Portal from "@/pages/client/Portal";
 import NewOrder from "@/pages/client/NewOrder";
 import OrderHistory from "@/pages/client/OrderHistory";
