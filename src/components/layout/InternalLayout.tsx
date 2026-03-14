@@ -226,6 +226,13 @@ export function InternalLayout({ children }: InternalLayoutProps) {
 
           <div className="border-t border-sidebar-border p-4">
             <button
+              onClick={() => { setFeedbackOpen(true); closeSidebar(); }}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 mb-2 text-xs font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/85 hover:text-sidebar-foreground"
+            >
+              <MessageSquarePlus className="h-4 w-4" />
+              Give Feedback
+            </button>
+            <button
               onClick={() => setAccountSheetOpen(true)}
               className="w-full mb-3 px-3 py-2 rounded-md text-left transition-colors hover:bg-sidebar-accent/85 group"
             >
