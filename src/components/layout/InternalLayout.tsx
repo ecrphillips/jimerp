@@ -203,6 +203,22 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                   <NavItem to="/admin/users" icon={Users2} label="Users & Access" onClick={closeSidebar} />
                   <NavItem to="/admin-tools" icon={Wrench} label="Admin Tools" onClick={closeSidebar} />
                   <NavItem to="/inventory/ledger" icon={BookOpen} label="Ledger" onClick={closeSidebar} />
+                  <NavLink
+                    to="/admin/feedback"
+                    onClick={closeSidebar}
+                    className={({ isActive }) => cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
+                      isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/85"
+                    )}
+                  >
+                    <Megaphone className="h-5 w-5" />
+                    Feedback
+                    {feedbackNewCount > 0 && (
+                      <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+                        {feedbackNewCount}
+                      </span>
+                    )}
+                  </NavLink>
                 </NavGroup>
               )}
             </ul>
