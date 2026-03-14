@@ -36,6 +36,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { FeedbackModal } from '@/components/feedback/FeedbackModal';
+import { useFeedbackCount } from '@/hooks/useFeedbackCount';
 
 interface InternalLayoutProps {
   children: React.ReactNode;
