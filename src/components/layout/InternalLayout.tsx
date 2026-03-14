@@ -112,6 +112,8 @@ export function InternalLayout({ children }: InternalLayoutProps) {
 
   useOrderNotifications();
 
+  const closeSidebar = () => setSidebarOpen(false);
+
   // Nav group open states — persist in sessionStorage
   const STORAGE_KEY = 'jim-nav-groups';
   const getInitialGroupState = () => {
