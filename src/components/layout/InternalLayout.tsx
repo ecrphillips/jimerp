@@ -114,12 +114,32 @@ export function InternalLayout({ children }: InternalLayoutProps) {
 
   const closeSidebar = () => setSidebarOpen(false);
 
-  // Group open states
-  const [accountsOpen, setAccountsOpen] = React.useState(true);
-  const [cmOpen, setCmOpen] = React.useState(true);
-  const [sourcingOpen, setSourcingOpen] = React.useState(true);
-  const [coroastOpen, setCoroastOpen] = React.useState(true);
-  const [adminOpen, setAdminOpen] = React.useState(true);
+  // Nav group open states — persist in sessionStorage
+  const STORAGE_KEY = 'jim-nav-groups';
+  const getInitialGroupState = () => {
+    try {
+      const stored = sessionStorage.getItem(STORAGE_KEY);
+      if (stored) return JSON.parse(stored) as Record<string, boolean>;
+    } catch {}
+    return {} as Record<string, boolean>;
+  };
+  const initial = React.useMemo(getInitialGroupState, []);
+  const [accountsOpen, setAccountsOpen] = React.useState(initial.accounts ?? false);
+  const [cmOpen, setCmOpen] = React.useState(initial.manufacturing ?? false);
+  const [sourcingOpen, setSourcingOpen] = React.useState(initial.sourcing ?? false);
+  const [coroastOpen, setCoroastOpen] = React.useState(initial.coroasting ?? false);
+  const [adminOpen, setAdminOpen] = React.useState(initial.admin ?? false);
+
+  // Persist whenever any group changes
+  React.useEffect(() => {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+      accounts: accountsOpen,
+      manufacturing: cmOpen,
+      sourcing: sourcingOpen,
+      coroasting: coroastOpen,
+      admin: adminOpen,
+    }));
+  }, [accountsOpen, cmOpen, sourcingOpen, coroastOpen, adminOpen]);
 
   const handleSignOut = async () => {
     await signOut();
