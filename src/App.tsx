@@ -219,6 +219,11 @@ const App = () => (
                 <InternalLayout><UsersAccess /></InternalLayout>
               </ProtectedRoute>
             } />
+            <Route path="/admin/feedback" element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <InternalLayout><AdminFeedback /></InternalLayout>
+              </ProtectedRoute>
+            } />
 
             {/* Client Portal */}
             <Route path="/portal" element={
