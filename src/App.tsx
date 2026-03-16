@@ -22,6 +22,8 @@ import OrderDetail from "@/pages/internal/OrderDetail";
 import CreateOrderForClient from "@/pages/internal/CreateOrderForClient";
 import Clients from "@/pages/internal/Clients";
 import Products from "@/pages/internal/Products";
+import RoastGroups from "@/pages/internal/RoastGroups";
+import RoastGroupDetail from "@/pages/internal/RoastGroupDetail";
 import Pricing from "@/pages/internal/Pricing";
 import Prospects from "@/pages/internal/Prospects";
 import Production from "@/pages/internal/Production";
@@ -105,6 +107,16 @@ const App = () => (
             <Route path="/products" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><Products /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/roast-groups" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><RoastGroups /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/roast-groups/:id" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><RoastGroupDetail /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/pricing" element={
