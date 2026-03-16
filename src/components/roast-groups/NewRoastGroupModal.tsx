@@ -148,6 +148,33 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
             </RadioGroup>
           </div>
 
+          {/* Blend Type (blends only) */}
+          {isBlend && (
+            <div>
+              <Label>Blend Type</Label>
+              <RadioGroup
+                value={blendType ?? ''}
+                onValueChange={setBlendType}
+                className="mt-1 space-y-2"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="PRE_ROAST" id="rg-pre" />
+                    <Label htmlFor="rg-pre" className="font-normal cursor-pointer">Pre-roast</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground ml-6">Green lots are scooped and charged together. One roast batch, one WIP pool.</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="POST_ROAST" id="rg-post" />
+                    <Label htmlFor="rg-post" className="font-normal cursor-pointer">Post-roast</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground ml-6">Separate roast groups are blended after roasting. Each component is roasted independently.</p>
+                </div>
+              </RadioGroup>
+            </div>
+          )}
+
           {/* Origin (single origin only) */}
           {!isBlend && (
             <div>
