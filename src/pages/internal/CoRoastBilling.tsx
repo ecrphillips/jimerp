@@ -408,7 +408,7 @@ export default function CoRoastBilling() {
     },
   });
 
-  const fmt = (n: number) => formatMoney(n).replace('CAD ', '');
+  const fmt = (n: number) => n.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
