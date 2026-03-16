@@ -9,11 +9,11 @@ import { cn } from '@/lib/utils';
 import { getDisplayName } from '@/lib/roastGroupUtils';
 import { NewRoastGroupModal } from '@/components/roast-groups/NewRoastGroupModal';
 
-type FilterType = 'ALL' | 'BLENDS' | 'SINGLE_ORIGINS' | 'NEEDS_ATTENTION';
+type FilterType = 'ALL' | 'ACTIVE' | 'BLENDS' | 'SINGLE_ORIGINS' | 'NEEDS_ATTENTION' | 'INACTIVE';
 
 export default function RoastGroups() {
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<FilterType>('ALL');
+  const [filter, setFilter] = useState<FilterType>('ACTIVE');
   const [modalOpen, setModalOpen] = useState(false);
 
   // Hook 1: Fetch all roast groups with components and lot links (no product join)
@@ -84,18 +84,22 @@ export default function RoastGroups() {
 
   const filtered = useMemo(() => {
     return roastGroups.filter((rg: any) => {
-      if (filter === 'BLENDS') return rg.is_blend;
-      if (filter === 'SINGLE_ORIGINS') return !rg.is_blend;
+      if (filter === 'ACTIVE') return rg.is_active === true;
+      if (filter === 'BLENDS') return rg.is_blend === true && rg.is_active === true;
+      if (filter === 'SINGLE_ORIGINS') return rg.is_blend === false && rg.is_active === true;
       if (filter === 'NEEDS_ATTENTION') return needsAttention(rg);
+      if (filter === 'INACTIVE') return rg.is_active === false;
       return true;
     });
   }, [roastGroups, filter]);
 
   const filters: { key: FilterType; label: string }[] = [
     { key: 'ALL', label: 'All' },
+    { key: 'ACTIVE', label: 'Active' },
     { key: 'BLENDS', label: 'Blends' },
     { key: 'SINGLE_ORIGINS', label: 'Single Origins' },
     { key: 'NEEDS_ATTENTION', label: 'Needs Attention' },
+    { key: 'INACTIVE', label: 'Inactive' },
   ];
 
   return (
