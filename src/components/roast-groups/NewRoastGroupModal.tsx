@@ -134,7 +134,7 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
             <Label>Type</Label>
             <RadioGroup
               value={isBlend ? 'blend' : 'single'}
-              onValueChange={v => setIsBlend(v === 'blend')}
+              onValueChange={v => { setIsBlend(v === 'blend'); if (v !== 'blend') setBlendType(null); }}
               className="flex gap-4 mt-1"
             >
               <div className="flex items-center gap-2">
