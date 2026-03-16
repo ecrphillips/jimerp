@@ -22,6 +22,8 @@ import OrderDetail from "@/pages/internal/OrderDetail";
 import CreateOrderForClient from "@/pages/internal/CreateOrderForClient";
 import Clients from "@/pages/internal/Clients";
 import Products from "@/pages/internal/Products";
+import RoastGroups from "@/pages/internal/RoastGroups";
+import RoastGroupDetail from "@/pages/internal/RoastGroupDetail";
 import Pricing from "@/pages/internal/Pricing";
 import Prospects from "@/pages/internal/Prospects";
 import Production from "@/pages/internal/Production";
