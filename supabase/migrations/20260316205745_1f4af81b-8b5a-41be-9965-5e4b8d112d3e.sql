@@ -1,0 +1,1 @@
+ALTER TABLE public.roast_groups ADD COLUMN is_seasonal boolean NOT NULL DEFAULT false;
