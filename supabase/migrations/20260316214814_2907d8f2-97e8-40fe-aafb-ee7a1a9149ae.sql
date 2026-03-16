@@ -1,0 +1,1 @@
+ALTER TABLE public.roast_groups ADD COLUMN blend_type text;
