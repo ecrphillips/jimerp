@@ -67,13 +67,15 @@ export default function RoastGroupDetail() {
       {/* Section 1: Details */}
       <RoastGroupDetailsSection roastGroupKey={rg.roast_group} initialData={rg} />
 
-      {/* Section 2: Blend Composition (blends only) */}
-      {rg.is_blend && (
+      {/* Section 2: Blend Composition (post-roast blends only) */}
+      {rg.is_blend && rg.blend_type === 'POST_ROAST' && (
         <BlendCompositionSection roastGroupKey={rg.roast_group} />
       )}
 
-      {/* Section 3: Green Lot Mapping */}
-      <GreenLotMappingSection roastGroupKey={rg.roast_group} />
+      {/* Section 3: Green Lot Mapping (single origins and pre-roast blends) */}
+      {rg.blend_type !== 'POST_ROAST' && (
+        <GreenLotMappingSection roastGroupKey={rg.roast_group} />
+      )}
 
       {/* Section 4: Products Family Tree */}
       <ProductsFamilyTreeSection roastGroupKey={rg.roast_group} displayName={displayName} />

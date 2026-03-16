@@ -24,6 +24,7 @@ export function RoastGroupDetailsSection({ roastGroupKey, initialData }: Props) 
   const [isBlend, setIsBlend] = useState(initialData.is_blend);
   const [origin, setOrigin] = useState(initialData.origin || '');
   const [isSeasonal, setIsSeasonal] = useState(initialData.is_seasonal ?? false);
+  const [blendType, setBlendType] = useState(initialData.blend_type || null);
   const [defaultRoaster, setDefaultRoaster] = useState(initialData.default_roaster || 'EITHER');
   const [batchKg, setBatchKg] = useState(initialData.standard_batch_kg ?? 20);
   const [yieldLoss, setYieldLoss] = useState(initialData.expected_yield_loss_pct ?? 16);
@@ -36,6 +37,7 @@ export function RoastGroupDetailsSection({ roastGroupKey, initialData }: Props) 
     setIsBlend(initialData.is_blend);
     setOrigin(initialData.origin || '');
     setIsSeasonal(initialData.is_seasonal ?? false);
+    setBlendType(initialData.blend_type || null);
     setDefaultRoaster(initialData.default_roaster || 'EITHER');
     setBatchKg(initialData.standard_batch_kg ?? 20);
     setYieldLoss(initialData.expected_yield_loss_pct ?? 16);
@@ -53,6 +55,7 @@ export function RoastGroupDetailsSection({ roastGroupKey, initialData }: Props) 
           is_blend: isBlend,
           origin: isBlend ? null : origin || null,
           is_seasonal: isSeasonal,
+          blend_type: isBlend ? blendType : null,
           default_roaster: defaultRoaster as any,
           standard_batch_kg: batchKg,
           expected_yield_loss_pct: yieldLoss,
@@ -98,6 +101,32 @@ export function RoastGroupDetailsSection({ roastGroupKey, initialData }: Props) 
           <div>
             <Label>Origin</Label>
             <Input value={origin} onChange={e => setOrigin(e.target.value)} placeholder="e.g. Guatemala" />
+          </div>
+        )}
+
+        {isBlend && (
+          <div>
+            <Label>Blend Type</Label>
+            <RadioGroup
+              value={blendType ?? ''}
+              onValueChange={setBlendType}
+              className="mt-1 space-y-2"
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="PRE_ROAST" id="det-pre" />
+                  <Label htmlFor="det-pre" className="font-normal cursor-pointer">Pre-roast</Label>
+                </div>
+                <p className="text-xs text-muted-foreground ml-6">Green lots are scooped and charged together. One roast batch, one WIP pool.</p>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="POST_ROAST" id="det-post" />
+                  <Label htmlFor="det-post" className="font-normal cursor-pointer">Post-roast</Label>
+                </div>
+                <p className="text-xs text-muted-foreground ml-6">Separate roast groups are blended after roasting. Each component is roasted independently.</p>
+              </div>
+            </RadioGroup>
           </div>
         )}
 

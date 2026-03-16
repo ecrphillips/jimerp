@@ -192,13 +192,19 @@ export default function RoastGroups() {
                 </div>
 
                 {/* Blend composition or origin */}
-                {rg.is_blend && rg.roast_group_components?.length > 0 && (
+                {rg.is_blend && rg.blend_type === 'POST_ROAST' && rg.roast_group_components?.length > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground truncate">
                     {rg.roast_group_components.map((c: any) => {
                       const name = allGroupNames[c.component_roast_group] || c.component_roast_group;
                       return `${name} ${c.pct}%`;
                     }).join(' · ')}
                   </p>
+                )}
+                {rg.is_blend && rg.blend_type === 'PRE_ROAST' && (
+                  <p className="mt-2 text-xs text-muted-foreground">Pre-roast blend</p>
+                )}
+                {rg.is_blend && !rg.blend_type && (
+                  <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">Blend type not set</p>
                 )}
                 {!rg.is_blend && rg.origin && (
                   <p className="mt-2 text-xs text-muted-foreground">{rg.origin}</p>

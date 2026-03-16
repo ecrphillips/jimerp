@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { Loader2, Plus, Trash2, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { getDisplayName } from '@/lib/roastGroupUtils';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -141,7 +140,7 @@ export function BlendCompositionSection({ roastGroupKey }: Props) {
 
   const getName = (key: string) => {
     const g = allGroups.find(g => g.roast_group === key);
-    return g ? getDisplayName(g.display_name, g.roast_group) : key;
+    return g?.display_name ?? key;
   };
 
   return (
@@ -195,7 +194,7 @@ export function BlendCompositionSection({ roastGroupKey }: Props) {
                     <SelectContent>
                       {availableGroups.map(g => (
                         <SelectItem key={g.roast_group} value={g.roast_group}>
-                          {getDisplayName(g.display_name, g.roast_group)}
+                          {g.display_name}
                         </SelectItem>
                       ))}
                     </SelectContent>

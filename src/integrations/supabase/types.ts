@@ -2960,6 +2960,7 @@ export type Database = {
       roast_groups: {
         Row: {
           blend_name: string | null
+          blend_type: string | null
           created_at: string
           cropster_profile_ref: string | null
           default_roaster: Database["public"]["Enums"]["default_roaster"]
@@ -2978,6 +2979,7 @@ export type Database = {
         }
         Insert: {
           blend_name?: string | null
+          blend_type?: string | null
           created_at?: string
           cropster_profile_ref?: string | null
           default_roaster?: Database["public"]["Enums"]["default_roaster"]
@@ -2996,6 +2998,7 @@ export type Database = {
         }
         Update: {
           blend_name?: string | null
+          blend_type?: string | null
           created_at?: string
           cropster_profile_ref?: string | null
           default_roaster?: Database["public"]["Enums"]["default_roaster"]
