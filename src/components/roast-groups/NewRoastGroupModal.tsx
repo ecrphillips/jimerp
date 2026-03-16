@@ -25,6 +25,7 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
 
   const [displayName, setDisplayName] = useState('');
   const [isBlend, setIsBlend] = useState(false);
+  const [blendType, setBlendType] = useState<string | null>(null);
   const [origin, setOrigin] = useState('');
   const [isSeasonal, setIsSeasonal] = useState(false);
   const [defaultRoaster, setDefaultRoaster] = useState<string>('EITHER');
