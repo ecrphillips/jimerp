@@ -24,7 +24,7 @@ export default function RoastGroups() {
         .from('roast_groups')
         .select(`
           *,
-          roast_group_components (component_roast_group, pct),
+          roast_group_components!roast_group_components_parent_roast_group_fkey (component_roast_group, pct),
           green_lot_roast_group_links (lot_id, green_lots (id, lot_number, status))
         `)
         .order('display_name');
