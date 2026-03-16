@@ -84,18 +84,22 @@ export default function RoastGroups() {
 
   const filtered = useMemo(() => {
     return roastGroups.filter((rg: any) => {
-      if (filter === 'BLENDS') return rg.is_blend;
-      if (filter === 'SINGLE_ORIGINS') return !rg.is_blend;
+      if (filter === 'ACTIVE') return rg.is_active === true;
+      if (filter === 'BLENDS') return rg.is_blend === true && rg.is_active === true;
+      if (filter === 'SINGLE_ORIGINS') return rg.is_blend === false && rg.is_active === true;
       if (filter === 'NEEDS_ATTENTION') return needsAttention(rg);
+      if (filter === 'INACTIVE') return rg.is_active === false;
       return true;
     });
   }, [roastGroups, filter]);
 
   const filters: { key: FilterType; label: string }[] = [
     { key: 'ALL', label: 'All' },
+    { key: 'ACTIVE', label: 'Active' },
     { key: 'BLENDS', label: 'Blends' },
     { key: 'SINGLE_ORIGINS', label: 'Single Origins' },
     { key: 'NEEDS_ATTENTION', label: 'Needs Attention' },
+    { key: 'INACTIVE', label: 'Inactive' },
   ];
 
   return (
