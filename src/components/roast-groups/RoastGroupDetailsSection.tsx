@@ -37,6 +37,7 @@ export function RoastGroupDetailsSection({ roastGroupKey, initialData }: Props) 
     setIsBlend(initialData.is_blend);
     setOrigin(initialData.origin || '');
     setIsSeasonal(initialData.is_seasonal ?? false);
+    setBlendType(initialData.blend_type || null);
     setDefaultRoaster(initialData.default_roaster || 'EITHER');
     setBatchKg(initialData.standard_batch_kg ?? 20);
     setYieldLoss(initialData.expected_yield_loss_pct ?? 16);
