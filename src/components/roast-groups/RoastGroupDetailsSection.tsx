@@ -55,6 +55,7 @@ export function RoastGroupDetailsSection({ roastGroupKey, initialData }: Props) 
           is_blend: isBlend,
           origin: isBlend ? null : origin || null,
           is_seasonal: isSeasonal,
+          blend_type: isBlend ? blendType : null,
           default_roaster: defaultRoaster as any,
           standard_batch_kg: batchKg,
           expected_yield_loss_pct: yieldLoss,
