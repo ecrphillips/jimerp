@@ -141,7 +141,7 @@ export function BlendCompositionSection({ roastGroupKey }: Props) {
 
   const getName = (key: string) => {
     const g = allGroups.find(g => g.roast_group === key);
-    return g ? getDisplayName(g.display_name, g.roast_group) : key;
+    return g?.display_name ?? key;
   };
 
   return (

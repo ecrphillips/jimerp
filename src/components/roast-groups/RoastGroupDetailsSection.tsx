@@ -104,6 +104,32 @@ export function RoastGroupDetailsSection({ roastGroupKey, initialData }: Props) 
           </div>
         )}
 
+        {isBlend && (
+          <div>
+            <Label>Blend Type</Label>
+            <RadioGroup
+              value={blendType ?? ''}
+              onValueChange={setBlendType}
+              className="mt-1 space-y-2"
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="PRE_ROAST" id="det-pre" />
+                  <Label htmlFor="det-pre" className="font-normal cursor-pointer">Pre-roast</Label>
+                </div>
+                <p className="text-xs text-muted-foreground ml-6">Green lots are scooped and charged together. One roast batch, one WIP pool.</p>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="POST_ROAST" id="det-post" />
+                  <Label htmlFor="det-post" className="font-normal cursor-pointer">Post-roast</Label>
+                </div>
+                <p className="text-xs text-muted-foreground ml-6">Separate roast groups are blended after roasting. Each component is roasted independently.</p>
+              </div>
+            </RadioGroup>
+          </div>
+        )}
+
         <div>
           <Label>Lifecycle</Label>
           <RadioGroup value={isSeasonal ? 'seasonal' : 'perennial'} onValueChange={v => setIsSeasonal(v === 'seasonal')} className="flex gap-4 mt-1">
