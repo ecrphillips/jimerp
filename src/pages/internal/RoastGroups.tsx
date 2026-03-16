@@ -16,68 +16,36 @@ export default function RoastGroups() {
   const [filter, setFilter] = useState<FilterType>('ALL');
   const [modalOpen, setModalOpen] = useState(false);
 
-  // Fetch roast groups with components, product count, and lot links
-  const { data: roastGroups = [], isLoading } = useQuery({
+  // Hook 1: Fetch all roast groups with components and lot links (no product join)
+  const { data: rawGroups = [], isLoading } = useQuery({
     queryKey: ['roast-groups-list'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roast_groups')
         .select(`
           *,
-          roast_group_components (
-            component_roast_group,
-            pct
-          ),
-          products:products!inner (id),
-          green_lot_roast_group_links (
-            lot_id,
-            green_lots:green_lots!inner (
-              id, lot_number, status
-            )
-          )
+          roast_group_components (component_roast_group, pct),
+          green_lot_roast_group_links (lot_id, green_lots (id, lot_number, status))
         `)
         .order('display_name');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
-      if (error) {
-        // Products inner join may exclude groups with no products - refetch without inner
-        const { data: d2, error: e2 } = await supabase
-          .from('roast_groups')
-          .select(`
-            *,
-            roast_group_components (
-              component_roast_group,
-              pct
-            ),
-            green_lot_roast_group_links (
-              lot_id,
-              green_lots:green_lots!inner (
-                id, lot_number, status
-              )
-            )
-          `)
-          .order('display_name');
-        if (e2) throw e2;
-
-        // Fetch product counts separately
-        const { data: prodCounts } = await supabase
-          .from('products')
-          .select('roast_group');
-        
-        const countMap: Record<string, number> = {};
-        (prodCounts ?? []).forEach((p: any) => {
-          if (p.roast_group) countMap[p.roast_group] = (countMap[p.roast_group] || 0) + 1;
-        });
-
-        return (d2 ?? []).map((rg: any) => ({
-          ...rg,
-          product_count: countMap[rg.roast_group] || 0,
-        }));
-      }
-
-      return (data ?? []).map((rg: any) => ({
-        ...rg,
-        product_count: rg.products?.length ?? 0,
-      }));
+  // Hook 2: Fetch product counts separately
+  const { data: productCountMap = {} } = useQuery({
+    queryKey: ['roast-group-product-counts'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('products')
+        .select('roast_group')
+        .not('roast_group', 'is', null);
+      const map: Record<string, number> = {};
+      (data ?? []).forEach((p: any) => {
+        if (p.roast_group) map[p.roast_group] = (map[p.roast_group] || 0) + 1;
+      });
+      return map;
     },
   });
 
@@ -96,6 +64,15 @@ export default function RoastGroups() {
       return map;
     },
   });
+
+  // Merge product counts into roast groups
+  const roastGroups = useMemo(() =>
+    rawGroups.map((rg: any) => ({
+      ...rg,
+      product_count: productCountMap[rg.roast_group] || 0,
+    })),
+    [rawGroups, productCountMap]
+  );
 
   const needsAttention = (rg: any) => {
     if (rg.is_seasonal || !rg.is_active) return false;
