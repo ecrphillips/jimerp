@@ -109,6 +109,16 @@ const App = () => (
                 <InternalLayout><Products /></InternalLayout>
               </ProtectedRoute>
             } />
+            <Route path="/roast-groups" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><RoastGroups /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/roast-groups/:id" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><RoastGroupDetail /></InternalLayout>
+              </ProtectedRoute>
+            } />
             <Route path="/pricing" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><Pricing /></InternalLayout>
