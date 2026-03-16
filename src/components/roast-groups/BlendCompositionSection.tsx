@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { Loader2, Plus, Trash2, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { getDisplayName } from '@/lib/roastGroupUtils';
 import { cn } from '@/lib/utils';
 
 interface Props {
