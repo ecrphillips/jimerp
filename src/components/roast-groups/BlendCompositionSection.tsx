@@ -194,7 +194,7 @@ export function BlendCompositionSection({ roastGroupKey }: Props) {
                     <SelectContent>
                       {availableGroups.map(g => (
                         <SelectItem key={g.roast_group} value={g.roast_group}>
-                          {getDisplayName(g.display_name, g.roast_group)}
+                          {g.display_name}
                         </SelectItem>
                       ))}
                     </SelectContent>
