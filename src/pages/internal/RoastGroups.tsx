@@ -9,11 +9,11 @@ import { cn } from '@/lib/utils';
 import { getDisplayName } from '@/lib/roastGroupUtils';
 import { NewRoastGroupModal } from '@/components/roast-groups/NewRoastGroupModal';
 
-type FilterType = 'ALL' | 'BLENDS' | 'SINGLE_ORIGINS' | 'NEEDS_ATTENTION';
+type FilterType = 'ALL' | 'ACTIVE' | 'BLENDS' | 'SINGLE_ORIGINS' | 'NEEDS_ATTENTION' | 'INACTIVE';
 
 export default function RoastGroups() {
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<FilterType>('ALL');
+  const [filter, setFilter] = useState<FilterType>('ACTIVE');
   const [modalOpen, setModalOpen] = useState(false);
 
   // Hook 1: Fetch all roast groups with components and lot links (no product join)
