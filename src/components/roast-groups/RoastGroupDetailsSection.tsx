@@ -24,6 +24,7 @@ export function RoastGroupDetailsSection({ roastGroupKey, initialData }: Props) 
   const [isBlend, setIsBlend] = useState(initialData.is_blend);
   const [origin, setOrigin] = useState(initialData.origin || '');
   const [isSeasonal, setIsSeasonal] = useState(initialData.is_seasonal ?? false);
+  const [blendType, setBlendType] = useState(initialData.blend_type || null);
   const [defaultRoaster, setDefaultRoaster] = useState(initialData.default_roaster || 'EITHER');
   const [batchKg, setBatchKg] = useState(initialData.standard_batch_kg ?? 20);
   const [yieldLoss, setYieldLoss] = useState(initialData.expected_yield_loss_pct ?? 16);
