@@ -56,6 +56,7 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
   const reset = () => {
     setDisplayName('');
     setIsBlend(false);
+    setBlendType(null);
     setOrigin('');
     setIsSeasonal(false);
     setDefaultRoaster('EITHER');
