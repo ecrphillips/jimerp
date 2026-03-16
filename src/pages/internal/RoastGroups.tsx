@@ -17,7 +17,7 @@ export default function RoastGroups() {
   const [modalOpen, setModalOpen] = useState(false);
 
   // Hook 1: Fetch all roast groups with components and lot links (no product join)
-  const { data: rawGroups = [], isLoading } = useQuery({
+  const { data: rawGroups = [], isLoading, error: groupsError } = useQuery({
     queryKey: ['roast-groups-list'],
     queryFn: async () => {
       const { data, error } = await supabase
