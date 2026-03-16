@@ -108,13 +108,8 @@ export default function RoastGroups() {
         </Button>
       </div>
 
-      {groupsError && (
-        <div style={{background:'red',color:'white',padding:'12px',marginBottom:'12px'}}>{(groupsError as any)?.message || JSON.stringify(groupsError)}</div>
-      )}
-
       {/* Filter chips */}
       <div className="flex flex-wrap gap-2">
-        <p style={{fontSize:'12px',color:'gray',width:'100%'}}>Raw groups loaded: {rawGroups.length}</p>
         {filters.map(f => (
           <button
             key={f.key}
