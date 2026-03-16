@@ -65,6 +65,15 @@ export default function RoastGroups() {
     },
   });
 
+  // Merge product counts into roast groups
+  const roastGroups = useMemo(() =>
+    rawGroups.map((rg: any) => ({
+      ...rg,
+      product_count: productCountMap[rg.roast_group] || 0,
+    })),
+    [rawGroups, productCountMap]
+  );
+
   const needsAttention = (rg: any) => {
     if (rg.is_seasonal || !rg.is_active) return false;
     const activeLots = (rg.green_lot_roast_group_links ?? []).filter(
