@@ -109,7 +109,7 @@ export default function RoastGroups() {
       </div>
 
       {groupsError && (
-        <div style={{background:'red',color:'white',padding:'12px',marginBottom:'12px'}}>{String(groupsError)}</div>
+        <div style={{background:'red',color:'white',padding:'12px',marginBottom:'12px'}}>{(groupsError as any)?.message || JSON.stringify(groupsError)}</div>
       )}
 
       {/* Filter chips */}
