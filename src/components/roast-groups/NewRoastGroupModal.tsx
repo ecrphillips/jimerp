@@ -91,6 +91,7 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
             default_roaster: defaultRoaster as any,
             standard_batch_kg: batchKg,
             expected_yield_loss_pct: yieldLoss,
+            blend_type: isBlend ? blendType : null,
           })
           .eq('roast_group', result.roastGroupKey);
       }
