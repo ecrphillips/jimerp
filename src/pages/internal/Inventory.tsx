@@ -269,6 +269,40 @@ export default function Inventory() {
     },
   });
 
+  // WIP history delete mutation (orphaned roast groups only)
+  const deleteWipHistory = useMutation({
+    mutationFn: async (roastGroupKey: string) => {
+      const { error: e1 } = await supabase
+        .from('inventory_transactions')
+        .delete()
+        .eq('roast_group', roastGroupKey);
+      if (e1) throw e1;
+
+      const { error: e2 } = await supabase
+        .from('wip_adjustments')
+        .delete()
+        .eq('roast_group', roastGroupKey);
+      if (e2) throw e2;
+
+      const { error: e3 } = await supabase
+        .from('wip_ledger')
+        .delete()
+        .eq('roast_group', roastGroupKey);
+      if (e3) throw e3;
+    },
+    onSuccess: () => {
+      toast.success('WIP history cleared');
+      setConfirmDeleteGroup(null);
+      queryClient.invalidateQueries({ queryKey: ['inventory-transactions-wip'] });
+      queryClient.invalidateQueries({ queryKey: ['wip-adjustments'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
+    },
+    onError: (err: any) => {
+      console.error(err);
+      toast.error(err.message || 'Failed to clear WIP history');
+    },
+  });
+
   // ===== Finished Goods Tab =====
   
   // Fetch FG inventory with product details
