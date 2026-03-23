@@ -226,6 +226,9 @@ export function CoverageCalendar() {
                   const isEnRoute = lot.status === 'EN_ROUTE';
                   const endDateLabel = isOpenEnded ? 'Unknown' : format(barEnd, 'MMM d, yyyy');
 
+                  // Low coverage check
+                  const isLowCoverage = !isOpenEnded && differenceInCalendarDays(barEnd, today) < 5;
+
                   return (
                     <div key={lot.id} className="flex border-b last:border-b-0 hover:bg-muted/20">
                       {/* Label column */}
