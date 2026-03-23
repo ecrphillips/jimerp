@@ -244,6 +244,37 @@ export default function AdminTools() {
       {/* Order Submit Notifications */}
       <OrderNotificationSettings />
 
+      {/* Data Maintenance */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Wand2 className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Data Maintenance</CardTitle>
+          </div>
+          <CardDescription>
+            Tools for maintaining data integrity and backfilling missing values.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              <p className="font-medium mb-1">Backfill SKUs</p>
+              <p>Generate SKUs for account-linked products that are missing them. Products linked to legacy clients are not affected.</p>
+              <p className="mt-1 font-medium">{productsNeedingSku.length} product{productsNeedingSku.length !== 1 ? 's' : ''} missing SKUs.</p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => setShowBackfillModal(true)}
+              disabled={productsNeedingSku.length === 0}
+              className="gap-2"
+            >
+              <Wand2 className="h-4 w-4" />
+              Backfill SKUs
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Dev/Test Reset Card */}
       <Card className="border-destructive/50">
         <CardHeader>
