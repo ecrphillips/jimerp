@@ -128,7 +128,7 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
   const { data: clients = [] } = useQuery({
     queryKey: ['qc-clients'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('clients').select('id, name, client_code').eq('is_active', true).order('name');
+      const { data, error } = await supabase.from('accounts').select('id, account_name').eq('is_active', true).order('account_name');
       if (error) throw error;
       return data ?? [];
     },
@@ -200,7 +200,7 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
         if (!pkgOpt) continue;
 
         const { data: product, error } = await supabase.from('products').insert({
-          client_id: pClientId,
+          account_id: pClientId,
           product_name: `${pProductName.trim()} ${pkgOpt.label}`,
           roast_group: roastGroupKey,
           packaging_variant: v.variant as any,
@@ -377,9 +377,8 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
     if (flow === 'product') {
       // P1 — Client
       if (step === 1) {
-        const filtered = clients.filter(c =>
-          c.name.toLowerCase().includes(pClientSearch.toLowerCase()) ||
-          c.client_code?.toLowerCase().includes(pClientSearch.toLowerCase())
+        const filtered = clients.filter((c: any) =>
+          c.account_name.toLowerCase().includes(pClientSearch.toLowerCase())
         );
         return (
           <>
@@ -394,11 +393,10 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
               {filtered.map(c => (
                 <button
                   key={c.id}
-                  onClick={() => { setPClientId(c.id); setPClientName(c.name); setStep(2); }}
+                  onClick={() => { setPClientId(c.id); setPClientName(c.account_name); setStep(2); }}
                   className="flex w-full items-center justify-between rounded-md border border-border p-3 text-left transition-colors hover:bg-accent"
                 >
-                  <span className="text-sm font-medium">{c.name}</span>
-                  <Badge variant="outline" className="text-xs">{c.client_code}</Badge>
+                  <span className="text-sm font-medium">{c.account_name}</span>
                 </button>
               ))}
               {filtered.length === 0 && <p className="text-sm text-muted-foreground py-4 text-center">No clients found</p>}
