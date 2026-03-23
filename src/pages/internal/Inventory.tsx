@@ -361,7 +361,7 @@ export default function Inventory() {
           product_id: productId,
           units_on_hand: newUnits,
           updated_at: new Date().toISOString(),
-          updated_by: user?.id,
+          updated_by: authUser?.id,
         }, {
           onConflict: 'product_id',
         });
