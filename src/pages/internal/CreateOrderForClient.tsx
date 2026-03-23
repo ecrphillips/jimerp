@@ -509,7 +509,7 @@ export default function CreateOrderForClient() {
                         size="sm"
                         onClick={() => setSelectedClientId(c.id)}
                       >
-                        {c.name}
+                        {c.account_name}
                       </Button>
                     ))}
                   </div>
