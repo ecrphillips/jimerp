@@ -363,6 +363,22 @@ function LotDetailPanel({
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
   const open = !!lotId;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const isAdmin = authUser?.role === 'ADMIN';
+
+  const deleteLotMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('green_lots').delete().eq('id', lotId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Lot deleted');
+      queryClient.invalidateQueries({ queryKey: ['green-lots-all'] });
+      queryClient.invalidateQueries({ queryKey: ['coverage-calendar-lots'] });
+      onClose();
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to delete lot'),
+  });
 
   const { data: lot, refetch: refetchLot } = useQuery({
     queryKey: ['green-lot-detail', lotId],
