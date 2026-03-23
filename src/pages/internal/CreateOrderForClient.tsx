@@ -51,7 +51,7 @@ interface Product {
 
 interface Client {
   id: string;
-  name: string;
+  account_name: string;
 }
 
 // Helper to build display name with packaging info
