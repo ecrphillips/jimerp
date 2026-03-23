@@ -309,6 +309,22 @@ export default function AdminTools() {
               Backfill SKUs
             </Button>
           </div>
+
+          {/* Clear Co-Roasting Test Data */}
+          <div className="border-t pt-4 space-y-4">
+            <div className="text-sm text-muted-foreground">
+              <p className="font-medium mb-1">Clear Co-Roasting Test Data</p>
+              <p>Delete all bookings, billing periods, hour ledger entries, invoices, storage allocations, and waiver logs. Member accounts and certifications are not affected.</p>
+            </div>
+            <Button
+              variant="destructive"
+              onClick={() => { setClearCoroastConfirmText(''); setShowClearCoroastModal(true); }}
+              className="gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              Clear All Co-Roasting Data
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
