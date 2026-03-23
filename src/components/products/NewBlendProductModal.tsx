@@ -546,7 +546,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
           
           {/* SKU Preview Section */}
           <GramBasedSkuPreview
-            clientCode={selectedClient?.client_code ?? ''}
+            clientCode={selectedClient?.account_code ?? ''}
             isBlend={true}
             fgNameSuffix={finishedGoodName.trim()}
             variants={validVariants}
