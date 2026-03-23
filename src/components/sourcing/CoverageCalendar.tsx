@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { AlertTriangle } from 'lucide-react';
 import { format, addDays, startOfMonth, differenceInCalendarDays, isAfter, isBefore, startOfDay } from 'date-fns';
 
-type Horizon = 90 | 180 | 365;
+type Horizon = 7 | 30 | 90;
 
 interface CalLot {
   id: string;
