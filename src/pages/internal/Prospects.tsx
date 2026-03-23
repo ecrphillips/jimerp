@@ -43,6 +43,20 @@ export default function Prospects() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [showDialog, setShowDialog] = useState(false);
+  const [confirmDeleteProspect, setConfirmDeleteProspect] = useState<{id: string, name: string} | null>(null);
+
+  const deleteProspectMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('prospects').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Prospect deleted');
+      queryClient.invalidateQueries({ queryKey: ['prospects'] });
+      setConfirmDeleteProspect(null);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   // Form state
   const [formName, setFormName] = useState('');
