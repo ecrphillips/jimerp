@@ -254,7 +254,7 @@ export default function Inventory() {
           kg_delta: delta,
           reason: adjustReason,
           notes: adjustNotes,
-          created_by: user?.id,
+          created_by: authUser?.id,
         });
       if (error) throw error;
     },
