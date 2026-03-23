@@ -129,13 +129,28 @@ export function CoverageCalendar() {
     return Math.max(0, Math.min(100, (days / totalDays) * 100));
   };
 
-  // Month markers
-  const monthMarkers = useMemo(() => {
+  // Axis markers based on horizon
+  const axisMarkers = useMemo(() => {
     const markers: { label: string; pct: number }[] = [];
-    let d = startOfMonth(addDays(axisStart, 32)); // first month boundary
-    while (isBefore(d, axisEnd)) {
-      markers.push({ label: format(d, 'MMM'), pct: toPercent(d) });
-      d = startOfMonth(addDays(d, 32));
+    if (horizon === 7) {
+      // One marker per day
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(axisStart, i);
+        markers.push({ label: format(d, 'EEE d'), pct: toPercent(d) });
+      }
+    } else if (horizon === 30) {
+      // One marker per week
+      for (let i = 0; i < 30; i += 7) {
+        const d = addDays(axisStart, i);
+        markers.push({ label: format(d, 'MMM d'), pct: toPercent(d) });
+      }
+    } else {
+      // 90d — monthly markers
+      let d = startOfMonth(addDays(axisStart, 32));
+      while (isBefore(d, axisEnd)) {
+        markers.push({ label: format(d, 'MMM'), pct: toPercent(d) });
+        d = startOfMonth(addDays(d, 32));
+      }
     }
     return markers;
   }, [horizon]);
