@@ -129,7 +129,7 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
   const { data: clients = [] } = useQuery({
     queryKey: ['qc-clients'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('accounts').select('id, account_name').eq('is_active', true).order('account_name');
+      const { data, error } = await supabase.from('accounts').select('id, account_name, account_code').eq('is_active', true).order('account_name');
       if (error) throw error;
       return data ?? [];
     },

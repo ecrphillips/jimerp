@@ -405,11 +405,14 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
               <SelectContent>
                 {clients?.map(c => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.account_name}
+                    {c.account_name} {c.account_code && <span className="text-muted-foreground">({c.account_code})</span>}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {clientId && selectedClient && !selectedClient.account_code && (
+              <p className="text-xs text-amber-600 mt-1">⚠ This account has no account code — SKUs cannot be generated. Set an account code on the account profile first.</p>
+            )}
           </div>
           
           {/* Step 2: Finished Good Name */}
