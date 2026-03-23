@@ -67,15 +67,15 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
   
   // Queries
   const { data: clients } = useQuery({
-    queryKey: ['all-clients-with-code'],
+    queryKey: ['all-accounts-with-code'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('clients')
-        .select('id, name, client_code')
+        .from('accounts')
+        .select('id, account_name, client_code:account_name')
         .eq('is_active', true)
-        .order('name');
+        .order('account_name');
       if (error) throw error;
-      return (data ?? []) as Client[];
+      return (data ?? []).map((a: any) => ({ id: a.id, account_name: a.account_name, client_code: a.account_name.substring(0, 4).toUpperCase() })) as Client[];
     },
   });
   
