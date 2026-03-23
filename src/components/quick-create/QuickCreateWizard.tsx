@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
+import { buildSku, getOriginCode, generateFgNameCode, formatGramsSuffix } from '@/lib/skuGenerator';
 
 interface Props {
   open: boolean;
