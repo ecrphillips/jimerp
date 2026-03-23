@@ -43,6 +43,24 @@ export default function AdminTools() {
   const [resetMasterUnderstood, setResetMasterUnderstood] = useState(false);
   const [isResettingMaster, setIsResettingMaster] = useState(false);
 
+  // SKU Backfill state
+  const [showBackfillModal, setShowBackfillModal] = useState(false);
+  const [isBackfilling, setIsBackfilling] = useState(false);
+
+  // Query products missing SKUs
+  const { data: productsNeedingSku = [] } = useQuery({
+    queryKey: ['products-needing-sku'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, product_name, account_id, bag_size_g, roast_group')
+        .is('sku', null)
+        .not('account_id', 'is', null);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const canConfirmReset = resetConfirmText === 'RESET' && resetUnderstood;
   const canConfirmResetMaster = resetMasterConfirmText === 'NUKE' && resetMasterUnderstood;
 
