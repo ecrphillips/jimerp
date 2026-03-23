@@ -869,6 +869,13 @@ export function ProductsListTab() {
                 <p><span className="font-medium">Account:</span> {getDisplayName(variantSource)}</p>
               </div>
 
+              {variantNewName && (
+                <div className="rounded-md border border-dashed p-2 bg-muted/30 text-sm">
+                  <span className="text-muted-foreground">New product name:</span>{' '}
+                  <span className="font-medium">{variantNewName}</span>
+                </div>
+              )}
+
               <div>
                 <Label>Packaging Variant</Label>
                 <Select value={variantPackaging ?? ''} onValueChange={(v) => setVariantPackaging(v as PackagingVariant)}>
