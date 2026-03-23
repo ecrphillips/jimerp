@@ -249,6 +249,28 @@ export default function Prospects() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Prospect Confirmation */}
+      <Dialog open={confirmDeleteProspect !== null} onOpenChange={(open) => { if (!open) setConfirmDeleteProspect(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Prospect</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Delete <span className="font-medium text-foreground">{confirmDeleteProspect?.name}</span>? This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeleteProspect(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteProspectMutation.isPending}
+              onClick={() => confirmDeleteProspect && deleteProspectMutation.mutate(confirmDeleteProspect.id)}
+            >
+              {deleteProspectMutation.isPending ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -432,6 +432,28 @@ export default function Accounts() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Account Confirmation */}
+      <Dialog open={confirmDeleteAccount !== null} onOpenChange={(open) => { if (!open) setConfirmDeleteAccount(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Account</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Delete <span className="font-medium text-foreground">{confirmDeleteAccount?.name}</span>? This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeleteAccount(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteAccountMutation.isPending}
+              onClick={() => confirmDeleteAccount && deleteAccountMutation.mutate(confirmDeleteAccount.id)}
+            >
+              {deleteAccountMutation.isPending ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
