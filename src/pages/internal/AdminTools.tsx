@@ -156,6 +156,65 @@ export default function AdminTools() {
     }
   };
 
+  const handleBackfillSkus = async () => {
+    setIsBackfilling(true);
+    try {
+      // Fetch all accounts with account_code
+      const { data: accounts } = await supabase.from('accounts').select('id, account_code');
+      const accountMap = new Map((accounts ?? []).map(a => [a.id, a.account_code]));
+
+      // Fetch existing SKUs for collision detection
+      const { data: existingSkuRows } = await supabase.from('products').select('sku');
+      const existingSkus = new Set((existingSkuRows ?? []).map(r => r.sku?.toUpperCase()).filter(Boolean));
+      const existingFgCodes = new Set<string>();
+
+      let generated = 0;
+      let skipped = 0;
+
+      for (const product of productsNeedingSku) {
+        const accountCode = accountMap.get(product.account_id);
+        if (!accountCode) {
+          skipped++;
+          continue;
+        }
+
+        // Get roast group origin
+        let originCode = 'BLD';
+        if (product.roast_group) {
+          const { data: rg } = await supabase.from('roast_groups').select('origin, is_blend').eq('roast_group', product.roast_group).maybeSingle();
+          if (rg && !rg.is_blend && rg.origin) {
+            originCode = getOriginCode(rg.origin);
+          }
+        }
+
+        const { code: fgCode } = generateFgNameCode(product.product_name || '', existingFgCodes);
+        existingFgCodes.add(fgCode);
+        const gramsSuffix = formatGramsSuffix(product.bag_size_g || 0);
+        const sku = buildSku({ clientCode: accountCode, originCode, fgNameCode: fgCode, gramsSuffix });
+
+        if (existingSkus.has(sku.toUpperCase())) {
+          skipped++;
+          continue;
+        }
+
+        const { error } = await supabase.from('products').update({ sku } as any).eq('id', product.id);
+        if (error) {
+          skipped++;
+        } else {
+          existingSkus.add(sku.toUpperCase());
+          generated++;
+        }
+      }
+
+      toast.success(`${generated} SKUs generated, ${skipped} skipped (missing account code or collision)`);
+      setShowBackfillModal(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Backfill failed');
+    } finally {
+      setIsBackfilling(false);
+    }
+  };
+
   const openResetModal = () => {
     setResetConfirmText('');
     setResetUnderstood(false);
