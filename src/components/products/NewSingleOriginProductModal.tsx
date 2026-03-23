@@ -379,18 +379,6 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
               <p className="text-xs text-amber-600 mt-1">⚠ This account has no account code — SKUs cannot be generated. Set an account code on the account profile first.</p>
             )}
           </div>
-              <SelectTrigger id="client">
-                <SelectValue placeholder="Select client" />
-              </SelectTrigger>
-              <SelectContent>
-                {clients?.map(c => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.account_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           
           {/* Step 2: Roast Group */}
           <div className="space-y-3">
