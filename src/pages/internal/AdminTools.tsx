@@ -232,6 +232,37 @@ export default function AdminTools() {
     setShowSeedModal(true);
   };
 
+  const handleClearCoroastData = async () => {
+    if (clearCoroastConfirmText !== 'CONFIRM') return;
+    setIsClearingCoroast(true);
+    try {
+      const tables = [
+        'coroast_invoices',
+        'coroast_waiver_log',
+        'coroast_storage_allocations',
+        'coroast_hour_ledger',
+        'coroast_bookings',
+        'coroast_billing_periods',
+      ] as const;
+      for (const table of tables) {
+        const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (error) throw error;
+      }
+      toast.success('Co-roasting data cleared');
+      queryClient.invalidateQueries({ queryKey: ['coroast-billing-periods'] });
+      queryClient.invalidateQueries({ queryKey: ['coroast-billing-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['coroast-invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['bookings-week'] });
+      queryClient.invalidateQueries({ queryKey: ['coroast-members-summary'] });
+      setShowClearCoroastModal(false);
+      setClearCoroastConfirmText('');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to clear co-roasting data');
+    } finally {
+      setIsClearingCoroast(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div>
