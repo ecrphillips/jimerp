@@ -494,7 +494,7 @@ export default function CreateOrderForClient() {
           {(() => {
             const commonClients = clients?.filter(c => 
               ['Matchstick', 'Funk', 'No Smoke'].some(name => 
-                c.name.toLowerCase().includes(name.toLowerCase())
+                c.account_name.toLowerCase().includes(name.toLowerCase())
               )
             ) ?? [];
             if (commonClients.length > 0) {
