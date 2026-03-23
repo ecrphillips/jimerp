@@ -404,7 +404,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
               <SelectContent>
                 {clients?.map(c => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.name} ({c.client_code})
+                    {c.account_name}
                   </SelectItem>
                 ))}
               </SelectContent>
