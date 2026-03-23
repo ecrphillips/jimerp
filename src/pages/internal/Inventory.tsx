@@ -65,6 +65,10 @@ export default function Inventory() {
   const [adjustKgDelta, setAdjustKgDelta] = useState('');
   const [adjustReason, setAdjustReason] = useState<WipAdjustmentReason>('COUNT_ADJUSTMENT');
   const [adjustNotes, setAdjustNotes] = useState('');
+  
+  // WIP delete confirmation state
+  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState<string | null>(null);
+  const isAdmin = user?.role === 'ADMIN';
 
   // ===== WIP Tab Queries =====
   
