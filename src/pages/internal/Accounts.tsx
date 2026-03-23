@@ -224,10 +224,10 @@ export default function Accounts() {
       ) : (
         <div className="space-y-2">
           {filtered.map(account => (
-            <button
+            <div
               key={account.id}
               onClick={() => navigate(`/accounts/${account.id}`)}
-              className="w-full text-left rounded-lg border bg-card p-4 hover:bg-accent/50 transition-colors flex items-center gap-4"
+              className="w-full text-left rounded-lg border bg-card p-4 hover:bg-accent/50 transition-colors flex items-center gap-4 cursor-pointer"
             >
               <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
               <div className="flex-1 min-w-0">
@@ -260,7 +260,20 @@ export default function Accounts() {
                   </p>
                 )}
               </div>
-            </button>
+              {authUser?.role === 'ADMIN' && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmDeleteAccount({ id: account.id, name: account.account_name });
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           ))}
         </div>
       )}
