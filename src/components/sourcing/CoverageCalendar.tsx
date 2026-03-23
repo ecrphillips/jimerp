@@ -157,7 +157,7 @@ export function CoverageCalendar() {
       <div className="space-y-4">
         {/* Horizon toggle */}
         <div className="flex items-center gap-2">
-          {([90, 180, 365] as Horizon[]).map(h => (
+          {([7, 30, 90] as Horizon[]).map(h => (
             <Button key={h} variant={horizon === h ? 'default' : 'outline'} size="sm" onClick={() => setHorizon(h)}>
               {h}d
             </Button>
