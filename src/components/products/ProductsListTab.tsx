@@ -463,6 +463,25 @@ export function ProductsListTab() {
     },
   });
 
+  const PACKAGING_SUFFIXES = [
+    '250g Retail', '300g Retail', '340g Retail', '454g Retail',
+    '200g Crowler', '250g Crowler', '125g Can',
+    '2lb Bulk', '1kg Bulk', '5lb Bulk', '2kg Bulk',
+  ];
+
+  const stripPackagingSuffix = (name: string) => {
+    let result = name;
+    for (const suffix of PACKAGING_SUFFIXES) {
+      const re = new RegExp(`[\\s\\-]+${suffix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      result = result.replace(re, '');
+    }
+    return result.trim();
+  };
+
+  const variantBaseName = variantSource ? stripPackagingSuffix(variantSource.product_name) : '';
+  const variantLabel = variantPackaging ? PACKAGING_OPTIONS.find(o => o.value === variantPackaging)?.label ?? '' : '';
+  const variantNewName = variantPackaging ? `${variantBaseName} ${variantLabel}` : '';
+
   // Add variant mutation
   const addVariantMutation = useMutation({
     mutationFn: async () => {
@@ -474,7 +493,7 @@ export function ProductsListTab() {
         .from('products')
         .insert({
           account_id: variantSource.account_id,
-          product_name: variantSource.product_name,
+          product_name: variantNewName,
           roast_group: variantSource.roast_group,
           packaging_variant: variantPackaging,
           bag_size_g: bagSizeG,
