@@ -369,7 +369,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
               <SelectContent>
                 {clients?.map(c => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.name} ({c.client_code})
+                    {c.account_name}
                   </SelectItem>
                 ))}
               </SelectContent>
