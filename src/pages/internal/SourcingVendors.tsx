@@ -345,8 +345,14 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
                 </div>
                 <div>
                   <Label>Abbreviation</Label>
-                  <p className="text-sm font-medium mt-1">{vendor.abbreviation || '—'}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Abbreviation cannot be changed after creation.</p>
+                  {vendor.abbreviation ? (
+                    <>
+                      <p className="text-sm font-medium mt-1">{vendor.abbreviation}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Abbreviation cannot be changed after creation.</p>
+                    </>
+                  ) : (
+                    <VendorAbbreviationEditor vendorId={vendor.id} />
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
