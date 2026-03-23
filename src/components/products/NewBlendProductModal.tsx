@@ -80,11 +80,11 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     queryFn: async () => {
       const { data, error } = await supabase
         .from('accounts')
-        .select('id, account_name')
+        .select('id, account_name, account_code')
         .eq('is_active', true)
         .order('account_name');
       if (error) throw error;
-      return (data ?? []).map((a: any) => ({ id: a.id, account_name: a.account_name, client_code: a.account_name.substring(0, 4).toUpperCase() })) as Client[];
+      return (data ?? []) as Client[];
     },
   });
   
