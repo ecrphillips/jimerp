@@ -288,6 +288,8 @@ export function InternalLayout({ children }: InternalLayoutProps) {
 
       <AccountSheet open={accountSheetOpen} onOpenChange={setAccountSheetOpen} />
       <FeedbackModal open={feedbackOpen} onOpenChange={setFeedbackOpen} />
+      <QuickCreateWizard open={quickCreateOpen} onOpenChange={setQuickCreateOpen} onOpenNewRoastGroup={() => setNewRoastGroupOpen(true)} />
+      <NewRoastGroupModal open={newRoastGroupOpen} onOpenChange={setNewRoastGroupOpen} />
 
       <div className="flex flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 lg:hidden">
