@@ -129,13 +129,28 @@ export function CoverageCalendar() {
     return Math.max(0, Math.min(100, (days / totalDays) * 100));
   };
 
-  // Month markers
-  const monthMarkers = useMemo(() => {
+  // Axis markers based on horizon
+  const axisMarkers = useMemo(() => {
     const markers: { label: string; pct: number }[] = [];
-    let d = startOfMonth(addDays(axisStart, 32)); // first month boundary
-    while (isBefore(d, axisEnd)) {
-      markers.push({ label: format(d, 'MMM'), pct: toPercent(d) });
-      d = startOfMonth(addDays(d, 32));
+    if (horizon === 7) {
+      // One marker per day
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(axisStart, i);
+        markers.push({ label: format(d, 'EEE d'), pct: toPercent(d) });
+      }
+    } else if (horizon === 30) {
+      // One marker per week
+      for (let i = 0; i < 30; i += 7) {
+        const d = addDays(axisStart, i);
+        markers.push({ label: format(d, 'MMM d'), pct: toPercent(d) });
+      }
+    } else {
+      // 90d — monthly markers
+      let d = startOfMonth(addDays(axisStart, 32));
+      while (isBefore(d, axisEnd)) {
+        markers.push({ label: format(d, 'MMM'), pct: toPercent(d) });
+        d = startOfMonth(addDays(d, 32));
+      }
     }
     return markers;
   }, [horizon]);
@@ -176,7 +191,7 @@ export function CoverageCalendar() {
               <div className="absolute top-0 text-[10px] text-destructive font-medium" style={{ left: `${todayPct}%`, transform: 'translateX(-50%)' }}>
                 Today
               </div>
-              {monthMarkers.map((m, i) => (
+              {axisMarkers.map((m, i) => (
                 <div key={i} className="absolute bottom-0 text-[10px] text-muted-foreground" style={{ left: `${m.pct}%` }}>
                   {m.label}
                 </div>
@@ -230,6 +245,10 @@ export function CoverageCalendar() {
 
                       {/* Bar track */}
                       <div className="flex-1 relative h-10 min-w-[400px]">
+                        {/* Grid lines */}
+                        {axisMarkers.map((m, i) => (
+                          <div key={`grid-${i}`} className="absolute top-0 bottom-0 w-px border-l border-border/40" style={{ left: `${m.pct}%` }} />
+                        ))}
                         {/* Today line */}
                         <div
                           className="absolute top-0 bottom-0 w-px border-l border-dashed border-destructive z-10"
