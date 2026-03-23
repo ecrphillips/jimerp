@@ -24,6 +24,7 @@ type ProgramFilter = 'ALL' | 'MANUFACTURING' | 'COROASTING' | 'BOTH';
 interface AccountRow {
   id: string;
   account_name: string;
+  account_code: string | null;
   billing_contact_name: string | null;
   billing_email: string | null;
   billing_phone: string | null;
