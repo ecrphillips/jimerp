@@ -27,12 +27,12 @@ export function ProductsFamilyTreeSection({ roastGroupKey, displayName }: Props)
   // Group by client
   const clientMap = new Map<string, { name: string; products: any[] }>();
   products.forEach((p: any) => {
-    const clientId = p.client_id;
-    const clientName = p.clients?.name || 'Unknown';
-    if (!clientMap.has(clientId)) {
-      clientMap.set(clientId, { name: clientName, products: [] });
+    const groupKey = p.client_id ?? p.account_id ?? 'unknown';
+    const clientName = p.clients?.name ?? p.accounts?.account_name ?? 'Unknown';
+    if (!clientMap.has(groupKey)) {
+      clientMap.set(groupKey, { name: clientName, products: [] });
     }
-    clientMap.get(clientId)!.products.push(p);
+    clientMap.get(groupKey)!.products.push(p);
   });
 
   return (
