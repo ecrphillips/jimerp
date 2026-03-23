@@ -234,10 +234,10 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
       // Get resolved SKUs with collision handling
       // Use the user-entered suffix (finishedGoodName) for the FG name code
       const resolvedSkus = getResolvedSkus(
-        selectedClient.client_code,
-        skuOrigin, // The origin for ISO code
-        false, // Not a blend
-        finishedGoodName.trim(), // The user-entered suffix
+        selectedClient.account_code!,
+        skuOrigin,
+        false,
+        finishedGoodName.trim(),
         validVariants,
         existingSkus ?? new Set()
       );
