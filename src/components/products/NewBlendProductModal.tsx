@@ -275,7 +275,6 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
         const { data: newProduct, error } = await supabase
           .from('products')
           .insert({
-            client_id: clientId,
             account_id: clientId,
             product_name: trimmedName,
             sku: skuData.sku,
