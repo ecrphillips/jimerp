@@ -252,6 +252,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
           .from('products')
           .insert({
             client_id: clientId,
+            account_id: clientId,
             product_name: displayName,
             sku: skuData.sku,
             roast_group: roastGroupKey!,
