@@ -393,11 +393,10 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
               {filtered.map(c => (
                 <button
                   key={c.id}
-                  onClick={() => { setPClientId(c.id); setPClientName(c.name); setStep(2); }}
+                  onClick={() => { setPClientId(c.id); setPClientName(c.account_name); setStep(2); }}
                   className="flex w-full items-center justify-between rounded-md border border-border p-3 text-left transition-colors hover:bg-accent"
                 >
-                  <span className="text-sm font-medium">{c.name}</span>
-                  <Badge variant="outline" className="text-xs">{c.client_code}</Badge>
+                  <span className="text-sm font-medium">{c.account_name}</span>
                 </button>
               ))}
               {filtered.length === 0 && <p className="text-sm text-muted-foreground py-4 text-center">No clients found</p>}
