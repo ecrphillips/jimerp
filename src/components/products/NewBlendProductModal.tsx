@@ -19,7 +19,7 @@ import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
 interface Client {
   id: string;
   account_name: string;
-  client_code: string;
+  account_code: string | null;
 }
 
 interface RoastGroup {
