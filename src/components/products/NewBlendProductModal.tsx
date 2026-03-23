@@ -276,6 +276,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
           .from('products')
           .insert({
             client_id: clientId,
+            account_id: clientId,
             product_name: trimmedName,
             sku: skuData.sku,
             roast_group: finalRoastGroupKey,
