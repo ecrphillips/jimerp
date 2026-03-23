@@ -105,15 +105,15 @@ export default function CreateOrderForClient() {
   const [internalNotes, setInternalNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Fetch all clients
+  // Fetch all accounts (replaces legacy clients query)
   const { data: clients } = useQuery({
-    queryKey: ['all-clients'],
+    queryKey: ['all-accounts-for-orders'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('clients')
-        .select('id, name')
+        .from('accounts')
+        .select('id, account_name')
         .eq('is_active', true)
-        .order('name', { ascending: true });
+        .order('account_name', { ascending: true });
 
       if (error) throw error;
       return (data ?? []) as Client[];
