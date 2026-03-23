@@ -125,6 +125,8 @@ export default function Inventory() {
     },
   });
 
+  const activeRoastGroupKeys = useMemo(() => new Set(roastGroups ?? []), [roastGroups]);
+
   // Calculate WIP by roast group for DISPLAY purposes
   // This shows the full picture: what was roasted, what was consumed, what was manually adjusted
   // 
