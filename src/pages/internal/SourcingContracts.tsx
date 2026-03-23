@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGr
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Search, Plus, Check, FileText, AlertTriangle, Copy, Mail, CalendarIcon, PackageCheck } from 'lucide-react';
+import { Search, Plus, Check, FileText, AlertTriangle, Copy, Mail, CalendarIcon, PackageCheck, Trash2 } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { COFFEE_ORIGIN_COUNTRIES, COMMON_ORIGINS, OTHER_ORIGINS, getCountryName, getCountryDisplayLabel } from '@/lib/coffeeOrigins';
 
