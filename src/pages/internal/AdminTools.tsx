@@ -662,6 +662,29 @@ export default function AdminTools() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Backfill SKUs Confirmation Modal */}
+      <Dialog open={showBackfillModal} onOpenChange={setShowBackfillModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wand2 className="h-5 w-5 text-primary" />
+              Backfill SKUs
+            </DialogTitle>
+            <DialogDescription>
+              This will generate SKUs for {productsNeedingSku.length} product{productsNeedingSku.length !== 1 ? 's' : ''} linked to accounts. Products linked to legacy clients are not affected.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBackfillModal(false)} disabled={isBackfilling}>
+              Cancel
+            </Button>
+            <Button onClick={handleBackfillSkus} disabled={isBackfilling}>
+              {isBackfilling ? 'Backfilling…' : 'Confirm Backfill'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
