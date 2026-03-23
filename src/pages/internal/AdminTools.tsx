@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertTriangle, Trash2, Sparkles, RotateCcw, Bomb } from 'lucide-react';
+import { AlertTriangle, Trash2, Sparkles, RotateCcw, Bomb, Wand2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { OrderNotificationSettings } from '@/components/admin/OrderNotificationSettings';
 import { BuildInfoPanel } from '@/components/admin/BuildInfoPanel';
 import { PackagingTypesManager } from '@/components/admin/PackagingTypesManager';
+import { buildSku, getOriginCode, generateFgNameCode, formatGramsSuffix } from '@/lib/skuGenerator';
 
 // Check if we're in development mode
 const isDev = import.meta.env.DEV;
