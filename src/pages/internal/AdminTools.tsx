@@ -738,6 +738,42 @@ export default function AdminTools() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Clear Co-Roasting Data Confirmation */}
+      <Dialog open={showClearCoroastModal} onOpenChange={setShowClearCoroastModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Clear All Co-Roasting Data?
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete all bookings, billing periods, hour ledger entries, invoices, storage allocations, and waiver logs. Member accounts and certifications are not affected. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="coroast-confirm">Type CONFIRM to proceed</Label>
+            <Input
+              id="coroast-confirm"
+              value={clearCoroastConfirmText}
+              onChange={e => setClearCoroastConfirmText(e.target.value)}
+              placeholder="CONFIRM"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowClearCoroastModal(false)} disabled={isClearingCoroast}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleClearCoroastData}
+              disabled={clearCoroastConfirmText !== 'CONFIRM' || isClearingCoroast}
+            >
+              {isClearingCoroast ? 'Clearing…' : 'Clear Co-Roasting Data'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
