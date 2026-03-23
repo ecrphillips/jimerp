@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { ProductFormat, GrindOption } from '@/types/database';
@@ -27,14 +27,30 @@ interface Product {
   grind_options: GrindOption[];
   is_active: boolean;
   is_perennial: boolean;
-  client_id: string;
+  client_id: string | null;
+  account_id: string | null;
   packaging_variant: PackagingVariant | null;
   roast_group: string | null;
   client: { name: string } | null;
+  account: { account_name: string } | null;
 }
 
 const FORMATS: ProductFormat[] = ['WHOLE_BEAN', 'ESPRESSO', 'FILTER', 'OTHER'];
 const GRINDS: GrindOption[] = ['WHOLE_BEAN', 'ESPRESSO', 'FILTER'];
+
+const VARIANT_BAG_SIZES: Record<string, number> = {
+  RETAIL_250G: 250,
+  RETAIL_300G: 300,
+  RETAIL_340G: 340,
+  RETAIL_454G: 454,
+  CROWLER_200G: 200,
+  CROWLER_250G: 250,
+  CAN_125G: 125,
+  BULK_2LB: 907,
+  BULK_1KG: 1000,
+  BULK_5LB: 2268,
+  BULK_2KG: 2000,
+};
 
 function getTodayVancouver(): string {
   const now = new Date();
@@ -80,13 +96,20 @@ export function ProductsListTab() {
       format: ProductFormat;
       bag_size_g: number;
       grind_options: GrindOption[];
-      client_id: string;
+      client_id: string | null;
+      account_id: string | null;
       is_active: boolean;
       is_perennial: boolean;
       packaging_variant: PackagingVariant | null;
       roast_group: string | null;
     };
   } | null>(null);
+
+  // Add Variant modal state
+  const [variantDialogOpen, setVariantDialogOpen] = useState(false);
+  const [variantSource, setVariantSource] = useState<Product | null>(null);
+  const [variantPackaging, setVariantPackaging] = useState<PackagingVariant | null>(null);
+  const [variantPrice, setVariantPrice] = useState('');
 
   // Form state (for editing only now)
   const [productName, setProductName] = useState('');
@@ -106,12 +129,11 @@ export function ProductsListTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, client_id, packaging_variant, roast_group, client:clients(name)')
-        .order('client_id')
+        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, client_id, account_id, packaging_variant, roast_group, client:clients(name), account:accounts(account_name)')
         .order('product_name');
 
       if (error) throw error;
-      return (data ?? []) as Product[];
+      return (data ?? []) as unknown as Product[];
     },
   });
 
@@ -128,10 +150,10 @@ export function ProductsListTab() {
     queryKey: ['all-clients'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('clients')
-        .select('id, name')
+        .from('accounts')
+        .select('id, account_name')
         .eq('is_active', true)
-        .order('name');
+        .order('account_name');
 
       if (error) throw error;
       return data ?? [];
@@ -180,6 +202,35 @@ export function ProductsListTab() {
     return products.filter((p) => !(p.id in currentPrices));
   }, [products, currentPrices]);
 
+  // Query sibling variants for the Add Variant dialog
+  const { data: siblingVariants } = useQuery({
+    queryKey: ['sibling-variants', variantSource?.roast_group, variantSource?.account_id],
+    queryFn: async () => {
+      if (!variantSource) return [];
+      const query = supabase
+        .from('products')
+        .select('packaging_variant')
+        .not('packaging_variant', 'is', null);
+
+      if (variantSource.roast_group) {
+        query.eq('roast_group', variantSource.roast_group);
+      }
+      if (variantSource.account_id) {
+        query.eq('account_id', variantSource.account_id);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []).map(d => d.packaging_variant).filter(Boolean) as string[];
+    },
+    enabled: variantDialogOpen && !!variantSource,
+  });
+
+  const availableVariants = useMemo(() => {
+    const used = new Set(siblingVariants ?? []);
+    return PACKAGING_OPTIONS.filter(opt => !used.has(opt.value));
+  }, [siblingVariants]);
+
   // Actual save mutation (used after confirmation if needed)
   const executeSaveMutation = useMutation({
     mutationFn: async (payload: {
@@ -188,7 +239,8 @@ export function ProductsListTab() {
       format: ProductFormat;
       bag_size_g: number;
       grind_options: GrindOption[];
-      client_id: string;
+      client_id: string | null;
+      account_id: string | null;
       is_active: boolean;
       is_perennial: boolean;
       packaging_variant: PackagingVariant | null;
@@ -239,7 +291,6 @@ export function ProductsListTab() {
           ? 'Product rerouted — roast demand recalculated' 
           : (editingProduct ? 'Product updated' : 'Product created')
       );
-      // Invalidate all production-related queries to force recalculation
       queryClient.invalidateQueries({ queryKey: ['all-products'] });
       queryClient.invalidateQueries({ queryKey: ['all-prices'] });
       queryClient.invalidateQueries({ queryKey: ['production-orders'] });
@@ -263,7 +314,8 @@ export function ProductsListTab() {
       format,
       bag_size_g: bagSize,
       grind_options: grindOptions,
-      client_id: clientId,
+      client_id: editingProduct?.client_id ?? null,
+      account_id: clientId || null,
       is_active: isActive,
       is_perennial: isPerennial,
       packaging_variant: packagingVariant,
@@ -276,7 +328,6 @@ export function ProductsListTab() {
       const newRG = roastGroup || null;
       
       if (currentRG !== newRG) {
-        // Roast group is changing — show confirmation modal
         setPendingRerouteData({
           productId: editingProduct.id,
           productName: editingProduct.product_name,
@@ -289,7 +340,6 @@ export function ProductsListTab() {
       }
     }
 
-    // No roast group change — proceed directly
     executeSaveMutation.mutate(payload);
   }, [
     editingProduct,
@@ -413,6 +463,55 @@ export function ProductsListTab() {
     },
   });
 
+  // Add variant mutation
+  const addVariantMutation = useMutation({
+    mutationFn: async () => {
+      if (!variantSource || !variantPackaging) throw new Error('Missing data');
+
+      const bagSizeG = VARIANT_BAG_SIZES[variantPackaging] ?? 0;
+
+      const { data: newProduct, error } = await supabase
+        .from('products')
+        .insert({
+          account_id: variantSource.account_id,
+          product_name: variantSource.product_name,
+          roast_group: variantSource.roast_group,
+          packaging_variant: variantPackaging,
+          bag_size_g: bagSizeG,
+          format: variantSource.format as any,
+          grind_options: variantSource.grind_options as any,
+          is_perennial: variantSource.is_perennial,
+          is_active: true,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+
+      const priceValue = parseFloat(variantPrice);
+      if (!isNaN(priceValue) && variantPrice.trim() !== '') {
+        await supabase.from('price_list').insert({
+          product_id: newProduct.id,
+          unit_price: priceValue,
+          currency: 'CAD',
+          effective_date: getTodayVancouver(),
+        });
+      }
+    },
+    onSuccess: () => {
+      toast.success('Variant added');
+      queryClient.invalidateQueries({ queryKey: ['all-products'] });
+      queryClient.invalidateQueries({ queryKey: ['all-prices'] });
+      setVariantDialogOpen(false);
+      setVariantSource(null);
+      setVariantPackaging(null);
+      setVariantPrice('');
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to add variant');
+    },
+  });
+
   const openDeleteDialog = useCallback((p: Product) => {
     deletePreflightMutation.mutate(p.id);
   }, [deletePreflightMutation]);
@@ -438,13 +537,22 @@ export function ProductsListTab() {
     setFormat(p.format);
     setBagSize(p.bag_size_g);
     setGrindOptions(p.grind_options ?? []);
-    setClientId(p.client_id);
+    setClientId(p.account_id ?? p.client_id ?? '');
     setIsActive(p.is_active);
     setIsPerennial(p.is_perennial);
     setPackagingVariant(p.packaging_variant);
     setPriceInput('');
     setRoastGroup(p.roast_group ?? '');
     setDialogOpen(true);
+  };
+
+  const openAddVariant = (p: Product) => {
+    setDialogOpen(false);
+    setEditingProduct(null);
+    setVariantSource(p);
+    setVariantPackaging(null);
+    setVariantPrice('');
+    setVariantDialogOpen(true);
   };
 
   const closeDialog = () => {
@@ -457,6 +565,8 @@ export function ProductsListTab() {
       prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]
     );
   };
+
+  const getDisplayName = (p: Product) => p.account?.account_name ?? p.client?.name ?? 'Unknown';
 
   return (
     <div className="space-y-4">
@@ -514,7 +624,7 @@ export function ProductsListTab() {
                   return (
                     <tr key={p.id} className={`border-b last:border-0 ${!p.is_active ? 'opacity-60' : ''}`}>
                       <td className="py-2 font-medium">{p.product_name}</td>
-                      <td className="py-2">{p.client?.name ?? '—'}</td>
+                      <td className="py-2">{getDisplayName(p)}</td>
                       <td className="py-2">{p.sku || '—'}</td>
                       <td className="py-2">
                         {p.packaging_variant ? (
@@ -560,6 +670,7 @@ export function ProductsListTab() {
         </CardContent>
       </Card>
 
+      {/* Edit Product Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -567,14 +678,14 @@ export function ProductsListTab() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="client">Client</Label>
+              <Label htmlFor="client">Account</Label>
               <Select value={clientId} onValueChange={setClientId}>
                 <SelectTrigger id="client">
-                  <SelectValue placeholder="Select client" />
+                  <SelectValue placeholder="Select account" />
                 </SelectTrigger>
                 <SelectContent>
                   {clients?.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    <SelectItem key={c.id} value={c.id}>{c.account_name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -709,13 +820,77 @@ export function ProductsListTab() {
                 <Label htmlFor="perennial">Perennial</Label>
               </div>
             </div>
-            <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={closeDialog}>Cancel</Button>
-              <Button onClick={handleSave} disabled={executeSaveMutation.isPending || !productName || !clientId}>
-                {executeSaveMutation.isPending ? 'Saving…' : 'Save'}
-              </Button>
+            <div className="flex justify-between pt-4">
+              {editingProduct ? (
+                <Button variant="secondary" onClick={() => openAddVariant(editingProduct)}>
+                  Add Variant
+                </Button>
+              ) : <div />}
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+                <Button onClick={handleSave} disabled={executeSaveMutation.isPending || !productName || !clientId}>
+                  {executeSaveMutation.isPending ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Variant Dialog */}
+      <Dialog open={variantDialogOpen} onOpenChange={setVariantDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Variant</DialogTitle>
+          </DialogHeader>
+          {variantSource && (
+            <div className="space-y-4">
+              <div className="rounded-md border p-3 bg-muted/50 text-sm space-y-1">
+                <p><span className="font-medium">Product:</span> {variantSource.product_name}</p>
+                <p><span className="font-medium">Account:</span> {getDisplayName(variantSource)}</p>
+              </div>
+
+              <div>
+                <Label>Packaging Variant</Label>
+                <Select value={variantPackaging ?? ''} onValueChange={(v) => setVariantPackaging(v as PackagingVariant)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select packaging variant" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableVariants.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {availableVariants.length === 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">All packaging variants are already in use.</p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="variantPrice">Unit Price (CAD, optional)</Label>
+                <Input
+                  id="variantPrice"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="e.g. 12.50"
+                  value={variantPrice}
+                  onChange={(e) => setVariantPrice(e.target.value)}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setVariantDialogOpen(false)}>Cancel</Button>
+                <Button
+                  onClick={() => addVariantMutation.mutate()}
+                  disabled={addVariantMutation.isPending || !variantPackaging}
+                >
+                  {addVariantMutation.isPending ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
