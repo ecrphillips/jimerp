@@ -258,10 +258,10 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
       
       // Get resolved SKUs - for blends, use 'BLD' as origin
       const resolvedSkus = getResolvedSkus(
-        selectedClient.client_code,
-        undefined, // No origin for blends
-        true, // Is a blend
-        trimmedName, // Use the full FG name for blends
+        selectedClient.account_code!,
+        undefined,
+        true,
+        trimmedName,
         validVariants,
         existingSkus ?? new Set()
       );
