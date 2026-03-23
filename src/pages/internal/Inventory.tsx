@@ -48,7 +48,7 @@ interface FgInventoryRow {
 }
 
 export default function Inventory() {
-  const { user } = useAuth();
+  const { authUser } = useAuth();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   
