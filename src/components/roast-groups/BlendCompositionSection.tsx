@@ -29,8 +29,13 @@ export function BlendCompositionSection({ roastGroupKey }: Props) {
   const [rows, setRows] = useState<ComponentRow[]>([]);
   const [dirty, setDirty] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [creatingNew, setCreatingNew] = useState(false);
   const [newComponent, setNewComponent] = useState('');
   const [newPct, setNewPct] = useState(0);
+  const [newRgName, setNewRgName] = useState('');
+  const [newRgIsBlend, setNewRgIsBlend] = useState(false);
+  const [newRgOrigin, setNewRgOrigin] = useState('');
+  const [newRgSaving, setNewRgSaving] = useState(false);
 
   // Fetch current components
   const { data: components, isLoading } = useQuery({
