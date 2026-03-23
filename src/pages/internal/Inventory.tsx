@@ -67,7 +67,7 @@ export default function Inventory() {
   const [adjustNotes, setAdjustNotes] = useState('');
   
   // WIP delete confirmation state
-  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState<string | null>(null);
+  const [confirmClearWip, setConfirmClearWip] = useState<string | null>(null);
   const isAdmin = user?.role === 'ADMIN';
 
   // ===== WIP Tab Queries =====
@@ -124,6 +124,8 @@ export default function Inventory() {
       return data?.map(r => r.roast_group) ?? [];
     },
   });
+
+  const activeRoastGroupKeys = useMemo(() => new Set(roastGroups ?? []), [roastGroups]);
 
   // Calculate WIP by roast group for DISPLAY purposes
   // This shows the full picture: what was roasted, what was consumed, what was manually adjusted
@@ -292,7 +294,7 @@ export default function Inventory() {
     },
     onSuccess: () => {
       toast.success('WIP history cleared');
-      setConfirmDeleteGroup(null);
+      setConfirmClearWip(null);
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions-wip'] });
       queryClient.invalidateQueries({ queryKey: ['wip-adjustments'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
@@ -488,7 +490,7 @@ export default function Inventory() {
                           </span>
                         </td>
                         <td className="py-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
+                          <div className="flex items-center justify-end gap-2">
                             <Button
                               size="sm"
                               variant="outline"
@@ -497,36 +499,16 @@ export default function Inventory() {
                             >
                               Adjust
                             </Button>
-                            {isAdmin && !(roastGroups ?? []).includes(row.roast_group) && (
-                              confirmDeleteGroup === row.roast_group ? (
-                                <div className="flex items-center gap-1 ml-2">
-                                  <span className="text-xs text-muted-foreground max-w-[200px] truncate" title={`Clear WIP history for ${row.roast_group}? This will permanently delete all inventory transaction records for this roast group. This cannot be undone.`}>
-                                    Clear history?
-                                  </span>
-                                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setConfirmDeleteGroup(null)}>
-                                    Cancel
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    className="h-7 text-xs"
-                                    disabled={deleteWipHistory.isPending}
-                                    onClick={() => deleteWipHistory.mutate(row.roast_group)}
-                                  >
-                                    Confirm
-                                  </Button>
-                                </div>
-                              ) : (
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-7 w-7 text-destructive hover:text-destructive"
-                                  onClick={() => setConfirmDeleteGroup(row.roast_group)}
-                                  title={`Clear WIP history for ${row.roast_group}`}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              )
+                            {isAdmin && !activeRoastGroupKeys.has(row.roast_group) && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-destructive hover:text-destructive"
+                                onClick={() => setConfirmClearWip(row.roast_group)}
+                                title={`Clear WIP history for ${row.roast_group}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             )}
                           </div>
                         </td>
@@ -676,6 +658,28 @@ export default function Inventory() {
               disabled={!adjustKgDelta || createWipAdjustment.isPending}
             >
               {createWipAdjustment.isPending ? 'Saving...' : 'Save Adjustment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* WIP Clear History Confirmation Dialog */}
+      <Dialog open={confirmClearWip !== null} onOpenChange={(open) => { if (!open) setConfirmClearWip(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Clear WIP History</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Clear WIP history for <span className="font-semibold text-foreground">{confirmClearWip}</span>? This will permanently delete all inventory transaction records for this roast group. This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmClearWip(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteWipHistory.isPending}
+              onClick={() => confirmClearWip && deleteWipHistory.mutate(confirmClearWip)}
+            >
+              {deleteWipHistory.isPending ? 'Clearing...' : 'Confirm'}
             </Button>
           </DialogFooter>
         </DialogContent>
