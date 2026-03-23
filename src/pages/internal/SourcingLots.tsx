@@ -14,8 +14,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, Check, FileText, AlertTriangle, CheckCircle2, Pencil, Trash2 } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
+import { CoverageCalendar } from '@/components/sourcing/CoverageCalendar';
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -180,64 +182,77 @@ export default function SourcingLots() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3">
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search lots…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground font-medium w-16">Status:</span>
-          {['ALL', 'EN_ROUTE', 'RECEIVED'].map(s => (
-            <Button key={s} variant={physicalFilter === s ? 'default' : 'outline'} size="sm" onClick={() => setPhysicalFilter(s)}>
-              {s === 'ALL' ? 'All' : s === 'EN_ROUTE' ? 'En Route' : 'Received'}
-            </Button>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground font-medium w-16">Costing:</span>
-          {[{ key: 'ALL', label: 'All' }, { key: 'INCOMPLETE', label: 'Not Costed' }, { key: 'COMPLETE', label: 'Costed' }].map(({ key, label }) => (
-            <Button key={key} variant={costingFilter === key ? 'default' : 'outline'} size="sm" onClick={() => setCostingFilter(key)}>
-              {label}
-            </Button>
-          ))}
-        </div>
-      </div>
+      <Tabs defaultValue="lots">
+        <TabsList>
+          <TabsTrigger value="lots">Lots</TabsTrigger>
+          <TabsTrigger value="coverage">Coverage Calendar</TabsTrigger>
+        </TabsList>
 
-      {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : filtered.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{search || physicalFilter !== 'ALL' || costingFilter !== 'ALL' ? 'No lots match your filters.' : 'No lots yet. Release coffee from a contract to create lots.'}</p>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map(lot => {
-            const c = contractMap[lot.contract_id];
-            const kgReceived = lot.bags_released * lot.bag_size_kg;
-            return (
-              <Card key={lot.id}>
-                <CardContent className="p-4 space-y-2">
-                  <p className="font-semibold text-base leading-tight">{lot.lot_number}</p>
-                  {c && <p className="text-sm text-muted-foreground">{c.name}</p>}
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <PhysicalStatusBadge status={lot.status} />
-                    <CostingStatusBadge costingStatus={lot.costing_status} />
-                    {lot.exceptions_noted && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
-                  </div>
-                  <p className="text-sm">{lot.bags_released} bags · {kgReceived.toLocaleString()} kg</p>
-                  {lot.status === 'EN_ROUTE' && lot.expected_delivery_date && (
-                    <p className="text-xs text-muted-foreground">Arriving {format(new Date(lot.expected_delivery_date + 'T00:00:00'), 'MMM d, yyyy')}</p>
-                  )}
-                  {lot.costing_status === 'COMPLETE' && lot.book_value_per_kg != null && (
-                    <p className="text-sm font-medium">{formatPerKg(lot.book_value_per_kg)}</p>
-                  )}
-                  <div className="pt-1">
-                    <Button variant="outline" size="sm" onClick={() => setSelectedLotId(lot.id)}>View</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
+        <TabsContent value="lots" className="space-y-4 mt-4">
+          <div className="flex flex-col gap-3">
+            <div className="relative max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search lots…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground font-medium w-16">Status:</span>
+              {['ALL', 'EN_ROUTE', 'RECEIVED'].map(s => (
+                <Button key={s} variant={physicalFilter === s ? 'default' : 'outline'} size="sm" onClick={() => setPhysicalFilter(s)}>
+                  {s === 'ALL' ? 'All' : s === 'EN_ROUTE' ? 'En Route' : 'Received'}
+                </Button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground font-medium w-16">Costing:</span>
+              {[{ key: 'ALL', label: 'All' }, { key: 'INCOMPLETE', label: 'Not Costed' }, { key: 'COMPLETE', label: 'Costed' }].map(({ key, label }) => (
+                <Button key={key} variant={costingFilter === key ? 'default' : 'outline'} size="sm" onClick={() => setCostingFilter(key)}>
+                  {label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : filtered.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{search || physicalFilter !== 'ALL' || costingFilter !== 'ALL' ? 'No lots match your filters.' : 'No lots yet. Release coffee from a contract to create lots.'}</p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {filtered.map(lot => {
+                const c = contractMap[lot.contract_id];
+                const kgReceived = lot.bags_released * lot.bag_size_kg;
+                return (
+                  <Card key={lot.id}>
+                    <CardContent className="p-4 space-y-2">
+                      <p className="font-semibold text-base leading-tight">{lot.lot_number}</p>
+                      {c && <p className="text-sm text-muted-foreground">{c.name}</p>}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <PhysicalStatusBadge status={lot.status} />
+                        <CostingStatusBadge costingStatus={lot.costing_status} />
+                        {lot.exceptions_noted && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
+                      </div>
+                      <p className="text-sm">{lot.bags_released} bags · {kgReceived.toLocaleString()} kg</p>
+                      {lot.status === 'EN_ROUTE' && lot.expected_delivery_date && (
+                        <p className="text-xs text-muted-foreground">Arriving {format(new Date(lot.expected_delivery_date + 'T00:00:00'), 'MMM d, yyyy')}</p>
+                      )}
+                      {lot.costing_status === 'COMPLETE' && lot.book_value_per_kg != null && (
+                        <p className="text-sm font-medium">{formatPerKg(lot.book_value_per_kg)}</p>
+                      )}
+                      <div className="pt-1">
+                        <Button variant="outline" size="sm" onClick={() => setSelectedLotId(lot.id)}>View</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="coverage" className="mt-4">
+          <CoverageCalendar />
+        </TabsContent>
+      </Tabs>
 
       <LotDetailPanel lotId={selectedLotId} onClose={() => setSelectedLotId(null)} contractMap={contractMap} />
     </div>
