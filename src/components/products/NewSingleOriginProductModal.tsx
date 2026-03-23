@@ -508,7 +508,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
           
           {/* SKU Preview Section */}
           <GramBasedSkuPreview
-            clientCode={selectedClient?.client_code ?? ''}
+            clientCode={selectedClient?.account_code ?? ''}
             origin={originForSku}
             isBlend={false}
             fgNameSuffix={finishedGoodName.trim()}
