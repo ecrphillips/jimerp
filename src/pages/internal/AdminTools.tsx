@@ -243,6 +243,8 @@ export default function AdminTools() {
         'coroast_hour_ledger',
         'coroast_bookings',
         'coroast_billing_periods',
+        'coroast_member_notes',
+        'coroast_members',
       ] as const;
       for (const table of tables) {
         const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
@@ -254,6 +256,8 @@ export default function AdminTools() {
       queryClient.invalidateQueries({ queryKey: ['coroast-invoices'] });
       queryClient.invalidateQueries({ queryKey: ['bookings-week'] });
       queryClient.invalidateQueries({ queryKey: ['coroast-members-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['coroast-member-notes'] });
+      queryClient.invalidateQueries({ queryKey: ['coroast-members'] });
       setShowClearCoroastModal(false);
       setClearCoroastConfirmText('');
     } catch (err: any) {
