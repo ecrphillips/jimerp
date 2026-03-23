@@ -163,6 +163,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
   
   const canSave = useMemo(() => {
     if (!clientId) return false;
+    if (!selectedClient?.account_code) return false;
     if (roastGroupMode === 'existing' && !selectedRoastGroup) return false;
     if (roastGroupMode === 'new') {
       if (!origin) return false;
@@ -172,7 +173,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
     if (validVariants.length === 0) return false;
     if (!lifecycle) return false;
     return true;
-  }, [clientId, roastGroupMode, selectedRoastGroup, origin, customOrigin, finishedGoodName, validVariants, lifecycle]);
+  }, [clientId, selectedClient, roastGroupMode, selectedRoastGroup, origin, customOrigin, finishedGoodName, validVariants, lifecycle]);
   
   // Reset form
   const resetForm = () => {
