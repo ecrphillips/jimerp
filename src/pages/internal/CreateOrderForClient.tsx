@@ -283,6 +283,7 @@ export default function CreateOrderForClient() {
         .from('orders')
         .insert({
           client_id: selectedClientId,
+          account_id: selectedClientId,
           location_id: selectedLocationId || null,
           order_number: '',
           status: initialStatus,
