@@ -127,8 +127,8 @@ export default function CreateOrderForClient() {
       if (!selectedClientId) return [];
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, bag_size_g, grams_per_unit, format, grind_options, is_perennial, packaging_type_id, packaging_types(name), client_id')
-        .eq('client_id', selectedClientId)
+        .select('id, product_name, sku, bag_size_g, grams_per_unit, format, grind_options, is_perennial, packaging_type_id, packaging_types(name), client_id, account_id')
+        .eq('account_id', selectedClientId)
         .eq('is_active', true)
         .order('product_name', { ascending: true });
 
