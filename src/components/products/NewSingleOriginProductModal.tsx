@@ -251,7 +251,6 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
         const { data: newProduct, error } = await supabase
           .from('products')
           .insert({
-            client_id: clientId,
             account_id: clientId,
             product_name: displayName,
             sku: skuData.sku,
@@ -275,7 +274,6 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
               const { data: retryProduct, error: retryError } = await supabase
                 .from('products')
                 .insert({
-                  client_id: clientId,
                   account_id: clientId,
                   product_name: displayName,
                   sku: fallbackSku,

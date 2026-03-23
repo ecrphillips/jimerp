@@ -2579,7 +2579,7 @@ export type Database = {
         Row: {
           account_id: string | null
           bag_size_g: number
-          client_id: string
+          client_id: string | null
           created_at: string
           format: Database["public"]["Enums"]["product_format"]
           grams_per_unit: number | null
@@ -2601,7 +2601,7 @@ export type Database = {
         Insert: {
           account_id?: string | null
           bag_size_g: number
-          client_id: string
+          client_id?: string | null
           created_at?: string
           format?: Database["public"]["Enums"]["product_format"]
           grams_per_unit?: number | null
@@ -2623,7 +2623,7 @@ export type Database = {
         Update: {
           account_id?: string | null
           bag_size_g?: number
-          client_id?: string
+          client_id?: string | null
           created_at?: string
           format?: Database["public"]["Enums"]["product_format"]
           grams_per_unit?: number | null
