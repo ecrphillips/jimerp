@@ -278,6 +278,9 @@ export function CoverageCalendar() {
                               {isOpenEnded && (
                                 <span className="text-[9px] font-medium text-muted-foreground">?</span>
                               )}
+                              {isLowCoverage && !isOpenEnded && (
+                                <AlertTriangle className="h-3 w-3 text-amber-800 dark:text-amber-200 shrink-0" />
+                              )}
                             </div>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="text-xs space-y-1 max-w-[240px]">

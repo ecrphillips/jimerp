@@ -138,6 +138,25 @@ export function GreenLotMappingSection({ roastGroupKey }: Props) {
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">{Number(lot.kg_on_hand).toFixed(1)} kg on hand</p>
+                    {(() => {
+                      if (!lot.estimated_days_to_consume) {
+                        return <p className="text-xs text-muted-foreground/60 mt-0.5">No estimate set</p>;
+                      }
+                      const startDate = lot.status === 'RECEIVED' ? lot.received_date : lot.expected_delivery_date;
+                      if (!startDate) return null;
+                      const endDate = new Date(startDate + 'T00:00:00');
+                      endDate.setDate(endDate.getDate() + lot.estimated_days_to_consume);
+                      const daysLeft = Math.max(0, Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+                      if (daysLeft < 5) {
+                        return (
+                          <div className="flex items-center gap-1 mt-0.5 text-xs text-amber-600 dark:text-amber-400">
+                            <AlertTriangle className="h-3 w-3 shrink-0" />
+                            {daysLeft} day{daysLeft !== 1 ? 's' : ''} remaining
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                   <div className="flex items-center gap-1">
                     <Input
