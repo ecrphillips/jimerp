@@ -111,6 +111,8 @@ export function InternalLayout({ children }: InternalLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = React.useState(false);
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
+  const [quickCreateOpen, setQuickCreateOpen] = React.useState(false);
+  const [newRoastGroupOpen, setNewRoastGroupOpen] = React.useState(false);
   const feedbackNewCount = useFeedbackCount();
 
   useOrderNotifications();
