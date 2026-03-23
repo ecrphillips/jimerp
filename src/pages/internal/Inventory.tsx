@@ -499,13 +499,12 @@ export default function Inventory() {
                             >
                               Adjust
                             </Button>
-                            {isAdmin && (
+                            {user?.role === 'ADMIN' && (
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-7 w-7 text-destructive hover:text-destructive"
+                                className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
                                 onClick={() => setConfirmClearWip(row.roast_group)}
-                                title={`Clear WIP history for ${row.roast_group}`}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
