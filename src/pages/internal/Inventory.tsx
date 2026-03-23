@@ -662,6 +662,28 @@ export default function Inventory() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* WIP Clear History Confirmation Dialog */}
+      <Dialog open={confirmClearWip !== null} onOpenChange={(open) => { if (!open) setConfirmClearWip(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Clear WIP History</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Clear WIP history for <span className="font-semibold text-foreground">{confirmClearWip}</span>? This will permanently delete all inventory transaction records for this roast group. This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmClearWip(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteWipHistory.isPending}
+              onClick={() => confirmClearWip && deleteWipHistory.mutate(confirmClearWip)}
+            >
+              {deleteWipHistory.isPending ? 'Clearing...' : 'Confirm'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
