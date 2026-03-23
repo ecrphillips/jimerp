@@ -345,8 +345,14 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
                 </div>
                 <div>
                   <Label>Abbreviation</Label>
-                  <p className="text-sm font-medium mt-1">{vendor.abbreviation || '—'}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Abbreviation cannot be changed after creation.</p>
+                  {vendor.abbreviation ? (
+                    <>
+                      <p className="text-sm font-medium mt-1">{vendor.abbreviation}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Abbreviation cannot be changed after creation.</p>
+                    </>
+                  ) : (
+                    <VendorAbbreviationEditor vendorId={vendor.id} />
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -454,6 +460,70 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+// ─── Vendor Abbreviation Editor (for vendors missing abbreviation) ──────
+
+function VendorAbbreviationEditor({ vendorId }: { vendorId: string }) {
+  const queryClient = useQueryClient();
+  const [value, setValue] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleChange = async (raw: string) => {
+    const upper = raw.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+    setValue(upper);
+    setError('');
+    if (upper.length === 3) {
+      const { data } = await supabase
+        .from('green_vendors')
+        .select('id')
+        .eq('abbreviation', upper)
+        .neq('id', vendorId)
+        .limit(1);
+      if (data && data.length > 0) setError('Already in use');
+    }
+  };
+
+  const handleSave = async () => {
+    if (value.length !== 3 || error) return;
+    setSaving(true);
+    const { error: saveErr } = await supabase
+      .from('green_vendors')
+      .update({ abbreviation: value })
+      .eq('id', vendorId);
+    setSaving(false);
+    if (saveErr) {
+      toast.error('Failed to save abbreviation');
+      return;
+    }
+    toast.success('Abbreviation saved');
+    queryClient.invalidateQueries({ queryKey: ['green-vendor', vendorId] });
+    queryClient.invalidateQueries({ queryKey: ['green-vendors'] });
+  };
+
+  return (
+    <div className="mt-1 space-y-1">
+      <div className="flex gap-1.5">
+        <Input
+          value={value}
+          onChange={(e) => handleChange(e.target.value)}
+          placeholder="ABC"
+          maxLength={3}
+          className="w-20 uppercase"
+        />
+        <Button
+          size="sm"
+          disabled={value.length !== 3 || !!error || saving}
+          onClick={handleSave}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <p className="text-xs text-muted-foreground">3 uppercase letters, locked after save.</p>
+    </div>
   );
 }
 
