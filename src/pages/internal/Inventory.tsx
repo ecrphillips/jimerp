@@ -69,7 +69,6 @@ export default function Inventory() {
   // WIP delete confirmation state
   const [confirmClearWip, setConfirmClearWip] = useState<string | null>(null);
   const isAdmin = user?.role === 'ADMIN';
-  const activeRoastGroupKeys = useMemo(() => new Set(roastGroups ?? []), [roastGroups]);
 
   // ===== WIP Tab Queries =====
   
