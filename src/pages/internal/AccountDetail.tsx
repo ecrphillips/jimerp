@@ -29,6 +29,10 @@ function ProfileTab({ account, refetch }: { account: any; refetch: () => void })
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ ...account });
 
+  // Account code editing (only when not yet set)
+  const [accountCodeInput, setAccountCodeInput] = useState('');
+  const [savingCode, setSavingCode] = useState(false);
+
   const { data: prospect } = useQuery({
     queryKey: ['account-prospect', account.relationship_id],
     queryFn: async () => {
