@@ -499,7 +499,7 @@ export default function Inventory() {
                             >
                               Adjust
                             </Button>
-                            {user?.role === 'ADMIN' && (
+                            {authUser?.role === 'ADMIN' && (
                               <Button
                                 size="icon"
                                 variant="ghost"
