@@ -8,14 +8,15 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Plus, Search, Info, CalendarIcon, Building2, CheckCircle2 } from 'lucide-react';
+import { Plus, Search, Info, CalendarIcon, Building2, CheckCircle2, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
@@ -41,11 +42,26 @@ interface AccountRow {
 }
 
 export default function Accounts() {
+  const { authUser } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [programFilter, setProgramFilter] = useState<ProgramFilter>('ALL');
   const [showNewModal, setShowNewModal] = useState(false);
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState<{id: string, name: string} | null>(null);
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('accounts').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Account deleted');
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      setConfirmDeleteAccount(null);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -208,10 +224,10 @@ export default function Accounts() {
       ) : (
         <div className="space-y-2">
           {filtered.map(account => (
-            <button
+            <div
               key={account.id}
               onClick={() => navigate(`/accounts/${account.id}`)}
-              className="w-full text-left rounded-lg border bg-card p-4 hover:bg-accent/50 transition-colors flex items-center gap-4"
+              className="w-full text-left rounded-lg border bg-card p-4 hover:bg-accent/50 transition-colors flex items-center gap-4 cursor-pointer"
             >
               <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
               <div className="flex-1 min-w-0">
@@ -244,7 +260,20 @@ export default function Accounts() {
                   </p>
                 )}
               </div>
-            </button>
+              {authUser?.role === 'ADMIN' && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmDeleteAccount({ id: account.id, name: account.account_name });
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           ))}
         </div>
       )}
@@ -401,6 +430,28 @@ export default function Accounts() {
               {createMutation.isPending ? 'Creating…' : 'Create Account'}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Account Confirmation */}
+      <Dialog open={confirmDeleteAccount !== null} onOpenChange={(open) => { if (!open) setConfirmDeleteAccount(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Account</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Delete <span className="font-medium text-foreground">{confirmDeleteAccount?.name}</span>? This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeleteAccount(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteAccountMutation.isPending}
+              onClick={() => confirmDeleteAccount && deleteAccountMutation.mutate(confirmDeleteAccount.id)}
+            >
+              {deleteAccountMutation.isPending ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -7,11 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Plus, CheckCircle2 } from 'lucide-react';
+import { Plus, CheckCircle2, Trash2 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 
 type ProspectStream = Database['public']['Enums']['prospect_stream'];
@@ -43,6 +43,20 @@ export default function Prospects() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [showDialog, setShowDialog] = useState(false);
+  const [confirmDeleteProspect, setConfirmDeleteProspect] = useState<{id: string, name: string} | null>(null);
+
+  const deleteProspectMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('prospects').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Prospect deleted');
+      queryClient.invalidateQueries({ queryKey: ['prospects'] });
+      setConfirmDeleteProspect(null);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -137,6 +151,19 @@ export default function Prospects() {
                     <Badge variant={streamVariant(p.stream)} className="text-xs">
                       {streamLabel(p.stream)}
                     </Badge>
+                    {authUser?.role === 'ADMIN' && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDeleteProspect({ id: p.id, name: p.business_name });
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </li>
               ))}
@@ -220,6 +247,28 @@ export default function Prospects() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Prospect Confirmation */}
+      <Dialog open={confirmDeleteProspect !== null} onOpenChange={(open) => { if (!open) setConfirmDeleteProspect(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Prospect</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Delete <span className="font-medium text-foreground">{confirmDeleteProspect?.name}</span>? This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeleteProspect(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteProspectMutation.isPending}
+              onClick={() => confirmDeleteProspect && deleteProspectMutation.mutate(confirmDeleteProspect.id)}
+            >
+              {deleteProspectMutation.isPending ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
