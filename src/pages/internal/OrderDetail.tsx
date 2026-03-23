@@ -66,7 +66,8 @@ export default function OrderDetail() {
           client_id,
           location_id,
           updated_at,
-          client:clients(name)
+           client:clients(name),
+           account:accounts(account_name)
         `)
         .eq('id', id!)
         .maybeSingle();
