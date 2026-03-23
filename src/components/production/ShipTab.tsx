@@ -707,7 +707,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
                   <div className="flex items-center gap-3">
                     <span className="font-semibold">{order.order_number}</span>
                     <span className="text-muted-foreground">•</span>
-                    <span>{order.client?.name ?? 'Unknown'}</span>
+                    <span>{(order as any).account?.account_name ?? order.client?.name ?? 'Unknown'}</span>
                     <span className="text-xs text-muted-foreground">
                       ({(order.line_items ?? []).length} item{(order.line_items ?? []).length !== 1 ? 's' : ''})
                     </span>
