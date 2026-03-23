@@ -68,8 +68,9 @@ export default function Orders() {
           created_by_admin,
           location_id,
           created_at,
-          client:clients(name),
-          order_line_items(id, product_id, quantity_units)
+            client:clients(name),
+            account:accounts(account_name),
+            order_line_items(id, product_id, quantity_units)
         `)
         .order('created_at', { ascending: false });
 
