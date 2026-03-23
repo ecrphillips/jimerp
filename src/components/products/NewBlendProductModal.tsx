@@ -19,7 +19,7 @@ import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
 interface Client {
   id: string;
   account_name: string;
-  client_code: string;
+  account_code: string | null;
 }
 
 interface RoastGroup {
@@ -80,11 +80,11 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     queryFn: async () => {
       const { data, error } = await supabase
         .from('accounts')
-        .select('id, account_name')
+        .select('id, account_name, account_code')
         .eq('is_active', true)
         .order('account_name');
       if (error) throw error;
-      return (data ?? []).map((a: any) => ({ id: a.id, account_name: a.account_name, client_code: a.account_name.substring(0, 4).toUpperCase() })) as Client[];
+      return (data ?? []) as Client[];
     },
   });
   
@@ -159,6 +159,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   
   const canSave = useMemo(() => {
     if (!clientId) return false;
+    if (!selectedClient?.account_code) return false;
     if (!finishedGoodName.trim()) return false;
     if (hasNoComponents) return false;
     if (!allComponentsSelected) return false;
@@ -166,7 +167,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     if (validVariants.length === 0) return false;
     if (!lifecycle) return false;
     return true;
-  }, [clientId, finishedGoodName, hasNoComponents, allComponentsSelected, percentageValid, validVariants, lifecycle]);
+  }, [clientId, selectedClient, finishedGoodName, hasNoComponents, allComponentsSelected, percentageValid, validVariants, lifecycle]);
   
   // Reset form
   const resetForm = () => {
@@ -257,10 +258,10 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
       
       // Get resolved SKUs - for blends, use 'BLD' as origin
       const resolvedSkus = getResolvedSkus(
-        selectedClient.client_code,
-        undefined, // No origin for blends
-        true, // Is a blend
-        trimmedName, // Use the full FG name for blends
+        selectedClient.account_code!,
+        undefined,
+        true,
+        trimmedName,
         validVariants,
         existingSkus ?? new Set()
       );
@@ -404,11 +405,14 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
               <SelectContent>
                 {clients?.map(c => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.account_name}
+                    {c.account_name} {c.account_code && <span className="text-muted-foreground">({c.account_code})</span>}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {clientId && selectedClient && !selectedClient.account_code && (
+              <p className="text-xs text-amber-600 mt-1">⚠ This account has no account code — SKUs cannot be generated. Set an account code on the account profile first.</p>
+            )}
           </div>
           
           {/* Step 2: Finished Good Name */}
@@ -542,7 +546,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
           
           {/* SKU Preview Section */}
           <GramBasedSkuPreview
-            clientCode={selectedClient?.client_code ?? ''}
+            clientCode={selectedClient?.account_code ?? ''}
             isBlend={true}
             fgNameSuffix={finishedGoodName.trim()}
             variants={validVariants}

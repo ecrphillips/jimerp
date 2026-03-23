@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertTriangle, Trash2, Sparkles, RotateCcw, Bomb } from 'lucide-react';
+import { AlertTriangle, Trash2, Sparkles, RotateCcw, Bomb, Wand2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { OrderNotificationSettings } from '@/components/admin/OrderNotificationSettings';
 import { BuildInfoPanel } from '@/components/admin/BuildInfoPanel';
 import { PackagingTypesManager } from '@/components/admin/PackagingTypesManager';
+import { buildSku, getOriginCode, generateFgNameCode, formatGramsSuffix } from '@/lib/skuGenerator';
 
 // Check if we're in development mode
 const isDev = import.meta.env.DEV;
@@ -40,6 +42,24 @@ export default function AdminTools() {
   const [resetMasterConfirmText, setResetMasterConfirmText] = useState('');
   const [resetMasterUnderstood, setResetMasterUnderstood] = useState(false);
   const [isResettingMaster, setIsResettingMaster] = useState(false);
+
+  // SKU Backfill state
+  const [showBackfillModal, setShowBackfillModal] = useState(false);
+  const [isBackfilling, setIsBackfilling] = useState(false);
+
+  // Query products missing SKUs
+  const { data: productsNeedingSku = [] } = useQuery({
+    queryKey: ['products-needing-sku'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, product_name, account_id, bag_size_g, roast_group')
+        .is('sku', null)
+        .not('account_id', 'is', null);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   const canConfirmReset = resetConfirmText === 'RESET' && resetUnderstood;
   const canConfirmResetMaster = resetMasterConfirmText === 'NUKE' && resetMasterUnderstood;
@@ -136,6 +156,65 @@ export default function AdminTools() {
     }
   };
 
+  const handleBackfillSkus = async () => {
+    setIsBackfilling(true);
+    try {
+      // Fetch all accounts with account_code
+      const { data: accounts } = await supabase.from('accounts').select('id, account_code');
+      const accountMap = new Map((accounts ?? []).map(a => [a.id, a.account_code]));
+
+      // Fetch existing SKUs for collision detection
+      const { data: existingSkuRows } = await supabase.from('products').select('sku');
+      const existingSkus = new Set((existingSkuRows ?? []).map(r => r.sku?.toUpperCase()).filter(Boolean));
+      const existingFgCodes = new Set<string>();
+
+      let generated = 0;
+      let skipped = 0;
+
+      for (const product of productsNeedingSku) {
+        const accountCode = accountMap.get(product.account_id);
+        if (!accountCode) {
+          skipped++;
+          continue;
+        }
+
+        // Get roast group origin
+        let originCode = 'BLD';
+        if (product.roast_group) {
+          const { data: rg } = await supabase.from('roast_groups').select('origin, is_blend').eq('roast_group', product.roast_group).maybeSingle();
+          if (rg && !rg.is_blend && rg.origin) {
+            originCode = getOriginCode(rg.origin);
+          }
+        }
+
+        const { code: fgCode } = generateFgNameCode(product.product_name || '', existingFgCodes);
+        existingFgCodes.add(fgCode);
+        const gramsSuffix = formatGramsSuffix(product.bag_size_g || 0);
+        const sku = buildSku({ clientCode: accountCode, originCode, fgNameCode: fgCode, gramsSuffix });
+
+        if (existingSkus.has(sku.toUpperCase())) {
+          skipped++;
+          continue;
+        }
+
+        const { error } = await supabase.from('products').update({ sku } as any).eq('id', product.id);
+        if (error) {
+          skipped++;
+        } else {
+          existingSkus.add(sku.toUpperCase());
+          generated++;
+        }
+      }
+
+      toast.success(`${generated} SKUs generated, ${skipped} skipped (missing account code or collision)`);
+      setShowBackfillModal(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Backfill failed');
+    } finally {
+      setIsBackfilling(false);
+    }
+  };
+
   const openResetModal = () => {
     setResetConfirmText('');
     setResetUnderstood(false);
@@ -164,6 +243,37 @@ export default function AdminTools() {
 
       {/* Order Submit Notifications */}
       <OrderNotificationSettings />
+
+      {/* Data Maintenance */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Wand2 className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Data Maintenance</CardTitle>
+          </div>
+          <CardDescription>
+            Tools for maintaining data integrity and backfilling missing values.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              <p className="font-medium mb-1">Backfill SKUs</p>
+              <p>Generate SKUs for account-linked products that are missing them. Products linked to legacy clients are not affected.</p>
+              <p className="mt-1 font-medium">{productsNeedingSku.length} product{productsNeedingSku.length !== 1 ? 's' : ''} missing SKUs.</p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => setShowBackfillModal(true)}
+              disabled={productsNeedingSku.length === 0}
+              className="gap-2"
+            >
+              <Wand2 className="h-4 w-4" />
+              Backfill SKUs
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Dev/Test Reset Card */}
       <Card className="border-destructive/50">
@@ -548,6 +658,29 @@ export default function AdminTools() {
               disabled={!canConfirmResetMaster || isResettingMaster}
             >
               {isResettingMaster ? 'Resetting...' : 'Confirm Nuclear Reset'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Backfill SKUs Confirmation Modal */}
+      <Dialog open={showBackfillModal} onOpenChange={setShowBackfillModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wand2 className="h-5 w-5 text-primary" />
+              Backfill SKUs
+            </DialogTitle>
+            <DialogDescription>
+              This will generate SKUs for {productsNeedingSku.length} product{productsNeedingSku.length !== 1 ? 's' : ''} linked to accounts. Products linked to legacy clients are not affected.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBackfillModal(false)} disabled={isBackfilling}>
+              Cancel
+            </Button>
+            <Button onClick={handleBackfillSkus} disabled={isBackfilling}>
+              {isBackfilling ? 'Backfilling…' : 'Confirm Backfill'}
             </Button>
           </DialogFooter>
         </DialogContent>

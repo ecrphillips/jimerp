@@ -18,7 +18,7 @@ import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
 interface Client {
   id: string;
   account_name: string;
-  client_code: string;
+  account_code: string | null;
 }
 
 interface RoastGroup {
@@ -71,11 +71,11 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
     queryFn: async () => {
       const { data, error } = await supabase
         .from('accounts')
-        .select('id, account_name, client_code:account_name')
+        .select('id, account_name, account_code')
         .eq('is_active', true)
         .order('account_name');
       if (error) throw error;
-      return (data ?? []).map((a: any) => ({ id: a.id, account_name: a.account_name, client_code: a.account_name.substring(0, 4).toUpperCase() })) as Client[];
+      return (data ?? []) as Client[];
     },
   });
   
@@ -163,6 +163,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
   
   const canSave = useMemo(() => {
     if (!clientId) return false;
+    if (!selectedClient?.account_code) return false;
     if (roastGroupMode === 'existing' && !selectedRoastGroup) return false;
     if (roastGroupMode === 'new') {
       if (!origin) return false;
@@ -172,7 +173,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
     if (validVariants.length === 0) return false;
     if (!lifecycle) return false;
     return true;
-  }, [clientId, roastGroupMode, selectedRoastGroup, origin, customOrigin, finishedGoodName, validVariants, lifecycle]);
+  }, [clientId, selectedClient, roastGroupMode, selectedRoastGroup, origin, customOrigin, finishedGoodName, validVariants, lifecycle]);
   
   // Reset form
   const resetForm = () => {
@@ -233,10 +234,10 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
       // Get resolved SKUs with collision handling
       // Use the user-entered suffix (finishedGoodName) for the FG name code
       const resolvedSkus = getResolvedSkus(
-        selectedClient.client_code,
-        skuOrigin, // The origin for ISO code
-        false, // Not a blend
-        finishedGoodName.trim(), // The user-entered suffix
+        selectedClient.account_code!,
+        skuOrigin,
+        false,
+        finishedGoodName.trim(),
         validVariants,
         existingSkus ?? new Set()
       );
@@ -369,11 +370,14 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
               <SelectContent>
                 {clients?.map(c => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.account_name}
+                    {c.account_name} {c.account_code && <span className="text-muted-foreground">({c.account_code})</span>}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {clientId && selectedClient && !selectedClient.account_code && (
+              <p className="text-xs text-amber-600 mt-1">⚠ This account has no account code — SKUs cannot be generated. Set an account code on the account profile first.</p>
+            )}
           </div>
           
           {/* Step 2: Roast Group */}
@@ -507,7 +511,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
           
           {/* SKU Preview Section */}
           <GramBasedSkuPreview
-            clientCode={selectedClient?.client_code ?? ''}
+            clientCode={selectedClient?.account_code ?? ''}
             origin={originForSku}
             isBlend={false}
             fgNameSuffix={finishedGoodName.trim()}

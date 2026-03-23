@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
+import { buildSku, getOriginCode, generateFgNameCode, formatGramsSuffix } from '@/lib/skuGenerator';
 
 interface Props {
   open: boolean;
@@ -128,7 +129,7 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
   const { data: clients = [] } = useQuery({
     queryKey: ['qc-clients'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('accounts').select('id, account_name').eq('is_active', true).order('account_name');
+      const { data, error } = await supabase.from('accounts').select('id, account_name, account_code').eq('is_active', true).order('account_name');
       if (error) throw error;
       return data ?? [];
     },
@@ -193,11 +194,47 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
         rgCreated = result.created;
       }
 
+      // Get account_code for SKU generation
+      const selectedAccount = clients.find((c: any) => c.id === pClientId);
+      const accountCode = selectedAccount?.account_code;
+
+      // Get origin from roast group for SKU generation
+      let rgOrigin: string | null = null;
+      if (roastGroupKey) {
+        if (pRoastGroupMode === 'new' && !pNewRGBlend) {
+          rgOrigin = pNewRGOrigin.trim() || null;
+        } else if (pRoastGroupMode === 'existing') {
+          const { data: rgData } = await supabase.from('roast_groups').select('origin, is_blend').eq('roast_group', roastGroupKey).maybeSingle();
+          if (rgData && !rgData.is_blend) rgOrigin = rgData.origin;
+        }
+      }
+
+      // Fetch existing SKUs for collision detection
+      const { data: existingSkuRows } = await supabase.from('products').select('sku');
+      const existingFgCodes = new Set<string>();
+
       const createdProducts: any[] = [];
 
       for (const v of pVariants) {
         const pkgOpt = PACKAGING_OPTIONS.find(o => o.value === v.variant);
         if (!pkgOpt) continue;
+
+        // Generate SKU if account_code is available
+        let sku: string | null = null;
+        if (accountCode && roastGroupKey) {
+          const isBlend = pRoastGroupMode === 'new' ? pNewRGBlend : !rgOrigin;
+          const originCode = isBlend ? 'BLD' : getOriginCode(rgOrigin || '');
+          const { code: fgCode } = generateFgNameCode(pProductName.trim(), existingFgCodes);
+          existingFgCodes.add(fgCode);
+          const gramsSuffix = formatGramsSuffix(pkgOpt.grams);
+          sku = buildSku({ clientCode: accountCode, originCode, fgNameCode: fgCode, gramsSuffix });
+
+          // Check for collision
+          const existingSkuSet = new Set((existingSkuRows ?? []).map(r => r.sku?.toUpperCase()).filter(Boolean));
+          if (existingSkuSet.has(sku.toUpperCase())) {
+            sku = null; // Skip SKU if collision
+          }
+        }
 
         const { data: product, error } = await supabase.from('products').insert({
           account_id: pClientId,
@@ -209,6 +246,7 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
           grind_options: ['WHOLE_BEAN'] as any,
           is_active: true,
           is_perennial: true,
+          ...(sku ? { sku } : {}),
         } as any).select('id, product_name').single();
         if (error) throw error;
         createdProducts.push(product);

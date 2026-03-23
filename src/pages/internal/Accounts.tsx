@@ -24,6 +24,7 @@ type ProgramFilter = 'ALL' | 'MANUFACTURING' | 'COROASTING' | 'BOTH';
 interface AccountRow {
   id: string;
   account_name: string;
+  account_code: string | null;
   billing_contact_name: string | null;
   billing_email: string | null;
   billing_phone: string | null;
@@ -66,7 +67,7 @@ export default function Accounts() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('accounts')
-        .select('*')
+        .select('*, account_code')
         .order('account_name');
       if (error) throw error;
       return data as AccountRow[];
@@ -215,7 +216,10 @@ export default function Accounts() {
               <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-sm">{account.account_name}</span>
+                 <span className="font-medium text-sm">{account.account_name}</span>
+                  {account.account_code && (
+                    <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded">{account.account_code}</span>
+                  )}
                   {account.programs.includes('MANUFACTURING') && (
                     <Badge variant="outline" className="text-[10px] border-blue-500 text-blue-600">Manufacturing</Badge>
                   )}
