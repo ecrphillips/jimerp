@@ -150,6 +150,21 @@ function VendorDetailPanel({ vendorId, onClose }: { vendorId: string | null; onC
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
   const open = !!vendorId;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const isAdmin = authUser?.role === 'ADMIN';
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('green_vendors').delete().eq('id', vendorId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Vendor deleted');
+      queryClient.invalidateQueries({ queryKey: ['green-vendors'] });
+      onClose();
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to delete vendor'),
+  });
 
   const { data: vendor } = useQuery({
     queryKey: ['green-vendor', vendorId],
