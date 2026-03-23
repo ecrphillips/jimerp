@@ -236,6 +236,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           ship_display_order,
           manually_deprioritized,
           client:clients(name),
+          account:accounts(account_name),
           line_items:order_line_items(
             id,
             product_id,
