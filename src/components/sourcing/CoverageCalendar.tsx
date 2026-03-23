@@ -226,6 +226,9 @@ export function CoverageCalendar() {
                   const isEnRoute = lot.status === 'EN_ROUTE';
                   const endDateLabel = isOpenEnded ? 'Unknown' : format(barEnd, 'MMM d, yyyy');
 
+                  // Low coverage check
+                  const isLowCoverage = !isOpenEnded && differenceInCalendarDays(barEnd, today) < 5;
+
                   return (
                     <div key={lot.id} className="flex border-b last:border-b-0 hover:bg-muted/20">
                       {/* Label column */}
@@ -274,6 +277,9 @@ export function CoverageCalendar() {
                             >
                               {isOpenEnded && (
                                 <span className="text-[9px] font-medium text-muted-foreground">?</span>
+                              )}
+                              {isLowCoverage && !isOpenEnded && (
+                                <AlertTriangle className="h-3 w-3 text-amber-800 dark:text-amber-200 shrink-0" />
                               )}
                             </div>
                           </TooltipTrigger>

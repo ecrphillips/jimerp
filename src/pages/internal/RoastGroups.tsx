@@ -25,7 +25,7 @@ export default function RoastGroups() {
         .select(`
           *,
           roast_group_components!roast_group_components_parent_roast_group_fkey (component_roast_group, pct),
-          green_lot_roast_group_links (lot_id, green_lots (id, lot_number, status))
+          green_lot_roast_group_links (lot_id, green_lots (id, lot_number, status, received_date, expected_delivery_date, estimated_days_to_consume))
         `)
         .order('display_name');
       if (error) throw error;
@@ -74,12 +74,28 @@ export default function RoastGroups() {
     [rawGroups, productCountMap]
   );
 
+  const getLowCoverageLots = (rg: any) => {
+    const today = new Date();
+    return (rg.green_lot_roast_group_links ?? []).filter((link: any) => {
+      const lot = link.green_lots;
+      if (!lot || lot.status === 'EXHAUSTED' || !lot.estimated_days_to_consume) return false;
+      const startDate = lot.status === 'RECEIVED' ? lot.received_date : lot.expected_delivery_date;
+      if (!startDate) return false;
+      const endDate = new Date(startDate + 'T00:00:00');
+      endDate.setDate(endDate.getDate() + lot.estimated_days_to_consume);
+      const daysRemaining = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      return daysRemaining < 5;
+    });
+  };
+
   const needsAttention = (rg: any) => {
     if (rg.is_seasonal || !rg.is_active) return false;
     const activeLots = (rg.green_lot_roast_group_links ?? []).filter(
       (link: any) => link.green_lots && link.green_lots.status !== 'EXHAUSTED'
     );
-    return activeLots.length === 0;
+    if (activeLots.length === 0) return true;
+    if (getLowCoverageLots(rg).length > 0) return true;
+    return false;
   };
 
   const filtered = useMemo(() => {
@@ -159,12 +175,25 @@ export default function RoastGroups() {
                   rg.is_blend ? 'border-l-blue-500' : 'border-l-green-500'
                 )}
               >
-                {attention && (
+                {attention && activeLots.length === 0 && (
                   <div className="flex items-center gap-1.5 mb-2 text-xs font-medium text-amber-600 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 rounded px-2 py-1">
                     <AlertTriangle className="h-3 w-3" />
                     Needs Attention — no green lot linked
                   </div>
                 )}
+                {getLowCoverageLots(rg).map((link: any) => {
+                  const lot = link.green_lots;
+                  const startDate = lot.status === 'RECEIVED' ? lot.received_date : lot.expected_delivery_date;
+                  const endDate = new Date(startDate + 'T00:00:00');
+                  endDate.setDate(endDate.getDate() + lot.estimated_days_to_consume);
+                  const daysLeft = Math.max(0, Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+                  return (
+                    <div key={link.lot_id} className="flex items-center gap-1.5 mb-2 text-xs font-medium text-amber-600 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 rounded px-2 py-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      Running low — {daysLeft} day{daysLeft !== 1 ? 's' : ''} coverage remaining on {lot.lot_number}
+                    </div>
+                  );
+                })}
 
                 <p className="font-semibold text-sm">{displayName}</p>
 
