@@ -48,7 +48,7 @@ interface FgInventoryRow {
 }
 
 export default function Inventory() {
-  const { user } = useAuth();
+  const { authUser } = useAuth();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   
@@ -68,7 +68,7 @@ export default function Inventory() {
   
   // WIP delete confirmation state
   const [confirmClearWip, setConfirmClearWip] = useState<string | null>(null);
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdmin = authUser?.role === 'ADMIN';
 
   // ===== WIP Tab Queries =====
   
@@ -254,7 +254,7 @@ export default function Inventory() {
           kg_delta: delta,
           reason: adjustReason,
           notes: adjustNotes,
-          created_by: user?.id,
+          created_by: authUser?.id,
         });
       if (error) throw error;
     },
@@ -361,7 +361,7 @@ export default function Inventory() {
           product_id: productId,
           units_on_hand: newUnits,
           updated_at: new Date().toISOString(),
-          updated_by: user?.id,
+          updated_by: authUser?.id,
         }, {
           onConflict: 'product_id',
         });
@@ -374,7 +374,7 @@ export default function Inventory() {
           product_id: productId,
           units_delta: unitsDelta,
           units_after: newUnits,
-          created_by: user?.id,
+          created_by: authUser?.id,
         });
       if (logError) throw logError;
     },
@@ -499,7 +499,7 @@ export default function Inventory() {
                             >
                               Adjust
                             </Button>
-                            {user?.role === 'ADMIN' && (
+                            {authUser?.role === 'ADMIN' && (
                               <Button
                                 size="icon"
                                 variant="ghost"
