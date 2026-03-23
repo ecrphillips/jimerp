@@ -200,7 +200,7 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
         if (!pkgOpt) continue;
 
         const { data: product, error } = await supabase.from('products').insert({
-          client_id: pClientId,
+          account_id: pClientId,
           product_name: `${pProductName.trim()} ${pkgOpt.label}`,
           roast_group: roastGroupKey,
           packaging_variant: v.variant as any,
