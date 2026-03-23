@@ -245,6 +245,10 @@ export function CoverageCalendar() {
 
                       {/* Bar track */}
                       <div className="flex-1 relative h-10 min-w-[400px]">
+                        {/* Grid lines */}
+                        {axisMarkers.map((m, i) => (
+                          <div key={`grid-${i}`} className="absolute top-0 bottom-0 w-px border-l border-border/40" style={{ left: `${m.pct}%` }} />
+                        ))}
                         {/* Today line */}
                         <div
                           className="absolute top-0 bottom-0 w-px border-l border-dashed border-destructive z-10"
