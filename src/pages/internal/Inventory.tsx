@@ -68,7 +68,7 @@ export default function Inventory() {
   
   // WIP delete confirmation state
   const [confirmClearWip, setConfirmClearWip] = useState<string | null>(null);
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdmin = authUser?.role === 'ADMIN';
 
   // ===== WIP Tab Queries =====
   
