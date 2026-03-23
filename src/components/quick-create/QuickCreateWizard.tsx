@@ -377,9 +377,8 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
     if (flow === 'product') {
       // P1 — Client
       if (step === 1) {
-        const filtered = clients.filter(c =>
-          c.name.toLowerCase().includes(pClientSearch.toLowerCase()) ||
-          c.client_code?.toLowerCase().includes(pClientSearch.toLowerCase())
+        const filtered = clients.filter((c: any) =>
+          c.account_name.toLowerCase().includes(pClientSearch.toLowerCase())
         );
         return (
           <>
