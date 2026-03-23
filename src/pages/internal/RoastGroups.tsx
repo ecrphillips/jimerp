@@ -74,12 +74,28 @@ export default function RoastGroups() {
     [rawGroups, productCountMap]
   );
 
+  const getLowCoverageLots = (rg: any) => {
+    const today = new Date();
+    return (rg.green_lot_roast_group_links ?? []).filter((link: any) => {
+      const lot = link.green_lots;
+      if (!lot || lot.status === 'EXHAUSTED' || !lot.estimated_days_to_consume) return false;
+      const startDate = lot.status === 'RECEIVED' ? lot.received_date : lot.expected_delivery_date;
+      if (!startDate) return false;
+      const endDate = new Date(startDate + 'T00:00:00');
+      endDate.setDate(endDate.getDate() + lot.estimated_days_to_consume);
+      const daysRemaining = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      return daysRemaining < 5;
+    });
+  };
+
   const needsAttention = (rg: any) => {
     if (rg.is_seasonal || !rg.is_active) return false;
     const activeLots = (rg.green_lot_roast_group_links ?? []).filter(
       (link: any) => link.green_lots && link.green_lots.status !== 'EXHAUSTED'
     );
-    return activeLots.length === 0;
+    if (activeLots.length === 0) return true;
+    if (getLowCoverageLots(rg).length > 0) return true;
+    return false;
   };
 
   const filtered = useMemo(() => {
