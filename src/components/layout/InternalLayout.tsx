@@ -39,6 +39,8 @@ import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { FeedbackModal } from '@/components/feedback/FeedbackModal';
 import { useFeedbackCount } from '@/hooks/useFeedbackCount';
+import { QuickCreateWizard } from '@/components/quick-create/QuickCreateWizard';
+import { NewRoastGroupModal } from '@/components/roast-groups/NewRoastGroupModal';
 
 interface InternalLayoutProps {
   children: React.ReactNode;
