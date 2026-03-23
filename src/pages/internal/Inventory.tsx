@@ -499,7 +499,7 @@ export default function Inventory() {
                             >
                               Adjust
                             </Button>
-                            {isAdmin && !activeRoastGroupKeys.has(row.roast_group) && (
+                            {isAdmin && (
                               <Button
                                 size="icon"
                                 variant="ghost"
