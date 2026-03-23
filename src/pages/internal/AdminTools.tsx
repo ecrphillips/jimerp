@@ -47,6 +47,12 @@ export default function AdminTools() {
   const [showBackfillModal, setShowBackfillModal] = useState(false);
   const [isBackfilling, setIsBackfilling] = useState(false);
 
+  // Co-Roasting clear state
+  const queryClient = useQueryClient();
+  const [showClearCoroastModal, setShowClearCoroastModal] = useState(false);
+  const [clearCoroastConfirmText, setClearCoroastConfirmText] = useState('');
+  const [isClearingCoroast, setIsClearingCoroast] = useState(false);
+
   // Query products missing SKUs
   const { data: productsNeedingSku = [] } = useQuery({
     queryKey: ['products-needing-sku'],
