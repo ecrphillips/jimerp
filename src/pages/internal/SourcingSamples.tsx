@@ -629,6 +629,21 @@ function SampleDetailPanel({
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
   const open = !!sampleId;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const isAdmin = authUser?.role === 'ADMIN';
+
+  const deleteSampleMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('green_samples').delete().eq('id', sampleId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Sample deleted');
+      queryClient.invalidateQueries({ queryKey: ['green-samples'] });
+      onClose();
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to delete sample'),
+  });
 
   const { data: sample } = useQuery({
     queryKey: ['green-sample', sampleId],
