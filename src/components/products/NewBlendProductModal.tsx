@@ -159,6 +159,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   
   const canSave = useMemo(() => {
     if (!clientId) return false;
+    if (!selectedClient?.account_code) return false;
     if (!finishedGoodName.trim()) return false;
     if (hasNoComponents) return false;
     if (!allComponentsSelected) return false;
@@ -166,7 +167,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     if (validVariants.length === 0) return false;
     if (!lifecycle) return false;
     return true;
-  }, [clientId, finishedGoodName, hasNoComponents, allComponentsSelected, percentageValid, validVariants, lifecycle]);
+  }, [clientId, selectedClient, finishedGoodName, hasNoComponents, allComponentsSelected, percentageValid, validVariants, lifecycle]);
   
   // Reset form
   const resetForm = () => {
