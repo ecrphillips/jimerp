@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGr
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Search, Plus, Check, FileText, AlertTriangle, Copy, Mail, CalendarIcon, PackageCheck } from 'lucide-react';
+import { Search, Plus, Check, FileText, AlertTriangle, Copy, Mail, CalendarIcon, PackageCheck, Trash2 } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { COFFEE_ORIGIN_COUNTRIES, COMMON_ORIGINS, OTHER_ORIGINS, getCountryName, getCountryDisplayLabel } from '@/lib/coffeeOrigins';
 
@@ -325,6 +325,21 @@ function ContractDetailPanel({
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
   const open = !!contractId;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const isAdmin = authUser?.role === 'ADMIN';
+
+  const deleteContractMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('green_contracts').delete().eq('id', contractId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Contract deleted');
+      queryClient.invalidateQueries({ queryKey: ['green-contracts'] });
+      onClose();
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to delete contract'),
+  });
 
   const { data: contract } = useQuery({
     queryKey: ['green-contract', contractId],
@@ -555,20 +570,38 @@ function ContractDetailPanel({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <Sheet open={open} onOpenChange={(o) => { if (!o) { setConfirmingDelete(false); onClose(); } }}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader className="flex-row items-center justify-between gap-2 pr-2">
             <div className="flex items-center gap-2">
               <SheetTitle className="text-lg">{contract?.name || 'Contract'}</SheetTitle>
               {contract && <ContractStatusBadge status={contract.status} />}
             </div>
-            <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={handleBriefMe}>
-              {briefCopied ? <Check className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
-              {briefCopied ? 'Copied' : 'Brief Me'}
-            </Button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={handleBriefMe}>
+                {briefCopied ? <Check className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+                {briefCopied ? 'Copied' : 'Brief Me'}
+              </Button>
+              {isAdmin && (
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setConfirmingDelete(true)}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </SheetHeader>
 
-          {contract && (
+          {confirmingDelete ? (
+            <div className="flex flex-col items-center gap-4 pt-12 text-center">
+              <p className="text-lg font-semibold">Delete "{contract?.name}"?</p>
+              <p className="text-sm text-muted-foreground">This cannot be undone.</p>
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={() => setConfirmingDelete(false)}>Cancel</Button>
+                <Button variant="destructive" disabled={deleteContractMutation.isPending} onClick={() => deleteContractMutation.mutate()}>
+                  {deleteContractMutation.isPending ? 'Deleting…' : 'Delete'}
+                </Button>
+              </div>
+            </div>
+          ) : contract && (
             <div className="space-y-6 pt-4">
               {/* Editable fields */}
               <div className="space-y-4">

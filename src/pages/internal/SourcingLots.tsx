@@ -363,6 +363,22 @@ function LotDetailPanel({
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
   const open = !!lotId;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const isAdmin = authUser?.role === 'ADMIN';
+
+  const deleteLotMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('green_lots').delete().eq('id', lotId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Lot deleted');
+      queryClient.invalidateQueries({ queryKey: ['green-lots-all'] });
+      queryClient.invalidateQueries({ queryKey: ['coverage-calendar-lots'] });
+      onClose();
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to delete lot'),
+  });
 
   const { data: lot, refetch: refetchLot } = useQuery({
     queryKey: ['green-lot-detail', lotId],
@@ -749,7 +765,7 @@ function LotDetailPanel({
   };
 
   return (
-    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Sheet open={open} onOpenChange={(o) => { if (!o) { setConfirmingDelete(false); onClose(); } }}>
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader className="flex-row items-center justify-between gap-2 pr-2">
           <div className="flex items-center gap-2">
@@ -765,10 +781,26 @@ function LotDetailPanel({
               {briefCopied ? <Check className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
               {briefCopied ? 'Copied' : 'Brief Me'}
             </Button>
+            {isAdmin && (
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setConfirmingDelete(true)}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </SheetHeader>
 
-        {lot && (
+        {confirmingDelete ? (
+          <div className="flex flex-col items-center gap-4 pt-12 text-center">
+            <p className="text-lg font-semibold">Delete "{lot?.lot_number}"?</p>
+            <p className="text-sm text-muted-foreground">This cannot be undone.</p>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setConfirmingDelete(false)}>Cancel</Button>
+              <Button variant="destructive" disabled={deleteLotMutation.isPending} onClick={() => deleteLotMutation.mutate()}>
+                {deleteLotMutation.isPending ? 'Deleting…' : 'Delete'}
+              </Button>
+            </div>
+          </div>
+        ) : lot && (
           <div className="space-y-6 pt-4">
             {/* SECTION 1 — LOT INFO */}
             <div className="space-y-3">

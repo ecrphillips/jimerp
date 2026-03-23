@@ -15,7 +15,7 @@ import { Switch } from '@/components/ui/switch';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Plus, Check, FileText, X } from 'lucide-react';
+import { Search, Plus, Check, FileText, X, Trash2 } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 
 type SampleStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -629,6 +629,21 @@ function SampleDetailPanel({
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
   const open = !!sampleId;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const isAdmin = authUser?.role === 'ADMIN';
+
+  const deleteSampleMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('green_samples').delete().eq('id', sampleId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Sample deleted');
+      queryClient.invalidateQueries({ queryKey: ['green-samples'] });
+      onClose();
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to delete sample'),
+  });
 
   const { data: sample } = useQuery({
     queryKey: ['green-sample', sampleId],
@@ -982,20 +997,38 @@ function SampleDetailPanel({
   const totalKg = (form.bag_size_kg ?? 0) && (form.num_bags ?? 0) ? Number(form.bag_size_kg) * Number(form.num_bags) : null;
 
   return (
-    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Sheet open={open} onOpenChange={(o) => { if (!o) { setConfirmingDelete(false); onClose(); } }}>
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader className="flex-row items-center justify-between gap-2 pr-2">
           <div className="flex items-center gap-2 min-w-0">
             <SheetTitle className="text-lg truncate">{sample?.name || 'Sample'}</SheetTitle>
             {sample && <StatusBadge status={sample.status} />}
           </div>
-          <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={handleBriefMe}>
-            {briefCopied ? <Check className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
-            {briefCopied ? 'Copied' : 'Brief Me'}
-          </Button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleBriefMe}>
+              {briefCopied ? <Check className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+              {briefCopied ? 'Copied' : 'Brief Me'}
+            </Button>
+            {isAdmin && (
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setConfirmingDelete(true)}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </SheetHeader>
 
-        {sample && (
+        {confirmingDelete ? (
+          <div className="flex flex-col items-center gap-4 pt-12 text-center">
+            <p className="text-lg font-semibold">Delete "{sample?.name}"?</p>
+            <p className="text-sm text-muted-foreground">This cannot be undone.</p>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setConfirmingDelete(false)}>Cancel</Button>
+              <Button variant="destructive" disabled={deleteSampleMutation.isPending} onClick={() => deleteSampleMutation.mutate()}>
+                {deleteSampleMutation.isPending ? 'Deleting…' : 'Delete'}
+              </Button>
+            </div>
+          </div>
+        ) : sample && (
           <div className="space-y-6 pt-4">
             <div className="space-y-4">
               <div>
