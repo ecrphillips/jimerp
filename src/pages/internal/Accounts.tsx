@@ -215,7 +215,10 @@ export default function Accounts() {
               <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-sm">{account.account_name}</span>
+                 <span className="font-medium text-sm">{account.account_name}</span>
+                  {account.account_code && (
+                    <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded">{account.account_code}</span>
+                  )}
                   {account.programs.includes('MANUFACTURING') && (
                     <Badge variant="outline" className="text-[10px] border-blue-500 text-blue-600">Manufacturing</Badge>
                   )}
