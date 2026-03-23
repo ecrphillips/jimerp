@@ -16,7 +16,7 @@ export function ProductsFamilyTreeSection({ roastGroupKey, displayName }: Props)
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, bag_size_g, grind_options, is_perennial, is_active, client_id, clients(id, name)')
+        .select('id, product_name, bag_size_g, grind_options, is_perennial, is_active, client_id, account_id, clients(id, name), accounts(id, account_name)')
         .eq('roast_group', roastGroupKey)
         .order('product_name');
       if (error) throw error;
