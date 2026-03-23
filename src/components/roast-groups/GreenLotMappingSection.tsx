@@ -31,7 +31,7 @@ export function GreenLotMappingSection({ roastGroupKey }: Props) {
           lot_id,
           pct_of_lot,
           green_lots (
-            id, lot_number, status, kg_on_hand,
+            id, lot_number, status, kg_on_hand, received_date, expected_delivery_date, estimated_days_to_consume,
             green_contracts ( origin )
           )
         `)
