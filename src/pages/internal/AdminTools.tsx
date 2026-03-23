@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,6 +46,12 @@ export default function AdminTools() {
   // SKU Backfill state
   const [showBackfillModal, setShowBackfillModal] = useState(false);
   const [isBackfilling, setIsBackfilling] = useState(false);
+
+  // Co-Roasting clear state
+  const queryClient = useQueryClient();
+  const [showClearCoroastModal, setShowClearCoroastModal] = useState(false);
+  const [clearCoroastConfirmText, setClearCoroastConfirmText] = useState('');
+  const [isClearingCoroast, setIsClearingCoroast] = useState(false);
 
   // Query products missing SKUs
   const { data: productsNeedingSku = [] } = useQuery({
@@ -226,6 +232,37 @@ export default function AdminTools() {
     setShowSeedModal(true);
   };
 
+  const handleClearCoroastData = async () => {
+    if (clearCoroastConfirmText !== 'CONFIRM') return;
+    setIsClearingCoroast(true);
+    try {
+      const tables = [
+        'coroast_invoices',
+        'coroast_waiver_log',
+        'coroast_storage_allocations',
+        'coroast_hour_ledger',
+        'coroast_bookings',
+        'coroast_billing_periods',
+      ] as const;
+      for (const table of tables) {
+        const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (error) throw error;
+      }
+      toast.success('Co-roasting data cleared');
+      queryClient.invalidateQueries({ queryKey: ['coroast-billing-periods'] });
+      queryClient.invalidateQueries({ queryKey: ['coroast-billing-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['coroast-invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['bookings-week'] });
+      queryClient.invalidateQueries({ queryKey: ['coroast-members-summary'] });
+      setShowClearCoroastModal(false);
+      setClearCoroastConfirmText('');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to clear co-roasting data');
+    } finally {
+      setIsClearingCoroast(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -270,6 +307,22 @@ export default function AdminTools() {
             >
               <Wand2 className="h-4 w-4" />
               Backfill SKUs
+            </Button>
+          </div>
+
+          {/* Clear Co-Roasting Test Data */}
+          <div className="border-t pt-4 space-y-4">
+            <div className="text-sm text-muted-foreground">
+              <p className="font-medium mb-1">Clear Co-Roasting Test Data</p>
+              <p>Delete all bookings, billing periods, hour ledger entries, invoices, storage allocations, and waiver logs. Member accounts and certifications are not affected.</p>
+            </div>
+            <Button
+              variant="destructive"
+              onClick={() => { setClearCoroastConfirmText(''); setShowClearCoroastModal(true); }}
+              className="gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              Clear All Co-Roasting Data
             </Button>
           </div>
         </CardContent>
@@ -681,6 +734,42 @@ export default function AdminTools() {
             </Button>
             <Button onClick={handleBackfillSkus} disabled={isBackfilling}>
               {isBackfilling ? 'Backfilling…' : 'Confirm Backfill'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Clear Co-Roasting Data Confirmation */}
+      <Dialog open={showClearCoroastModal} onOpenChange={setShowClearCoroastModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Clear All Co-Roasting Data?
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete all bookings, billing periods, hour ledger entries, invoices, storage allocations, and waiver logs. Member accounts and certifications are not affected. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="coroast-confirm">Type CONFIRM to proceed</Label>
+            <Input
+              id="coroast-confirm"
+              value={clearCoroastConfirmText}
+              onChange={e => setClearCoroastConfirmText(e.target.value)}
+              placeholder="CONFIRM"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowClearCoroastModal(false)} disabled={isClearingCoroast}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleClearCoroastData}
+              disabled={clearCoroastConfirmText !== 'CONFIRM' || isClearingCoroast}
+            >
+              {isClearingCoroast ? 'Clearing…' : 'Clear Co-Roasting Data'}
             </Button>
           </DialogFooter>
         </DialogContent>
