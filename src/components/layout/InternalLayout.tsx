@@ -12,6 +12,7 @@ import {
   LogOut,
   Coffee,
   Menu,
+  Plus,
   X,
   ChevronDown,
   ChevronRight,
@@ -38,6 +39,8 @@ import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { FeedbackModal } from '@/components/feedback/FeedbackModal';
 import { useFeedbackCount } from '@/hooks/useFeedbackCount';
+import { QuickCreateWizard } from '@/components/quick-create/QuickCreateWizard';
+import { NewRoastGroupModal } from '@/components/roast-groups/NewRoastGroupModal';
 
 interface InternalLayoutProps {
   children: React.ReactNode;
@@ -108,6 +111,8 @@ export function InternalLayout({ children }: InternalLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = React.useState(false);
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
+  const [quickCreateOpen, setQuickCreateOpen] = React.useState(false);
+  const [newRoastGroupOpen, setNewRoastGroupOpen] = React.useState(false);
   const feedbackNewCount = useFeedbackCount();
 
   useOrderNotifications();
@@ -247,6 +252,13 @@ export function InternalLayout({ children }: InternalLayoutProps) {
 
           <div className="border-t border-sidebar-border p-4">
             <button
+              onClick={() => { setQuickCreateOpen(true); closeSidebar(); }}
+              className="flex w-full items-center justify-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 mb-3 text-sm font-medium shadow-md transition-colors hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" />
+              Quick Create
+            </button>
+            <button
               onClick={() => { setFeedbackOpen(true); closeSidebar(); }}
               className="flex w-full items-center gap-2 rounded-md px-3 py-2 mb-2 text-xs font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/85 hover:text-sidebar-foreground"
             >
@@ -276,6 +288,8 @@ export function InternalLayout({ children }: InternalLayoutProps) {
 
       <AccountSheet open={accountSheetOpen} onOpenChange={setAccountSheetOpen} />
       <FeedbackModal open={feedbackOpen} onOpenChange={setFeedbackOpen} />
+      <QuickCreateWizard open={quickCreateOpen} onOpenChange={setQuickCreateOpen} onOpenNewRoastGroup={() => setNewRoastGroupOpen(true)} />
+      <NewRoastGroupModal open={newRoastGroupOpen} onOpenChange={setNewRoastGroupOpen} />
 
       <div className="flex flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 lg:hidden">
