@@ -293,7 +293,7 @@ export default function Inventory() {
     },
     onSuccess: () => {
       toast.success('WIP history cleared');
-      setConfirmDeleteGroup(null);
+      setConfirmClearWip(null);
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions-wip'] });
       queryClient.invalidateQueries({ queryKey: ['wip-adjustments'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
