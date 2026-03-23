@@ -325,6 +325,21 @@ function ContractDetailPanel({
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
   const open = !!contractId;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const isAdmin = authUser?.role === 'ADMIN';
+
+  const deleteContractMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('green_contracts').delete().eq('id', contractId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Contract deleted');
+      queryClient.invalidateQueries({ queryKey: ['green-contracts'] });
+      onClose();
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to delete contract'),
+  });
 
   const { data: contract } = useQuery({
     queryKey: ['green-contract', contractId],
