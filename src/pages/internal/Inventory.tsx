@@ -488,14 +488,47 @@ export default function Inventory() {
                           </span>
                         </td>
                         <td className="py-3 text-right">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs"
-                            onClick={() => openAdjustDialog(row.roast_group)}
-                          >
-                            Adjust
-                          </Button>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => openAdjustDialog(row.roast_group)}
+                            >
+                              Adjust
+                            </Button>
+                            {isAdmin && !(roastGroups ?? []).includes(row.roast_group) && (
+                              confirmDeleteGroup === row.roast_group ? (
+                                <div className="flex items-center gap-1 ml-2">
+                                  <span className="text-xs text-muted-foreground max-w-[200px] truncate" title={`Clear WIP history for ${row.roast_group}? This will permanently delete all inventory transaction records for this roast group. This cannot be undone.`}>
+                                    Clear history?
+                                  </span>
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setConfirmDeleteGroup(null)}>
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="h-7 text-xs"
+                                    disabled={deleteWipHistory.isPending}
+                                    onClick={() => deleteWipHistory.mutate(row.roast_group)}
+                                  >
+                                    Confirm
+                                  </Button>
+                                </div>
+                              ) : (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-destructive hover:text-destructive"
+                                  onClick={() => setConfirmDeleteGroup(row.roast_group)}
+                                  title={`Clear WIP history for ${row.roast_group}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
