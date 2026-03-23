@@ -374,7 +374,7 @@ export default function Inventory() {
           product_id: productId,
           units_delta: unitsDelta,
           units_after: newUnits,
-          created_by: user?.id,
+          created_by: authUser?.id,
         });
       if (logError) throw logError;
     },
