@@ -66,7 +66,7 @@ export default function Accounts() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('accounts')
-        .select('*')
+        .select('*, account_code')
         .order('account_name');
       if (error) throw error;
       return data as AccountRow[];
