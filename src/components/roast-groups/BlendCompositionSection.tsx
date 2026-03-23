@@ -196,22 +196,101 @@ export function BlendCompositionSection({ roastGroupKey }: Props) {
 
             {/* Add component inline */}
             {adding ? (
-              <div className="flex items-end gap-2 pt-2 border-t">
-                <div className="flex-1">
-                  <Select value={newComponent} onValueChange={setNewComponent}>
-                    <SelectTrigger><SelectValue placeholder="Select component" /></SelectTrigger>
-                    <SelectContent>
-                      {availableGroups.map(g => (
-                        <SelectItem key={g.roast_group} value={g.roast_group}>
-                          {g.display_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Input type="number" className="w-20" value={newPct} onChange={e => setNewPct(Number(e.target.value))} min={0} max={100} placeholder="%" />
-                <Button size="sm" onClick={addComponent} disabled={!newComponent}>Add</Button>
-                <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
+              <div className="space-y-3 pt-2 border-t">
+                {creatingNew ? (
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Display name *"
+                      value={newRgName}
+                      onChange={(e) => setNewRgName(e.target.value)}
+                    />
+                    <RadioGroup
+                      value={newRgIsBlend ? 'blend' : 'single'}
+                      onValueChange={(v) => setNewRgIsBlend(v === 'blend')}
+                      className="flex gap-4"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <RadioGroupItem value="single" id="inline-so" />
+                        <Label htmlFor="inline-so" className="text-sm mb-0">Single Origin</Label>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <RadioGroupItem value="blend" id="inline-bl" />
+                        <Label htmlFor="inline-bl" className="text-sm mb-0">Blend</Label>
+                      </div>
+                    </RadioGroup>
+                    {!newRgIsBlend && (
+                      <Input
+                        placeholder="Origin (e.g. Ethiopia)"
+                        value={newRgOrigin}
+                        onChange={(e) => setNewRgOrigin(e.target.value)}
+                      />
+                    )}
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        disabled={!newRgName.trim() || newRgSaving}
+                        onClick={async () => {
+                          setNewRgSaving(true);
+                          const result = await createOrReuseRoastGroup({
+                            displayName: newRgName.trim(),
+                            isBlend: newRgIsBlend,
+                            origin: newRgIsBlend ? null : newRgOrigin.trim() || null,
+                          });
+                          setNewRgSaving(false);
+                          if (result.error) {
+                            toast.error(result.error);
+                            return;
+                          }
+                          toast.success('Roast group created');
+                          queryClient.invalidateQueries({ queryKey: ['roast-groups-active-list'] });
+                          setNewComponent(result.roastGroupKey);
+                          setCreatingNew(false);
+                          setNewRgName('');
+                          setNewRgIsBlend(false);
+                          setNewRgOrigin('');
+                        }}
+                      >
+                        {newRgSaving ? 'Creating…' : 'Create'}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => {
+                        setCreatingNew(false);
+                        setNewRgName('');
+                        setNewRgIsBlend(false);
+                        setNewRgOrigin('');
+                      }}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <Select value={newComponent} onValueChange={(val) => {
+                        if (val === '__create_new__') {
+                          setCreatingNew(true);
+                        } else {
+                          setNewComponent(val);
+                        }
+                      }}>
+                        <SelectTrigger><SelectValue placeholder="Select component" /></SelectTrigger>
+                        <SelectContent>
+                          {availableGroups.map(g => (
+                            <SelectItem key={g.roast_group} value={g.roast_group}>
+                              {g.display_name}
+                            </SelectItem>
+                          ))}
+                          <Separator className="my-1" />
+                          <SelectItem value="__create_new__" className="text-primary font-medium">
+                            ＋ Create new roast group
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Input type="number" className="w-20" value={newPct} onChange={e => setNewPct(Number(e.target.value))} min={0} max={100} placeholder="%" />
+                    <Button size="sm" onClick={addComponent} disabled={!newComponent}>Add</Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewComponent(''); }}>Cancel</Button>
+                  </div>
+                )}
               </div>
             ) : (
               <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
