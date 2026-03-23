@@ -107,6 +107,59 @@ function ProfileTab({ account, refetch }: { account: any; refetch: () => void })
           <CardContent className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
             <div><span className="text-muted-foreground">Account Name</span><p className="font-medium">{account.account_name}</p></div>
             <div><span className="text-muted-foreground">Status</span><p>{account.is_active ? <Badge variant="outline" className="text-green-600 border-green-500">Active</Badge> : <Badge variant="destructive">Inactive</Badge>}</p></div>
+            <div>
+              <span className="text-muted-foreground">Account Code</span>
+              {account.account_code ? (
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="font-mono font-medium text-sm bg-muted px-2 py-0.5 rounded">{account.account_code}</span>
+                  <span className="text-xs text-muted-foreground flex items-center gap-1"><Lock className="h-3 w-3" /> Cannot be changed after creation</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 mt-0.5">
+                  <Input
+                    value={accountCodeInput}
+                    onChange={e => setAccountCodeInput(e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3))}
+                    placeholder="ABC"
+                    className="w-20 font-mono text-sm h-8"
+                    maxLength={3}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8"
+                    disabled={accountCodeInput.length !== 3 || savingCode}
+                    onClick={async () => {
+                      setSavingCode(true);
+                      try {
+                        // Check uniqueness
+                        const { data: existing } = await supabase
+                          .from('accounts')
+                          .select('id')
+                          .eq('account_code', accountCodeInput)
+                          .neq('id', account.id)
+                          .maybeSingle();
+                        if (existing) {
+                          toast.error(`Code "${accountCodeInput}" is already in use`);
+                          return;
+                        }
+                        const { error } = await supabase.from('accounts').update({ account_code: accountCodeInput } as any).eq('id', account.id);
+                        if (error) throw error;
+                        toast.success('Account code saved');
+                        queryClient.invalidateQueries({ queryKey: ['account-detail'] });
+                        refetch();
+                      } catch (err: any) {
+                        toast.error(err.message);
+                      } finally {
+                        setSavingCode(false);
+                      }
+                    }}
+                  >
+                    {savingCode ? '…' : 'Save'}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">3 uppercase letters. Used for SKU generation. Locked after save.</span>
+                </div>
+              )}
+            </div>
             <div><span className="text-muted-foreground">Billing Contact</span><p>{account.billing_contact_name || '—'}</p></div>
             <div><span className="text-muted-foreground">Billing Email</span><p>{account.billing_email || '—'}</p></div>
             <div><span className="text-muted-foreground">Billing Phone</span><p>{account.billing_phone || '—'}</p></div>
