@@ -42,11 +42,26 @@ interface AccountRow {
 }
 
 export default function Accounts() {
+  const { authUser } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [programFilter, setProgramFilter] = useState<ProgramFilter>('ALL');
   const [showNewModal, setShowNewModal] = useState(false);
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState<{id: string, name: string} | null>(null);
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('accounts').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Account deleted');
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      setConfirmDeleteAccount(null);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   // Form state
   const [formName, setFormName] = useState('');
