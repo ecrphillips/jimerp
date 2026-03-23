@@ -67,8 +67,9 @@ export default function Inventory() {
   const [adjustNotes, setAdjustNotes] = useState('');
   
   // WIP delete confirmation state
-  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState<string | null>(null);
+  const [confirmClearWip, setConfirmClearWip] = useState<string | null>(null);
   const isAdmin = user?.role === 'ADMIN';
+  const activeRoastGroupKeys = useMemo(() => new Set(roastGroups ?? []), [roastGroups]);
 
   // ===== WIP Tab Queries =====
   
