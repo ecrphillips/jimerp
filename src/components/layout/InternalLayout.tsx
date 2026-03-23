@@ -12,6 +12,7 @@ import {
   LogOut,
   Coffee,
   Menu,
+  Plus,
   X,
   ChevronDown,
   ChevronRight,
