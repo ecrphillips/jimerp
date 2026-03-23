@@ -191,7 +191,7 @@ export function CoverageCalendar() {
               <div className="absolute top-0 text-[10px] text-destructive font-medium" style={{ left: `${todayPct}%`, transform: 'translateX(-50%)' }}>
                 Today
               </div>
-              {monthMarkers.map((m, i) => (
+              {axisMarkers.map((m, i) => (
                 <div key={i} className="absolute bottom-0 text-[10px] text-muted-foreground" style={{ left: `${m.pct}%` }}>
                   {m.label}
                 </div>
