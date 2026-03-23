@@ -319,7 +319,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
       orders.push({
         id: order.id,
         order_number: order.order_number,
-        client_name: order.client?.name ?? 'Unknown',
+        client_name: (order as any).account?.account_name ?? order.client?.name ?? 'Unknown',
         requested_ship_date: order.requested_ship_date,
         work_deadline: order.work_deadline_at ?? null, // Map work_deadline_at to work_deadline for display
         delivery_method: order.delivery_method,

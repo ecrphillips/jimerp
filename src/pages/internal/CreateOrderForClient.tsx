@@ -527,7 +527,7 @@ export default function CreateOrderForClient() {
               </SelectTrigger>
               <SelectContent>
                 {clients?.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  <SelectItem key={c.id} value={c.id}>{c.account_name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

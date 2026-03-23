@@ -573,7 +573,7 @@ export default function OrderDetail() {
         <Card>
           <CardHeader><CardTitle>Order Info</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <div><strong>Client:</strong> {order.client?.name ?? 'Unknown'}</div>
+            <div><strong>Client:</strong> {(order as any).account?.account_name ?? order.client?.name ?? 'Unknown'}</div>
             <div><strong>Status:</strong> {order.status}</div>
             <div><strong>Delivery:</strong> {order.delivery_method}</div>
             <div><strong>Client PO:</strong> {order.client_po || '—'}</div>

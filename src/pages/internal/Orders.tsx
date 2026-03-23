@@ -359,7 +359,7 @@ export default function Orders() {
                         </Badge>
                       )}
                       <span className="text-sm text-muted-foreground truncate">
-                        {o.client?.name ?? 'Unknown'}
+                        {(o as any).account?.account_name ?? o.client?.name ?? 'Unknown'}
                       </span>
                       <LocationCodeDisplay locationId={o.location_id} />
                     </div>
