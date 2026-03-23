@@ -68,8 +68,9 @@ export default function Orders() {
           created_by_admin,
           location_id,
           created_at,
-          client:clients(name),
-          order_line_items(id, product_id, quantity_units)
+            client:clients(name),
+            account:accounts(account_name),
+            order_line_items(id, product_id, quantity_units)
         `)
         .order('created_at', { ascending: false });
 
@@ -358,7 +359,7 @@ export default function Orders() {
                         </Badge>
                       )}
                       <span className="text-sm text-muted-foreground truncate">
-                        {o.client?.name ?? 'Unknown'}
+                        {(o as any).account?.account_name ?? o.client?.name ?? 'Unknown'}
                       </span>
                       <LocationCodeDisplay locationId={o.location_id} />
                     </div>

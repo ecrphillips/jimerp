@@ -18,7 +18,7 @@ import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
 
 interface Client {
   id: string;
-  name: string;
+  account_name: string;
   client_code: string;
 }
 
@@ -76,15 +76,15 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   
   // Queries
   const { data: clients } = useQuery({
-    queryKey: ['all-clients-with-code'],
+    queryKey: ['all-accounts-with-code'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('clients')
-        .select('id, name, client_code')
+        .from('accounts')
+        .select('id, account_name')
         .eq('is_active', true)
-        .order('name');
+        .order('account_name');
       if (error) throw error;
-      return (data ?? []) as Client[];
+      return (data ?? []).map((a: any) => ({ id: a.id, account_name: a.account_name, client_code: a.account_name.substring(0, 4).toUpperCase() })) as Client[];
     },
   });
   
@@ -276,6 +276,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
           .from('products')
           .insert({
             client_id: clientId,
+            account_id: clientId,
             product_name: trimmedName,
             sku: skuData.sku,
             roast_group: finalRoastGroupKey,
@@ -298,6 +299,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
                 .from('products')
                 .insert({
                   client_id: clientId,
+                  account_id: clientId,
                   product_name: trimmedName,
                   sku: fallbackSku,
                   roast_group: finalRoastGroupKey,
@@ -404,7 +406,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
               <SelectContent>
                 {clients?.map(c => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.name} ({c.client_code})
+                    {c.account_name}
                   </SelectItem>
                 ))}
               </SelectContent>

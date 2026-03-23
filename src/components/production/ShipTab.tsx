@@ -183,6 +183,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           ship_display_order,
           manually_deprioritized,
           client:clients(name),
+          account:accounts(account_name),
           line_items:order_line_items(
             id,
             product_id,
@@ -235,6 +236,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           ship_display_order,
           manually_deprioritized,
           client:clients(name),
+          account:accounts(account_name),
           line_items:order_line_items(
             id,
             product_id,
@@ -317,7 +319,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
       orders.push({
         id: order.id,
         order_number: order.order_number,
-        client_name: order.client?.name ?? 'Unknown',
+        client_name: (order as any).account?.account_name ?? order.client?.name ?? 'Unknown',
         requested_ship_date: order.requested_ship_date,
         work_deadline: order.work_deadline_at ?? null, // Map work_deadline_at to work_deadline for display
         delivery_method: order.delivery_method,
@@ -705,7 +707,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
                   <div className="flex items-center gap-3">
                     <span className="font-semibold">{order.order_number}</span>
                     <span className="text-muted-foreground">•</span>
-                    <span>{order.client?.name ?? 'Unknown'}</span>
+                    <span>{(order as any).account?.account_name ?? order.client?.name ?? 'Unknown'}</span>
                     <span className="text-xs text-muted-foreground">
                       ({(order.line_items ?? []).length} item{(order.line_items ?? []).length !== 1 ? 's' : ''})
                     </span>

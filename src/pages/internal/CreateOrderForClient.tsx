@@ -51,7 +51,7 @@ interface Product {
 
 interface Client {
   id: string;
-  name: string;
+  account_name: string;
 }
 
 // Helper to build display name with packaging info
@@ -105,15 +105,15 @@ export default function CreateOrderForClient() {
   const [internalNotes, setInternalNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Fetch all clients
+  // Fetch all accounts (replaces legacy clients query)
   const { data: clients } = useQuery({
-    queryKey: ['all-clients'],
+    queryKey: ['all-accounts-for-orders'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('clients')
-        .select('id, name')
+        .from('accounts')
+        .select('id, account_name')
         .eq('is_active', true)
-        .order('name', { ascending: true });
+        .order('account_name', { ascending: true });
 
       if (error) throw error;
       return (data ?? []) as Client[];
@@ -127,8 +127,8 @@ export default function CreateOrderForClient() {
       if (!selectedClientId) return [];
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, bag_size_g, grams_per_unit, format, grind_options, is_perennial, packaging_type_id, packaging_types(name), client_id')
-        .eq('client_id', selectedClientId)
+        .select('id, product_name, sku, bag_size_g, grams_per_unit, format, grind_options, is_perennial, packaging_type_id, packaging_types(name), client_id, account_id')
+        .eq('account_id', selectedClientId)
         .eq('is_active', true)
         .order('product_name', { ascending: true });
 
@@ -283,6 +283,7 @@ export default function CreateOrderForClient() {
         .from('orders')
         .insert({
           client_id: selectedClientId,
+          account_id: selectedClientId,
           location_id: selectedLocationId || null,
           order_number: '',
           status: initialStatus,
@@ -493,7 +494,7 @@ export default function CreateOrderForClient() {
           {(() => {
             const commonClients = clients?.filter(c => 
               ['Matchstick', 'Funk', 'No Smoke'].some(name => 
-                c.name.toLowerCase().includes(name.toLowerCase())
+                c.account_name.toLowerCase().includes(name.toLowerCase())
               )
             ) ?? [];
             if (commonClients.length > 0) {
@@ -508,7 +509,7 @@ export default function CreateOrderForClient() {
                         size="sm"
                         onClick={() => setSelectedClientId(c.id)}
                       >
-                        {c.name}
+                        {c.account_name}
                       </Button>
                     ))}
                   </div>
@@ -526,7 +527,7 @@ export default function CreateOrderForClient() {
               </SelectTrigger>
               <SelectContent>
                 {clients?.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  <SelectItem key={c.id} value={c.id}>{c.account_name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

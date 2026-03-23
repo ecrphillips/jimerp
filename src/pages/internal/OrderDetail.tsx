@@ -66,7 +66,8 @@ export default function OrderDetail() {
           client_id,
           location_id,
           updated_at,
-          client:clients(name)
+           client:clients(name),
+           account:accounts(account_name)
         `)
         .eq('id', id!)
         .maybeSingle();
@@ -572,7 +573,7 @@ export default function OrderDetail() {
         <Card>
           <CardHeader><CardTitle>Order Info</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <div><strong>Client:</strong> {order.client?.name ?? 'Unknown'}</div>
+            <div><strong>Client:</strong> {(order as any).account?.account_name ?? order.client?.name ?? 'Unknown'}</div>
             <div><strong>Status:</strong> {order.status}</div>
             <div><strong>Delivery:</strong> {order.delivery_method}</div>
             <div><strong>Client PO:</strong> {order.client_po || '—'}</div>
