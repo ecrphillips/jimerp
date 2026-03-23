@@ -18,7 +18,7 @@ import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
 
 interface Client {
   id: string;
-  name: string;
+  account_name: string;
   client_code: string;
 }
 
