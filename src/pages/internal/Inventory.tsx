@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { Trash2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -64,6 +65,10 @@ export default function Inventory() {
   const [adjustKgDelta, setAdjustKgDelta] = useState('');
   const [adjustReason, setAdjustReason] = useState<WipAdjustmentReason>('COUNT_ADJUSTMENT');
   const [adjustNotes, setAdjustNotes] = useState('');
+  
+  // WIP delete confirmation state
+  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState<string | null>(null);
+  const isAdmin = user?.role === 'ADMIN';
 
   // ===== WIP Tab Queries =====
   
@@ -264,6 +269,40 @@ export default function Inventory() {
     },
   });
 
+  // WIP history delete mutation (orphaned roast groups only)
+  const deleteWipHistory = useMutation({
+    mutationFn: async (roastGroupKey: string) => {
+      const { error: e1 } = await supabase
+        .from('inventory_transactions')
+        .delete()
+        .eq('roast_group', roastGroupKey);
+      if (e1) throw e1;
+
+      const { error: e2 } = await supabase
+        .from('wip_adjustments')
+        .delete()
+        .eq('roast_group', roastGroupKey);
+      if (e2) throw e2;
+
+      const { error: e3 } = await supabase
+        .from('wip_ledger')
+        .delete()
+        .eq('roast_group', roastGroupKey);
+      if (e3) throw e3;
+    },
+    onSuccess: () => {
+      toast.success('WIP history cleared');
+      setConfirmDeleteGroup(null);
+      queryClient.invalidateQueries({ queryKey: ['inventory-transactions-wip'] });
+      queryClient.invalidateQueries({ queryKey: ['wip-adjustments'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
+    },
+    onError: (err: any) => {
+      console.error(err);
+      toast.error(err.message || 'Failed to clear WIP history');
+    },
+  });
+
   // ===== Finished Goods Tab =====
   
   // Fetch FG inventory with product details
@@ -449,14 +488,47 @@ export default function Inventory() {
                           </span>
                         </td>
                         <td className="py-3 text-right">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs"
-                            onClick={() => openAdjustDialog(row.roast_group)}
-                          >
-                            Adjust
-                          </Button>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => openAdjustDialog(row.roast_group)}
+                            >
+                              Adjust
+                            </Button>
+                            {isAdmin && !(roastGroups ?? []).includes(row.roast_group) && (
+                              confirmDeleteGroup === row.roast_group ? (
+                                <div className="flex items-center gap-1 ml-2">
+                                  <span className="text-xs text-muted-foreground max-w-[200px] truncate" title={`Clear WIP history for ${row.roast_group}? This will permanently delete all inventory transaction records for this roast group. This cannot be undone.`}>
+                                    Clear history?
+                                  </span>
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setConfirmDeleteGroup(null)}>
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="h-7 text-xs"
+                                    disabled={deleteWipHistory.isPending}
+                                    onClick={() => deleteWipHistory.mutate(row.roast_group)}
+                                  >
+                                    Confirm
+                                  </Button>
+                                </div>
+                              ) : (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-destructive hover:text-destructive"
+                                  onClick={() => setConfirmDeleteGroup(row.roast_group)}
+                                  title={`Clear WIP history for ${row.roast_group}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
