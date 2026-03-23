@@ -149,6 +149,7 @@ export type Database = {
       }
       accounts: {
         Row: {
+          account_code: string | null
           account_name: string
           billing_address: string | null
           billing_contact_name: string | null
@@ -168,6 +169,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_code?: string | null
           account_name: string
           billing_address?: string | null
           billing_contact_name?: string | null
@@ -187,6 +189,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_code?: string | null
           account_name?: string
           billing_address?: string | null
           billing_contact_name?: string | null
