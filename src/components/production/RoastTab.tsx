@@ -1313,7 +1313,6 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
         if (!open) {
           setShowAddBatchModal(false);
           setAddBatchRgKey('');
-          setAddBatchDescription('');
           setAddBatchNewName('');
           setAddBatchKg('');
           setAddBatchRoaster('');
