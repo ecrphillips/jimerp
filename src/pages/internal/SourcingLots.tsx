@@ -185,7 +185,7 @@ export default function SourcingLots() {
         </div>
       </div>
 
-      <Tabs defaultValue="lots">
+      <Tabs defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="lots">Lots</TabsTrigger>
           <TabsTrigger value="coverage">Coverage Calendar</TabsTrigger>
