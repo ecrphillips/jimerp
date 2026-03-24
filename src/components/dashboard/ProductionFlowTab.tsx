@@ -329,7 +329,7 @@ export function ProductionFlowTab() {
                 label="FG"
                 value={`${metrics?.fgNeededTodayUnits ?? 0}`}
                 unit="units"
-                subLabel="pick pressure"
+                subLabel="PICK"
                 litCount={channelData?.fgLit ?? 0}
                 isLoading={isLoading}
               />
