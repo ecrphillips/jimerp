@@ -1,47 +1,52 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Flame, Package, Truck, Clock } from 'lucide-react';
 import { useDashboardMetrics, TimeHorizon } from '@/hooks/useDashboardMetrics';
-import { Skeleton } from '@/components/ui/skeleton';
 
-function MetricCard({ 
-  icon: Icon, 
-  label, 
-  sublabel, 
-  value, 
+const SEGMENT_COUNT = 12;
+
+function VuMeter({
+  label,
+  value,
+  max,
   unit,
-  isLoading 
-}: { 
-  icon: React.ElementType;
+  isLoading,
+}: {
   label: string;
-  sublabel: string;
   value: number;
+  max: number;
   unit: string;
-  isLoading?: boolean;
+  isLoading: boolean;
 }) {
+  const litCount = Math.min(SEGMENT_COUNT, Math.round((value / max) * SEGMENT_COUNT));
+
+  const getSegmentColor = (index: number, isLit: boolean) => {
+    if (!isLit) return 'bg-muted/30';
+    if (index >= 10) return 'bg-red-500';
+    if (index >= 7) return 'bg-yellow-400';
+    return 'bg-green-500';
+  };
+
   return (
-    <Card className="flex flex-col">
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <div>
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            {label}
-          </CardTitle>
-          <p className="text-xs text-muted-foreground/70 mt-0.5">{sublabel}</p>
-        </div>
-        <Icon className="h-5 w-5 text-muted-foreground" />
-      </CardHeader>
-      <CardContent className="flex-1 flex items-end">
-        {isLoading ? (
-          <Skeleton className="h-10 w-24" />
-        ) : (
-          <p className="text-4xl font-bold tabular-nums">
-            {value.toLocaleString()}
-            <span className="text-lg font-normal text-muted-foreground ml-1">{unit}</span>
-          </p>
-        )}
-      </CardContent>
-    </Card>
+    <div className="flex flex-col items-center gap-2">
+      <div className="border border-border rounded-sm p-1 bg-background flex flex-col-reverse gap-px">
+        {Array.from({ length: SEGMENT_COUNT }, (_, i) => (
+          <div
+            key={i}
+            className={`w-8 h-3 rounded-[1px] transition-colors ${
+              isLoading ? 'bg-muted/20 animate-pulse' : getSegmentColor(i, i < litCount)
+            }`}
+          />
+        ))}
+      </div>
+      <div className="text-center mt-1">
+        <p className="text-lg font-bold tabular-nums leading-tight">
+          {isLoading ? '—' : value.toLocaleString()}
+        </p>
+        <p className="text-xs text-muted-foreground">{unit}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+      </div>
+    </div>
   );
 }
 
@@ -79,36 +84,32 @@ export function ProductionFlowTab() {
         )}
       </p>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-        <MetricCard
-          icon={Flame}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 justify-items-center mb-6">
+        <VuMeter
           label="Roast Demand"
-          sublabel="Remaining roasting work"
           value={metrics?.roastDemandKg ?? 0}
+          max={100}
           unit="kg"
           isLoading={isLoading}
         />
-        <MetricCard
-          icon={Package}
+        <VuMeter
           label="WIP Buffer"
-          sublabel="Roasted, waiting to pack"
           value={metrics?.wipBufferKg ?? 0}
+          max={100}
           unit="kg"
           isLoading={isLoading}
         />
-        <MetricCard
-          icon={Truck}
+        <VuMeter
           label="FG Ready"
-          sublabel="Packed, ready to pick"
           value={metrics?.fgReadyUnits ?? 0}
+          max={500}
           unit="units"
           isLoading={isLoading}
         />
-        <MetricCard
-          icon={Clock}
+        <VuMeter
           label="Blocked Demand"
-          sublabel="Orders awaiting fulfilment"
           value={metrics?.blockedDemandUnits ?? 0}
+          max={500}
           unit="units"
           isLoading={isLoading}
         />
