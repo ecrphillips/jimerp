@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { RefreshCw, Minus, Plus, AlertTriangle } from 'lucide-react';
@@ -83,14 +82,14 @@ function ChannelStrip({
 }) {
   return (
     <div className="flex flex-col items-center gap-1.5 w-16 shrink-0">
-      <span className="text-[10px] font-semibold tracking-widest text-zinc-400 uppercase">
+      <span className="text-[10px] font-semibold tracking-widest text-zinc-300 uppercase drop-shadow-[0_0_4px_rgba(255,255,255,0.3)]">
         {label}
       </span>
       <VuMeter litCount={litCount} isLoading={isLoading} />
-      <p className="text-sm font-bold tabular-nums text-zinc-100 leading-tight">
+      <p className="text-sm font-bold tabular-nums text-white leading-tight drop-shadow-[0_0_6px_rgba(255,255,255,0.5)]">
         {isLoading ? '—' : value}
       </p>
-      <p className="text-[10px] text-zinc-500">{unit}</p>
+      <p className="text-[10px] text-zinc-400">{unit}</p>
       {children}
       {subLabel && <p className="text-[10px] text-zinc-500 text-center leading-tight">{subLabel}</p>}
     </div>
@@ -103,6 +102,13 @@ function calcLitCount(demand: number, hoursRemaining: number, capacityPerHr: num
   const loadRatio = (demand / hrs) / capacityPerHr;
   return Math.min(segments, Math.round(loadRatio * segments));
 }
+
+// ===== Horizon Button =====
+const horizonOptions: { value: TimeHorizon; label: string }[] = [
+  { value: 'today', label: 'TODAY' },
+  { value: 'tomorrow', label: 'TMRW' },
+  { value: 'week', label: 'WEEK' },
+];
 
 // ===== Main Component =====
 export function ProductionFlowTab() {
@@ -206,7 +212,7 @@ export function ProductionFlowTab() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
+      {/* Header — external */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
@@ -218,41 +224,9 @@ export function ProductionFlowTab() {
           <PacificTimeTicker />
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Staff spinner */}
-          <div className="flex items-center gap-1 bg-muted/50 rounded-md px-2 py-1">
-            <span className="text-xs text-muted-foreground mr-1">Staff</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={() => setLocalStaff(Math.max(0.5, staffCount - 0.5))}
-            >
-              <Minus className="h-3 w-3" />
-            </Button>
-            <span className="text-sm font-bold tabular-nums w-8 text-center">{staffCount}</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={() => setLocalStaff(Math.min(6, staffCount + 0.5))}
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
-          </div>
-
-          <Tabs value={horizon} onValueChange={(v) => setHorizon(v as TimeHorizon)}>
-            <TabsList>
-              <TabsTrigger value="today">Today</TabsTrigger>
-              <TabsTrigger value="tomorrow">Tomorrow</TabsTrigger>
-              <TabsTrigger value="week">Week</TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          <Button variant="ghost" size="icon" onClick={() => refetch()} className="h-8 w-8">
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
+        <Button variant="ghost" size="icon" onClick={() => refetch()} className="h-8 w-8">
+          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
 
       {/* Context line */}
@@ -279,84 +253,135 @@ export function ProductionFlowTab() {
       ))}
 
       {/* ===== Console ===== */}
-      <div className="bg-zinc-950 rounded-xl border border-zinc-800 p-4 overflow-x-auto">
-        <div className="flex items-end gap-4 min-w-max">
-          {/* Channel 1 — Samiac */}
-          <ChannelStrip
-            label="Samiac"
-            value={`${((metrics?.samiacBatchKgToday ?? 0) + (metrics?.samiacCoroastKgToday ?? 0)).toFixed(0)}`}
-            unit="kg"
-            litCount={channelData?.samiacLit ?? 0}
-            isLoading={isLoading}
-          >
-            <MiniBar
-              production={metrics?.samiacBatchKgToday ?? 0}
-              coroast={metrics?.samiacCoroastKgToday ?? 0}
-              label="samiac"
-            />
-          </ChannelStrip>
-
-          {/* Channel 2 — Loring */}
-          <ChannelStrip
-            label="Loring"
-            value={`${((metrics?.loringBatchKgToday ?? 0) + (metrics?.loringCoroastKgToday ?? 0)).toFixed(0)}`}
-            unit="kg"
-            litCount={channelData?.loringLit ?? 0}
-            isLoading={isLoading}
-          >
-            <MiniBar
-              production={metrics?.loringBatchKgToday ?? 0}
-              coroast={metrics?.loringCoroastKgToday ?? 0}
-              label="loring"
-            />
-          </ChannelStrip>
-
-          {/* Channel 3 — WIP */}
-          <ChannelStrip
-            label="WIP"
-            value={`${(metrics?.wipNeededTodayKg ?? 0).toFixed(0)}`}
-            unit="kg"
-            subLabel="pack pressure"
-            litCount={channelData?.wipLit ?? 0}
-            isLoading={isLoading}
-          />
-
-          {/* Channel 4 — FG */}
-          <ChannelStrip
-            label="FG"
-            value={`${metrics?.fgNeededTodayUnits ?? 0}`}
-            unit="units"
-            subLabel="pick pressure"
-            litCount={channelData?.fgLit ?? 0}
-            isLoading={isLoading}
-          />
-
-          {/* Channel 5 — Ship */}
-          <ChannelStrip
-            label="Ship"
-            value={`${metrics?.ordersToShipToday ?? 0}`}
-            unit="orders"
-            subLabel="to ship today"
-            litCount={channelData?.shipLit ?? 0}
-            isLoading={isLoading}
-          />
-
-          {/* Divider */}
-          <div className="w-px h-48 bg-zinc-700 mx-2 shrink-0" />
-
-          {/* Master */}
-          <div className="flex flex-col items-center gap-1.5 w-24 shrink-0">
-            <span className="text-[10px] font-semibold tracking-widest text-zinc-400 uppercase">
-              Master
+      <div className="bg-zinc-950 rounded-xl border border-zinc-800 overflow-hidden">
+        {/* Console header bar */}
+        <div className="bg-zinc-900 border-b border-zinc-700 px-4 py-2 flex items-center justify-between">
+          <span className="text-zinc-500 text-[10px] uppercase tracking-widest font-semibold">
+            Floor Console
+          </span>
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-zinc-500 uppercase tracking-wider mr-2">Staff</span>
+            <button
+              className="h-6 w-6 flex items-center justify-center rounded text-zinc-600 hover:text-zinc-400 transition-colors"
+              onClick={() => setLocalStaff(Math.max(0.5, staffCount - 0.5))}
+            >
+              <Minus className="h-3 w-3" />
+            </button>
+            <span className="text-sm font-bold tabular-nums w-8 text-center text-green-400 drop-shadow-[0_0_6px_rgba(74,222,128,0.5)]">
+              {staffCount}
             </span>
-            <div className="flex gap-1">
-              <VuMeter litCount={channelData?.masterLit ?? 0} segments={16} isLoading={isLoading} />
-              <VuMeter litCount={channelData?.masterLit ?? 0} segments={16} isLoading={isLoading} />
+            <button
+              className="h-6 w-6 flex items-center justify-center rounded text-zinc-600 hover:text-zinc-400 transition-colors"
+              onClick={() => setLocalStaff(Math.min(6, staffCount + 0.5))}
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+
+        {/* Console body */}
+        <div className="p-4 overflow-x-auto">
+          <div className="flex items-end justify-between min-w-max">
+            {/* Left: Channel strips */}
+            <div className="flex items-end gap-4">
+              {/* Channel 1 — Samiac */}
+              <ChannelStrip
+                label="Samiac"
+                value={`${((metrics?.samiacBatchKgToday ?? 0) + (metrics?.samiacCoroastKgToday ?? 0)).toFixed(0)}`}
+                unit="kg"
+                litCount={channelData?.samiacLit ?? 0}
+                isLoading={isLoading}
+              >
+                <MiniBar
+                  production={metrics?.samiacBatchKgToday ?? 0}
+                  coroast={metrics?.samiacCoroastKgToday ?? 0}
+                  label="samiac"
+                />
+              </ChannelStrip>
+
+              {/* Channel 2 — Loring */}
+              <ChannelStrip
+                label="Loring"
+                value={`${((metrics?.loringBatchKgToday ?? 0) + (metrics?.loringCoroastKgToday ?? 0)).toFixed(0)}`}
+                unit="kg"
+                litCount={channelData?.loringLit ?? 0}
+                isLoading={isLoading}
+              >
+                <MiniBar
+                  production={metrics?.loringBatchKgToday ?? 0}
+                  coroast={metrics?.loringCoroastKgToday ?? 0}
+                  label="loring"
+                />
+              </ChannelStrip>
+
+              {/* Channel 3 — WIP */}
+              <ChannelStrip
+                label="WIP"
+                value={`${(metrics?.wipNeededTodayKg ?? 0).toFixed(0)}`}
+                unit="kg"
+                subLabel="pack pressure"
+                litCount={channelData?.wipLit ?? 0}
+                isLoading={isLoading}
+              />
+
+              {/* Channel 4 — FG */}
+              <ChannelStrip
+                label="FG"
+                value={`${metrics?.fgNeededTodayUnits ?? 0}`}
+                unit="units"
+                subLabel="pick pressure"
+                litCount={channelData?.fgLit ?? 0}
+                isLoading={isLoading}
+              />
+
+              {/* Channel 5 — Ship */}
+              <ChannelStrip
+                label="Ship"
+                value={`${metrics?.ordersToShipToday ?? 0}`}
+                unit="orders"
+                subLabel="to ship today"
+                litCount={channelData?.shipLit ?? 0}
+                isLoading={isLoading}
+              />
             </div>
-            <p className="text-lg font-bold tabular-nums text-zinc-100">
-              {isLoading ? '—' : `${metrics?.masterLoadPct ?? 0}%`}
-            </p>
-            <p className="text-[10px] text-zinc-500">floor load</p>
+
+            {/* Right: Divider + Master + Horizon buttons */}
+            <div className="flex items-end gap-4">
+              {/* Divider */}
+              <div className="w-px h-48 bg-zinc-600 shrink-0" />
+
+              {/* Master */}
+              <div className="flex flex-col items-center gap-1.5 w-24 shrink-0">
+                <span className="text-[10px] font-semibold tracking-widest text-zinc-300 uppercase drop-shadow-[0_0_4px_rgba(255,255,255,0.3)]">
+                  Master
+                </span>
+                <div className="flex gap-1">
+                  <VuMeter litCount={channelData?.masterLit ?? 0} segments={16} isLoading={isLoading} />
+                  <VuMeter litCount={channelData?.masterLit ?? 0} segments={16} isLoading={isLoading} />
+                </div>
+                <p className="text-lg font-bold tabular-nums text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.5)]">
+                  {isLoading ? '—' : `${metrics?.masterLoadPct ?? 0}%`}
+                </p>
+                <p className="text-[10px] text-zinc-400">floor load</p>
+              </div>
+
+              {/* Horizon selector buttons */}
+              <div className="flex flex-col gap-2 ml-4">
+                {horizonOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setHorizon(opt.value)}
+                    className={`w-20 h-10 rounded text-xs font-bold uppercase tracking-wider border transition-all ${
+                      horizon === opt.value
+                        ? 'bg-zinc-700 border-green-400 text-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]'
+                        : 'bg-zinc-800 border-zinc-600 text-zinc-500 hover:border-zinc-500 hover:text-zinc-400'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
