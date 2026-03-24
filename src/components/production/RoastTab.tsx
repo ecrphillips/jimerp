@@ -1485,7 +1485,6 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                   queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
                   setShowAddBatchModal(false);
                   setAddBatchRgKey('');
-                  setAddBatchDescription('');
                   setAddBatchNewName('');
                   setAddBatchKg('');
                   setAddBatchRoaster('');
