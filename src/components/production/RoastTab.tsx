@@ -1443,8 +1443,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
               disabled={
                 addBatchSaving ||
                 (addBatchMode === 'existing' && !addBatchRgKey) ||
-                (addBatchMode === 'new' && !addBatchNewName.trim()) ||
-                (addBatchMode === 'description' && !addBatchDescription.trim())
+                (addBatchMode === 'new' && !addBatchNewName.trim())
               }
               onClick={async () => {
                 setAddBatchSaving(true);
