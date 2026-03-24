@@ -377,8 +377,8 @@ export function ProductsListTab() {
 
       const first = matchingVariants[0];
       const accountName = first.account?.account_name ?? first.client?.name ?? 'Unknown';
-      const roastGroupName = first.roast_group_info?.display_name ?? first.roast_group ?? '—';
-      const origin = first.roast_group_info?.origin ?? null;
+      const roastGroupName = first.roast_group ?? '—';
+      const origin = null;
 
       // Last order date across all variants
       let familyLastOrder: Date | null = null;
