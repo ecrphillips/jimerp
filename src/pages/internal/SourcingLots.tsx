@@ -119,6 +119,8 @@ function CostingStatusBadge({ costingStatus }: { costingStatus: string }) {
 // ─── Main Page ─────────────────────────────────────────────
 
 export default function SourcingLots() {
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') === 'coverage' ? 'coverage' : 'lots';
   const [search, setSearch] = useState('');
   const [physicalFilter, setPhysicalFilter] = useState<string>('ALL');
   const [costingFilter, setCostingFilter] = useState<string>('ALL');

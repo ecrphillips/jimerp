@@ -122,6 +122,21 @@ export function GreenCoffeeTab({ enabled }: { enabled: boolean }) {
 
   return (
     <div className="space-y-6">
+      {/* Coverage Calendar link */}
+      <Card
+        className="cursor-pointer hover:bg-accent/50 transition-colors"
+        onClick={() => navigate('/sourcing/lots?tab=coverage')}
+      >
+        <CardContent className="flex items-center gap-4 py-4">
+          <CalendarDays className="h-6 w-6 text-muted-foreground shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm">Coverage Calendar</p>
+            <p className="text-xs text-muted-foreground">Visual lot coverage by roast group</p>
+          </div>
+          <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+        </CardContent>
+      </Card>
+
       {/* Section A */}
       <Card>
         <CardHeader>
