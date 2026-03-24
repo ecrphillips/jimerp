@@ -273,28 +273,17 @@ export function ProductionFlowTab() {
                 unit="kg"
                 litCount={channelData?.samiacLit ?? 0}
                 isLoading={isLoading}
-              >
-                <MiniBar
-                  production={metrics?.samiacBatchKgToday ?? 0}
-                  coroast={metrics?.samiacCoroastKgToday ?? 0}
-                  label="samiac"
-                />
-              </ChannelStrip>
+              />
 
               {/* Channel 2 — Loring */}
               <ChannelStrip
                 label="Loring"
                 value={`${((metrics?.loringBatchKgToday ?? 0) + (metrics?.loringCoroastKgToday ?? 0)).toFixed(0)}`}
                 unit="kg"
+                subLabel={(metrics?.loringCoroastKgToday ?? 0) > 0 ? `co-r: ${(metrics!.loringCoroastKgToday).toFixed(0)} kg` : undefined}
                 litCount={channelData?.loringLit ?? 0}
                 isLoading={isLoading}
-              >
-                <MiniBar
-                  production={metrics?.loringBatchKgToday ?? 0}
-                  coroast={metrics?.loringCoroastKgToday ?? 0}
-                  label="loring"
-                />
-              </ChannelStrip>
+              />
 
               {/* Channel 3 — WIP */}
               <ChannelStrip
