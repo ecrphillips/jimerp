@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertTriangle, Trash2, Sparkles, RotateCcw, Bomb, Wand2 } from 'lucide-react';
+import { GenericLaneConversion } from '@/components/admin/GenericLaneConversion';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { OrderNotificationSettings } from '@/components/admin/OrderNotificationSettings';
@@ -331,6 +332,9 @@ export default function AdminTools() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Generic Lane Conversion */}
+      <GenericLaneConversion />
 
       {/* Dev/Test Reset Card */}
       <Card className="border-destructive/50">
