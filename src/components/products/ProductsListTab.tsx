@@ -173,7 +173,7 @@ export function ProductsListTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, client_id, account_id, packaging_variant, roast_group, client:clients(name), account:accounts(account_name), roast_group_info:roast_groups(display_name, origin)')
+        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, client_id, account_id, packaging_variant, roast_group, client:clients(name), account:accounts(account_name)')
         .order('product_name');
 
       if (error) throw error;
