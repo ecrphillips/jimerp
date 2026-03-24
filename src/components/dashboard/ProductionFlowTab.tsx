@@ -86,7 +86,7 @@ function ChannelStrip({
         {label}
       </span>
       <VuMeter litCount={litCount} isLoading={isLoading} />
-      <p className="text-sm font-bold tabular-nums text-white leading-tight drop-shadow-[0_0_6px_rgba(255,255,255,0.5)]">
+      <p className="text-sm font-bold tabular-nums text-white leading-tight drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]">
         {isLoading ? '—' : value}
       </p>
       <p className="text-[10px] text-zinc-400">{unit}</p>
