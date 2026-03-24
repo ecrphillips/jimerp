@@ -113,8 +113,8 @@ export function ProductionFlowTab() {
     const samiacTotal = metrics.samiacBatchKgToday + metrics.samiacCoroastKgToday;
     const loringTotal = metrics.loringBatchKgToday + metrics.loringCoroastKgToday;
 
-    const samiacLit = calcLitCount(samiacTotal, hrs, roastCapPerHr);
-    const loringLit = calcLitCount(loringTotal, hrs, roastCapPerHr);
+    const samiacLit = calcLitCount(samiacTotal, hrs, 40);
+    const loringLit = calcLitCount(loringTotal, hrs, 40);
     const wipLit = calcLitCount(metrics.wipNeededTodayKg, hrs, packCapPerHr);
     const fgLit = calcLitCount(metrics.fgNeededTodayUnits, hrs, packCapPerHr * 10 / avgOrderKg);
     const shipLit = calcLitCount(metrics.ordersToShipToday, hrs, shipCapPerHr);
