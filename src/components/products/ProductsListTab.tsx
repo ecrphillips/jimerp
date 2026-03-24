@@ -309,7 +309,7 @@ export function ProductsListTab() {
     if (!products) return [];
     const set = new Set<string>();
     for (const p of products) {
-      if (p.roast_group_info?.origin) set.add(p.roast_group_info.origin);
+      // origin join removed for debugging
     }
     return [...set].sort();
   }, [products]);
