@@ -129,7 +129,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   // Add batch modal state
   const [showAddBatchModal, setShowAddBatchModal] = useState(false);
   const [addBatchRgKey, setAddBatchRgKey] = useState('');
-  const [addBatchDescription, setAddBatchDescription] = useState('');
+  
   const [addBatchKg, setAddBatchKg] = useState('');
   const [addBatchRoaster, setAddBatchRoaster] = useState<'SAMIAC' | 'LORING' | ''>('');
   const [addBatchDate, setAddBatchDate] = useState(today);
