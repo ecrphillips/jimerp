@@ -36,7 +36,7 @@ interface Product {
   roast_group: string | null;
   client: { name: string } | null;
   account: { account_name: string } | null;
-  roast_group_info: { display_name: string; origin: string | null } | null;
+  
 }
 
 const FORMATS: ProductFormat[] = ['WHOLE_BEAN', 'ESPRESSO', 'FILTER', 'OTHER'];
@@ -160,7 +160,7 @@ export function ProductsListTab() {
   const [filterAccount, setFilterAccount] = useState('__all__');
   const [filterRoastGroup, setFilterRoastGroup] = useState('__all__');
   const [filterOrigin, setFilterOrigin] = useState('__all__');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [sortMode, setSortMode] = useState<SortMode>('recent');
 
   // Expand state
@@ -173,7 +173,7 @@ export function ProductsListTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, client_id, account_id, packaging_variant, roast_group, client:clients(name), account:accounts(account_name), roast_group_info:roast_groups(display_name, origin)')
+        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, client_id, account_id, packaging_variant, roast_group, client:clients(name), account:accounts(account_name)')
         .order('product_name');
 
       if (error) throw error;
@@ -309,7 +309,7 @@ export function ProductsListTab() {
     if (!products) return [];
     const set = new Set<string>();
     for (const p of products) {
-      if (p.roast_group_info?.origin) set.add(p.roast_group_info.origin);
+      // origin join removed for debugging
     }
     return [...set].sort();
   }, [products]);
@@ -369,7 +369,7 @@ export function ProductsListTab() {
         // Roast group
         if (filterRoastGroup !== '__all__' && p.roast_group !== filterRoastGroup) return false;
         // Origin
-        if (filterOrigin !== '__all__' && p.roast_group_info?.origin !== filterOrigin) return false;
+        if (filterOrigin !== '__all__') return false;
         return true;
       });
 
@@ -377,8 +377,8 @@ export function ProductsListTab() {
 
       const first = matchingVariants[0];
       const accountName = first.account?.account_name ?? first.client?.name ?? 'Unknown';
-      const roastGroupName = first.roast_group_info?.display_name ?? first.roast_group ?? '—';
-      const origin = first.roast_group_info?.origin ?? null;
+      const roastGroupName = first.roast_group ?? '—';
+      const origin = null;
 
       // Last order date across all variants
       let familyLastOrder: Date | null = null;
