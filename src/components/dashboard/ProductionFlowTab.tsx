@@ -319,7 +319,7 @@ export function ProductionFlowTab() {
                 label="WIP"
                 value={`${(metrics?.wipNeededTodayKg ?? 0).toFixed(0)}`}
                 unit="kg"
-                subLabel="pack pressure"
+                subLabel="PACK"
                 litCount={channelData?.wipLit ?? 0}
                 isLoading={isLoading}
               />
