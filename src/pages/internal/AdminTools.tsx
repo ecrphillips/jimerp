@@ -333,6 +333,9 @@ export default function AdminTools() {
         </CardContent>
       </Card>
 
+      {/* Generic Lane Conversion */}
+      <GenericLaneConversion />
+
       {/* Dev/Test Reset Card */}
       <Card className="border-destructive/50">
         <CardHeader>
