@@ -5,13 +5,34 @@ import { toZonedTime } from 'date-fns-tz';
 
 export type TimeHorizon = 'today' | 'tomorrow' | 'week';
 
-interface DashboardMetrics {
-  roastDemandKg: number;
-  wipBufferKg: number;
-  fgReadyUnits: number;
-  systemStressScore: number;
+export interface DashboardMetrics {
+  // Channel 1 — Samiac
+  samiacBatchKgToday: number;
+  samiacCoroastKgToday: number;
+
+  // Channel 2 — Loring
+  loringBatchKgToday: number;
+  loringCoroastKgToday: number;
+
+  // Channel 3 — Pack pressure
+  wipNeededTodayKg: number;
+
+  // Channel 4 — FG pressure
+  fgNeededTodayUnits: number;
+
+  // Channel 5 — Ship pressure
+  ordersToShipToday: number;
+
+  // Master
+  masterLoadPct: number;
+
+  // Context
+  hoursRemainingToday: number;
   ordersInWindow: number;
   lineItemsInWindow: number;
+
+  // Staff
+  staffCount: number;
 }
 
 export function useDashboardMetrics(horizon: TimeHorizon) {
@@ -24,23 +45,23 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
   const monday = startOfWeek(zonedNow, { weekStartsOn: 1 });
   const fridayEnd = addDays(monday, 5);
 
+  const todayStr = format(today, 'yyyy-MM-dd');
+  const tomorrowStr = format(tomorrow, 'yyyy-MM-dd');
+
   const getDateFilter = () => {
     if (horizon === 'today') {
-      return { gte: format(today, 'yyyy-MM-dd'), lte: format(tomorrow, 'yyyy-MM-dd') };
+      return { gte: todayStr, lte: tomorrowStr };
     } else if (horizon === 'tomorrow') {
-      return { gte: format(tomorrow, 'yyyy-MM-dd'), lte: format(dayAfter, 'yyyy-MM-dd') };
+      return { gte: tomorrowStr, lte: format(dayAfter, 'yyyy-MM-dd') };
     }
-    // 'week' — Mon to Fri
     return { gte: format(monday, 'yyyy-MM-dd'), lte: format(fridayEnd, 'yyyy-MM-dd') };
   };
 
-  // We need prodStartHour/prodEndHour outside queryFn for refetchInterval
-  // Default values used; actual values come from queryFn
-  const prodStartHourDefault = 6;
-  const prodEndHourDefault = 15;
+  const prodStartHourDefault = 8;
+  const prodEndHourDefault = 16;
 
   return useQuery({
-    queryKey: ['dashboard-metrics-v2', horizon],
+    queryKey: ['dashboard-metrics-v3', horizon],
     queryFn: async (): Promise<DashboardMetrics> => {
       // Fetch production window settings
       const { data: settingsRow } = await supabase
@@ -50,12 +71,67 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
         .maybeSingle();
 
       const prodWindow = settingsRow?.value_json as { start_hour: number; end_hour: number } | null;
-      const prodStartHour = prodWindow?.start_hour ?? 6;
-      const prodEndHour = prodWindow?.end_hour ?? 15;
+      const prodStartHour = prodWindow?.start_hour ?? 8;
+      const prodEndHour = prodWindow?.end_hour ?? 16;
+
+      // Fetch staff count
+      const { data: staffRow } = await supabase
+        .from('app_settings')
+        .select('value_json')
+        .eq('key', 'floor_capacity')
+        .maybeSingle();
+
+      const staffJson = staffRow?.value_json as { staff_count: number } | null;
+      const staffCount = staffJson?.staff_count ?? 2.5;
+
+      // Hours remaining today
+      const currentHour = getHours(zonedNow);
+      const inWindow = currentHour >= prodStartHour && currentHour < prodEndHour;
+      const hoursRemainingToday = inWindow ? Math.max(0, prodEndHour - currentHour) : 0;
 
       const dateFilter = getDateFilter();
 
-      // 1. Get open orders with line items in the selected window
+      // ===== Channel 1 & 2: Roaster batches today =====
+      const { data: plannedBatches } = await supabase
+        .from('roasted_batches')
+        .select('roast_group, planned_output_kg, assigned_roaster')
+        .eq('status', 'PLANNED')
+        .eq('target_date', todayStr);
+
+      let samiacBatchKgToday = 0;
+      let loringBatchKgToday = 0;
+      let unassignedKg = 0;
+
+      for (const b of plannedBatches || []) {
+        const kg = Number(b.planned_output_kg ?? 0);
+        if (b.assigned_roaster === 'SAMIAC') {
+          samiacBatchKgToday += kg;
+        } else if (b.assigned_roaster === 'LORING') {
+          loringBatchKgToday += kg;
+        } else {
+          unassignedKg += kg;
+        }
+      }
+      // Split unassigned evenly
+      samiacBatchKgToday += unassignedKg / 2;
+      loringBatchKgToday += unassignedKg / 2;
+
+      // ===== Channel 2b: Co-roasting today =====
+      const { data: coroastBookings } = await supabase
+        .from('coroast_bookings')
+        .select('duration_hours')
+        .eq('status', 'CONFIRMED')
+        .eq('booking_date', todayStr);
+
+      let loringCoroastKgToday = 0;
+      for (const b of coroastBookings || []) {
+        loringCoroastKgToday += (Number(b.duration_hours ?? 0)) * 40;
+      }
+
+      // Samiac doesn't do co-roasting
+      const samiacCoroastKgToday = 0;
+
+      // ===== Orders in window (for context line) =====
       let ordersQuery = supabase
         .from('orders')
         .select(`
@@ -75,10 +151,27 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
           .gte('work_deadline', dateFilter.gte)
           .lte('work_deadline', dateFilter.lte);
       }
-
       const { data: orders } = await ordersQuery;
 
-      // 2. Get ship_picks to know what's already picked
+      // ===== Orders due TODAY specifically (for channels 3-5) =====
+      const { data: todayOrders } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          work_deadline,
+          status,
+          order_line_items (
+            id,
+            product_id,
+            quantity_units
+          )
+        `)
+        .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY'])
+        .gte('work_deadline', todayStr)
+        .lte('work_deadline', tomorrowStr);
+
+      // Ship picks for today's orders
+      const todayOrderIds = (todayOrders || []).map(o => o.id);
       const { data: shipPicks } = await supabase
         .from('ship_picks')
         .select('order_line_item_id, units_picked');
@@ -87,234 +180,98 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
         (shipPicks || []).map(p => [p.order_line_item_id, p.units_picked])
       );
 
-      // 3. Get products with roast_group and bag_size_g
+      // Products info
       const { data: products } = await supabase
         .from('products')
         .select('id, bag_size_g, roast_group, grams_per_unit')
         .eq('is_active', true);
 
       const productInfo = new Map(
-        (products || []).map(p => [p.id, { 
-          bag_size_g: p.bag_size_g, 
+        (products || []).map(p => [p.id, {
+          bag_size_g: p.bag_size_g,
           roast_group: p.roast_group,
           grams_per_unit: p.grams_per_unit || p.bag_size_g,
         }])
       );
 
-      // 4. Get roast groups to identify blends
-      const { data: roastGroups } = await supabase
-        .from('roast_groups')
-        .select('roast_group, is_blend, is_active')
-        .eq('is_active', true);
+      // ===== Channel 3: WIP needed today =====
+      let wipNeededTodayKg = 0;
 
-      const blendGroups = new Set(
-        (roastGroups || []).filter(rg => rg.is_blend).map(rg => rg.roast_group)
-      );
+      // ===== Channel 4: FG needed today =====
+      let fgNeededTodayUnits = 0;
 
-      // 5. Get blend components
-      const { data: blendComponents } = await supabase
-        .from('roast_group_components')
-        .select('parent_roast_group, component_roast_group');
+      // ===== Channel 5: Orders to ship today =====
+      let ordersToShipToday = 0;
+      const todayOrderIdSet = new Set<string>();
 
-      // 6. Calculate remaining demand per product and per roast_group
-      const remainingByProduct = new Map<string, number>();
-      const remainingKgByRoastGroup = new Map<string, number>();
-      let lineItemCount = 0;
-      const orderIds = new Set<string>();
+      for (const order of todayOrders || []) {
+        let orderHasRemaining = false;
+        todayOrderIdSet.add(order.id);
 
-      for (const order of orders || []) {
-        orderIds.add(order.id);
         for (const item of order.order_line_items || []) {
           const picked = picksByLineItem.get(item.id) || 0;
           const remaining = Math.max(0, item.quantity_units - picked);
-          
+
           if (remaining > 0) {
-            lineItemCount++;
-            
-            remainingByProduct.set(
-              item.product_id,
-              (remainingByProduct.get(item.product_id) || 0) + remaining
-            );
-            
+            orderHasRemaining = true;
+            fgNeededTodayUnits += remaining;
+
             const info = productInfo.get(item.product_id);
-            if (info?.roast_group) {
-              const kgNeeded = (remaining * info.grams_per_unit) / 1000;
-              remainingKgByRoastGroup.set(
-                info.roast_group,
-                (remainingKgByRoastGroup.get(info.roast_group) || 0) + kgNeeded
-              );
+            if (info) {
+              wipNeededTodayKg += (remaining * info.grams_per_unit) / 1000;
             }
           }
         }
-      }
 
-      // 7. Get FG inventory from inventory_transactions ledger
-      const { data: fgTransactions } = await supabase
-        .from('inventory_transactions')
-        .select('product_id, quantity_units')
-        .in('transaction_type', ['PACK_PRODUCE_FG', 'SHIP_CONSUME_FG'])
-        .not('product_id', 'is', null);
-
-      const fgByProduct = new Map<string, number>();
-      for (const tx of fgTransactions || []) {
-        if (tx.product_id) {
-          fgByProduct.set(
-            tx.product_id,
-            (fgByProduct.get(tx.product_id) || 0) + (tx.quantity_units || 0)
-          );
+        if (orderHasRemaining) {
+          ordersToShipToday++;
         }
       }
 
-      // 8. Get WIP from roasted batches and packing runs
-      const { data: roastedBatches } = await supabase
-        .from('roasted_batches')
-        .select('roast_group, actual_output_kg, status, consumed_by_blend_at, planned_for_blend_roast_group')
-        .eq('status', 'ROASTED');
+      // ===== Context counts for window =====
+      let lineItemsInWindow = 0;
+      const orderIdsInWindow = new Set<string>();
 
-      const { data: packingRuns } = await supabase
-        .from('packing_runs')
-        .select('product_id, kg_consumed');
-
-      const { data: wipAdjustments } = await supabase
-        .from('inventory_transactions')
-        .select('roast_group, quantity_kg')
-        .not('roast_group', 'is', null)
-        .in('transaction_type', ['ADJUSTMENT', 'LOSS']);
-
-      const roastedByGroup = new Map<string, number>();
-      for (const batch of roastedBatches || []) {
-        if (batch.planned_for_blend_roast_group) continue;
-        if (batch.consumed_by_blend_at) continue;
-        roastedByGroup.set(
-          batch.roast_group,
-          (roastedByGroup.get(batch.roast_group) || 0) + Number(batch.actual_output_kg)
-        );
-      }
-
-      const consumedByGroup = new Map<string, number>();
-      for (const run of packingRuns || []) {
-        const info = productInfo.get(run.product_id);
-        if (info?.roast_group) {
-          consumedByGroup.set(
-            info.roast_group,
-            (consumedByGroup.get(info.roast_group) || 0) + Number(run.kg_consumed)
-          );
-        }
-      }
-
-      const adjustmentsByGroup = new Map<string, number>();
-      for (const adj of wipAdjustments || []) {
-        if (adj.roast_group) {
-          adjustmentsByGroup.set(
-            adj.roast_group,
-            (adjustmentsByGroup.get(adj.roast_group) || 0) + Number(adj.quantity_kg ?? 0)
-          );
-        }
-      }
-
-      const wipByGroup = new Map<string, number>();
-      const allWipGroups = new Set([
-        ...roastedByGroup.keys(),
-        ...consumedByGroup.keys(),
-        ...adjustmentsByGroup.keys(),
-      ]);
-
-      for (const rg of allWipGroups) {
-        const roasted = roastedByGroup.get(rg) || 0;
-        const consumed = consumedByGroup.get(rg) || 0;
-        const adjusted = adjustmentsByGroup.get(rg) || 0;
-        const isBlend = blendGroups.has(rg);
-        const netWip = isBlend
-          ? Math.max(0, adjusted - consumed)
-          : Math.max(0, roasted - consumed + adjusted);
-        if (netWip > 0) {
-          wipByGroup.set(rg, netWip);
-        }
-      }
-
-      // 9. FG Ready — total FG on hand (uncapped)
-      let fgReadyUnits = 0;
-      for (const [, units] of fgByProduct) {
-        if (units > 0) fgReadyUnits += units;
-      }
-
-      // Track FG offset for roast demand calculation
-      const fgUsedKgByRoastGroup = new Map<string, number>();
-      for (const [productId, fgOnHand] of fgByProduct) {
-        if (fgOnHand <= 0) continue;
-        const remaining = remainingByProduct.get(productId) || 0;
-        const usable = Math.min(fgOnHand, remaining);
-        if (usable > 0) {
-          const info = productInfo.get(productId);
-          if (info?.roast_group) {
-            const kgUsed = (usable * info.grams_per_unit) / 1000;
-            fgUsedKgByRoastGroup.set(
-              info.roast_group,
-              (fgUsedKgByRoastGroup.get(info.roast_group) || 0) + kgUsed
-            );
+      for (const order of orders || []) {
+        orderIdsInWindow.add(order.id);
+        for (const item of order.order_line_items || []) {
+          const picked = picksByLineItem.get(item.id) || 0;
+          if (item.quantity_units - picked > 0) {
+            lineItemsInWindow++;
           }
         }
       }
 
-      // 10. WIP Buffer — total WIP on hand (uncapped)
-      let wipBufferKg = 0;
-      for (const [, wipKg] of wipByGroup) {
-        wipBufferKg += wipKg;
-      }
+      // ===== Master load % =====
+      const roastCapPerHr = staffCount * 40;
+      const packCapPerHr = staffCount * 33.5;
+      const avgOrderKg = 10;
+      const shipCapPerHr = staffCount * (33.5 / avgOrderKg);
+      const hrs = Math.max(0.5, hoursRemainingToday || 1); // avoid division by zero
 
-      // 11. Calculate Roast Demand from orders
-      let roastDemandKg = 0;
-      for (const [roastGroup, demandKg] of remainingKgByRoastGroup) {
-        const fgOffsetKg = fgUsedKgByRoastGroup.get(roastGroup) || 0;
-        const wipAvailable = wipByGroup.get(roastGroup) || 0;
-        const wipUsable = Math.min(wipAvailable, Math.max(0, demandKg - fgOffsetKg));
-        const remainingRoastWork = Math.max(0, demandKg - fgOffsetKg - wipUsable);
-        roastDemandKg += remainingRoastWork;
-      }
+      const samiacLoad = Math.min(100, ((samiacBatchKgToday + samiacCoroastKgToday) / hrs) / roastCapPerHr * 100);
+      const loringLoad = Math.min(100, ((loringBatchKgToday + loringCoroastKgToday) / hrs) / roastCapPerHr * 100);
+      const wipLoad = Math.min(100, (wipNeededTodayKg / hrs) / packCapPerHr * 100);
+      const fgLoad = Math.min(100, (fgNeededTodayUnits / hrs) / (packCapPerHr / (avgOrderKg / 10)) * 100);
+      const shipLoad = Math.min(100, (ordersToShipToday / hrs) / shipCapPerHr * 100);
 
-      // 11b. Add planned batches not connected to orders
-      const { data: plannedBatches } = await supabase
-        .from('roasted_batches')
-        .select('roast_group, planned_output_kg, target_date')
-        .eq('status', 'PLANNED');
-
-      for (const batch of plannedBatches || []) {
-        // Filter to date window
-        if (dateFilter) {
-          if (batch.target_date < dateFilter.gte || batch.target_date > dateFilter.lte) continue;
-        }
-        // Only add if roast_group is NOT already covered by order demand
-        if (!remainingKgByRoastGroup.has(batch.roast_group)) {
-          roastDemandKg += Number(batch.planned_output_kg ?? 0);
-        }
-      }
-
-      // 12. System Stress Score
-      const currentHour = getHours(zonedNow);
-      const inWindow = currentHour >= prodStartHour && currentHour < prodEndHour;
-      const hoursRemainingToday = inWindow ? Math.max(0, prodEndHour - currentHour) : 0;
-
-      // Count remaining weekdays after today (Mon=1..Fri=5)
-      const dayOfWeek = getDay(zonedNow); // 0=Sun, 1=Mon, ..., 6=Sat
-      let remainingWeekdays = 0;
-      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-        remainingWeekdays = 5 - dayOfWeek; // days after today in Mon-Fri
-      }
-      const windowHoursPerDay = prodEndHour - prodStartHour;
-      const hoursRemainingThisWeek = hoursRemainingToday + remainingWeekdays * windowHoursPerDay;
-
-      const systemStressScore = Math.min(
-        100,
-        Math.round((orderIds.size / Math.max(1, hoursRemainingToday)) * 20)
-      );
+      const masterLoadPct = Math.min(100, Math.round(
+        (samiacLoad + loringLoad + wipLoad + fgLoad + shipLoad) / 5
+      ));
 
       return {
-        roastDemandKg: Math.round(roastDemandKg * 10) / 10,
-        wipBufferKg: Math.round(wipBufferKg * 10) / 10,
-        fgReadyUnits: Math.round(fgReadyUnits),
-        systemStressScore,
-        ordersInWindow: orderIds.size,
-        lineItemsInWindow: lineItemCount,
+        samiacBatchKgToday: Math.round(samiacBatchKgToday * 10) / 10,
+        samiacCoroastKgToday: Math.round(samiacCoroastKgToday * 10) / 10,
+        loringBatchKgToday: Math.round(loringBatchKgToday * 10) / 10,
+        loringCoroastKgToday: Math.round(loringCoroastKgToday * 10) / 10,
+        wipNeededTodayKg: Math.round(wipNeededTodayKg * 10) / 10,
+        fgNeededTodayUnits: Math.round(fgNeededTodayUnits),
+        ordersToShipToday,
+        masterLoadPct,
+        hoursRemainingToday,
+        ordersInWindow: orderIdsInWindow.size,
+        lineItemsInWindow,
+        staffCount,
       };
     },
     refetchInterval: () => {

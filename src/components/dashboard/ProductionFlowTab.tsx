@@ -1,74 +1,246 @@
-import React, { useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import React, { useState, useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { RefreshCw } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { RefreshCw, Minus, Plus, AlertTriangle } from 'lucide-react';
 import { useDashboardMetrics, TimeHorizon } from '@/hooks/useDashboardMetrics';
+import { PacificTimeTicker } from '@/components/production/PacificTimeTicker';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
+import { format, addDays, startOfDay } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 
-const SEGMENT_COUNT = 12;
-
+// ===== VU Meter =====
 function VuMeter({
-  label,
-  value,
-  max,
-  unit,
+  litCount,
+  segments = 12,
   isLoading,
 }: {
-  label: string;
-  value: number;
-  max: number;
-  unit: string;
+  litCount: number;
+  segments?: number;
   isLoading: boolean;
 }) {
-  const litCount = Math.min(SEGMENT_COUNT, Math.round((value / max) * SEGMENT_COUNT));
-
   const getSegmentColor = (index: number, isLit: boolean) => {
-    if (!isLit) return 'bg-muted/30';
-    if (index >= 10) return 'bg-red-500';
-    if (index >= 7) return 'bg-yellow-400';
+    if (!isLit) return 'bg-zinc-700';
+    const pct = index / segments;
+    if (pct >= 10 / 12) return 'bg-red-500';
+    if (pct >= 7 / 12) return 'bg-yellow-400';
     return 'bg-green-500';
   };
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="border border-border rounded-sm p-1 bg-background flex flex-col-reverse gap-px">
-        {Array.from({ length: SEGMENT_COUNT }, (_, i) => (
-          <div
-            key={i}
-            className={`w-8 h-3 rounded-[1px] transition-colors ${
-              isLoading ? 'bg-muted/20 animate-pulse' : getSegmentColor(i, i < litCount)
-            }`}
-          />
-        ))}
+    <div className="border border-zinc-700 rounded-sm p-1 bg-zinc-950 flex flex-col-reverse gap-px">
+      {Array.from({ length: segments }, (_, i) => (
+        <div
+          key={i}
+          className={`rounded-[1px] transition-colors ${
+            segments === 16 ? 'w-6 h-2.5' : 'w-6 h-3'
+          } ${isLoading ? 'bg-zinc-800 animate-pulse' : getSegmentColor(i, i < litCount)}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ===== Mini bar for production vs co-roast split =====
+function MiniBar({ production, coroast, label }: { production: number; coroast: number; label: string }) {
+  const total = production + coroast;
+  if (total === 0) return <span className="text-[10px] text-zinc-500">{label}: 0 kg</span>;
+  const prodPct = (production / total) * 100;
+  return (
+    <div className="w-full space-y-0.5">
+      <div className="flex h-1.5 rounded-full overflow-hidden bg-zinc-800">
+        <div className="bg-green-500" style={{ width: `${prodPct}%` }} />
+        <div className="bg-green-500/40" style={{ width: `${100 - prodPct}%` }} />
       </div>
-      <div className="text-center mt-1">
-        <p className="text-lg font-bold tabular-nums leading-tight">
-          {isLoading ? '—' : value.toLocaleString()}
-        </p>
-        <p className="text-xs text-muted-foreground">{unit}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+      <div className="flex justify-between text-[9px] text-zinc-500">
+        <span>{production.toFixed(0)} prod</span>
+        <span>{coroast.toFixed(0)} co-r</span>
       </div>
     </div>
   );
 }
 
+// ===== Channel Strip =====
+function ChannelStrip({
+  label,
+  value,
+  unit,
+  subLabel,
+  litCount,
+  isLoading,
+  children,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  subLabel?: string;
+  litCount: number;
+  isLoading: boolean;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-1.5 w-16 shrink-0">
+      <span className="text-[10px] font-semibold tracking-widest text-zinc-400 uppercase">
+        {label}
+      </span>
+      <VuMeter litCount={litCount} isLoading={isLoading} />
+      <p className="text-sm font-bold tabular-nums text-zinc-100 leading-tight">
+        {isLoading ? '—' : value}
+      </p>
+      <p className="text-[10px] text-zinc-500">{unit}</p>
+      {children}
+      {subLabel && <p className="text-[10px] text-zinc-500 text-center leading-tight">{subLabel}</p>}
+    </div>
+  );
+}
+
+// ===== Helpers =====
+function calcLitCount(demand: number, hoursRemaining: number, capacityPerHr: number, segments = 12): number {
+  const hrs = Math.max(0.5, hoursRemaining);
+  const loadRatio = (demand / hrs) / capacityPerHr;
+  return Math.min(segments, Math.round(loadRatio * segments));
+}
+
+// ===== Main Component =====
 export function ProductionFlowTab() {
   const [horizon, setHorizon] = useState<TimeHorizon>('today');
   const { data: metrics, isLoading, refetch } = useDashboardMetrics(horizon);
+  const [localStaff, setLocalStaff] = useState<number | null>(null);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-  const horizonLabel = horizon === 'today' 
-    ? 'Today & Tomorrow' 
-    : horizon === 'tomorrow' 
-      ? 'Day After Tomorrow' 
+  const staffCount = localStaff ?? metrics?.staffCount ?? 2.5;
+  const hrs = Math.max(0.5, metrics?.hoursRemainingToday ?? 1);
+
+  const roastCapPerHr = staffCount * 40;
+  const packCapPerHr = staffCount * 33.5;
+  const avgOrderKg = 10;
+  const shipCapPerHr = staffCount * (33.5 / avgOrderKg);
+
+  // Calculate lit counts
+  const channelData = useMemo(() => {
+    if (!metrics) return null;
+    const samiacTotal = metrics.samiacBatchKgToday + metrics.samiacCoroastKgToday;
+    const loringTotal = metrics.loringBatchKgToday + metrics.loringCoroastKgToday;
+
+    const samiacLit = calcLitCount(samiacTotal, hrs, roastCapPerHr);
+    const loringLit = calcLitCount(loringTotal, hrs, roastCapPerHr);
+    const wipLit = calcLitCount(metrics.wipNeededTodayKg, hrs, packCapPerHr);
+    const fgLit = calcLitCount(metrics.fgNeededTodayUnits, hrs, packCapPerHr * 10 / avgOrderKg);
+    const shipLit = calcLitCount(metrics.ordersToShipToday, hrs, shipCapPerHr);
+
+    const loads = [samiacLit, loringLit, wipLit, fgLit, shipLit];
+    const masterLit = Math.min(16, Math.round((loads.reduce((a, b) => a + b, 0) / (5 * 12)) * 16));
+
+    return { samiacLit, loringLit, wipLit, fgLit, shipLit, masterLit, loads };
+  }, [metrics, hrs, roastCapPerHr, packCapPerHr, shipCapPerHr, avgOrderKg]);
+
+  // Warning channels
+  const redChannels = useMemo(() => {
+    if (!channelData) return [];
+    const names = ['Samiac', 'Loring', 'WIP/Pack', 'FG/Pack', 'Ship'];
+    const suggestions = [
+      'consider pushing lower-priority batches to tomorrow',
+      'consider pushing batches or co-roasting bookings',
+      'consider pushing lower-priority orders to tomorrow',
+      'consider pushing lower-priority orders to tomorrow',
+      'consider pushing lower-priority orders to tomorrow or adding a body to shipping',
+    ];
+    return channelData.loads
+      .map((lit, i) => ({ name: names[i], suggestion: suggestions[i], lit }))
+      .filter(c => c.lit >= 11);
+  }, [channelData]);
+
+  // Triage orders
+  const tz = 'America/Vancouver';
+  const zonedNow = toZonedTime(new Date(), tz);
+  const todayStr = format(startOfDay(zonedNow), 'yyyy-MM-dd');
+  const tomorrowStr = format(addDays(startOfDay(zonedNow), 1), 'yyyy-MM-dd');
+
+  const { data: triageOrders, refetch: refetchTriage } = useQuery({
+    queryKey: ['triage-orders-today'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          order_number,
+          work_deadline,
+          status,
+          client_id,
+          clients ( name ),
+          order_line_items ( id )
+        `)
+        .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY'])
+        .gte('work_deadline', todayStr)
+        .lte('work_deadline', tomorrowStr)
+        .order('work_deadline', { ascending: true });
+      return data || [];
+    },
+  });
+
+  const handlePushToTomorrow = async (orderId: string) => {
+    const { error } = await supabase
+      .from('orders')
+      .update({ work_deadline: tomorrowStr })
+      .eq('id', orderId);
+
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      return;
+    }
+    toast({ title: 'Pushed to tomorrow' });
+    refetch();
+    refetchTriage();
+    queryClient.invalidateQueries({ queryKey: ['dashboard-metrics-v3'] });
+  };
+
+  const horizonLabel = horizon === 'today'
+    ? 'Today & Tomorrow'
+    : horizon === 'tomorrow'
+      ? 'Day After Tomorrow'
       : 'This Week (Mon–Fri)';
 
   return (
-    <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-        <p className="text-muted-foreground text-sm">
-          Order-constrained work remaining across ROAST → PACK → SHIP
-        </p>
-        <div className="flex items-center gap-2">
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold">Production Flow</h2>
+            <span className="text-sm text-muted-foreground tabular-nums">
+              {metrics ? `${metrics.hoursRemainingToday}h left today` : '—'}
+            </span>
+          </div>
+          <PacificTimeTicker />
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Staff spinner */}
+          <div className="flex items-center gap-1 bg-muted/50 rounded-md px-2 py-1">
+            <span className="text-xs text-muted-foreground mr-1">Staff</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => setLocalStaff(Math.max(0.5, staffCount - 0.5))}
+            >
+              <Minus className="h-3 w-3" />
+            </Button>
+            <span className="text-sm font-bold tabular-nums w-8 text-center">{staffCount}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => setLocalStaff(Math.min(6, staffCount + 0.5))}
+            >
+              <Plus className="h-3 w-3" />
+            </Button>
+          </div>
+
           <Tabs value={horizon} onValueChange={(v) => setHorizon(v as TimeHorizon)}>
             <TabsList>
               <TabsTrigger value="today">Today</TabsTrigger>
@@ -76,18 +248,15 @@ export function ProductionFlowTab() {
               <TabsTrigger value="week">Week</TabsTrigger>
             </TabsList>
           </Tabs>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => refetch()}
-            className="h-8 w-8"
-          >
+
+          <Button variant="ghost" size="icon" onClick={() => refetch()} className="h-8 w-8">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground mb-4">
+      {/* Context line */}
+      <p className="text-xs text-muted-foreground">
         Showing: <span className="font-medium">{horizonLabel}</span>
         {metrics && (
           <span className="ml-2">
@@ -96,61 +265,168 @@ export function ProductionFlowTab() {
         )}
       </p>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 justify-items-center mb-6">
-        <VuMeter
-          label="Orders + queued batches"
-          value={metrics?.roastDemandKg ?? 0}
-          max={100}
-          unit="kg"
-          isLoading={isLoading}
-        />
-        <VuMeter
-          label="Roasted coffee on hand"
-          value={metrics?.wipBufferKg ?? 0}
-          max={100}
-          unit="kg"
-          isLoading={isLoading}
-        />
-        <VuMeter
-          label="Packed units on hand"
-          value={metrics?.fgReadyUnits ?? 0}
-          max={200}
-          unit="units"
-          isLoading={isLoading}
-        />
-        <VuMeter
-          label="Orders vs hours remaining"
-          value={metrics?.systemStressScore ?? 0}
-          max={100}
-          unit="%"
-          isLoading={isLoading}
-        />
+      {/* Warning banners */}
+      {redChannels.map((ch) => (
+        <div
+          key={ch.name}
+          className="flex items-center gap-2 rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-sm text-amber-200"
+        >
+          <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+          <span>
+            <strong>{ch.name}</strong> is over capacity — {ch.suggestion}.
+          </span>
+        </div>
+      ))}
+
+      {/* ===== Console ===== */}
+      <div className="bg-zinc-950 rounded-xl border border-zinc-800 p-4 overflow-x-auto">
+        <div className="flex items-end gap-4 min-w-max">
+          {/* Channel 1 — Samiac */}
+          <ChannelStrip
+            label="Samiac"
+            value={`${((metrics?.samiacBatchKgToday ?? 0) + (metrics?.samiacCoroastKgToday ?? 0)).toFixed(0)}`}
+            unit="kg"
+            litCount={channelData?.samiacLit ?? 0}
+            isLoading={isLoading}
+          >
+            <MiniBar
+              production={metrics?.samiacBatchKgToday ?? 0}
+              coroast={metrics?.samiacCoroastKgToday ?? 0}
+              label="samiac"
+            />
+          </ChannelStrip>
+
+          {/* Channel 2 — Loring */}
+          <ChannelStrip
+            label="Loring"
+            value={`${((metrics?.loringBatchKgToday ?? 0) + (metrics?.loringCoroastKgToday ?? 0)).toFixed(0)}`}
+            unit="kg"
+            litCount={channelData?.loringLit ?? 0}
+            isLoading={isLoading}
+          >
+            <MiniBar
+              production={metrics?.loringBatchKgToday ?? 0}
+              coroast={metrics?.loringCoroastKgToday ?? 0}
+              label="loring"
+            />
+          </ChannelStrip>
+
+          {/* Channel 3 — WIP */}
+          <ChannelStrip
+            label="WIP"
+            value={`${(metrics?.wipNeededTodayKg ?? 0).toFixed(0)}`}
+            unit="kg"
+            subLabel="pack pressure"
+            litCount={channelData?.wipLit ?? 0}
+            isLoading={isLoading}
+          />
+
+          {/* Channel 4 — FG */}
+          <ChannelStrip
+            label="FG"
+            value={`${metrics?.fgNeededTodayUnits ?? 0}`}
+            unit="units"
+            subLabel="pick pressure"
+            litCount={channelData?.fgLit ?? 0}
+            isLoading={isLoading}
+          />
+
+          {/* Channel 5 — Ship */}
+          <ChannelStrip
+            label="Ship"
+            value={`${metrics?.ordersToShipToday ?? 0}`}
+            unit="orders"
+            subLabel="to ship today"
+            litCount={channelData?.shipLit ?? 0}
+            isLoading={isLoading}
+          />
+
+          {/* Divider */}
+          <div className="w-px h-48 bg-zinc-700 mx-2 shrink-0" />
+
+          {/* Master */}
+          <div className="flex flex-col items-center gap-1.5 w-24 shrink-0">
+            <span className="text-[10px] font-semibold tracking-widest text-zinc-400 uppercase">
+              Master
+            </span>
+            <div className="flex gap-1">
+              <VuMeter litCount={channelData?.masterLit ?? 0} segments={16} isLoading={isLoading} />
+              <VuMeter litCount={channelData?.masterLit ?? 0} segments={16} isLoading={isLoading} />
+            </div>
+            <p className="text-lg font-bold tabular-nums text-zinc-100">
+              {isLoading ? '—' : `${metrics?.masterLoadPct ?? 0}%`}
+            </p>
+            <p className="text-[10px] text-zinc-500">floor load</p>
+          </div>
+        </div>
       </div>
 
+      {/* Triage list */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Orders Due Today</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!triageOrders || triageOrders.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No orders due today.</p>
+          ) : (
+            <div className="space-y-2">
+              {triageOrders.map((order: any) => (
+                <div
+                  key={order.id}
+                  className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="font-mono font-medium">{order.order_number}</span>
+                    <span className="text-muted-foreground truncate">
+                      {order.clients?.name ?? '—'}
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      {order.order_line_items?.length ?? 0} items
+                    </span>
+                    <Badge variant="outline" className="text-xs capitalize">
+                      {(order.status as string).toLowerCase().replace('_', ' ')}
+                    </Badge>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 text-xs"
+                    onClick={() => handlePushToTomorrow(order.id)}
+                  >
+                    Push to Tomorrow
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Explanation */}
       <Card>
         <CardContent className="pt-4">
           <div className="text-sm text-muted-foreground space-y-2">
             <p>
-              <strong>Roast Demand</strong>: total kg to roast for open orders plus any 
-              queued batches not yet connected to orders.
+              <strong>Samiac / Loring</strong>: planned roasting kg for today, split by roaster.
+              Co-roasting bookings add to Loring load at 40 kg/hr.
             </p>
             <p>
-              <strong>WIP Buffer</strong>: total roasted coffee on hand across all roast groups.
+              <strong>WIP</strong>: roasted coffee kg still needed to pack today's orders.
             </p>
             <p>
-              <strong>FG Ready</strong>: total packed finished goods on hand.
+              <strong>FG</strong>: finished good units still unpicked for today's orders.
             </p>
             <p>
-              <strong>System Stress</strong>: ratio of open orders to hours remaining in 
-              the production window today.
+              <strong>Ship</strong>: open orders due today not yet shipped.
+            </p>
+            <p>
+              <strong>Master</strong>: weighted average load across all five channels.
+              Adjust <em>Staff</em> to see how adding or removing a person changes capacity.
             </p>
           </div>
         </CardContent>
       </Card>
-
-      <p className="text-xs text-muted-foreground mt-6">
-        Use the Production page to manage work. These metrics reflect remaining work for orders only.
-      </p>
     </div>
   );
 }
