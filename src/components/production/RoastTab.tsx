@@ -25,6 +25,8 @@ import { toast } from 'sonner';
 import { Flame, Plus, Check, Zap, Clock, Settings, Sparkles, Package, Layers } from 'lucide-react';
 import { RoastGroupDrawer } from './RoastGroupDrawer';
 import { WipFgAdjustModal } from './WipFgAdjustModal';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
 import { PlanBlendBatchesModal } from './PlanBlendBatchesModal';
 import { BlendExecuteModal } from './BlendExecuteModal';
 import {
@@ -123,6 +125,18 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   
   // WIP/FG adjustment modal state
   const [wipFgModalGroup, setWipFgModalGroup] = useState<string | null>(null);
+  
+  // Add batch modal state
+  const [showAddBatchModal, setShowAddBatchModal] = useState(false);
+  const [addBatchRgKey, setAddBatchRgKey] = useState('');
+  const [addBatchDescription, setAddBatchDescription] = useState('');
+  const [addBatchKg, setAddBatchKg] = useState('');
+  const [addBatchRoaster, setAddBatchRoaster] = useState<'SAMIAC' | 'LORING' | ''>('');
+  const [addBatchDate, setAddBatchDate] = useState(today);
+  const [addBatchCropster, setAddBatchCropster] = useState('');
+  const [addBatchMode, setAddBatchMode] = useState<'existing' | 'new' | 'description'>('existing');
+  const [addBatchSaving, setAddBatchSaving] = useState(false);
+  const [addBatchNewName, setAddBatchNewName] = useState('');
   
   // Blend planning modal state
   const [blendPlanModal, setBlendPlanModal] = useState<{
@@ -816,6 +830,11 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                   </ToggleGroupItem>
                 </ToggleGroup>
               </div>
+              
+              <Button variant="outline" size="sm" onClick={() => setShowAddBatchModal(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                Add Batch
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -1289,6 +1308,220 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
           today={today}
         />
       )}
+      {/* Add Batch Modal */}
+      <Dialog open={showAddBatchModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowAddBatchModal(false);
+          setAddBatchRgKey('');
+          setAddBatchDescription('');
+          setAddBatchNewName('');
+          setAddBatchKg('');
+          setAddBatchRoaster('');
+          setAddBatchDate(today);
+          setAddBatchCropster('');
+          setAddBatchMode('existing');
+          setAddBatchSaving(false);
+        }
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Batch</DialogTitle>
+          </DialogHeader>
+          
+          {/* Mode selector tiles */}
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { key: 'existing' as const, label: 'Existing roast group' },
+              { key: 'new' as const, label: 'New roast group' },
+              { key: 'description' as const, label: 'Description only' },
+            ]).map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setAddBatchMode(key)}
+                className={`border rounded-lg p-3 cursor-pointer text-sm text-left transition-colors ${
+                  addBatchMode === key
+                    ? 'border-primary bg-accent'
+                    : 'border-border hover:bg-accent/30'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-4 mt-2">
+            {/* Mode-specific fields */}
+            {addBatchMode === 'existing' && (
+              <div className="space-y-2">
+                <Label>Roast Group</Label>
+                <Select value={addBatchRgKey} onValueChange={setAddBatchRgKey}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select roast group…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(roastGroupsConfig ?? []).map((rg) => (
+                      <SelectItem key={rg.roast_group} value={rg.roast_group}>
+                        {rg.display_name ?? rg.roast_group}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {addBatchMode === 'new' && (
+              <div className="space-y-2">
+                <Label>Roast group name</Label>
+                <Input
+                  value={addBatchNewName}
+                  onChange={(e) => setAddBatchNewName(e.target.value)}
+                  placeholder="e.g. Colombia Huila"
+                />
+              </div>
+            )}
+
+            {addBatchMode === 'description' && (
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Input
+                  value={addBatchDescription}
+                  onChange={(e) => setAddBatchDescription(e.target.value)}
+                  placeholder="e.g. Ethiopia Natural — test batch"
+                />
+                <p className="text-xs text-muted-foreground">
+                  A roast group will be created automatically with this name.
+                </p>
+              </div>
+            )}
+
+            {/* Shared fields */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Target date</Label>
+                <Input
+                  type="date"
+                  value={addBatchDate}
+                  onChange={(e) => setAddBatchDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Planned output (kg)</Label>
+                <Input
+                  type="number"
+                  value={addBatchKg}
+                  onChange={(e) => setAddBatchKg(e.target.value)}
+                  placeholder="Optional"
+                  min={0}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Roaster</Label>
+              <RadioGroup
+                value={addBatchRoaster}
+                onValueChange={(val) => setAddBatchRoaster(val as 'SAMIAC' | 'LORING' | '')}
+                className="flex gap-4"
+              >
+                <div className="flex items-center gap-1.5">
+                  <RadioGroupItem value="SAMIAC" id="ab-samiac" />
+                  <Label htmlFor="ab-samiac" className="cursor-pointer text-sm">Samiac</Label>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <RadioGroupItem value="LORING" id="ab-loring" />
+                  <Label htmlFor="ab-loring" className="cursor-pointer text-sm">Loring</Label>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <RadioGroupItem value="" id="ab-either" />
+                  <Label htmlFor="ab-either" className="cursor-pointer text-sm">Either</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Cropster batch ID</Label>
+              <Input
+                value={addBatchCropster}
+                onChange={(e) => setAddBatchCropster(e.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setShowAddBatchModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                addBatchSaving ||
+                (addBatchMode === 'existing' && !addBatchRgKey) ||
+                (addBatchMode === 'new' && !addBatchNewName.trim()) ||
+                (addBatchMode === 'description' && !addBatchDescription.trim())
+              }
+              onClick={async () => {
+                setAddBatchSaving(true);
+                try {
+                  let roastGroupKey: string;
+
+                  if (addBatchMode === 'existing') {
+                    roastGroupKey = addBatchRgKey;
+                  } else {
+                    const displayName = addBatchMode === 'new'
+                      ? addBatchNewName.trim()
+                      : addBatchDescription.trim();
+                    const result = await createOrReuseRoastGroup({
+                      displayName,
+                      isBlend: false,
+                      origin: null,
+                    });
+                    if (result.error) {
+                      toast.error(result.error);
+                      return;
+                    }
+                    roastGroupKey = result.roastGroupKey;
+                    // Invalidate roast groups so the new one appears
+                    queryClient.invalidateQueries({ queryKey: ['roast-groups-config'] });
+                  }
+
+                  const { error } = await supabase.from('roasted_batches').insert({
+                    roast_group: roastGroupKey,
+                    target_date: addBatchDate,
+                    planned_output_kg: addBatchKg ? parseFloat(addBatchKg) : null,
+                    actual_output_kg: 0,
+                    status: 'PLANNED' as const,
+                    assigned_roaster: addBatchRoaster || null,
+                    cropster_batch_id: addBatchCropster.trim() || null,
+                    created_by: user?.id,
+                  });
+
+                  if (error) throw error;
+
+                  toast.success('Batch added');
+                  queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+                  setShowAddBatchModal(false);
+                  setAddBatchRgKey('');
+                  setAddBatchDescription('');
+                  setAddBatchNewName('');
+                  setAddBatchKg('');
+                  setAddBatchRoaster('');
+                  setAddBatchDate(today);
+                  setAddBatchCropster('');
+                  setAddBatchMode('existing');
+                } catch (err: any) {
+                  console.error(err);
+                  toast.error('Failed to add batch');
+                } finally {
+                  setAddBatchSaving(false);
+                }
+              }}
+            >
+              {addBatchSaving ? 'Saving…' : 'Add Batch'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
