@@ -1328,11 +1328,10 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
           </DialogHeader>
           
           {/* Mode selector tiles */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {([
               { key: 'existing' as const, label: 'Existing roast group' },
               { key: 'new' as const, label: 'New roast group' },
-              { key: 'description' as const, label: 'Description only' },
             ]).map(({ key, label }) => (
               <button
                 key={key}
