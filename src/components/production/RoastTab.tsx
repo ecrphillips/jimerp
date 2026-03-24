@@ -1453,9 +1453,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                   if (addBatchMode === 'existing') {
                     roastGroupKey = addBatchRgKey;
                   } else {
-                    const displayName = addBatchMode === 'new'
-                      ? addBatchNewName.trim()
-                      : addBatchDescription.trim();
+                    const displayName = addBatchNewName.trim();
                     const result = await createOrReuseRoastGroup({
                       displayName,
                       isBlend: false,
