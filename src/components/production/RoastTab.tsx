@@ -129,12 +129,12 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   // Add batch modal state
   const [showAddBatchModal, setShowAddBatchModal] = useState(false);
   const [addBatchRgKey, setAddBatchRgKey] = useState('');
-  const [addBatchDescription, setAddBatchDescription] = useState('');
+  
   const [addBatchKg, setAddBatchKg] = useState('');
   const [addBatchRoaster, setAddBatchRoaster] = useState<'SAMIAC' | 'LORING' | ''>('');
   const [addBatchDate, setAddBatchDate] = useState(today);
   const [addBatchCropster, setAddBatchCropster] = useState('');
-  const [addBatchMode, setAddBatchMode] = useState<'existing' | 'new' | 'description'>('existing');
+  const [addBatchMode, setAddBatchMode] = useState<'existing' | 'new'>('existing');
   const [addBatchSaving, setAddBatchSaving] = useState(false);
   const [addBatchNewName, setAddBatchNewName] = useState('');
   
@@ -1313,7 +1313,6 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
         if (!open) {
           setShowAddBatchModal(false);
           setAddBatchRgKey('');
-          setAddBatchDescription('');
           setAddBatchNewName('');
           setAddBatchKg('');
           setAddBatchRoaster('');
@@ -1329,11 +1328,10 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
           </DialogHeader>
           
           {/* Mode selector tiles */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {([
               { key: 'existing' as const, label: 'Existing roast group' },
               { key: 'new' as const, label: 'New roast group' },
-              { key: 'description' as const, label: 'Description only' },
             ]).map(({ key, label }) => (
               <button
                 key={key}
@@ -1381,19 +1379,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
               </div>
             )}
 
-            {addBatchMode === 'description' && (
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Input
-                  value={addBatchDescription}
-                  onChange={(e) => setAddBatchDescription(e.target.value)}
-                  placeholder="e.g. Ethiopia Natural — test batch"
-                />
-                <p className="text-xs text-muted-foreground">
-                  A roast group will be created automatically with this name.
-                </p>
-              </div>
-            )}
+
 
             {/* Shared fields */}
             <div className="grid grid-cols-2 gap-4">
@@ -1457,8 +1443,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
               disabled={
                 addBatchSaving ||
                 (addBatchMode === 'existing' && !addBatchRgKey) ||
-                (addBatchMode === 'new' && !addBatchNewName.trim()) ||
-                (addBatchMode === 'description' && !addBatchDescription.trim())
+                (addBatchMode === 'new' && !addBatchNewName.trim())
               }
               onClick={async () => {
                 setAddBatchSaving(true);
@@ -1468,9 +1453,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                   if (addBatchMode === 'existing') {
                     roastGroupKey = addBatchRgKey;
                   } else {
-                    const displayName = addBatchMode === 'new'
-                      ? addBatchNewName.trim()
-                      : addBatchDescription.trim();
+                    const displayName = addBatchNewName.trim();
                     const result = await createOrReuseRoastGroup({
                       displayName,
                       isBlend: false,
@@ -1502,7 +1485,6 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                   queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
                   setShowAddBatchModal(false);
                   setAddBatchRgKey('');
-                  setAddBatchDescription('');
                   setAddBatchNewName('');
                   setAddBatchKg('');
                   setAddBatchRoaster('');
