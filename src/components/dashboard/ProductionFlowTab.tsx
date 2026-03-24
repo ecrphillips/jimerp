@@ -43,24 +43,6 @@ function VuMeter({
   );
 }
 
-// ===== Mini bar for production vs co-roast split =====
-function MiniBar({ production, coroast, label }: { production: number; coroast: number; label: string }) {
-  const total = production + coroast;
-  if (total === 0) return <span className="text-[10px] text-zinc-300">{label}: 0 kg</span>;
-  const prodPct = (production / total) * 100;
-  return (
-    <div className="w-full space-y-0.5">
-      <div className="flex h-1.5 rounded-full overflow-hidden bg-zinc-800">
-        <div className="bg-green-500" style={{ width: `${prodPct}%` }} />
-        <div className="bg-green-500/40" style={{ width: `${100 - prodPct}%` }} />
-      </div>
-      <div className="flex justify-between text-[9px] text-zinc-300">
-        <span>{production.toFixed(0)} prod</span>
-        <span>{coroast.toFixed(0)} co-r</span>
-      </div>
-    </div>
-  );
-}
 
 // ===== Channel Strip =====
 function ChannelStrip({
