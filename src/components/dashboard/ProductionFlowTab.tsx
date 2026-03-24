@@ -72,8 +72,9 @@ function ChannelStrip({
         {isLoading ? '—' : value}
       </p>
       <p className="text-[10px] text-zinc-300">{unit}</p>
-      {children}
-      {subLabel && <p className="text-[10px] text-zinc-300 text-center leading-tight">{subLabel}</p>}
+      <div className="h-4 flex items-start justify-center">
+        {subLabel ? <p className="text-[10px] text-zinc-300 text-center leading-tight">{subLabel}</p> : null}
+      </div>
     </div>
   );
 }
