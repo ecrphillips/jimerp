@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { RefreshCw } from 'lucide-react';
 import { useDashboardMetrics, TimeHorizon } from '@/hooks/useDashboardMetrics';
 
 const SEGMENT_COUNT = 12;
@@ -52,13 +54,13 @@ function VuMeter({
 
 export function ProductionFlowTab() {
   const [horizon, setHorizon] = useState<TimeHorizon>('today');
-  const { data: metrics, isLoading } = useDashboardMetrics(horizon);
+  const { data: metrics, isLoading, refetch } = useDashboardMetrics(horizon);
 
   const horizonLabel = horizon === 'today' 
     ? 'Today & Tomorrow' 
     : horizon === 'tomorrow' 
       ? 'Day After Tomorrow' 
-      : 'All Open Work';
+      : 'This Week (Mon–Fri)';
 
   return (
     <div>
@@ -66,13 +68,23 @@ export function ProductionFlowTab() {
         <p className="text-muted-foreground text-sm">
           Order-constrained work remaining across ROAST → PACK → SHIP
         </p>
-        <Tabs value={horizon} onValueChange={(v) => setHorizon(v as TimeHorizon)}>
-          <TabsList>
-            <TabsTrigger value="today">Today</TabsTrigger>
-            <TabsTrigger value="tomorrow">Tomorrow</TabsTrigger>
-            <TabsTrigger value="all">All</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex items-center gap-2">
+          <Tabs value={horizon} onValueChange={(v) => setHorizon(v as TimeHorizon)}>
+            <TabsList>
+              <TabsTrigger value="today">Today</TabsTrigger>
+              <TabsTrigger value="tomorrow">Tomorrow</TabsTrigger>
+              <TabsTrigger value="week">Week</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => refetch()}
+            className="h-8 w-8"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
       </div>
 
       <p className="text-xs text-muted-foreground mb-4">
@@ -86,31 +98,31 @@ export function ProductionFlowTab() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 justify-items-center mb-6">
         <VuMeter
-          label="Roast Demand"
+          label="Orders + queued batches"
           value={metrics?.roastDemandKg ?? 0}
           max={100}
           unit="kg"
           isLoading={isLoading}
         />
         <VuMeter
-          label="WIP Buffer"
+          label="Roasted coffee on hand"
           value={metrics?.wipBufferKg ?? 0}
           max={100}
           unit="kg"
           isLoading={isLoading}
         />
         <VuMeter
-          label="FG Ready"
+          label="Packed units on hand"
           value={metrics?.fgReadyUnits ?? 0}
-          max={500}
+          max={200}
           unit="units"
           isLoading={isLoading}
         />
         <VuMeter
-          label="Blocked Demand"
-          value={metrics?.blockedDemandUnits ?? 0}
-          max={500}
-          unit="units"
+          label="Orders vs hours remaining"
+          value={metrics?.systemStressScore ?? 0}
+          max={100}
+          unit="%"
           isLoading={isLoading}
         />
       </div>
@@ -119,12 +131,18 @@ export function ProductionFlowTab() {
         <CardContent className="pt-4">
           <div className="text-sm text-muted-foreground space-y-2">
             <p>
-              <strong>Roast Demand</strong> decreases when: batches are roasted (single origin), 
-              blends are created (post-roast blend), FG is packed, or FG is picked.
+              <strong>Roast Demand</strong>: total kg to roast for open orders plus any 
+              queued batches not yet connected to orders.
             </p>
             <p>
-              <strong>WIP Buffer</strong> and <strong>FG Ready</strong> are capped at what's 
-              actually needed for orders in this window — surplus inventory is excluded.
+              <strong>WIP Buffer</strong>: total roasted coffee on hand across all roast groups.
+            </p>
+            <p>
+              <strong>FG Ready</strong>: total packed finished goods on hand.
+            </p>
+            <p>
+              <strong>System Stress</strong>: ratio of open orders to hours remaining in 
+              the production window today.
             </p>
           </div>
         </CardContent>
