@@ -89,9 +89,9 @@ function ChannelStrip({
       <p className="text-sm font-bold tabular-nums text-white leading-tight drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]">
         {isLoading ? '—' : value}
       </p>
-      <p className="text-[10px] text-zinc-400">{unit}</p>
+      <p className="text-[10px] text-zinc-300">{unit}</p>
       {children}
-      {subLabel && <p className="text-[10px] text-zinc-500 text-center leading-tight">{subLabel}</p>}
+      {subLabel && <p className="text-[10px] text-zinc-300 text-center leading-tight">{subLabel}</p>}
     </div>
   );
 }
