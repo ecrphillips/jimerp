@@ -36,7 +36,7 @@ interface Product {
   roast_group: string | null;
   client: { name: string } | null;
   account: { account_name: string } | null;
-  roast_group_info: { display_name: string; origin: string | null } | null;
+  
 }
 
 const FORMATS: ProductFormat[] = ['WHOLE_BEAN', 'ESPRESSO', 'FILTER', 'OTHER'];
