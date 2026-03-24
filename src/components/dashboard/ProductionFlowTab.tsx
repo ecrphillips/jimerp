@@ -317,7 +317,7 @@ export function ProductionFlowTab() {
             </div>
 
             {/* Right: Divider + Master + Horizon buttons */}
-            <div className="flex items-end gap-4">
+            <div className="flex items-center gap-4">
               {/* Divider */}
               <div className="w-px h-48 bg-zinc-600 shrink-0" />
 
