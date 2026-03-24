@@ -46,7 +46,7 @@ function VuMeter({
 // ===== Mini bar for production vs co-roast split =====
 function MiniBar({ production, coroast, label }: { production: number; coroast: number; label: string }) {
   const total = production + coroast;
-  if (total === 0) return <span className="text-[10px] text-zinc-500">{label}: 0 kg</span>;
+  if (total === 0) return <span className="text-[10px] text-zinc-300">{label}: 0 kg</span>;
   const prodPct = (production / total) * 100;
   return (
     <div className="w-full space-y-0.5">
