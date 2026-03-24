@@ -52,7 +52,6 @@ function ChannelStrip({
   subLabel,
   litCount,
   isLoading,
-  children,
 }: {
   label: string;
   value: string;
@@ -60,7 +59,6 @@ function ChannelStrip({
   subLabel?: string;
   litCount: number;
   isLoading: boolean;
-  children?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col items-center gap-1.5 w-16 shrink-0">
@@ -72,8 +70,9 @@ function ChannelStrip({
         {isLoading ? '—' : value}
       </p>
       <p className="text-[10px] text-zinc-300">{unit}</p>
-      {children}
-      {subLabel && <p className="text-[10px] text-zinc-300 text-center leading-tight">{subLabel}</p>}
+      <div className="h-4 flex items-start justify-center">
+        {subLabel ? <p className="text-[10px] text-zinc-300 text-center leading-tight">{subLabel}</p> : null}
+      </div>
     </div>
   );
 }
@@ -263,9 +262,9 @@ export function ProductionFlowTab() {
 
         {/* Console body */}
         <div className="p-4 overflow-x-auto">
-          <div className="flex items-end justify-between min-w-max">
+          <div className="flex items-center justify-between min-w-max">
             {/* Left: Channel strips */}
-            <div className="flex items-end gap-4">
+            <div className="flex items-center gap-4">
               {/* Channel 1 — Samiac */}
               <ChannelStrip
                 label="Samiac"
@@ -280,7 +279,6 @@ export function ProductionFlowTab() {
                 label="Loring"
                 value={`${((metrics?.loringBatchKgToday ?? 0) + (metrics?.loringCoroastKgToday ?? 0)).toFixed(0)}`}
                 unit="kg"
-                subLabel={(metrics?.loringCoroastKgToday ?? 0) > 0 ? `co-r: ${(metrics!.loringCoroastKgToday).toFixed(0)} kg` : undefined}
                 litCount={channelData?.loringLit ?? 0}
                 isLoading={isLoading}
               />
@@ -317,7 +315,7 @@ export function ProductionFlowTab() {
             </div>
 
             {/* Right: Divider + Master + Horizon buttons */}
-            <div className="flex items-end gap-4">
+            <div className="flex items-center gap-4">
               {/* Divider */}
               <div className="w-px h-48 bg-zinc-600 shrink-0" />
 
