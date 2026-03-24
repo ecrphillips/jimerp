@@ -25,6 +25,8 @@ import { toast } from 'sonner';
 import { Flame, Plus, Check, Zap, Clock, Settings, Sparkles, Package, Layers } from 'lucide-react';
 import { RoastGroupDrawer } from './RoastGroupDrawer';
 import { WipFgAdjustModal } from './WipFgAdjustModal';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
 import { PlanBlendBatchesModal } from './PlanBlendBatchesModal';
 import { BlendExecuteModal } from './BlendExecuteModal';
 import {
