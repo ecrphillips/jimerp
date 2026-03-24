@@ -1379,19 +1379,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
               </div>
             )}
 
-            {addBatchMode === 'description' && (
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Input
-                  value={addBatchDescription}
-                  onChange={(e) => setAddBatchDescription(e.target.value)}
-                  placeholder="e.g. Ethiopia Natural — test batch"
-                />
-                <p className="text-xs text-muted-foreground">
-                  A roast group will be created automatically with this name.
-                </p>
-              </div>
-            )}
+
 
             {/* Shared fields */}
             <div className="grid grid-cols-2 gap-4">
