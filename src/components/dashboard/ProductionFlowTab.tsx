@@ -82,7 +82,7 @@ function ChannelStrip({
 }) {
   return (
     <div className="flex flex-col items-center gap-1.5 w-16 shrink-0">
-      <span className="text-[10px] font-semibold tracking-widest text-zinc-300 uppercase drop-shadow-[0_0_4px_rgba(255,255,255,0.3)]">
+      <span className="text-[10px] font-semibold tracking-widest text-zinc-100 uppercase drop-shadow-[0_0_4px_rgba(255,255,255,0.4)]">
         {label}
       </span>
       <VuMeter litCount={litCount} isLoading={isLoading} />
