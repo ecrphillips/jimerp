@@ -830,6 +830,11 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                   </ToggleGroupItem>
                 </ToggleGroup>
               </div>
+              
+              <Button variant="outline" size="sm" onClick={() => setShowAddBatchModal(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                Add Batch
+              </Button>
             </div>
           </div>
         </CardHeader>
