@@ -366,7 +366,7 @@ export function ProductionFlowTab() {
               </div>
 
               {/* Horizon selector buttons */}
-              <div className="flex flex-col gap-2 ml-4">
+              <div className="flex flex-col gap-2 ml-4 self-center">
                 {horizonOptions.map((opt) => (
                   <button
                     key={opt.value}
