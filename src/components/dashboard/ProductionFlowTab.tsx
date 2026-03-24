@@ -260,7 +260,7 @@ export function ProductionFlowTab() {
             Floor Console
           </span>
           <div className="flex items-center gap-1">
-            <span className="text-[10px] text-zinc-500 uppercase tracking-wider mr-2">Staff</span>
+            <span className="text-[10px] text-zinc-400 uppercase tracking-wider mr-2">Staff</span>
             <button
               className="h-6 w-6 flex items-center justify-center rounded text-zinc-600 hover:text-zinc-400 transition-colors"
               onClick={() => setLocalStaff(Math.max(0.5, staffCount - 0.5))}
