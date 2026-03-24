@@ -134,7 +134,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   const [addBatchRoaster, setAddBatchRoaster] = useState<'SAMIAC' | 'LORING' | ''>('');
   const [addBatchDate, setAddBatchDate] = useState(today);
   const [addBatchCropster, setAddBatchCropster] = useState('');
-  const [addBatchMode, setAddBatchMode] = useState<'existing' | 'new' | 'description'>('existing');
+  const [addBatchMode, setAddBatchMode] = useState<'existing' | 'new'>('existing');
   const [addBatchSaving, setAddBatchSaving] = useState(false);
   const [addBatchNewName, setAddBatchNewName] = useState('');
   
