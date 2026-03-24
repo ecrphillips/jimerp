@@ -46,7 +46,7 @@ function VuMeter({
 // ===== Mini bar for production vs co-roast split =====
 function MiniBar({ production, coroast, label }: { production: number; coroast: number; label: string }) {
   const total = production + coroast;
-  if (total === 0) return <span className="text-[10px] text-zinc-500">{label}: 0 kg</span>;
+  if (total === 0) return <span className="text-[10px] text-zinc-300">{label}: 0 kg</span>;
   const prodPct = (production / total) * 100;
   return (
     <div className="w-full space-y-0.5">
@@ -54,7 +54,7 @@ function MiniBar({ production, coroast, label }: { production: number; coroast: 
         <div className="bg-green-500" style={{ width: `${prodPct}%` }} />
         <div className="bg-green-500/40" style={{ width: `${100 - prodPct}%` }} />
       </div>
-      <div className="flex justify-between text-[9px] text-zinc-500">
+      <div className="flex justify-between text-[9px] text-zinc-300">
         <span>{production.toFixed(0)} prod</span>
         <span>{coroast.toFixed(0)} co-r</span>
       </div>
@@ -82,16 +82,16 @@ function ChannelStrip({
 }) {
   return (
     <div className="flex flex-col items-center gap-1.5 w-16 shrink-0">
-      <span className="text-[10px] font-semibold tracking-widest text-zinc-300 uppercase drop-shadow-[0_0_4px_rgba(255,255,255,0.3)]">
+      <span className="text-[10px] font-semibold tracking-widest text-zinc-100 uppercase drop-shadow-[0_0_4px_rgba(255,255,255,0.4)]">
         {label}
       </span>
       <VuMeter litCount={litCount} isLoading={isLoading} />
-      <p className="text-sm font-bold tabular-nums text-white leading-tight drop-shadow-[0_0_6px_rgba(255,255,255,0.5)]">
+      <p className="text-sm font-bold tabular-nums text-white leading-tight drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]">
         {isLoading ? '—' : value}
       </p>
-      <p className="text-[10px] text-zinc-400">{unit}</p>
+      <p className="text-[10px] text-zinc-300">{unit}</p>
       {children}
-      {subLabel && <p className="text-[10px] text-zinc-500 text-center leading-tight">{subLabel}</p>}
+      {subLabel && <p className="text-[10px] text-zinc-300 text-center leading-tight">{subLabel}</p>}
     </div>
   );
 }
@@ -256,11 +256,11 @@ export function ProductionFlowTab() {
       <div className="bg-zinc-950 rounded-xl border border-zinc-800 overflow-hidden">
         {/* Console header bar */}
         <div className="bg-zinc-900 border-b border-zinc-700 px-4 py-2 flex items-center justify-between">
-          <span className="text-zinc-500 text-[10px] uppercase tracking-widest font-semibold">
+          <span className="text-zinc-400 text-[10px] uppercase tracking-widest font-semibold">
             Floor Console
           </span>
           <div className="flex items-center gap-1">
-            <span className="text-[10px] text-zinc-500 uppercase tracking-wider mr-2">Staff</span>
+            <span className="text-[10px] text-zinc-400 uppercase tracking-wider mr-2">Staff</span>
             <button
               className="h-6 w-6 flex items-center justify-center rounded text-zinc-600 hover:text-zinc-400 transition-colors"
               onClick={() => setLocalStaff(Math.max(0.5, staffCount - 0.5))}
@@ -319,7 +319,7 @@ export function ProductionFlowTab() {
                 label="WIP"
                 value={`${(metrics?.wipNeededTodayKg ?? 0).toFixed(0)}`}
                 unit="kg"
-                subLabel="pack pressure"
+                subLabel="PACK"
                 litCount={channelData?.wipLit ?? 0}
                 isLoading={isLoading}
               />
@@ -329,7 +329,7 @@ export function ProductionFlowTab() {
                 label="FG"
                 value={`${metrics?.fgNeededTodayUnits ?? 0}`}
                 unit="units"
-                subLabel="pick pressure"
+                subLabel="PICK"
                 litCount={channelData?.fgLit ?? 0}
                 isLoading={isLoading}
               />
@@ -339,7 +339,7 @@ export function ProductionFlowTab() {
                 label="Ship"
                 value={`${metrics?.ordersToShipToday ?? 0}`}
                 unit="orders"
-                subLabel="to ship today"
+                subLabel="SHIP"
                 litCount={channelData?.shipLit ?? 0}
                 isLoading={isLoading}
               />
@@ -352,21 +352,21 @@ export function ProductionFlowTab() {
 
               {/* Master */}
               <div className="flex flex-col items-center gap-1.5 w-24 shrink-0">
-                <span className="text-[10px] font-semibold tracking-widest text-zinc-300 uppercase drop-shadow-[0_0_4px_rgba(255,255,255,0.3)]">
+                <span className="text-[10px] font-semibold tracking-widest text-zinc-100 uppercase drop-shadow-[0_0_4px_rgba(255,255,255,0.4)]">
                   Master
                 </span>
                 <div className="flex gap-1">
                   <VuMeter litCount={channelData?.masterLit ?? 0} segments={16} isLoading={isLoading} />
                   <VuMeter litCount={channelData?.masterLit ?? 0} segments={16} isLoading={isLoading} />
                 </div>
-                <p className="text-lg font-bold tabular-nums text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.5)]">
+                <p className="text-lg font-bold tabular-nums text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]">
                   {isLoading ? '—' : `${metrics?.masterLoadPct ?? 0}%`}
                 </p>
-                <p className="text-[10px] text-zinc-400">floor load</p>
+                <p className="text-[10px] text-zinc-300">floor load</p>
               </div>
 
               {/* Horizon selector buttons */}
-              <div className="flex flex-col gap-2 ml-4">
+              <div className="flex flex-col gap-2 ml-4 self-center">
                 {horizonOptions.map((opt) => (
                   <button
                     key={opt.value}
