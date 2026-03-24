@@ -160,7 +160,7 @@ export function ProductsListTab() {
   const [filterAccount, setFilterAccount] = useState('__all__');
   const [filterRoastGroup, setFilterRoastGroup] = useState('__all__');
   const [filterOrigin, setFilterOrigin] = useState('__all__');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [sortMode, setSortMode] = useState<SortMode>('recent');
 
   // Expand state
