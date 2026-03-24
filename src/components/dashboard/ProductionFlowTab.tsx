@@ -359,7 +359,7 @@ export function ProductionFlowTab() {
                   <VuMeter litCount={channelData?.masterLit ?? 0} segments={16} isLoading={isLoading} />
                   <VuMeter litCount={channelData?.masterLit ?? 0} segments={16} isLoading={isLoading} />
                 </div>
-                <p className="text-lg font-bold tabular-nums text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.5)]">
+                <p className="text-lg font-bold tabular-nums text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]">
                   {isLoading ? '—' : `${metrics?.masterLoadPct ?? 0}%`}
                 </p>
                 <p className="text-[10px] text-zinc-400">floor load</p>
