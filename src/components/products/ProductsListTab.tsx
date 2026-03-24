@@ -369,7 +369,7 @@ export function ProductsListTab() {
         // Roast group
         if (filterRoastGroup !== '__all__' && p.roast_group !== filterRoastGroup) return false;
         // Origin
-        if (filterOrigin !== '__all__' && p.roast_group_info?.origin !== filterOrigin) return false;
+        if (filterOrigin !== '__all__') return false;
         return true;
       });
 
