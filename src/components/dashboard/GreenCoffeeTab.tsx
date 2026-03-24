@@ -1,12 +1,14 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { CalendarDays, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { differenceInDays } from 'date-fns';
 
 export function GreenCoffeeTab({ enabled }: { enabled: boolean }) {
+  const navigate = useNavigate();
   // Section A — Coverage Alerts
   const { data: coverageAlerts, isLoading: loadingCoverage } = useQuery({
     queryKey: ['dashboard-coverage-alerts'],
