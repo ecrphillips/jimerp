@@ -54,7 +54,7 @@ function MiniBar({ production, coroast, label }: { production: number; coroast: 
         <div className="bg-green-500" style={{ width: `${prodPct}%` }} />
         <div className="bg-green-500/40" style={{ width: `${100 - prodPct}%` }} />
       </div>
-      <div className="flex justify-between text-[9px] text-zinc-500">
+      <div className="flex justify-between text-[9px] text-zinc-300">
         <span>{production.toFixed(0)} prod</span>
         <span>{coroast.toFixed(0)} co-r</span>
       </div>
