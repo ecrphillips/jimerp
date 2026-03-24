@@ -126,6 +126,18 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   // WIP/FG adjustment modal state
   const [wipFgModalGroup, setWipFgModalGroup] = useState<string | null>(null);
   
+  // Add batch modal state
+  const [showAddBatchModal, setShowAddBatchModal] = useState(false);
+  const [addBatchRgKey, setAddBatchRgKey] = useState('');
+  const [addBatchDescription, setAddBatchDescription] = useState('');
+  const [addBatchKg, setAddBatchKg] = useState('');
+  const [addBatchRoaster, setAddBatchRoaster] = useState<'SAMIAC' | 'LORING' | ''>('');
+  const [addBatchDate, setAddBatchDate] = useState(today);
+  const [addBatchCropster, setAddBatchCropster] = useState('');
+  const [addBatchMode, setAddBatchMode] = useState<'existing' | 'new' | 'description'>('existing');
+  const [addBatchSaving, setAddBatchSaving] = useState(false);
+  const [addBatchNewName, setAddBatchNewName] = useState('');
+  
   // Blend planning modal state
   const [blendPlanModal, setBlendPlanModal] = useState<{
     roastGroup: string;
