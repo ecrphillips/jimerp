@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -118,6 +119,8 @@ function CostingStatusBadge({ costingStatus }: { costingStatus: string }) {
 // ─── Main Page ─────────────────────────────────────────────
 
 export default function SourcingLots() {
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') === 'coverage' ? 'coverage' : 'lots';
   const [search, setSearch] = useState('');
   const [physicalFilter, setPhysicalFilter] = useState<string>('ALL');
   const [costingFilter, setCostingFilter] = useState<string>('ALL');
@@ -182,7 +185,7 @@ export default function SourcingLots() {
         </div>
       </div>
 
-      <Tabs defaultValue="lots">
+      <Tabs defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="lots">Lots</TabsTrigger>
           <TabsTrigger value="coverage">Coverage Calendar</TabsTrigger>
