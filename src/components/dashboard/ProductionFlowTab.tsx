@@ -264,9 +264,9 @@ export function ProductionFlowTab() {
 
         {/* Console body */}
         <div className="p-4 overflow-x-auto">
-          <div className="flex items-end justify-between min-w-max">
+          <div className="flex items-center justify-between min-w-max">
             {/* Left: Channel strips */}
-            <div className="flex items-end gap-4">
+            <div className="flex items-center gap-4">
               {/* Channel 1 — Samiac */}
               <ChannelStrip
                 label="Samiac"
