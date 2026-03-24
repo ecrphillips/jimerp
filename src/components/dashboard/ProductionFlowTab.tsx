@@ -52,7 +52,6 @@ function ChannelStrip({
   subLabel,
   litCount,
   isLoading,
-  children,
 }: {
   label: string;
   value: string;
@@ -60,7 +59,6 @@ function ChannelStrip({
   subLabel?: string;
   litCount: number;
   isLoading: boolean;
-  children?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col items-center gap-1.5 w-16 shrink-0">
