@@ -339,7 +339,7 @@ export function ProductionFlowTab() {
                 label="Ship"
                 value={`${metrics?.ordersToShipToday ?? 0}`}
                 unit="orders"
-                subLabel="to ship today"
+                subLabel="SHIP"
                 litCount={channelData?.shipLit ?? 0}
                 isLoading={isLoading}
               />
