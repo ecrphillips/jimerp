@@ -453,7 +453,7 @@ export default function CoRoastBilling() {
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-lg">{d.member.business_name}</CardTitle>
                   <Badge variant="secondary" className="text-xs">
-                    {d.tier}
+                    {TIER_RATES[d.tier]?.label ?? d.tier}
                   </Badge>
                   {d.isClosed && (
                     <Badge variant="outline" className="text-xs gap-1">
