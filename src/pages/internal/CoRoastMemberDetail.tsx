@@ -44,7 +44,7 @@ export default function CoRoastMemberDetail() {
   const [formContactName, setFormContactName] = useState('');
   const [formContactEmail, setFormContactEmail] = useState('');
   const [formContactPhone, setFormContactPhone] = useState('');
-  const [formTier, setFormTier] = useState<CoroastTier>('ACCESS');
+  const [formTier, setFormTier] = useState<CoroastTier>('MEMBER');
   const [formNotes, setFormNotes] = useState('');
   const [formClientId, setFormClientId] = useState<string | null>(null);
   const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
