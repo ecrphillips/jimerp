@@ -384,7 +384,7 @@ export default function CoRoastMemberDetail() {
       lines.push(`Co-Roasting Member: ${member.business_name}`);
       if (member.contact_name) lines.push(`Contact: ${member.contact_name}`);
       if (member.contact_email) lines.push(`Email: ${member.contact_email}`);
-      lines.push(`Tier: ${member.tier}`);
+      lines.push(`Tier: ${TIER_RATES[member.tier]?.label ?? member.tier}`);
       lines.push(`Certified: ${member.certified ? 'Yes' : 'No'}`);
       lines.push(`Account Created: ${format(new Date(member.created_at), 'MMM d, yyyy')}`);
       lines.push(`Status: ${member.is_active ? 'Active' : 'Inactive'}`);
