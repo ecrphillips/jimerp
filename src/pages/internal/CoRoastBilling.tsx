@@ -319,7 +319,10 @@ export default function CoRoastBilling() {
       const grandTotal = subtotal + gst;
 
       const prevUsed = prevMemberHoursUsed.get(m.id) ?? 0;
-      const upgradeRecommended = tier === 'ACCESS' && usedHours > 6 && prevUsed > 6;
+      const nudgeMemberToGrowth = tier === 'MEMBER' && usedHours > 6 && prevUsed > 6;
+      const nudgeGrowthToProduction = tier === 'GROWTH' && usedHours > 10 && prevUsed > 10;
+      const upgradeRecommended = nudgeMemberToGrowth || nudgeGrowthToProduction;
+      const upgradeLabel = nudgeGrowthToProduction ? 'Upgrade to Production Recommended' : 'Upgrade to Growth Recommended';
 
       return {
         member: m,
