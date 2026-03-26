@@ -232,7 +232,7 @@ export default function ProspectDetail() {
     const stream = prospect.stream as ProspectStream;
     setConvertMfg(stream === 'CONTRACT' || stream === 'BOTH');
     setConvertCoroast(stream === 'CO_ROAST' || stream === 'BOTH');
-    setConvertTier('ACCESS');
+    setConvertTier('MEMBER');
     setConvertOpen(true);
   };
 
