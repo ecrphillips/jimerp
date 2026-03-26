@@ -74,7 +74,7 @@ function NavGroup({ label, icon: Icon, open, onOpenChange, children }: NavGroupP
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-0.5">
-          <div className="bg-sidebar-accent/20 rounded-md mx-1 px-1 py-1 mb-1 space-y-0.5">
+          <div className="bg-sidebar-accent/35 rounded-md mx-1 px-1 py-1 mb-1 space-y-0.5">
             {children}
           </div>
         </CollapsibleContent>
