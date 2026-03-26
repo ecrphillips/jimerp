@@ -585,8 +585,9 @@ export default function ProspectDetail() {
                 <Select value={convertTier} onValueChange={setConvertTier}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ACCESS">Access</SelectItem>
+                    <SelectItem value="MEMBER">Member</SelectItem>
                     <SelectItem value="GROWTH">Growth</SelectItem>
+                    <SelectItem value="PRODUCTION">Production</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
