@@ -72,7 +72,7 @@ export default function Accounts() {
   const [formNotes, setFormNotes] = useState('');
   const [formManufacturing, setFormManufacturing] = useState(false);
   const [formCoroasting, setFormCoroasting] = useState(false);
-  const [formTier, setFormTier] = useState<string>('ACCESS');
+  const [formTier, setFormTier] = useState<string>('MEMBER');
   const [formJoinedDate, setFormJoinedDate] = useState<Date>(new Date());
   const [formCertified, setFormCertified] = useState(false);
   const [formCertifiedDate, setFormCertifiedDate] = useState<Date | undefined>(undefined);
