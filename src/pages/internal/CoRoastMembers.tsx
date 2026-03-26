@@ -199,7 +199,7 @@ export default function CoRoastMembers() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Badge variant="outline" className="font-mono text-xs">
-                        {m.tier}
+                        {TIER_RATES[m.tier]?.label ?? m.tier}
                       </Badge>
                       <div>
                         <span className="font-medium">{m.business_name}</span>
