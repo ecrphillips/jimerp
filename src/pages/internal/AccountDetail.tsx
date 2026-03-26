@@ -266,15 +266,16 @@ function ProfileTab({ account, refetch }: { account: any; refetch: () => void })
                 <Tooltip>
                   <TooltipTrigger><Info className="h-3.5 w-3.5 text-muted-foreground" /></TooltipTrigger>
                   <TooltipContent side="right" className="max-w-xs text-xs">
-                    Access: $300/mo, 3 included hours, 4-week booking horizon. Growth: $1,000/mo, 10 included hours, unlimited booking horizon + recurring blocks.
+                    Member: $399/mo, 3 included hours, 4-week booking horizon. Growth: $859/mo, 7 included hours, unlimited booking horizon + recurring blocks. Production: $1,399/mo, 12 included hours, unlimited booking horizon + recurring blocks.
                   </TooltipContent>
                 </Tooltip>
               </div>
-              <Select value={form.coroast_tier || 'ACCESS'} onValueChange={v => setForm({ ...form, coroast_tier: v })}>
+              <Select value={form.coroast_tier || 'MEMBER'} onValueChange={v => setForm({ ...form, coroast_tier: v })}>
                 <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ACCESS">Access</SelectItem>
+                  <SelectItem value="MEMBER">Member</SelectItem>
                   <SelectItem value="GROWTH">Growth</SelectItem>
+                  <SelectItem value="PRODUCTION">Production</SelectItem>
                 </SelectContent>
               </Select>
               <div>
