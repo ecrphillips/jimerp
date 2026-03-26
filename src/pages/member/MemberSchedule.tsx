@@ -251,7 +251,7 @@ export default function MemberSchedule() {
     if (!formDate || isGrowth) return null;
     const maxDate = addWeeks(new Date(), 4);
     if (isAfter(formDate, maxDate)) {
-      return 'Access tier members cannot book more than 4 weeks ahead.';
+      return 'Member tier members cannot book more than 4 weeks ahead.';
     }
     return null;
   }, [formDate, isGrowth]);
