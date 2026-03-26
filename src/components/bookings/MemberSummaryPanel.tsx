@@ -28,7 +28,7 @@ export function MemberSummaryPanel({ members, bookings, currentMonth }: MemberSu
     <ScrollArea className="w-full mb-4">
       <div className="flex gap-2 pb-2">
         {activeMembers.map(member => {
-          const rates = TIER_RATES[member.tier] ?? TIER_RATES.ACCESS;
+          const rates = TIER_RATES[member.tier] ?? TIER_RATES.MEMBER;
           const monthBookings = getMonthBookings(bookings, member.id, currentMonth);
           const hoursUsed = monthBookings
             .filter(b => b.booking_date < today || b.status === 'COMPLETED')

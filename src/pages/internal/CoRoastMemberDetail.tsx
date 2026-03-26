@@ -19,6 +19,7 @@ import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, Command
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ArrowLeft, Link2, X, ChevronsUpDown, ShieldCheck, Copy, Check, FileText, Plus } from 'lucide-react';
 import MemberStorageSection from '@/components/coroast/MemberStorageSection';
+import { TIER_RATES } from '@/components/bookings/bookingUtils';
 import type { Database } from '@/integrations/supabase/types';
 
 type CoroastTier = Database['public']['Enums']['coroast_tier'];
@@ -44,7 +45,7 @@ export default function CoRoastMemberDetail() {
   const [formContactName, setFormContactName] = useState('');
   const [formContactEmail, setFormContactEmail] = useState('');
   const [formContactPhone, setFormContactPhone] = useState('');
-  const [formTier, setFormTier] = useState<CoroastTier>('ACCESS');
+  const [formTier, setFormTier] = useState<CoroastTier>('MEMBER');
   const [formNotes, setFormNotes] = useState('');
   const [formClientId, setFormClientId] = useState<string | null>(null);
   const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
@@ -383,7 +384,7 @@ export default function CoRoastMemberDetail() {
       lines.push(`Co-Roasting Member: ${member.business_name}`);
       if (member.contact_name) lines.push(`Contact: ${member.contact_name}`);
       if (member.contact_email) lines.push(`Email: ${member.contact_email}`);
-      lines.push(`Tier: ${member.tier}`);
+      lines.push(`Tier: ${TIER_RATES[member.tier]?.label ?? member.tier}`);
       lines.push(`Certified: ${member.certified ? 'Yes' : 'No'}`);
       lines.push(`Account Created: ${format(new Date(member.created_at), 'MMM d, yyyy')}`);
       lines.push(`Status: ${member.is_active ? 'Active' : 'Inactive'}`);
@@ -461,7 +462,7 @@ export default function CoRoastMemberDetail() {
         <div className="flex-1">
           <h1 className="page-title">{member.business_name}</h1>
           <div className="flex items-center gap-2 mt-1">
-            <Badge variant="outline" className="font-mono text-xs">{member.tier}</Badge>
+            <Badge variant="outline" className="font-mono text-xs">{TIER_RATES[member.tier]?.label ?? member.tier}</Badge>
             {member.certified && (
               <Badge variant="default" className="text-xs gap-1">
                 <ShieldCheck className="h-3 w-3" />
@@ -505,8 +506,9 @@ export default function CoRoastMemberDetail() {
               <Select value={formTier} onValueChange={(v) => { setFormTier(v as CoroastTier); markFormDirty(); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ACCESS">Access</SelectItem>
+                  <SelectItem value="MEMBER">Member</SelectItem>
                   <SelectItem value="GROWTH">Growth</SelectItem>
+                  <SelectItem value="PRODUCTION">Production</SelectItem>
                 </SelectContent>
               </Select>
             </div>

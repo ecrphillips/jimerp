@@ -68,7 +68,7 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
     for (const [key, bks] of grouped) {
       const memberId = key.split(':')[0];
       const member = members.find(m => m.id === memberId);
-      const tier = member?.tier ?? 'ACCESS';
+      const tier = member?.tier ?? 'MEMBER';
       const included = TIER_RATES[tier]?.includedHours ?? 3;
       let running = 0;
       for (const bk of bks) {

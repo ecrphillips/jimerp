@@ -72,7 +72,7 @@ export default function Accounts() {
   const [formNotes, setFormNotes] = useState('');
   const [formManufacturing, setFormManufacturing] = useState(false);
   const [formCoroasting, setFormCoroasting] = useState(false);
-  const [formTier, setFormTier] = useState<string>('ACCESS');
+  const [formTier, setFormTier] = useState<string>('MEMBER');
   const [formJoinedDate, setFormJoinedDate] = useState<Date>(new Date());
   const [formCertified, setFormCertified] = useState(false);
   const [formCertifiedDate, setFormCertifiedDate] = useState<Date | undefined>(undefined);
@@ -162,7 +162,7 @@ export default function Accounts() {
     setFormNotes('');
     setFormManufacturing(false);
     setFormCoroasting(false);
-    setFormTier('ACCESS');
+    setFormTier('MEMBER');
     setFormJoinedDate(new Date());
     setFormCertified(false);
     setFormCertifiedDate(undefined);
@@ -340,7 +340,7 @@ export default function Accounts() {
                     <Tooltip>
                       <TooltipTrigger><Info className="h-3.5 w-3.5 text-muted-foreground" /></TooltipTrigger>
                       <TooltipContent side="right" className="max-w-xs text-xs">
-                        Access: $300/mo, 3 included hours, 4-week booking horizon. Growth: $1,000/mo, 10 included hours, unlimited booking horizon + recurring blocks.
+                        Member: $399/mo, 3 included hours, 4-week booking horizon. Growth: $859/mo, 7 included hours, unlimited booking horizon + recurring blocks. Production: $1,399/mo, 12 included hours, unlimited booking horizon + recurring blocks.
                       </TooltipContent>
                     </Tooltip>
                   </div>
@@ -349,8 +349,9 @@ export default function Accounts() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ACCESS">Access</SelectItem>
+                      <SelectItem value="MEMBER">Member</SelectItem>
                       <SelectItem value="GROWTH">Growth</SelectItem>
+                      <SelectItem value="PRODUCTION">Production</SelectItem>
                     </SelectContent>
                   </Select>
 

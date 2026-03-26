@@ -85,9 +85,9 @@ export default function MemberSchedule() {
   });
 
   const memberId = authUser?.accountId;
-  const tier = member?.coroast_tier ?? 'ACCESS';
-  const isGrowth = tier === 'GROWTH';
-  const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
+  const tier = member?.coroast_tier ?? 'MEMBER';
+  const isGrowth = tier === 'GROWTH' || tier === 'PRODUCTION';
+  const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
 
   // Week state
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
@@ -251,7 +251,7 @@ export default function MemberSchedule() {
     if (!formDate || isGrowth) return null;
     const maxDate = addWeeks(new Date(), 4);
     if (isAfter(formDate, maxDate)) {
-      return 'Access tier members cannot book more than 4 weeks ahead.';
+      return 'Member tier members cannot book more than 4 weeks ahead.';
     }
     return null;
   }, [formDate, isGrowth]);

@@ -88,8 +88,8 @@ export default function CoRoastBilling() {
 
     const createMissing = async () => {
       const inserts = membersWithoutPeriod.map((m) => {
-        const tier = m.tier ?? 'ACCESS';
-        const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
+        const tier = m.tier ?? 'MEMBER';
+        const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
 
         // Proration logic
         let baseFee = rates.base;
@@ -212,8 +212,8 @@ export default function CoRoastBilling() {
 
     const createMissingStorage = async () => {
       const inserts = membersWithoutStorage.map((m) => {
-        const tier = m.tier ?? 'ACCESS';
-        const sRates = STORAGE_RATES[tier] ?? STORAGE_RATES.ACCESS;
+        const tier = m.tier ?? 'MEMBER';
+        const sRates = STORAGE_RATES[tier] ?? STORAGE_RATES.MEMBER;
         const bp = billingPeriods.find((bp) => bp.member_id === m.id)!;
         return {
           member_id: m.id,
@@ -278,8 +278,8 @@ export default function CoRoastBilling() {
 
   const memberBillingData = useMemo(() => {
     return members.map((m) => {
-      const tier = m.tier ?? 'ACCESS';
-      const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
+      const tier = m.tier ?? 'MEMBER';
+      const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
       const bp = billingPeriods.find((bp) => bp.member_id === m.id);
 
       // Use prorated base fee if available, otherwise full rate
@@ -319,7 +319,10 @@ export default function CoRoastBilling() {
       const grandTotal = subtotal + gst;
 
       const prevUsed = prevMemberHoursUsed.get(m.id) ?? 0;
-      const upgradeRecommended = tier === 'ACCESS' && usedHours > 6 && prevUsed > 6;
+      const nudgeMemberToGrowth = tier === 'MEMBER' && usedHours > 6 && prevUsed > 6;
+      const nudgeGrowthToProduction = tier === 'GROWTH' && usedHours > 10 && prevUsed > 10;
+      const upgradeRecommended = nudgeMemberToGrowth || nudgeGrowthToProduction;
+      const upgradeLabel = nudgeGrowthToProduction ? 'Upgrade to Production Recommended' : 'Upgrade to Growth Recommended';
 
       return {
         member: m,
@@ -342,6 +345,7 @@ export default function CoRoastBilling() {
         grandTotal,
         invoice,
         upgradeRecommended,
+        upgradeLabel,
         isClosed,
         contactEmail: (m as any).contact_email ?? null,
       };
@@ -449,7 +453,7 @@ export default function CoRoastBilling() {
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-lg">{d.member.business_name}</CardTitle>
                   <Badge variant="secondary" className="text-xs">
-                    {d.tier}
+                    {TIER_RATES[d.tier]?.label ?? d.tier}
                   </Badge>
                   {d.isClosed && (
                     <Badge variant="outline" className="text-xs gap-1">
@@ -463,7 +467,7 @@ export default function CoRoastBilling() {
                       className="text-xs border-amber-400 text-amber-600 bg-amber-50"
                     >
                       <TrendingUp className="h-3 w-3 mr-1" />
-                      Upgrade Recommended
+                      {d.upgradeLabel}
                     </Badge>
                   )}
                 </div>

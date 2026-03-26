@@ -73,7 +73,7 @@ export default function ProspectDetail() {
   const [convertName, setConvertName] = useState('');
   const [convertMfg, setConvertMfg] = useState(false);
   const [convertCoroast, setConvertCoroast] = useState(false);
-  const [convertTier, setConvertTier] = useState('ACCESS');
+  const [convertTier, setConvertTier] = useState('MEMBER');
   const [convertLoading, setConvertLoading] = useState(false);
 
   const { data: prospect, isLoading } = useQuery({
@@ -232,7 +232,7 @@ export default function ProspectDetail() {
     const stream = prospect.stream as ProspectStream;
     setConvertMfg(stream === 'CONTRACT' || stream === 'BOTH');
     setConvertCoroast(stream === 'CO_ROAST' || stream === 'BOTH');
-    setConvertTier('ACCESS');
+    setConvertTier('MEMBER');
     setConvertOpen(true);
   };
 
@@ -585,8 +585,9 @@ export default function ProspectDetail() {
                 <Select value={convertTier} onValueChange={setConvertTier}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ACCESS">Access</SelectItem>
+                    <SelectItem value="MEMBER">Member</SelectItem>
                     <SelectItem value="GROWTH">Growth</SelectItem>
+                    <SelectItem value="PRODUCTION">Production</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

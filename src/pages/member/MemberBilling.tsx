@@ -31,8 +31,8 @@ export default function MemberBilling() {
   });
 
   const accountId = authUser?.accountId;
-  const tier = member?.coroast_tier ?? 'ACCESS';
-  const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
+  const tier = member?.coroast_tier ?? 'MEMBER';
+  const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
 
   const now = new Date();
   const currentMonthStart = format(startOfMonth(now), 'yyyy-MM-dd');
@@ -104,7 +104,7 @@ export default function MemberBilling() {
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold">My Hours & Billing</h1>
-        <p className="text-sm text-muted-foreground">{member.account_name} · {tier} tier</p>
+        <p className="text-sm text-muted-foreground">{member.account_name} · {rates.label} tier</p>
       </div>
 
       {/* Current Month */}

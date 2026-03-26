@@ -74,7 +74,7 @@ export function BookingFormDialog({
 
   const activeMembers = useMemo(() => members.filter(m => m.is_active), [members]);
   const selectedMember = useMemo(() => members.find(m => m.id === memberId), [members, memberId]);
-  const isGrowth = selectedMember?.tier === 'GROWTH';
+  const isGrowth = selectedMember?.tier === 'GROWTH' || selectedMember?.tier === 'PRODUCTION';
 
   const dateStr = formDate ? format(formDate, 'yyyy-MM-dd') : null;
 
@@ -132,7 +132,7 @@ export function BookingFormDialog({
     }
   }, [formStartTime]);
 
-  // Reset recurring if switching to ACCESS tier
+  // Reset recurring if switching to Member tier
   useEffect(() => {
     if (!isGrowth) setIsRecurring(false);
   }, [isGrowth]);
@@ -152,8 +152,8 @@ export function BookingFormDialog({
     if (existing && existing.length > 0) return existing[0].id;
 
     const member = members.find(m => m.id === mId);
-    const tier = member?.tier ?? 'ACCESS';
-    const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
+    const tier = member?.tier ?? 'MEMBER';
+    const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
 
     const { data: created, error } = await supabase
       .from('coroast_billing_periods')
@@ -182,11 +182,11 @@ export function BookingFormDialog({
 
       const saveDateStr = format(formDate, 'yyyy-MM-dd');
 
-      // Access tier: 4 week horizon (only for future dates)
-      if (selectedMember?.tier === 'ACCESS' && !isBefore(formDate, startOfDay(new Date()))) {
+      // Member tier: 4 week horizon (only for future dates)
+      if (selectedMember?.tier === 'MEMBER' && !isBefore(formDate, startOfDay(new Date()))) {
         const maxDate = addWeeks(new Date(), 4);
         if (formDate > maxDate) {
-          throw new Error('Access tier members can only book within 4 weeks from today');
+          throw new Error('Member tier members can only book within 4 weeks from today');
         }
       }
 

@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Plus, Pencil, ShieldCheck, FileText, Link2 } from 'lucide-react';
+import { TIER_RATES } from '@/components/bookings/bookingUtils';
 import { WaiverHistoryPanel } from '@/components/bookings/WaiverHistoryPanel';
 import { useNavigate } from 'react-router-dom';
 import type { Database } from '@/integrations/supabase/types';
@@ -53,7 +54,7 @@ export default function CoRoastMembers() {
   const [formContactName, setFormContactName] = useState('');
   const [formContactEmail, setFormContactEmail] = useState('');
   const [formContactPhone, setFormContactPhone] = useState('');
-  const [formTier, setFormTier] = useState<CoroastTier>('ACCESS');
+  const [formTier, setFormTier] = useState<CoroastTier>('MEMBER');
   const [formNotes, setFormNotes] = useState('');
 
   const { data: members, isLoading, error } = useQuery({
@@ -101,7 +102,7 @@ export default function CoRoastMembers() {
     setFormContactName('');
     setFormContactEmail('');
     setFormContactPhone('');
-    setFormTier('ACCESS');
+    setFormTier('MEMBER');
     setFormNotes('');
   }, []);
 
@@ -199,7 +200,7 @@ export default function CoRoastMembers() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Badge variant="outline" className="font-mono text-xs">
-                        {m.tier}
+                        {TIER_RATES[m.tier]?.label ?? m.tier}
                       </Badge>
                       <div>
                         <span className="font-medium">{m.business_name}</span>
@@ -305,8 +306,9 @@ export default function CoRoastMembers() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ACCESS">Access</SelectItem>
+                  <SelectItem value="MEMBER">Member</SelectItem>
                   <SelectItem value="GROWTH">Growth</SelectItem>
+                  <SelectItem value="PRODUCTION">Production</SelectItem>
                 </SelectContent>
               </Select>
             </div>

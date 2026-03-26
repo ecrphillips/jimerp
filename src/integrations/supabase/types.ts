@@ -3379,7 +3379,7 @@ export type Database = {
         | "FRI"
         | "SAT"
         | "SUN"
-      coroast_tier: "ACCESS" | "GROWTH"
+      coroast_tier: "ACCESS" | "GROWTH" | "MEMBER" | "PRODUCTION"
       default_roaster: "SAMIAC" | "LORING" | "EITHER"
       delivery_method: "PICKUP" | "DELIVERY" | "COURIER"
       exception_event_type:
@@ -3606,7 +3606,7 @@ export const Constants = {
         "OTHER",
       ],
       coroast_recurring_day: ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
-      coroast_tier: ["ACCESS", "GROWTH"],
+      coroast_tier: ["ACCESS", "GROWTH", "MEMBER", "PRODUCTION"],
       default_roaster: ["SAMIAC", "LORING", "EITHER"],
       delivery_method: ["PICKUP", "DELIVERY", "COURIER"],
       exception_event_type: [
