@@ -212,8 +212,8 @@ export default function CoRoastBilling() {
 
     const createMissingStorage = async () => {
       const inserts = membersWithoutStorage.map((m) => {
-        const tier = m.tier ?? 'ACCESS';
-        const sRates = STORAGE_RATES[tier] ?? STORAGE_RATES.ACCESS;
+        const tier = m.tier ?? 'MEMBER';
+        const sRates = STORAGE_RATES[tier] ?? STORAGE_RATES.MEMBER;
         const bp = billingPeriods.find((bp) => bp.member_id === m.id)!;
         return {
           member_id: m.id,
