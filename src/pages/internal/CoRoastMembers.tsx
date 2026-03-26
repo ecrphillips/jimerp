@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Plus, Pencil, ShieldCheck, FileText, Link2 } from 'lucide-react';
+import { TIER_RATES } from '@/components/bookings/bookingUtils';
 import { WaiverHistoryPanel } from '@/components/bookings/WaiverHistoryPanel';
 import { useNavigate } from 'react-router-dom';
 import type { Database } from '@/integrations/supabase/types';

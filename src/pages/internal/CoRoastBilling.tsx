@@ -467,7 +467,7 @@ export default function CoRoastBilling() {
                       className="text-xs border-amber-400 text-amber-600 bg-amber-50"
                     >
                       <TrendingUp className="h-3 w-3 mr-1" />
-                      Upgrade Recommended
+                      {d.upgradeLabel}
                     </Badge>
                   )}
                 </div>

@@ -141,7 +141,7 @@ export default function MemberStorageSection({ memberId, tier }: MemberStorageSe
     onError: () => toast.error('Failed to request release'),
   });
 
-  const sRates = STORAGE_RATES[tier] ?? STORAGE_RATES.ACCESS;
+  const sRates = STORAGE_RATES[tier] ?? STORAGE_RATES.MEMBER;
   const includedPallets = currentStorage?.included_pallets ?? sRates.includedPallets;
   const paidPallets = editPaidPallets ?? currentStorage?.paid_pallets ?? 0;
   const palletsInUse = editPalletsInUse ?? currentStorage?.pallets_in_use ?? 0;

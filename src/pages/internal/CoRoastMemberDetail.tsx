@@ -505,8 +505,9 @@ export default function CoRoastMemberDetail() {
               <Select value={formTier} onValueChange={(v) => { setFormTier(v as CoroastTier); markFormDirty(); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ACCESS">Access</SelectItem>
+                  <SelectItem value="MEMBER">Member</SelectItem>
                   <SelectItem value="GROWTH">Growth</SelectItem>
+                  <SelectItem value="PRODUCTION">Production</SelectItem>
                 </SelectContent>
               </Select>
             </div>
