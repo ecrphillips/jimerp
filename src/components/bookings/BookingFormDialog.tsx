@@ -132,7 +132,7 @@ export function BookingFormDialog({
     }
   }, [formStartTime]);
 
-  // Reset recurring if switching to ACCESS tier
+  // Reset recurring if switching to Member tier
   useEffect(() => {
     if (!isGrowth) setIsRecurring(false);
   }, [isGrowth]);
