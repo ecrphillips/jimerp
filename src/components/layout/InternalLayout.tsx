@@ -60,7 +60,10 @@ function NavGroup({ label, icon: Icon, open, onOpenChange, children }: NavGroupP
     <li>
       <Collapsible open={open} onOpenChange={onOpenChange}>
         <CollapsibleTrigger asChild>
-          <button className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground transition-colors hover:text-sidebar-foreground/80">
+          <button className={cn(
+            "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground transition-colors hover:text-sidebar-foreground/80",
+            open && "bg-sidebar-accent/30"
+          )}>
             <Icon className="h-4 w-4" />
             {label}
             {open ? (
@@ -70,8 +73,10 @@ function NavGroup({ label, icon: Icon, open, onOpenChange, children }: NavGroupP
             )}
           </button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="mt-0.5 space-y-0.5 pl-3">
-          {children}
+        <CollapsibleContent className="mt-0.5">
+          <div className="bg-sidebar-accent/20 rounded-md mx-1 px-1 py-1 mb-1 space-y-0.5">
+            {children}
+          </div>
         </CollapsibleContent>
       </Collapsible>
     </li>
