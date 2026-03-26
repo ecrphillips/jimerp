@@ -98,8 +98,8 @@ function NavItem({ to, icon: Icon, label, onClick, end }: NavItemProps) {
       end={end}
       onClick={onClick}
       className={({ isActive }) => cn(
-        "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
-        isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/85"
+        "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground border-l-2",
+        isActive ? "bg-sidebar-accent border-l-sidebar-primary" : "border-l-transparent hover:bg-sidebar-accent/85"
       )}
     >
       <Icon className="h-5 w-5" />
