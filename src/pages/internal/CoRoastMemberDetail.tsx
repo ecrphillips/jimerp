@@ -461,7 +461,7 @@ export default function CoRoastMemberDetail() {
         <div className="flex-1">
           <h1 className="page-title">{member.business_name}</h1>
           <div className="flex items-center gap-2 mt-1">
-            <Badge variant="outline" className="font-mono text-xs">{member.tier}</Badge>
+            <Badge variant="outline" className="font-mono text-xs">{TIER_RATES[member.tier]?.label ?? member.tier}</Badge>
             {member.certified && (
               <Badge variant="default" className="text-xs gap-1">
                 <ShieldCheck className="h-3 w-3" />
