@@ -88,8 +88,8 @@ export default function CoRoastBilling() {
 
     const createMissing = async () => {
       const inserts = membersWithoutPeriod.map((m) => {
-        const tier = m.tier ?? 'ACCESS';
-        const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
+        const tier = m.tier ?? 'MEMBER';
+        const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
 
         // Proration logic
         let baseFee = rates.base;
