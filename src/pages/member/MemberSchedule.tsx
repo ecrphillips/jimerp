@@ -85,9 +85,9 @@ export default function MemberSchedule() {
   });
 
   const memberId = authUser?.accountId;
-  const tier = member?.coroast_tier ?? 'ACCESS';
-  const isGrowth = tier === 'GROWTH';
-  const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
+  const tier = member?.coroast_tier ?? 'MEMBER';
+  const isGrowth = tier === 'GROWTH' || tier === 'PRODUCTION';
+  const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
 
   // Week state
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
