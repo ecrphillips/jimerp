@@ -162,7 +162,7 @@ export default function Accounts() {
     setFormNotes('');
     setFormManufacturing(false);
     setFormCoroasting(false);
-    setFormTier('ACCESS');
+    setFormTier('MEMBER');
     setFormJoinedDate(new Date());
     setFormCertified(false);
     setFormCertifiedDate(undefined);
