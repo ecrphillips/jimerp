@@ -53,7 +53,7 @@ export default function QuickBooksInstructionsModal({
   gst,
   grandTotal,
 }: QuickBooksInstructionsModalProps) {
-  const tierLabel = tier === 'GROWTH' ? 'Growth' : 'Access';
+  const tierLabel = tier === 'GROWTH' ? 'Growth' : tier === 'PRODUCTION' ? 'Production' : tier === 'MEMBER' ? 'Member' : 'Access';
   const invoiceDate = periodEnd;
   const dueDate = format(addDays(new Date(`${periodEnd}T00:00:00`), 15), 'yyyy-MM-dd');
 
