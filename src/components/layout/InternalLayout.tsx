@@ -62,7 +62,7 @@ function NavGroup({ label, icon: Icon, open, onOpenChange, children }: NavGroupP
         <CollapsibleTrigger asChild>
           <button className={cn(
             "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground transition-colors hover:text-sidebar-foreground/80",
-            open && "bg-sidebar-accent/30"
+            open && "bg-sidebar-accent/45"
           )}>
             <Icon className="h-4 w-4" />
             {label}
