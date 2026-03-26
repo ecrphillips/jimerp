@@ -19,6 +19,7 @@ import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, Command
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ArrowLeft, Link2, X, ChevronsUpDown, ShieldCheck, Copy, Check, FileText, Plus } from 'lucide-react';
 import MemberStorageSection from '@/components/coroast/MemberStorageSection';
+import { TIER_RATES } from '@/components/bookings/bookingUtils';
 import type { Database } from '@/integrations/supabase/types';
 
 type CoroastTier = Database['public']['Enums']['coroast_tier'];
