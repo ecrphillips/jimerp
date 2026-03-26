@@ -345,6 +345,7 @@ export default function CoRoastBilling() {
         grandTotal,
         invoice,
         upgradeRecommended,
+        upgradeLabel,
         isClosed,
         contactEmail: (m as any).contact_email ?? null,
       };
