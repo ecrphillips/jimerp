@@ -74,7 +74,7 @@ export function BookingFormDialog({
 
   const activeMembers = useMemo(() => members.filter(m => m.is_active), [members]);
   const selectedMember = useMemo(() => members.find(m => m.id === memberId), [members, memberId]);
-  const isGrowth = selectedMember?.tier === 'GROWTH';
+  const isGrowth = selectedMember?.tier === 'GROWTH' || selectedMember?.tier === 'PRODUCTION';
 
   const dateStr = formDate ? format(formDate, 'yyyy-MM-dd') : null;
 
