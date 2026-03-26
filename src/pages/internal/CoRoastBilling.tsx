@@ -278,8 +278,8 @@ export default function CoRoastBilling() {
 
   const memberBillingData = useMemo(() => {
     return members.map((m) => {
-      const tier = m.tier ?? 'ACCESS';
-      const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
+      const tier = m.tier ?? 'MEMBER';
+      const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
       const bp = billingPeriods.find((bp) => bp.member_id === m.id);
 
       // Use prorated base fee if available, otherwise full rate
