@@ -152,8 +152,8 @@ export function BookingFormDialog({
     if (existing && existing.length > 0) return existing[0].id;
 
     const member = members.find(m => m.id === mId);
-    const tier = member?.tier ?? 'ACCESS';
-    const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
+    const tier = member?.tier ?? 'MEMBER';
+    const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
 
     const { data: created, error } = await supabase
       .from('coroast_billing_periods')
