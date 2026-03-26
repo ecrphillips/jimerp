@@ -31,8 +31,8 @@ export default function MemberBilling() {
   });
 
   const accountId = authUser?.accountId;
-  const tier = member?.coroast_tier ?? 'ACCESS';
-  const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
+  const tier = member?.coroast_tier ?? 'MEMBER';
+  const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
 
   const now = new Date();
   const currentMonthStart = format(startOfMonth(now), 'yyyy-MM-dd');
