@@ -73,7 +73,7 @@ export default function ProspectDetail() {
   const [convertName, setConvertName] = useState('');
   const [convertMfg, setConvertMfg] = useState(false);
   const [convertCoroast, setConvertCoroast] = useState(false);
-  const [convertTier, setConvertTier] = useState('ACCESS');
+  const [convertTier, setConvertTier] = useState('MEMBER');
   const [convertLoading, setConvertLoading] = useState(false);
 
   const { data: prospect, isLoading } = useQuery({
