@@ -101,7 +101,7 @@ export default function CoRoastMembers() {
     setFormContactName('');
     setFormContactEmail('');
     setFormContactPhone('');
-    setFormTier('ACCESS');
+    setFormTier('MEMBER');
     setFormNotes('');
   }, []);
 
