@@ -79,7 +79,9 @@ export default function QuickBooksInstructionsModal({
     const storageLabel =
       tier === 'GROWTH'
         ? `Co-Roasting — Pallet Storage (Growth, additional)`
-        : `Co-Roasting — Pallet Storage (Access)`;
+        : tier === 'PRODUCTION'
+        ? `Co-Roasting — Pallet Storage (Production, additional)`
+        : `Co-Roasting — Pallet Storage (${tierLabel})`;
     lineItems.push({
       name: storageLabel,
       qty: String(paidPallets),

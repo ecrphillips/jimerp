@@ -36,8 +36,8 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
 
   const member = booking ? members.find(m => m.id === booking.member_id) : undefined;
   const durationHrs = booking ? (timeToMinutes(booking.end_time) - timeToMinutes(booking.start_time)) / 60 : 0;
-  const tier = member?.tier ?? 'ACCESS';
-  const rates = TIER_RATES[tier] ?? TIER_RATES.ACCESS;
+  const tier = member?.tier ?? 'MEMBER';
+  const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
   const hourlyRate = rates.overageRate;
   const fullFee = durationHrs * hourlyRate;
 
