@@ -406,7 +406,7 @@ function ContractDetailPanel({
         lot_identifier: contract.lot_identifier,
       });
       setPriceUnit(contract.contracted_price_currency === 'CAD' ? 'cad_kg' : 'usd_kg');
-      setPriceInput(contract.contracted_price_per_kg != null ? String(contract.contracted_price_per_kg) : '');
+      setPriceInput(contract.contracted_price_per_kg != null ? contract.contracted_price_per_kg.toFixed(4) : '');
       setDirty(false);
     }
   }, [contract]);
