@@ -758,9 +758,7 @@ const CHECKLIST_TOOLTIPS: Record<number, string> = {
 function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void }) {
   const queryClient = useQueryClient();
 
-  // We store the QBO parent as item_number = 8
-  const QBO_ITEM_NUMBER = 8;
-  const TOTAL_ITEMS = 8; // 7 original + 1 QBO parent
+  const TOTAL_ORIGINAL_ITEMS = 7;
 
   const { data: checklist = [] } = useQuery({
     queryKey: ['account-checklist', account.id],
@@ -775,11 +773,18 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
     },
   });
 
-  const recomputeCertification = async (allItems: any[]) => {
-    const allComplete = Array.from({ length: TOTAL_ITEMS }, (_, i) => {
-      const item = allItems.find((c: any) => c.item_number === i + 1);
-      return item?.completed;
-    }).every(Boolean);
+  // Read QBO sub-fields from the first checklist row (they're stored on every row but we use item 1)
+  const qboRow = checklist[0] as any | undefined;
+  const qboSubs = {
+    qbo_company_name: qboRow?.qbo_company_name || false,
+    qbo_billing_contact: qboRow?.qbo_billing_contact || false,
+    qbo_billing_address: qboRow?.qbo_billing_address || false,
+    qbo_credit_card: qboRow?.qbo_credit_card || false,
+  };
+  const qboParentChecked = QBO_SUB_FIELDS.every(f => qboSubs[f.key]);
+
+  const recomputeCertification = async (allOriginalComplete: boolean, allQboComplete: boolean) => {
+    const allComplete = allOriginalComplete && allQboComplete;
 
     const update: Record<string, unknown> = { coroast_certified: allComplete };
     if (allComplete && !account.coroast_certified) {
@@ -812,7 +817,11 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
       }
 
       const allItems = [...checklist.filter((c: any) => c.item_number !== itemNumber), { item_number: itemNumber, completed }];
-      await recomputeCertification(allItems);
+      const allOriginalComplete = Array.from({ length: TOTAL_ORIGINAL_ITEMS }, (_, i) => {
+        const item = allItems.find((c: any) => c.item_number === i + 1);
+        return item?.completed;
+      }).every(Boolean);
+      await recomputeCertification(allOriginalComplete, qboParentChecked);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['account-checklist'] });
@@ -824,44 +833,31 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
 
   const toggleQboSub = useMutation({
     mutationFn: async ({ field, value }: { field: string; value: boolean }) => {
-      const existing = checklist.find((c: any) => c.item_number === QBO_ITEM_NUMBER);
+      const newSubs = { ...qboSubs, [field]: value };
+      const allSubsChecked = QBO_SUB_FIELDS.every(f => newSubs[f.key]);
 
-      // Build new sub-field values to determine parent state
-      const currentSubs = {
-        qbo_company_name: existing?.qbo_company_name || false,
-        qbo_billing_contact: existing?.qbo_billing_contact || false,
-        qbo_billing_address: existing?.qbo_billing_address || false,
-        qbo_credit_card: existing?.qbo_credit_card || false,
-        [field]: value,
-      };
-      const allSubsChecked = QBO_SUB_FIELDS.every(f => currentSubs[f.key]);
+      const payload = { [field]: value };
 
-      const payload = {
-        [field]: value,
-        completed: allSubsChecked,
-        completed_date: allSubsChecked ? new Date().toISOString().split('T')[0] : null,
-      };
-
-      if (existing) {
-        const { error } = await supabase.from('coroast_member_checklist').update(payload).eq('id', existing.id);
+      if (qboRow) {
+        // Update the first checklist row with QBO fields
+        const { error } = await supabase.from('coroast_member_checklist').update(payload).eq('id', qboRow.id);
         if (error) throw error;
       } else {
+        // No checklist rows exist yet — create item 1 with the QBO field
         const { error } = await supabase.from('coroast_member_checklist').insert({
           account_id: account.id,
-          item_number: QBO_ITEM_NUMBER,
-          ...currentSubs,
-          [field]: value,
-          completed: allSubsChecked,
-          completed_date: allSubsChecked ? new Date().toISOString().split('T')[0] : null,
+          item_number: 1,
+          completed: false,
+          ...newSubs,
         } as any);
         if (error) throw error;
       }
 
-      const allItems = [
-        ...checklist.filter((c: any) => c.item_number !== QBO_ITEM_NUMBER),
-        { item_number: QBO_ITEM_NUMBER, completed: allSubsChecked },
-      ];
-      await recomputeCertification(allItems);
+      const allOriginalComplete = Array.from({ length: TOTAL_ORIGINAL_ITEMS }, (_, i) => {
+        const item = checklist.find((c: any) => c.item_number === i + 1);
+        return item?.completed || false;
+      }).every(Boolean);
+      await recomputeCertification(allOriginalComplete, allSubsChecked);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['account-checklist'] });
@@ -875,9 +871,6 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
     const item = checklist.find((c: any) => c.item_number === index + 1);
     return item?.completed || false;
   };
-
-  const qboRow = checklist.find((c: any) => c.item_number === QBO_ITEM_NUMBER);
-  const qboParentChecked = qboRow?.completed || false;
 
   return (
     <div className="space-y-6">
