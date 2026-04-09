@@ -818,6 +818,10 @@ export type Database = {
           id: string
           item_number: number
           member_id: string | null
+          qbo_billing_address: boolean
+          qbo_billing_contact: boolean
+          qbo_company_name: boolean
+          qbo_credit_card: boolean
           updated_at: string
         }
         Insert: {
@@ -829,6 +833,10 @@ export type Database = {
           id?: string
           item_number: number
           member_id?: string | null
+          qbo_billing_address?: boolean
+          qbo_billing_contact?: boolean
+          qbo_company_name?: boolean
+          qbo_credit_card?: boolean
           updated_at?: string
         }
         Update: {
@@ -840,6 +848,10 @@ export type Database = {
           id?: string
           item_number?: number
           member_id?: string | null
+          qbo_billing_address?: boolean
+          qbo_billing_contact?: boolean
+          qbo_company_name?: boolean
+          qbo_credit_card?: boolean
           updated_at?: string
         }
         Relationships: [
