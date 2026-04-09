@@ -915,7 +915,7 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
           {QBO_SUB_FIELDS.map((sub) => (
             <div key={sub.key} className="flex items-start gap-2 pl-6">
               <Checkbox
-                checked={qboRow?.[sub.key] || false}
+                checked={qboSubs[sub.key] || false}
                 onCheckedChange={(v) => toggleQboSub.mutate({ field: sub.key, value: !!v })}
                 className="mt-0.5"
               />
