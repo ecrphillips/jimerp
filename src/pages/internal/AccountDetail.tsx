@@ -744,12 +744,23 @@ const CHECKLIST_ITEMS = [
   'Supervised roast session completed to Home Island Coffee Partners satisfaction',
 ];
 
+const QBO_SUB_FIELDS = [
+  { key: 'qbo_company_name' as const, label: 'Registered company name confirmed' },
+  { key: 'qbo_billing_contact' as const, label: 'Billing contact name, email, and phone on file' },
+  { key: 'qbo_billing_address' as const, label: 'Billing address on file' },
+  { key: 'qbo_credit_card' as const, label: 'Credit card on file' },
+];
+
 const CHECKLIST_TOOLTIPS: Record<number, string> = {
   1: 'PSA: our member agreement says $2M but we have updated our standard to $5M.',
 };
 
 function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void }) {
   const queryClient = useQueryClient();
+
+  // We store the QBO parent as item_number = 8
+  const QBO_ITEM_NUMBER = 8;
+  const TOTAL_ITEMS = 8; // 7 original + 1 QBO parent
 
   const { data: checklist = [] } = useQuery({
     queryKey: ['account-checklist', account.id],
@@ -763,6 +774,23 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
       return data;
     },
   });
+
+  const recomputeCertification = async (allItems: any[]) => {
+    const allComplete = Array.from({ length: TOTAL_ITEMS }, (_, i) => {
+      const item = allItems.find((c: any) => c.item_number === i + 1);
+      return item?.completed;
+    }).every(Boolean);
+
+    const update: Record<string, unknown> = { coroast_certified: allComplete };
+    if (allComplete && !account.coroast_certified) {
+      update.coroast_certified_date = new Date().toISOString().split('T')[0];
+    }
+    if (!allComplete) {
+      update.coroast_certified_date = null;
+      update.coroast_certified_by = null;
+    }
+    await supabase.from('accounts').update(update).eq('id', account.id);
+  };
 
   const toggleItem = useMutation({
     mutationFn: async ({ itemNumber, completed }: { itemNumber: number; completed: boolean }) => {
@@ -783,22 +811,57 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
         if (error) throw error;
       }
 
-      // Check if all 7 are now complete
       const allItems = [...checklist.filter((c: any) => c.item_number !== itemNumber), { item_number: itemNumber, completed }];
-      const allComplete = CHECKLIST_ITEMS.every((_, i) => {
-        const item = allItems.find((c: any) => c.item_number === i + 1);
-        return item?.completed;
-      });
+      await recomputeCertification(allItems);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['account-checklist'] });
+      queryClient.invalidateQueries({ queryKey: ['account-detail'] });
+      refetch();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
-      const update: Record<string, unknown> = { coroast_certified: allComplete };
-      if (allComplete && !account.coroast_certified) {
-        update.coroast_certified_date = new Date().toISOString().split('T')[0];
+  const toggleQboSub = useMutation({
+    mutationFn: async ({ field, value }: { field: string; value: boolean }) => {
+      const existing = checklist.find((c: any) => c.item_number === QBO_ITEM_NUMBER);
+
+      // Build new sub-field values to determine parent state
+      const currentSubs = {
+        qbo_company_name: existing?.qbo_company_name || false,
+        qbo_billing_contact: existing?.qbo_billing_contact || false,
+        qbo_billing_address: existing?.qbo_billing_address || false,
+        qbo_credit_card: existing?.qbo_credit_card || false,
+        [field]: value,
+      };
+      const allSubsChecked = QBO_SUB_FIELDS.every(f => currentSubs[f.key]);
+
+      const payload = {
+        [field]: value,
+        completed: allSubsChecked,
+        completed_date: allSubsChecked ? new Date().toISOString().split('T')[0] : null,
+      };
+
+      if (existing) {
+        const { error } = await supabase.from('coroast_member_checklist').update(payload).eq('id', existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('coroast_member_checklist').insert({
+          account_id: account.id,
+          item_number: QBO_ITEM_NUMBER,
+          ...currentSubs,
+          [field]: value,
+          completed: allSubsChecked,
+          completed_date: allSubsChecked ? new Date().toISOString().split('T')[0] : null,
+        } as any);
+        if (error) throw error;
       }
-      if (!allComplete) {
-        update.coroast_certified_date = null;
-        update.coroast_certified_by = null;
-      }
-      await supabase.from('accounts').update(update).eq('id', account.id);
+
+      const allItems = [
+        ...checklist.filter((c: any) => c.item_number !== QBO_ITEM_NUMBER),
+        { item_number: QBO_ITEM_NUMBER, completed: allSubsChecked },
+      ];
+      await recomputeCertification(allItems);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['account-checklist'] });
@@ -812,6 +875,9 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
     const item = checklist.find((c: any) => c.item_number === index + 1);
     return item?.completed || false;
   };
+
+  const qboRow = checklist.find((c: any) => c.item_number === QBO_ITEM_NUMBER);
+  const qboParentChecked = qboRow?.completed || false;
 
   return (
     <div className="space-y-6">
@@ -839,6 +905,28 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
                   <TooltipContent className="text-xs max-w-xs">{CHECKLIST_TOOLTIPS[i]}</TooltipContent>
                 </Tooltip>
               )}
+            </div>
+          ))}
+
+          {/* QBO parent item */}
+          <div className="flex items-start gap-2 pt-1">
+            <Checkbox
+              checked={qboParentChecked}
+              disabled
+              className="mt-0.5"
+            />
+            <span className="text-sm flex-1 font-medium">Client account active in QBO</span>
+          </div>
+
+          {/* QBO sub-checkboxes */}
+          {QBO_SUB_FIELDS.map((sub) => (
+            <div key={sub.key} className="flex items-start gap-2 pl-6">
+              <Checkbox
+                checked={qboRow?.[sub.key] || false}
+                onCheckedChange={(v) => toggleQboSub.mutate({ field: sub.key, value: !!v })}
+                className="mt-0.5"
+              />
+              <span className="text-xs text-muted-foreground flex-1">{sub.label}</span>
             </div>
           ))}
         </CardContent>
