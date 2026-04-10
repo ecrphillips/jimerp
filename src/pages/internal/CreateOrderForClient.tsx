@@ -282,7 +282,6 @@ export default function CreateOrderForClient() {
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
-          client_id: null as any,
           account_id: selectedClientId,
           location_id: selectedLocationId || null,
           order_number: '',
