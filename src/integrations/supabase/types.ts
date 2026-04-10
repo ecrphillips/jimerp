@@ -2261,7 +2261,7 @@ export type Database = {
         Row: {
           account_id: string | null
           account_location_id: string | null
-          client_id: string
+          client_id: string | null
           client_notes: string | null
           client_po: string | null
           created_at: string
@@ -2289,7 +2289,7 @@ export type Database = {
         Insert: {
           account_id?: string | null
           account_location_id?: string | null
-          client_id: string
+          client_id?: string | null
           client_notes?: string | null
           client_po?: string | null
           created_at?: string
@@ -2317,7 +2317,7 @@ export type Database = {
         Update: {
           account_id?: string | null
           account_location_id?: string | null
-          client_id?: string
+          client_id?: string | null
           client_notes?: string | null
           client_po?: string | null
           created_at?: string
