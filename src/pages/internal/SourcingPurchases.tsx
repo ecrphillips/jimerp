@@ -1513,8 +1513,8 @@ function CreatePurchaseModal({
 
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
-              <Button disabled={!canCreate || createMutation.isPending} onClick={() => createMutation.mutate()}>
-                {createMutation.isPending ? 'Creating…' : 'Create Purchase & Lots'}
+              <Button disabled={!canCreate || saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+                {saveMutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save Changes' : 'Create Purchase & Lots')}
               </Button>
             </DialogFooter>
           </div>
