@@ -783,6 +783,11 @@ function CreatePurchaseModal({
   // Step 2 lines
   const [lines, setLines] = useState<CoffeeLine[]>([emptyLine()]);
 
+  // Before You Save state
+  const [confirmCosting, setConfirmCosting] = useState(true);
+  const [markPaid, setMarkPaid] = useState(false);
+  const [paidDate, setPaidDate] = useState<Date | undefined>(new Date());
+
   // React to FX rate changes — update default currencies for lines that haven't been manually toggled
   const prevFxRef = React.useRef('');
   React.useEffect(() => {
