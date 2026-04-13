@@ -1054,8 +1054,21 @@ function CreatePurchaseModal({
 
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <Label className="text-xs">Price/lb (USD)</Label>
-                      <Input type="number" step="0.0001" value={line.price_per_lb_usd} onChange={e => updateLine(line.key, 'price_per_lb_usd', e.target.value)} placeholder="0.0000" />
+                      <Label className="text-xs">Price</Label>
+                      <div className="flex gap-1.5">
+                        <Input type="number" step="0.0001" value={line.price_amount} onChange={e => updateLine(line.key, 'price_amount', e.target.value)} placeholder="0.0000" className="flex-1" />
+                        <Select value={line.price_unit} onValueChange={(v: PriceUnit) => updateLine(line.key, 'price_unit', v)}>
+                          <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {PRICE_UNIT_OPTIONS.map(o => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {(line.price_unit === 'CAD_LB' || line.price_unit === 'CAD_KG') && !fxRate.trim() && parseFloat(line.price_amount) > 0 && (
+                        <p className="text-xs text-amber-600 mt-1">FX rate not set — CAD price stored unconverted</p>
+                      )}
                     </div>
                     <div>
                       <Label className="text-xs">Warehouse</Label>
@@ -1074,46 +1087,83 @@ function CreatePurchaseModal({
               <Plus className="h-4 w-4" /> Add Coffee
             </Button>
 
-            {/* Proration preview */}
-            {hasAnyCost && (
-              <div className="border rounded-lg p-4">
-                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Cost Proration Preview</h4>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs">Coffee</TableHead>
-                        <TableHead className="text-xs text-right">Bags</TableHead>
-                        <TableHead className="text-xs text-right">Total kg</TableHead>
-                        {carryNum > 0 && <TableHead className="text-xs text-right">Carry ({sharedCosts.carry.currency})</TableHead>}
-                        {freightNum > 0 && <TableHead className="text-xs text-right">Freight ({sharedCosts.freight.currency})</TableHead>}
-                        {dutiesNum > 0 && <TableHead className="text-xs text-right">Duties ({sharedCosts.duties.currency})</TableHead>}
-                        {feesNum > 0 && <TableHead className="text-xs text-right">Fees ({sharedCosts.fees.currency})</TableHead>}
-                        {otherNum > 0 && <TableHead className="text-xs text-right">{sharedCosts.other.label || 'Other'} ({sharedCosts.other.currency})</TableHead>}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {lines.map(l => {
-                        const lkg = l.bags * l.bag_size_kg;
-                        const share = totalKgAll > 0 ? lkg / totalKgAll : 0;
-                        return (
-                          <TableRow key={l.key}>
-                            <TableCell className="text-xs">{l.lot_identifier || '—'}</TableCell>
-                            <TableCell className="text-xs text-right">{l.bags || 0}</TableCell>
-                            <TableCell className="text-xs text-right">{totalKgAll > 0 ? `${lkg.toLocaleString()} kg` : '—'}</TableCell>
-                            {carryNum > 0 && <TableCell className="text-xs text-right">{totalKgAll > 0 ? `$${(carryNum * share).toFixed(2)}` : '—'}</TableCell>}
-                            {freightNum > 0 && <TableCell className="text-xs text-right">{totalKgAll > 0 ? `$${(freightNum * share).toFixed(2)}` : '—'}</TableCell>}
-                            {dutiesNum > 0 && <TableCell className="text-xs text-right">{totalKgAll > 0 ? `$${(dutiesNum * share).toFixed(2)}` : '—'}</TableCell>}
-                            {feesNum > 0 && <TableCell className="text-xs text-right">{totalKgAll > 0 ? `$${(feesNum * share).toFixed(2)}` : '—'}</TableCell>}
-                            {otherNum > 0 && <TableCell className="text-xs text-right">{totalKgAll > 0 ? `$${(otherNum * share).toFixed(2)}` : '—'}</TableCell>}
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+            {/* Estimated Book Value Summary */}
+            {(() => {
+              const fxRateNum = fxRate ? parseFloat(fxRate) : null;
+              const validLines = lines.filter(l => l.bags > 0 && l.bag_size_kg > 0 && parseFloat(l.price_amount) > 0);
+              if (validLines.length === 0) return null;
+
+              // Convert each shared cost to USD
+              const toUsd = (amount: number, currency: Currency): number => {
+                if (currency === 'USD') return amount;
+                if (fxRateNum) return amount / fxRateNum;
+                return amount; // used as-is
+              };
+              const totalSharedUsd = toUsd(carryNum, sharedCosts.carry.currency)
+                + toUsd(freightNum, sharedCosts.freight.currency)
+                + toUsd(dutiesNum, sharedCosts.duties.currency)
+                + toUsd(feesNum, sharedCosts.fees.currency)
+                + toUsd(otherNum, sharedCosts.other.currency);
+
+              const hasCADWithoutFx = !fxRateNum && [
+                sharedCosts.carry, sharedCosts.freight, sharedCosts.duties, sharedCosts.fees, sharedCosts.other
+              ].some(c => c.currency === 'CAD' && parseFloat(c.amount) > 0);
+
+              const hasCADPriceWithoutFx = !fxRateNum && validLines.some(l => l.price_unit === 'CAD_LB' || l.price_unit === 'CAD_KG');
+
+              return (
+                <div className="border rounded-lg p-4">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Estimated Book Value</h4>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">Coffee</TableHead>
+                          <TableHead className="text-xs text-right">Total kg</TableHead>
+                          <TableHead className="text-xs text-right">Price input</TableHead>
+                          <TableHead className="text-xs text-right">Coffee cost (USD)</TableHead>
+                          <TableHead className="text-xs text-right">Shared costs (USD)</TableHead>
+                          <TableHead className="text-xs text-right">Total cost (USD)</TableHead>
+                          <TableHead className="text-xs text-right">Book $/kg</TableHead>
+                          <TableHead className="text-xs text-right">Book $/lb</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {lines.map((l, idx) => {
+                          const lkg = l.bags * l.bag_size_kg;
+                          const priceAmt = parseFloat(l.price_amount) || 0;
+                          if (lkg <= 0 || priceAmt <= 0) return null;
+
+                          const usdPerKg = convertToUsdPerKg(priceAmt, l.price_unit, fxRateNum);
+                          const coffeeCostUsd = usdPerKg.value * lkg;
+                          const share = totalKgAll > 0 ? lkg / totalKgAll : 0;
+                          const sharedCostUsd = totalSharedUsd * share;
+                          const totalCostUsd = coffeeCostUsd + sharedCostUsd;
+                          const bookPerKg = lkg > 0 ? totalCostUsd / lkg : 0;
+                          const bookPerLb = bookPerKg / KG_PER_LB;
+
+                          return (
+                            <TableRow key={l.key}>
+                              <TableCell className="text-xs">{l.lot_identifier || `Coffee ${idx + 1}`}</TableCell>
+                              <TableCell className="text-xs text-right">{lkg.toLocaleString()}</TableCell>
+                              <TableCell className="text-xs text-right">${priceAmt.toFixed(4)} {PRICE_UNIT_LABELS[l.price_unit]}</TableCell>
+                              <TableCell className="text-xs text-right">${coffeeCostUsd.toFixed(2)}</TableCell>
+                              <TableCell className="text-xs text-right">${sharedCostUsd.toFixed(2)}</TableCell>
+                              <TableCell className="text-xs text-right">${totalCostUsd.toFixed(2)}</TableCell>
+                              <TableCell className="text-xs text-right">${bookPerKg.toFixed(4)}</TableCell>
+                              <TableCell className="text-xs text-right">${bookPerLb.toFixed(4)}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {(hasCADWithoutFx || hasCADPriceWithoutFx) && (
+                    <p className="text-xs text-amber-600 mt-2">FX rate not set — CAD amounts used as-is in USD column</p>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
