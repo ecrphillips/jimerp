@@ -50,14 +50,14 @@ export default function AdminFeedback() {
     queryFn: async () => {
       let q = supabase
         .from('feedback_submissions')
-        .select('*, profiles:created_by(name)')
+        .select('id, created_at, category, status, message, admin_note, updated_at, created_by')
         .order('created_at', { ascending: false });
 
       if (statusFilter !== 'ALL') q = q.eq('status', statusFilter);
       if (categoryFilter !== 'ALL') q = q.eq('category', categoryFilter);
 
       const { data, error } = await q;
-      if (error) throw error;
+      if (error) { console.error('Feedback query error:', error); throw error; }
       return data ?? [];
     },
   });
@@ -136,9 +136,7 @@ export default function AdminFeedback() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium">
-                        {(item.profiles as any)?.name ?? 'Unknown'}
-                      </span>
+                      <span className="text-sm font-medium">Team member</span>
                       <span className="text-xs text-muted-foreground">
                         {format(new Date(item.created_at), 'MMM d, yyyy')}
                       </span>
@@ -174,7 +172,7 @@ export default function AdminFeedback() {
           </div>
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">
-              {(selected as any).profiles?.name} · {format(new Date(selected.created_at), 'MMM d, yyyy h:mm a')}
+              Team member · {format(new Date(selected.created_at), 'MMM d, yyyy h:mm a')}
             </p>
             <Badge variant="outline" className="text-[10px]">
               {CATEGORY_LABELS[selected.category] ?? selected.category}
