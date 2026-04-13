@@ -1599,7 +1599,7 @@ export type Database = {
           carry_fees_usd: number | null
           carry_fees_usd_confirmed_at: string | null
           carry_fees_usd_confirmed_by: string | null
-          contract_id: string
+          contract_id: string | null
           costing_complete: boolean
           costing_completed_at: string | null
           costing_status: string
@@ -1679,7 +1679,7 @@ export type Database = {
           carry_fees_usd?: number | null
           carry_fees_usd_confirmed_at?: string | null
           carry_fees_usd_confirmed_by?: string | null
-          contract_id: string
+          contract_id?: string | null
           costing_complete?: boolean
           costing_completed_at?: string | null
           costing_status?: string
@@ -1759,7 +1759,7 @@ export type Database = {
           carry_fees_usd?: number | null
           carry_fees_usd_confirmed_at?: string | null
           carry_fees_usd_confirmed_by?: string | null
-          contract_id?: string
+          contract_id?: string | null
           costing_complete?: boolean
           costing_completed_at?: string | null
           costing_status?: string
