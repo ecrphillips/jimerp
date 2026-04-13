@@ -104,6 +104,7 @@ export function ProductsListTab() {
   const [typeChoiceOpen, setTypeChoiceOpen] = useState(false);
   const [singleOriginModalOpen, setSingleOriginModalOpen] = useState(false);
   const [blendModalOpen, setBlendModalOpen] = useState(false);
+  const [pendingLifecycle, setPendingLifecycle] = useState<'perennial' | 'seasonal' | null>(null);
 
   // Delete modal state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -574,8 +575,8 @@ export function ProductsListTab() {
   const openDeleteDialog = useCallback((p: Product) => { deletePreflightMutation.mutate(p.id); }, [deletePreflightMutation]);
 
   const openNew = () => { setTypeChoiceOpen(true); };
-  const handleChooseSingleOrigin = () => { setTypeChoiceOpen(false); setSingleOriginModalOpen(true); };
-  const handleChooseBlend = () => { setTypeChoiceOpen(false); setBlendModalOpen(true); };
+  const handleChooseSingleOrigin = (lifecycle: 'perennial' | 'seasonal') => { setTypeChoiceOpen(false); setPendingLifecycle(lifecycle); setSingleOriginModalOpen(true); };
+  const handleChooseBlend = (lifecycle: 'perennial' | 'seasonal') => { setTypeChoiceOpen(false); setPendingLifecycle(lifecycle); setBlendModalOpen(true); };
 
   const openEdit = (p: Product) => {
     setEditingProduct(p); setProductName(p.product_name); setSku(p.sku ?? '');
@@ -924,7 +925,7 @@ export function ProductsListTab() {
       </Dialog>
 
       <ProductTypeChoiceModal open={typeChoiceOpen} onOpenChange={setTypeChoiceOpen} onChooseSingleOrigin={handleChooseSingleOrigin} onChooseBlend={handleChooseBlend} />
-      <NewSingleOriginProductModal open={singleOriginModalOpen} onOpenChange={setSingleOriginModalOpen} />
+      <NewSingleOriginProductModal open={singleOriginModalOpen} onOpenChange={setSingleOriginModalOpen} initialLifecycle={pendingLifecycle} />
       <NewBlendProductModal open={blendModalOpen} onOpenChange={setBlendModalOpen} />
 
       <SafeDeleteModal
