@@ -747,14 +747,20 @@ function CreatePurchaseModal({
   open,
   onOpenChange,
   vendors,
+  existingPurchase,
+  existingLines,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   vendors: Vendor[];
+  existingPurchase?: PurchaseRow;
+  existingLines?: PurchaseLine[];
 }) {
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+
+  const isEdit = !!existingPurchase;
 
   const [step, setStep] = useState<1 | 2>(1);
 
@@ -787,10 +793,55 @@ function CreatePurchaseModal({
     prevFxRef.current = fxRate;
   }, [fxRate]);
 
-  // Reset on open
+  // Reset / pre-fill on open
   React.useEffect(() => {
-    if (open) {
-      setStep(1);
+    if (!open) return;
+    setStep(1);
+
+    if (existingPurchase) {
+      // Edit mode: pre-fill from existing purchase
+      setVendorId(existingPurchase.vendor_id);
+      setInvoiceNumber(existingPurchase.invoice_number || '');
+      setInvoiceDate(existingPurchase.invoice_date ? parseISO(existingPurchase.invoice_date) : undefined);
+      setDueDate(existingPurchase.due_date ? parseISO(existingPurchase.due_date) : undefined);
+      setFxRate(existingPurchase.fx_rate != null ? String(existingPurchase.fx_rate) : '');
+
+      // Parse shared costs from JSONB notes
+      const sc = parseSharedCostsFromNotes(existingPurchase.notes);
+      if (sc) {
+        setSharedCosts({
+          carry: { amount: String(sc.carry?.amount ?? 0), currency: (sc.carry?.currency as Currency) || 'CAD' },
+          freight: { amount: String(sc.freight?.amount ?? 0), currency: (sc.freight?.currency as Currency) || 'CAD' },
+          duties: { amount: String(sc.duties?.amount ?? 0), currency: (sc.duties?.currency as Currency) || 'CAD' },
+          fees: { amount: String(sc.fees?.amount ?? 0), currency: (sc.fees?.currency as Currency) || 'CAD' },
+          other: { amount: String(sc.other?.amount ?? 0), currency: (sc.other?.currency as Currency) || 'CAD', label: sc.other?.label || '' },
+        });
+      } else {
+        setSharedCosts({
+          carry: { amount: String(existingPurchase.shared_carry_usd), currency: 'USD' },
+          freight: { amount: String(existingPurchase.shared_freight_usd), currency: 'USD' },
+          duties: { amount: '0', currency: 'CAD' },
+          fees: { amount: '0', currency: 'CAD' },
+          other: { amount: String(existingPurchase.shared_other_usd), currency: 'USD', label: existingPurchase.shared_other_label || '' },
+        });
+      }
+
+      // Parse notes text
+      let notesText = existingPurchase.notes || '';
+      try { notesText = JSON.parse(notesText)?.notes_text || ''; } catch { /* not JSON */ }
+      setHeaderNotes(notesText);
+
+      // Pre-fill lines
+      const originalPrices = parseOriginalPrices(existingPurchase.notes);
+      if (existingLines && existingLines.length > 0) {
+        setLines(existingLines.map(l => purchaseLineToCoffeeLine(l, originalPrices)));
+      } else {
+        setLines([emptyLine()]);
+      }
+
+      prevFxRef.current = existingPurchase.fx_rate != null ? String(existingPurchase.fx_rate) : '';
+    } else {
+      // Create mode: reset
       setVendorId('');
       setInvoiceNumber('');
       setInvoiceDate(undefined);
@@ -801,7 +852,7 @@ function CreatePurchaseModal({
       setLines([emptyLine()]);
       prevFxRef.current = '';
     }
-  }, [open]);
+  }, [open, existingPurchase, existingLines]);
 
   const selectedVendor = vendors.find(v => v.id === vendorId);
 
