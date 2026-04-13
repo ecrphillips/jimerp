@@ -1172,7 +1172,7 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
         .from('green_samples')
         .select('id, name, origin, region, producer, variety, category, crop_year, vendor_id, status')
         .eq('status', 'APPROVED')
-        .eq('category', category);
+        .eq('category', category as string);
       if (error) throw error;
       return data as ApprovedSample[];
     },
