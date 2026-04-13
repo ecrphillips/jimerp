@@ -82,6 +82,93 @@ const CATEGORY_LABELS: Record<string, string> = {
   HYPER_PREMIUM: 'Hyper Premium',
 };
 
+// ─── Shared cost types ────────────────────────────────────
+
+type Currency = 'CAD' | 'USD';
+
+interface SharedCostLine {
+  amount: string;
+  currency: Currency;
+}
+
+interface SharedCostLineWithLabel extends SharedCostLine {
+  label: string;
+}
+
+interface SharedCosts {
+  carry: SharedCostLine;
+  freight: SharedCostLine;
+  duties: SharedCostLine;
+  fees: SharedCostLine;
+  other: SharedCostLineWithLabel;
+}
+
+// Parsed shared_costs from notes JSON
+interface SharedCostsJson {
+  carry?: { amount: number; currency: string };
+  freight?: { amount: number; currency: string };
+  duties?: { amount: number; currency: string };
+  fees?: { amount: number; currency: string };
+  other?: { amount: number; currency: string; label?: string };
+}
+
+function parseSharedCostsFromNotes(notes: string | null): SharedCostsJson | null {
+  if (!notes) return null;
+  try {
+    const parsed = JSON.parse(notes);
+    return parsed?.shared_costs || null;
+  } catch {
+    return null;
+  }
+}
+
+function defaultCurrency(fxRate: string): Currency {
+  return fxRate.trim() ? 'USD' : 'CAD';
+}
+
+function makeDefaultSharedCosts(cur: Currency): SharedCosts {
+  return {
+    carry: { amount: '0', currency: cur },
+    freight: { amount: '0', currency: cur },
+    duties: { amount: '0', currency: cur },
+    fees: { amount: '0', currency: cur },
+    other: { amount: '0', currency: cur, label: '' },
+  };
+}
+
+// ─── Currency Toggle ──────────────────────────────────────
+
+function CurrencyToggle({ value, onChange }: { value: Currency; onChange: (c: Currency) => void }) {
+  return (
+    <div className="inline-flex rounded-md border border-input overflow-hidden h-10">
+      <button
+        type="button"
+        className={cn(
+          'px-2 text-xs font-medium transition-colors',
+          value === 'CAD'
+            ? 'bg-primary text-primary-foreground'
+            : 'bg-background text-muted-foreground hover:bg-muted'
+        )}
+        onClick={() => onChange('CAD')}
+      >
+        CAD
+      </button>
+      <button
+        type="button"
+        className={cn(
+          'px-2 text-xs font-medium transition-colors border-l border-input',
+          value === 'USD'
+            ? 'bg-primary text-primary-foreground'
+            : 'bg-background text-muted-foreground hover:bg-muted'
+        )}
+        onClick={() => onChange('USD')}
+      >
+        USD
+      </button>
+    </div>
+  );
+}
+
 // ─── Empty line template ───────────────────────────────────
 
 function emptyLine(): CoffeeLine {
@@ -313,6 +400,31 @@ function PurchaseDetailContent({
   const navigate = useNavigate();
   const totalKg = lines.reduce((sum, l) => sum + l.bags * l.bag_size_kg, 0);
 
+  // Try to parse structured shared costs from notes
+  const sc = parseSharedCostsFromNotes(purchase.notes);
+
+  // Build display costs: prefer JSONB, fall back to legacy columns
+  const costLines: { label: string; amount: number; currency: string }[] = [];
+  if (sc) {
+    if (sc.carry && sc.carry.amount > 0) costLines.push({ label: 'Carry / Storage', amount: sc.carry.amount, currency: sc.carry.currency });
+    if (sc.freight && sc.freight.amount > 0) costLines.push({ label: 'Freight', amount: sc.freight.amount, currency: sc.freight.currency });
+    if (sc.duties && sc.duties.amount > 0) costLines.push({ label: 'Customs / Duties / Taxes', amount: sc.duties.amount, currency: sc.duties.currency });
+    if (sc.fees && sc.fees.amount > 0) costLines.push({ label: 'Fees', amount: sc.fees.amount, currency: sc.fees.currency });
+    if (sc.other && sc.other.amount > 0) costLines.push({ label: sc.other.label || 'Other', amount: sc.other.amount, currency: sc.other.currency });
+  } else {
+    // Legacy fallback
+    if (purchase.shared_carry_usd > 0) costLines.push({ label: 'Carry / Storage', amount: purchase.shared_carry_usd, currency: 'USD' });
+    if (purchase.shared_freight_usd > 0) costLines.push({ label: 'Freight', amount: purchase.shared_freight_usd, currency: 'USD' });
+    if (purchase.shared_other_usd > 0) costLines.push({ label: purchase.shared_other_label || 'Other', amount: purchase.shared_other_usd, currency: 'USD' });
+  }
+
+  // Extract plain notes text (strip JSON if present)
+  let displayNotes = purchase.notes || '';
+  try {
+    const parsed = JSON.parse(displayNotes);
+    displayNotes = parsed?.notes_text || '';
+  } catch { /* not JSON, use as-is */ }
+
   return (
     <div className="space-y-6 pt-4">
       {/* Header fields */}
@@ -340,32 +452,24 @@ function PurchaseDetailContent({
       </div>
 
       {/* Shared costs */}
-      {(purchase.shared_freight_usd > 0 || purchase.shared_carry_usd > 0 || purchase.shared_other_usd > 0) && (
+      {costLines.length > 0 && (
         <div className="border-t pt-4">
           <h3 className="text-sm font-semibold mb-2">Shared Costs</h3>
           <div className="grid grid-cols-3 gap-3 text-sm">
-            <div>
-              <p className="text-muted-foreground text-xs">Freight (USD)</p>
-              <p>${purchase.shared_freight_usd.toFixed(2)}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground text-xs">Carry (USD)</p>
-              <p>${purchase.shared_carry_usd.toFixed(2)}</p>
-            </div>
-            {purchase.shared_other_usd > 0 && (
-              <div>
-                <p className="text-muted-foreground text-xs">{purchase.shared_other_label || 'Other'} (USD)</p>
-                <p>${purchase.shared_other_usd.toFixed(2)}</p>
+            {costLines.map((cl, i) => (
+              <div key={i}>
+                <p className="text-muted-foreground text-xs">{cl.label} ({cl.currency})</p>
+                <p>${cl.amount.toFixed(2)}</p>
               </div>
-            )}
+            ))}
           </div>
         </div>
       )}
 
-      {purchase.notes && (
+      {displayNotes && (
         <div className="border-t pt-4">
           <h3 className="text-sm font-semibold mb-1">Notes</h3>
-          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{purchase.notes}</p>
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{displayNotes}</p>
         </div>
       )}
 
@@ -376,6 +480,21 @@ function PurchaseDetailContent({
           {lines.map(line => {
             const lineKg = line.bags * line.bag_size_kg;
             const share = totalKg > 0 ? lineKg / totalKg : 0;
+
+            // Build per-line cost shares from structured data or legacy
+            const costShares: { label: string; value: string }[] = [];
+            if (sc) {
+              if (sc.carry && sc.carry.amount > 0) costShares.push({ label: `Carry (${sc.carry.currency})`, value: `$${(sc.carry.amount * share).toFixed(2)}` });
+              if (sc.freight && sc.freight.amount > 0) costShares.push({ label: `Freight (${sc.freight.currency})`, value: `$${(sc.freight.amount * share).toFixed(2)}` });
+              if (sc.duties && sc.duties.amount > 0) costShares.push({ label: `Duties (${sc.duties.currency})`, value: `$${(sc.duties.amount * share).toFixed(2)}` });
+              if (sc.fees && sc.fees.amount > 0) costShares.push({ label: `Fees (${sc.fees.currency})`, value: `$${(sc.fees.amount * share).toFixed(2)}` });
+              if (sc.other && sc.other.amount > 0) costShares.push({ label: `${sc.other.label || 'Other'} (${sc.other.currency})`, value: `$${(sc.other.amount * share).toFixed(2)}` });
+            } else {
+              if (purchase.shared_freight_usd > 0) costShares.push({ label: 'Freight', value: `$${(purchase.shared_freight_usd * share).toFixed(2)}` });
+              if (purchase.shared_carry_usd > 0) costShares.push({ label: 'Carry', value: `$${(purchase.shared_carry_usd * share).toFixed(2)}` });
+              if (purchase.shared_other_usd > 0) costShares.push({ label: 'Other', value: `$${(purchase.shared_other_usd * share).toFixed(2)}` });
+            }
+
             return (
               <Card key={line.id}>
                 <CardContent className="p-3 space-y-2">
@@ -396,11 +515,13 @@ function PurchaseDetailContent({
                     {line.price_per_lb_usd != null && <div>${Number(line.price_per_lb_usd).toFixed(4)}/lb</div>}
                     {line.warehouse_location && <div>{line.warehouse_location}</div>}
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>Freight: ${(purchase.shared_freight_usd * share).toFixed(2)}</span>
-                    <span>Carry: ${(purchase.shared_carry_usd * share).toFixed(2)}</span>
-                    {purchase.shared_other_usd > 0 && <span>Other: ${(purchase.shared_other_usd * share).toFixed(2)}</span>}
-                  </div>
+                  {costShares.length > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                      {costShares.map((cs, i) => (
+                        <span key={i}>{cs.label}: {cs.value}</span>
+                      ))}
+                    </div>
+                  )}
                   {line.lot_id && (
                     <Button
                       size="sm"
@@ -444,14 +565,28 @@ function CreatePurchaseModal({
   const [invoiceDate, setInvoiceDate] = useState<Date | undefined>();
   const [dueDate, setDueDate] = useState<Date | undefined>();
   const [fxRate, setFxRate] = useState('');
-  const [sharedFreight, setSharedFreight] = useState('0');
-  const [sharedCarry, setSharedCarry] = useState('0');
-  const [sharedOther, setSharedOther] = useState('0');
-  const [sharedOtherLabel, setSharedOtherLabel] = useState('');
+  const [sharedCosts, setSharedCosts] = useState<SharedCosts>(makeDefaultSharedCosts('CAD'));
   const [headerNotes, setHeaderNotes] = useState('');
 
   // Step 2 lines
   const [lines, setLines] = useState<CoffeeLine[]>([emptyLine()]);
+
+  // React to FX rate changes — update default currencies for lines that haven't been manually toggled
+  const prevFxRef = React.useRef('');
+  React.useEffect(() => {
+    const cur = defaultCurrency(fxRate);
+    const prevCur = defaultCurrency(prevFxRef.current);
+    if (cur !== prevCur) {
+      setSharedCosts(prev => ({
+        carry: { ...prev.carry, currency: prev.carry.amount === '0' || prev.carry.amount === '' ? cur : prev.carry.currency },
+        freight: { ...prev.freight, currency: prev.freight.amount === '0' || prev.freight.amount === '' ? cur : prev.freight.currency },
+        duties: { ...prev.duties, currency: prev.duties.amount === '0' || prev.duties.amount === '' ? cur : prev.duties.currency },
+        fees: { ...prev.fees, currency: prev.fees.amount === '0' || prev.fees.amount === '' ? cur : prev.fees.currency },
+        other: { ...prev.other, currency: prev.other.amount === '0' || prev.other.amount === '' ? cur : prev.other.currency },
+      }));
+    }
+    prevFxRef.current = fxRate;
+  }, [fxRate]);
 
   // Reset on open
   React.useEffect(() => {
@@ -462,12 +597,10 @@ function CreatePurchaseModal({
       setInvoiceDate(undefined);
       setDueDate(undefined);
       setFxRate('');
-      setSharedFreight('0');
-      setSharedCarry('0');
-      setSharedOther('0');
-      setSharedOtherLabel('');
+      setSharedCosts(makeDefaultSharedCosts('CAD'));
       setHeaderNotes('');
       setLines([emptyLine()]);
+      prevFxRef.current = '';
     }
   }, [open]);
 
@@ -481,16 +614,40 @@ function CreatePurchaseModal({
     setLines(prev => prev.filter(l => l.key !== key));
   };
 
+  const updateCost = (field: keyof SharedCosts, key: 'amount' | 'currency' | 'label', value: string) => {
+    setSharedCosts(prev => ({
+      ...prev,
+      [field]: { ...prev[field], [key]: value },
+    }));
+  };
+
   // Proration calculations
-  const freightNum = parseFloat(sharedFreight) || 0;
-  const carryNum = parseFloat(sharedCarry) || 0;
-  const otherNum = parseFloat(sharedOther) || 0;
+  const carryNum = parseFloat(sharedCosts.carry.amount) || 0;
+  const freightNum = parseFloat(sharedCosts.freight.amount) || 0;
+  const dutiesNum = parseFloat(sharedCosts.duties.amount) || 0;
+  const feesNum = parseFloat(sharedCosts.fees.amount) || 0;
+  const otherNum = parseFloat(sharedCosts.other.amount) || 0;
   const totalKgAll = lines.reduce((s, l) => s + (l.bags * l.bag_size_kg), 0);
+  const hasAnyCost = carryNum > 0 || freightNum > 0 || dutiesNum > 0 || feesNum > 0 || otherNum > 0;
 
   const canCreate = lines.some(l => l.lot_identifier.trim() && l.bags > 0 && l.bag_size_kg > 0);
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      // Build JSONB for notes field
+      const sharedCostsJson = {
+        carry: { amount: carryNum, currency: sharedCosts.carry.currency },
+        freight: { amount: freightNum, currency: sharedCosts.freight.currency },
+        duties: { amount: dutiesNum, currency: sharedCosts.duties.currency },
+        fees: { amount: feesNum, currency: sharedCosts.fees.currency },
+        other: { amount: otherNum, currency: sharedCosts.other.currency, label: sharedCosts.other.label.trim() },
+      };
+
+      const notesPayload = JSON.stringify({
+        shared_costs: sharedCostsJson,
+        notes_text: headerNotes.trim(),
+      });
+
       // 1. Insert purchase
       const { data: purchase, error: purchaseErr } = await supabase
         .from('green_purchases')
@@ -504,8 +661,8 @@ function CreatePurchaseModal({
           shared_freight_usd: freightNum,
           shared_carry_usd: carryNum,
           shared_other_usd: otherNum,
-          shared_other_label: sharedOtherLabel.trim() || null,
-          notes: headerNotes.trim() || null,
+          shared_other_label: sharedCosts.other.label.trim() || null,
+          notes: notesPayload,
           created_by: authUser!.id,
         } as any)
         .select('id')
@@ -692,20 +849,46 @@ function CreatePurchaseModal({
             {/* Shared Costs */}
             <div className="border rounded-lg p-4 space-y-3">
               <h4 className="text-sm font-semibold">Shared Costs</h4>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2">
+                {/* Carry / Storage */}
                 <div>
-                  <Label className="text-xs">Freight (USD)</Label>
-                  <Input type="number" step="0.01" value={sharedFreight} onChange={e => setSharedFreight(e.target.value)} />
+                  <Label className="text-xs">Carry / Storage</Label>
+                  <div className="flex gap-1.5 items-center">
+                    <Input type="number" step="0.01" value={sharedCosts.carry.amount} onChange={e => updateCost('carry', 'amount', e.target.value)} className="flex-1" />
+                    <CurrencyToggle value={sharedCosts.carry.currency} onChange={c => updateCost('carry', 'currency', c)} />
+                  </div>
                 </div>
+                {/* Freight */}
                 <div>
-                  <Label className="text-xs">Carry / Storage (USD)</Label>
-                  <Input type="number" step="0.01" value={sharedCarry} onChange={e => setSharedCarry(e.target.value)} />
+                  <Label className="text-xs">Freight</Label>
+                  <div className="flex gap-1.5 items-center">
+                    <Input type="number" step="0.01" value={sharedCosts.freight.amount} onChange={e => updateCost('freight', 'amount', e.target.value)} className="flex-1" />
+                    <CurrencyToggle value={sharedCosts.freight.currency} onChange={c => updateCost('freight', 'currency', c)} />
+                  </div>
                 </div>
+                {/* Customs / Duties / Taxes */}
                 <div>
-                  <Label className="text-xs">Other (USD)</Label>
-                  <div className="flex gap-1">
-                    <Input type="number" step="0.01" value={sharedOther} onChange={e => setSharedOther(e.target.value)} className="w-24" />
-                    <Input value={sharedOtherLabel} onChange={e => setSharedOtherLabel(e.target.value)} placeholder="Label" className="flex-1" />
+                  <Label className="text-xs">Customs / Duties / Taxes</Label>
+                  <div className="flex gap-1.5 items-center">
+                    <Input type="number" step="0.01" value={sharedCosts.duties.amount} onChange={e => updateCost('duties', 'amount', e.target.value)} className="flex-1" />
+                    <CurrencyToggle value={sharedCosts.duties.currency} onChange={c => updateCost('duties', 'currency', c)} />
+                  </div>
+                </div>
+                {/* Fees */}
+                <div>
+                  <Label className="text-xs">Fees</Label>
+                  <div className="flex gap-1.5 items-center">
+                    <Input type="number" step="0.01" value={sharedCosts.fees.amount} onChange={e => updateCost('fees', 'amount', e.target.value)} className="flex-1" />
+                    <CurrencyToggle value={sharedCosts.fees.currency} onChange={c => updateCost('fees', 'currency', c)} />
+                  </div>
+                </div>
+                {/* Other */}
+                <div>
+                  <Label className="text-xs">Other</Label>
+                  <div className="flex gap-1.5 items-center">
+                    <Input type="number" step="0.01" value={sharedCosts.other.amount} onChange={e => updateCost('other', 'amount', e.target.value)} className="w-28" />
+                    <Input value={sharedCosts.other.label} onChange={e => updateCost('other', 'label', e.target.value)} placeholder="Label" className="flex-1" />
+                    <CurrencyToggle value={sharedCosts.other.currency} onChange={c => updateCost('other', 'currency', c)} />
                   </div>
                 </div>
               </div>
@@ -832,7 +1015,7 @@ function CreatePurchaseModal({
             </Button>
 
             {/* Proration preview */}
-            {(freightNum > 0 || carryNum > 0 || otherNum > 0) && (
+            {hasAnyCost && (
               <div className="border rounded-lg p-4">
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Cost Proration Preview</h4>
                 <div className="overflow-x-auto">
@@ -842,9 +1025,11 @@ function CreatePurchaseModal({
                         <TableHead className="text-xs">Coffee</TableHead>
                         <TableHead className="text-xs text-right">Bags</TableHead>
                         <TableHead className="text-xs text-right">Total kg</TableHead>
-                        {freightNum > 0 && <TableHead className="text-xs text-right">Freight</TableHead>}
-                        {carryNum > 0 && <TableHead className="text-xs text-right">Carry</TableHead>}
-                        {otherNum > 0 && <TableHead className="text-xs text-right">Other</TableHead>}
+                        {carryNum > 0 && <TableHead className="text-xs text-right">Carry ({sharedCosts.carry.currency})</TableHead>}
+                        {freightNum > 0 && <TableHead className="text-xs text-right">Freight ({sharedCosts.freight.currency})</TableHead>}
+                        {dutiesNum > 0 && <TableHead className="text-xs text-right">Duties ({sharedCosts.duties.currency})</TableHead>}
+                        {feesNum > 0 && <TableHead className="text-xs text-right">Fees ({sharedCosts.fees.currency})</TableHead>}
+                        {otherNum > 0 && <TableHead className="text-xs text-right">{sharedCosts.other.label || 'Other'} ({sharedCosts.other.currency})</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -856,8 +1041,10 @@ function CreatePurchaseModal({
                             <TableCell className="text-xs">{l.lot_identifier || '—'}</TableCell>
                             <TableCell className="text-xs text-right">{l.bags || 0}</TableCell>
                             <TableCell className="text-xs text-right">{totalKgAll > 0 ? `${lkg.toLocaleString()} kg` : '—'}</TableCell>
-                            {freightNum > 0 && <TableCell className="text-xs text-right">{totalKgAll > 0 ? `$${(freightNum * share).toFixed(2)}` : '—'}</TableCell>}
                             {carryNum > 0 && <TableCell className="text-xs text-right">{totalKgAll > 0 ? `$${(carryNum * share).toFixed(2)}` : '—'}</TableCell>}
+                            {freightNum > 0 && <TableCell className="text-xs text-right">{totalKgAll > 0 ? `$${(freightNum * share).toFixed(2)}` : '—'}</TableCell>}
+                            {dutiesNum > 0 && <TableCell className="text-xs text-right">{totalKgAll > 0 ? `$${(dutiesNum * share).toFixed(2)}` : '—'}</TableCell>}
+                            {feesNum > 0 && <TableCell className="text-xs text-right">{totalKgAll > 0 ? `$${(feesNum * share).toFixed(2)}` : '—'}</TableCell>}
                             {otherNum > 0 && <TableCell className="text-xs text-right">{totalKgAll > 0 ? `$${(otherNum * share).toFixed(2)}` : '—'}</TableCell>}
                           </TableRow>
                         );
