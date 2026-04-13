@@ -1020,7 +1020,6 @@ function CreatePurchaseModal({
                 producer: line.producer.trim() || null,
                 variety: line.variety.trim() || null,
                 crop_year: line.crop_year.trim() || null,
-                category: line.category || null,
                 fx_rate: fxRateNum,
                 freight_cad: freightCad,
                 carry_fees_usd: carryAllocated,
@@ -1033,6 +1032,10 @@ function CreatePurchaseModal({
               .select('id')
               .single();
             if (lotErr) throw lotErr;
+
+            if (line.category) {
+              await supabase.from('green_lots').update({ category: line.category } as any).eq('id', lot.id);
+            }
 
             const { error: lineErr } = await supabase
               .from('green_purchase_lines')
@@ -1118,7 +1121,6 @@ function CreatePurchaseModal({
               producer: line.producer.trim() || null,
               variety: line.variety.trim() || null,
               crop_year: line.crop_year.trim() || null,
-              category: line.category || null,
               fx_rate: fxRateNum,
               freight_cad: freightCad,
               carry_fees_usd: carryAllocated,
@@ -1131,6 +1133,10 @@ function CreatePurchaseModal({
             .select('id')
             .single();
           if (lotErr) throw lotErr;
+
+          if (line.category) {
+            await supabase.from('green_lots').update({ category: line.category } as any).eq('id', lot.id);
+          }
 
           const priceAmt = parseFloat(line.price_amount) || 0;
           const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
@@ -1623,7 +1629,6 @@ function AddCoffeeLineModal({
           producer: producer.trim() || null,
           variety: variety.trim() || null,
           crop_year: cropYear.trim() || null,
-          category: category || null,
           fx_rate: fxRateNum,
           warehouse_location: warehouseLocation.trim() || null,
           notes_internal: notes.trim() || null,
@@ -1634,6 +1639,10 @@ function AddCoffeeLineModal({
         .single();
 
       if (lotErr) throw lotErr;
+
+      if (category) {
+        await supabase.from('green_lots').update({ category } as any).eq('id', lot.id);
+      }
 
       // Insert purchase line
       const { error: lineErr } = await supabase
