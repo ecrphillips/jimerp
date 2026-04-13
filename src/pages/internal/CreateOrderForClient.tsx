@@ -650,7 +650,7 @@ export default function CreateOrderForClient() {
                   />
                 </div>
                 <div>
-                  <Label>Work Deadline</Label>
+                  <Label>Work Deadline <span className="text-destructive">*</span></Label>
                   <WorkDeadlinePicker
                     value={workDeadlineAt}
                     onChange={setWorkDeadlineAt}
