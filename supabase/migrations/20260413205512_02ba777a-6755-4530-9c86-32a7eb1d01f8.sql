@@ -1,0 +1,1 @@
+ALTER TABLE public.green_purchases ADD COLUMN IF NOT EXISTS paid_at date;

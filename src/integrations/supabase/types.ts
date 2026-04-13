@@ -1921,6 +1921,7 @@ export type Database = {
           invoice_date: string | null
           invoice_number: string | null
           notes: string | null
+          paid_at: string | null
           shared_carry_usd: number
           shared_freight_usd: number
           shared_other_label: string | null
@@ -1938,6 +1939,7 @@ export type Database = {
           invoice_date?: string | null
           invoice_number?: string | null
           notes?: string | null
+          paid_at?: string | null
           shared_carry_usd?: number
           shared_freight_usd?: number
           shared_other_label?: string | null
@@ -1955,6 +1957,7 @@ export type Database = {
           invoice_date?: string | null
           invoice_number?: string | null
           notes?: string | null
+          paid_at?: string | null
           shared_carry_usd?: number
           shared_freight_usd?: number
           shared_other_label?: string | null
