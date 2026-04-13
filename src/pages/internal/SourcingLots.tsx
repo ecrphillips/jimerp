@@ -879,6 +879,71 @@ function LotDetailPanel({
                 <div><span className="text-muted-foreground">Bags:</span> {lot.bags_released}</div>
                 <div><span className="text-muted-foreground">Bag Size:</span> {lot.bag_size_kg} kg</div>
                 <div><span className="text-muted-foreground">kg Received:</span> {kgReceived.toLocaleString()}</div>
+                {isInternal && (
+                  <div>
+                    {editingKgOnHand ? (
+                      <div className="space-y-2 rounded-md border p-3">
+                        <Label className="text-xs text-muted-foreground">Adjust kg On Hand</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={draftKgOnHand}
+                          onChange={(e) => setDraftKgOnHand(e.target.value)}
+                          className="h-8"
+                        />
+                        <Input
+                          placeholder="Reason for adjustment e.g. physical count, spillage…"
+                          value={draftKgNote}
+                          onChange={(e) => setDraftKgNote(e.target.value)}
+                          className="h-8"
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={async () => {
+                              const newVal = parseFloat(draftKgOnHand);
+                              if (isNaN(newVal) || newVal < 0) {
+                                toast.error('Enter a valid kg value');
+                                return;
+                              }
+                              const { error } = await supabase
+                                .from('green_lots')
+                                .update({ kg_on_hand: newVal } as any)
+                                .eq('id', lot.id);
+                              if (error) {
+                                toast.error(error.message);
+                                return;
+                              }
+                              toast.success(`Inventory updated to ${newVal} kg`);
+                              setEditingKgOnHand(false);
+                              refetchLot();
+                              queryClient.invalidateQueries({ queryKey: ['green-lots'] });
+                            }}
+                          >
+                            Save
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setEditingKgOnHand(false)}>Cancel</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground">kg On Hand:</span> {lot.kg_on_hand.toLocaleString()}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 w-5 p-0"
+                          onClick={() => {
+                            setDraftKgOnHand(String(lot.kg_on_hand));
+                            setDraftKgNote('');
+                            setEditingKgOnHand(true);
+                          }}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div><span className="text-muted-foreground">Received:</span> {lot.received_date ? format(new Date(lot.received_date + 'T00:00:00'), 'MMM d, yyyy') : '—'}</div>
                 <div><span className="text-muted-foreground">Carrier:</span> {lot.carrier || '—'}</div>
               </div>
