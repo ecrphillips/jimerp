@@ -239,6 +239,7 @@ function emptyLine(): CoffeeLine {
     notes: '',
     lot_id: null,
     purchase_line_id: null,
+    importer_payment_terms_days: null,
   };
 }
 
@@ -259,6 +260,7 @@ interface CoffeeLine {
   notes: string;
   lot_id: string | null;
   purchase_line_id: string | null;
+  importer_payment_terms_days: number | null;
 }
 
 // Helper to parse original_prices from JSONB notes
@@ -298,6 +300,7 @@ function purchaseLineToCoffeeLine(line: PurchaseLine, originalPrices: OriginalPr
     notes: line.notes || '',
     lot_id: line.lot_id || null,
     purchase_line_id: line.id,
+    importer_payment_terms_days: null,
   };
 }
 
@@ -1027,15 +1030,21 @@ function CreatePurchaseModal({
               .single();
             if (lotErr) throw lotErr;
 
-            await supabase.from('green_lots').update({
+            const { error: updateErr } = await supabase.from('green_lots').update({
               origin_country: line.origin_country || null,
               region: line.region.trim() || null,
               producer: line.producer.trim() || null,
               variety: line.variety.trim() || null,
               crop_year: line.crop_year.trim() || null,
               category: line.category || null,
+              price_per_lb_usd: converted ? converted.value : null,
               po_number: poNumber,
+              vendor_invoice_number: invoiceNumber.trim() || null,
+              importer_payment_terms_days: line.importer_payment_terms_days || null,
             } as any).eq('id', lot.id);
+            if (updateErr) {
+              console.error('Lot field update error:', updateErr);
+            }
 
             const { error: lineErr } = await supabase
               .from('green_purchase_lines')
@@ -1131,7 +1140,7 @@ function CreatePurchaseModal({
           const priceAmt = parseFloat(line.price_amount) || 0;
           const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
 
-          await supabase.from('green_lots').update({
+          const { error: updateErr2 } = await supabase.from('green_lots').update({
             origin_country: line.origin_country || null,
             region: line.region.trim() || null,
             producer: line.producer.trim() || null,
@@ -1140,7 +1149,12 @@ function CreatePurchaseModal({
             category: line.category || null,
             price_per_lb_usd: converted ? converted.value : null,
             po_number: poNumber,
+            vendor_invoice_number: invoiceNumber.trim() || null,
+            importer_payment_terms_days: line.importer_payment_terms_days || null,
           } as any).eq('id', lot.id);
+          if (updateErr2) {
+            console.error('Lot field update error:', updateErr2);
+          }
 
           const { error: lineErr } = await supabase
             .from('green_purchase_lines')
@@ -1431,6 +1445,10 @@ function CreatePurchaseModal({
                       <Input value={line.warehouse_location} onChange={e => updateLine(line.key, 'warehouse_location', e.target.value)} />
                     </div>
                     <div>
+                      <Label className="text-xs">Payment Terms (days)</Label>
+                      <Input type="number" value={line.importer_payment_terms_days ?? ''} onChange={e => updateLine(line.key, 'importer_payment_terms_days', e.target.value ? parseInt(e.target.value) || null : null)} placeholder="e.g. 30" />
+                    </div>
+                    <div>
                       <Label className="text-xs">Notes</Label>
                       <Input value={line.notes} onChange={e => updateLine(line.key, 'notes', e.target.value)} />
                     </div>
@@ -1572,6 +1590,7 @@ function AddCoffeeLineModal({
   const [priceUnit, setPriceUnit] = useState<PriceUnit>('USD_LB');
   const [warehouseLocation, setWarehouseLocation] = useState('');
   const [notes, setNotes] = useState('');
+  const [paymentTermsDays, setPaymentTermsDays] = useState<number | null>(null);
 
   React.useEffect(() => {
     if (open) {
@@ -1588,6 +1607,7 @@ function AddCoffeeLineModal({
       setPriceUnit('USD_LB');
       setWarehouseLocation('');
       setNotes('');
+      setPaymentTermsDays(null);
     }
   }, [open]);
 
@@ -1639,15 +1659,21 @@ function AddCoffeeLineModal({
 
       if (lotErr) throw lotErr;
 
-      await supabase.from('green_lots').update({
+      const { error: updateErr } = await supabase.from('green_lots').update({
         origin_country: originCountry || null,
         region: region.trim() || null,
         producer: producer.trim() || null,
         variety: variety.trim() || null,
         crop_year: cropYear.trim() || null,
         category: category || null,
+        price_per_lb_usd: converted ? converted.value : null,
         po_number: poNumber,
+        vendor_invoice_number: purchase.invoice_number || null,
+        importer_payment_terms_days: paymentTermsDays || null,
       } as any).eq('id', lot.id);
+      if (updateErr) {
+        console.error('Lot field update error:', updateErr);
+      }
 
       // Insert purchase line
       const { error: lineErr } = await supabase
@@ -1780,6 +1806,10 @@ function AddCoffeeLineModal({
             <div>
               <Label className="text-xs">Warehouse</Label>
               <Input value={warehouseLocation} onChange={e => setWarehouseLocation(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Payment Terms (days)</Label>
+              <Input type="number" value={paymentTermsDays ?? ''} onChange={e => setPaymentTermsDays(e.target.value ? parseInt(e.target.value) || null : null)} placeholder="e.g. 30" />
             </div>
             <div>
               <Label className="text-xs">Notes</Label>
