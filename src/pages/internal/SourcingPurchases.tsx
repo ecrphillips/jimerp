@@ -1470,11 +1470,13 @@ function CreatePurchaseModal({
                           <TableHead className="text-xs text-right">Coffee cost (USD)</TableHead>
                           <TableHead className="text-xs text-right">Shared costs (USD)</TableHead>
                           <TableHead className="text-xs text-right">Total cost (USD)</TableHead>
-                          <TableHead className="text-xs text-right">Book $/kg</TableHead>
-                          <TableHead className="text-xs text-right">Book $/lb</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
+                           <TableHead className="text-xs text-right">Book $/kg (USD)</TableHead>
+                           <TableHead className="text-xs text-right">Book $/lb (USD)</TableHead>
+                           {fxRateNum > 0 && <TableHead className="text-xs text-right">Book $/kg (CAD)</TableHead>}
+                           {fxRateNum > 0 && <TableHead className="text-xs text-right">Book $/lb (CAD)</TableHead>}
+                         </TableRow>
+                       </TableHeader>
+                       <TableBody>
                         {lines.map((l, idx) => {
                           const lkg = l.bags * l.bag_size_kg;
                           const priceAmt = parseFloat(l.price_amount) || 0;
@@ -1498,6 +1500,8 @@ function CreatePurchaseModal({
                               <TableCell className="text-xs text-right">${totalCostUsd.toFixed(2)}</TableCell>
                               <TableCell className="text-xs text-right">${bookPerKg.toFixed(4)}</TableCell>
                               <TableCell className="text-xs text-right">${bookPerLb.toFixed(4)}</TableCell>
+                              {fxRateNum > 0 && <TableCell className="text-xs text-right">${(bookPerKg * fxRateNum).toFixed(4)}</TableCell>}
+                              {fxRateNum > 0 && <TableCell className="text-xs text-right">${(bookPerLb * fxRateNum).toFixed(4)}</TableCell>}
                             </TableRow>
                           );
                         })}
