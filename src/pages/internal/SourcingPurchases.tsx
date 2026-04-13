@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format, isPast, parseISO } from 'date-fns';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -240,6 +241,7 @@ function emptyLine(): CoffeeLine {
     lot_id: null,
     purchase_line_id: null,
     importer_payment_terms_days: null,
+    received: true,
   };
 }
 
@@ -261,6 +263,7 @@ interface CoffeeLine {
   lot_id: string | null;
   purchase_line_id: string | null;
   importer_payment_terms_days: number | null;
+  received: boolean;
 }
 
 // Helper to parse original_prices from JSONB notes
@@ -301,6 +304,7 @@ function purchaseLineToCoffeeLine(line: PurchaseLine, originalPrices: OriginalPr
     lot_id: line.lot_id || null,
     purchase_line_id: line.id,
     importer_payment_terms_days: null,
+    received: true,
   };
 }
 
@@ -779,6 +783,11 @@ function CreatePurchaseModal({
   // Step 2 lines
   const [lines, setLines] = useState<CoffeeLine[]>([emptyLine()]);
 
+  // Before You Save state
+  const [confirmCosting, setConfirmCosting] = useState(true);
+  const [markPaid, setMarkPaid] = useState(false);
+  const [paidDate, setPaidDate] = useState<Date | undefined>(new Date());
+
   // React to FX rate changes — update default currencies for lines that haven't been manually toggled
   const prevFxRef = React.useRef('');
   React.useEffect(() => {
@@ -855,6 +864,10 @@ function CreatePurchaseModal({
       setLines([emptyLine()]);
       prevFxRef.current = '';
     }
+    // Reset confirmation state
+    setConfirmCosting(true);
+    setMarkPaid(false);
+    setPaidDate(new Date());
   }, [open, existingPurchase, existingLines]);
 
   const selectedVendor = vendors.find(v => v.id === vendorId);
@@ -907,7 +920,7 @@ function CreatePurchaseModal({
         notes_text: headerNotes.trim(),
       });
 
-      const purchasePayload = {
+      const purchasePayload: any = {
         vendor_id: vendorId,
         invoice_number: invoiceNumber.trim() || null,
         invoice_date: invoiceDate ? format(invoiceDate, 'yyyy-MM-dd') : null,
@@ -920,6 +933,9 @@ function CreatePurchaseModal({
         shared_other_label: sharedCosts.other.label.trim() || null,
         notes: notesPayload,
       };
+      if (markPaid) {
+        purchasePayload.paid_at = paidDate ? format(paidDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+      }
 
       const fxRateNum = fxRate ? parseFloat(fxRate) : null;
       let purchaseId: string;
@@ -1015,9 +1031,9 @@ function CreatePurchaseModal({
                 bags_released: line.bags,
                 bag_size_kg: line.bag_size_kg,
                 kg_received: lineKg,
-                kg_on_hand: lineKg,
-                status: 'EN_ROUTE' as any,
-                costing_status: 'INCOMPLETE',
+                kg_on_hand: line.received ? lineKg : 0,
+                status: (line.received ? 'RECEIVED' : 'EN_ROUTE') as any,
+                costing_status: confirmCosting ? 'COMPLETE' : 'INCOMPLETE',
                 fx_rate: fxRateNum,
                 freight_cad: freightCad,
                 carry_fees_usd: carryAllocated,
@@ -1030,7 +1046,7 @@ function CreatePurchaseModal({
               .single();
             if (lotErr) throw lotErr;
 
-            const { error: updateErr } = await supabase.from('green_lots').update({
+            const lotUpdateFields: any = {
               origin_country: line.origin_country || null,
               region: line.region.trim() || null,
               producer: line.producer.trim() || null,
@@ -1041,10 +1057,22 @@ function CreatePurchaseModal({
               po_number: poNumber,
               vendor_invoice_number: invoiceNumber.trim() || null,
               importer_payment_terms_days: line.importer_payment_terms_days || null,
-            } as any).eq('id', lot.id);
-            if (updateErr) {
-              console.error('Lot field update error:', updateErr);
+              received_date: line.received ? format(new Date(), 'yyyy-MM-dd') : null,
+            };
+            if (confirmCosting) {
+              const now = new Date().toISOString();
+              lotUpdateFields.costing_status = 'COMPLETE';
+              lotUpdateFields.invoice_confirmed_at = now;
+              lotUpdateFields.invoice_confirmed_by = authUser!.id;
+              lotUpdateFields.fx_rate_confirmed_at = now;
+              lotUpdateFields.fx_rate_confirmed_by = authUser!.id;
+              lotUpdateFields.carry_fees_confirmed_at = now;
+              lotUpdateFields.carry_fees_confirmed_by = authUser!.id;
+              lotUpdateFields.freight_confirmed_at = now;
+              lotUpdateFields.freight_confirmed_by = authUser!.id;
             }
+            const { error: updateErr } = await supabase.from('green_lots').update(lotUpdateFields).eq('id', lot.id);
+            if (updateErr) throw updateErr;
 
             const { error: lineErr } = await supabase
               .from('green_purchase_lines')
@@ -1120,9 +1148,9 @@ function CreatePurchaseModal({
               bags_released: line.bags,
               bag_size_kg: line.bag_size_kg,
               kg_received: lineKg,
-              kg_on_hand: lineKg,
-              status: 'EN_ROUTE' as any,
-              costing_status: 'INCOMPLETE',
+              kg_on_hand: line.received ? lineKg : 0,
+              status: (line.received ? 'RECEIVED' : 'EN_ROUTE') as any,
+              costing_status: confirmCosting ? 'COMPLETE' : 'INCOMPLETE',
               expected_delivery_date: null,
               received_date: null,
               fx_rate: fxRateNum,
@@ -1140,7 +1168,7 @@ function CreatePurchaseModal({
           const priceAmt = parseFloat(line.price_amount) || 0;
           const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
 
-          const { error: updateErr2 } = await supabase.from('green_lots').update({
+          const lotUpdateFields2: any = {
             origin_country: line.origin_country || null,
             region: line.region.trim() || null,
             producer: line.producer.trim() || null,
@@ -1151,10 +1179,22 @@ function CreatePurchaseModal({
             po_number: poNumber,
             vendor_invoice_number: invoiceNumber.trim() || null,
             importer_payment_terms_days: line.importer_payment_terms_days || null,
-          } as any).eq('id', lot.id);
-          if (updateErr2) {
-            console.error('Lot field update error:', updateErr2);
+            received_date: line.received ? format(new Date(), 'yyyy-MM-dd') : null,
+          };
+          if (confirmCosting) {
+            const now = new Date().toISOString();
+            lotUpdateFields2.costing_status = 'COMPLETE';
+            lotUpdateFields2.invoice_confirmed_at = now;
+            lotUpdateFields2.invoice_confirmed_by = authUser!.id;
+            lotUpdateFields2.fx_rate_confirmed_at = now;
+            lotUpdateFields2.fx_rate_confirmed_by = authUser!.id;
+            lotUpdateFields2.carry_fees_confirmed_at = now;
+            lotUpdateFields2.carry_fees_confirmed_by = authUser!.id;
+            lotUpdateFields2.freight_confirmed_at = now;
+            lotUpdateFields2.freight_confirmed_by = authUser!.id;
           }
+          const { error: updateErr2 } = await supabase.from('green_lots').update(lotUpdateFields2).eq('id', lot.id);
+          if (updateErr2) throw updateErr2;
 
           const { error: lineErr } = await supabase
             .from('green_purchase_lines')
@@ -1341,7 +1381,35 @@ function CreatePurchaseModal({
               <Card key={line.key} className="relative">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-muted-foreground">Coffee {idx + 1}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-semibold text-muted-foreground">Coffee {idx + 1}</span>
+                      <div className="inline-flex rounded-md border border-input overflow-hidden h-7">
+                        <button
+                          type="button"
+                          className={cn(
+                            'px-2 text-xs font-medium transition-colors',
+                            line.received
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-background text-muted-foreground hover:bg-muted'
+                          )}
+                          onClick={() => updateLine(line.key, 'received', true)}
+                        >
+                          Received
+                        </button>
+                        <button
+                          type="button"
+                          className={cn(
+                            'px-2 text-xs font-medium transition-colors border-l border-input',
+                            !line.received
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-background text-muted-foreground hover:bg-muted'
+                          )}
+                          onClick={() => updateLine(line.key, 'received', false)}
+                        >
+                          En Route
+                        </button>
+                      </div>
+                    </div>
                     <Button
                       size="icon"
                       variant="ghost"
@@ -1460,6 +1528,36 @@ function CreatePurchaseModal({
             <Button variant="outline" className="w-full gap-1.5" onClick={() => setLines(prev => [...prev, emptyLine()])}>
               <Plus className="h-4 w-4" /> Add Coffee
             </Button>
+
+            {/* Before You Save */}
+            <div className="border-t pt-3 space-y-2">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Before You Save</h4>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox checked={confirmCosting} onCheckedChange={(v) => setConfirmCosting(!!v)} />
+                  Costing is complete — lock pricing on created lots
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <Checkbox checked={markPaid} onCheckedChange={(v) => setMarkPaid(!!v)} />
+                    Mark purchase as paid
+                  </label>
+                  {markPaid && (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+                          <CalendarIcon className="h-3 w-3" />
+                          {paidDate ? format(paidDate, 'MMM d, yyyy') : 'Paid date'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={paidDate} onSelect={setPaidDate} className="pointer-events-auto" />
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+              </div>
+            </div>
 
             {/* Estimated Book Value Summary */}
             {(() => {
