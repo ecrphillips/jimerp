@@ -1529,6 +1529,36 @@ function CreatePurchaseModal({
               <Plus className="h-4 w-4" /> Add Coffee
             </Button>
 
+            {/* Before You Save */}
+            <div className="border-t pt-3 space-y-2">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Before You Save</h4>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox checked={confirmCosting} onCheckedChange={(v) => setConfirmCosting(!!v)} />
+                  Costing is complete — lock pricing on created lots
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <Checkbox checked={markPaid} onCheckedChange={(v) => setMarkPaid(!!v)} />
+                    Mark purchase as paid
+                  </label>
+                  {markPaid && (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+                          <CalendarIcon className="h-3 w-3" />
+                          {paidDate ? format(paidDate, 'MMM d, yyyy') : 'Paid date'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={paidDate} onSelect={setPaidDate} className="pointer-events-auto" />
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Estimated Book Value Summary */}
             {(() => {
               const fxRateNum = fxRate ? parseFloat(fxRate) : null;
