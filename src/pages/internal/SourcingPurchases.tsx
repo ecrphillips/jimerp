@@ -300,6 +300,7 @@ function purchaseLineToCoffeeLine(line: PurchaseLine, originalPrices: OriginalPr
     notes: line.notes || '',
     lot_id: line.lot_id || null,
     purchase_line_id: line.id,
+    importer_payment_terms_days: null,
   };
 }
 
