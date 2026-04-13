@@ -19,7 +19,8 @@ import { Search, Plus, Check, FileText, X, Trash2 } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 
 type SampleStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-type GreenCategory = 'BLENDER' | 'SINGLE_ORIGIN';
+// NOTE: Existing SINGLE_ORIGIN records remain in the DB but display as "Blender" via fallback. No automated migration needed.
+type GreenCategory = 'BLENDER' | 'SINGLE_ORIGIN' | 'MICRO_LOT' | 'HYPER_PREMIUM';
 type SampleRelationship = 'REPLACE_RESTOCK' | 'NEW_BLEND_COMPONENT' | 'RETURNING_SO' | 'NEW_SO';
 
 interface Sample {
@@ -64,9 +65,11 @@ interface LotOption {
   display_label: string;
 }
 
-const CATEGORY_LABELS: Record<GreenCategory, string> = {
+const CATEGORY_LABELS: Record<string, string> = {
   BLENDER: 'Blender',
-  SINGLE_ORIGIN: 'Single Origin',
+  SINGLE_ORIGIN: 'Blender',
+  MICRO_LOT: 'Micro-lot',
+  HYPER_PREMIUM: 'Hyper Premium',
 };
 
 const STATUS_LABELS: Record<SampleStatus, string> = {
@@ -420,7 +423,7 @@ export default function SourcingSamples() {
             </Button>
           ))}
           <span className="border-l mx-1" />
-          {(['ALL', 'BLENDER', 'SINGLE_ORIGIN'] as const).map(c => (
+          {(['ALL', 'BLENDER', 'MICRO_LOT', 'HYPER_PREMIUM'] as const).map(c => (
             <Button
               key={c}
               variant={categoryFilter === c ? 'default' : 'outline'}
@@ -986,10 +989,8 @@ function SampleDetailPanel({
   const availableRgs = useMemo(() => {
     const category = form.category as GreenCategory;
     let filtered = roastGroups.filter(rg => !linkedRgKeys.has(rg.roast_group));
-    if (category === 'BLENDER') {
+    if (category === 'BLENDER' || category === 'SINGLE_ORIGIN') {
       filtered = filtered.filter(rg => blendComponentRgs.has(rg.roast_group));
-    } else if (category === 'SINGLE_ORIGIN') {
-      filtered = filtered.filter(rg => !blendComponentRgs.has(rg.roast_group));
     }
     return filtered;
   }, [roastGroups, linkedRgKeys, form.category, blendComponentRgs]);
@@ -1101,7 +1102,8 @@ function SampleDetailPanel({
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="BLENDER">Blender</SelectItem>
-                    <SelectItem value="SINGLE_ORIGIN">Single Origin</SelectItem>
+                    <SelectItem value="MICRO_LOT">Micro-lot</SelectItem>
+                    <SelectItem value="HYPER_PREMIUM">Hyper Premium</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1447,9 +1449,9 @@ function AddSampleModal({
 
   // Filter RGs for the toggle list
   const filteredRgs = useMemo(() => {
-    if (!category) return roastGroups;
-    if (category === 'BLENDER') return roastGroups.filter(rg => blendComponentRgs.has(rg.roast_group));
-    return roastGroups.filter(rg => !blendComponentRgs.has(rg.roast_group));
+     if (!category) return roastGroups;
+    if (category === 'BLENDER' || category === 'SINGLE_ORIGIN') return roastGroups.filter(rg => blendComponentRgs.has(rg.roast_group));
+    return roastGroups;
   }, [roastGroups, category, blendComponentRgs]);
 
   const createMutation = useMutation({
