@@ -171,6 +171,54 @@ function CurrencyToggle({ value, onChange }: { value: Currency; onChange: (c: Cu
 
 // ─── Empty line template ───────────────────────────────────
 
+type PriceUnit = 'USD_LB' | 'USD_KG' | 'CAD_LB' | 'CAD_KG';
+
+const PRICE_UNIT_OPTIONS: { value: PriceUnit; label: string }[] = [
+  { value: 'USD_LB', label: 'USD/lb' },
+  { value: 'USD_KG', label: 'USD/kg' },
+  { value: 'CAD_LB', label: 'CAD/lb' },
+  { value: 'CAD_KG', label: 'CAD/kg' },
+];
+
+const PRICE_UNIT_LABELS: Record<PriceUnit, string> = {
+  USD_LB: 'USD/lb',
+  USD_KG: 'USD/kg',
+  CAD_LB: 'CAD/lb',
+  CAD_KG: 'CAD/kg',
+};
+
+const KG_PER_LB = 2.20462;
+
+function convertToUsdPerLb(amount: number, unit: PriceUnit, fxRate: number | null): { value: number; unconverted: boolean } {
+  switch (unit) {
+    case 'USD_LB':
+      return { value: amount, unconverted: false };
+    case 'USD_KG':
+      return { value: amount / KG_PER_LB, unconverted: false };
+    case 'CAD_LB':
+      if (fxRate) return { value: amount / fxRate, unconverted: false };
+      return { value: amount, unconverted: true };
+    case 'CAD_KG':
+      if (fxRate) return { value: (amount / fxRate) / KG_PER_LB, unconverted: false };
+      return { value: amount / KG_PER_LB, unconverted: true };
+  }
+}
+
+function convertToUsdPerKg(amount: number, unit: PriceUnit, fxRate: number | null): { value: number; unconverted: boolean } {
+  switch (unit) {
+    case 'USD_LB':
+      return { value: amount * KG_PER_LB, unconverted: false };
+    case 'USD_KG':
+      return { value: amount, unconverted: false };
+    case 'CAD_LB':
+      if (fxRate) return { value: (amount / fxRate) * KG_PER_LB, unconverted: false };
+      return { value: amount * KG_PER_LB, unconverted: true };
+    case 'CAD_KG':
+      if (fxRate) return { value: amount / fxRate, unconverted: false };
+      return { value: amount, unconverted: true };
+  }
+}
+
 function emptyLine(): CoffeeLine {
   return {
     key: crypto.randomUUID(),
@@ -183,7 +231,8 @@ function emptyLine(): CoffeeLine {
     category: 'BLENDER',
     bags: 0,
     bag_size_kg: 0,
-    price_per_lb_usd: '',
+    price_amount: '',
+    price_unit: 'USD_LB',
     warehouse_location: '',
     notes: '',
   };
@@ -200,7 +249,8 @@ interface CoffeeLine {
   category: string;
   bags: number;
   bag_size_kg: number;
-  price_per_lb_usd: string;
+  price_amount: string;
+  price_unit: PriceUnit;
   warehouse_location: string;
   notes: string;
 }
