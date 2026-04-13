@@ -864,6 +864,10 @@ function CreatePurchaseModal({
       setLines([emptyLine()]);
       prevFxRef.current = '';
     }
+    // Reset confirmation state
+    setConfirmCosting(true);
+    setMarkPaid(false);
+    setPaidDate(new Date());
   }, [open, existingPurchase, existingLines]);
 
   const selectedVendor = vendors.find(v => v.id === vendorId);
