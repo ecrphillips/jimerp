@@ -1015,27 +1015,27 @@ function CreatePurchaseModal({
                 kg_on_hand: lineKg,
                 status: 'EN_ROUTE' as any,
                 costing_status: 'INCOMPLETE',
-                origin_country: line.origin_country || null,
-                region: line.region.trim() || null,
-                producer: line.producer.trim() || null,
-                variety: line.variety.trim() || null,
-                crop_year: line.crop_year.trim() || null,
                 fx_rate: fxRateNum,
                 freight_cad: freightCad,
                 carry_fees_usd: carryAllocated,
                 other_costs_cad: fxRateNum ? otherAllocated * fxRateNum : otherAllocated,
                 warehouse_location: line.warehouse_location.trim() || null,
                 notes_internal: line.notes.trim() || null,
-                po_number: poNumber,
                 created_by: authUser!.id,
               } as any)
               .select('id')
               .single();
             if (lotErr) throw lotErr;
 
-            if (line.category) {
-              await supabase.from('green_lots').update({ category: line.category } as any).eq('id', lot.id);
-            }
+            await supabase.from('green_lots').update({
+              origin_country: line.origin_country || null,
+              region: line.region.trim() || null,
+              producer: line.producer.trim() || null,
+              variety: line.variety.trim() || null,
+              crop_year: line.crop_year.trim() || null,
+              category: line.category || null,
+              po_number: poNumber,
+            } as any).eq('id', lot.id);
 
             const { error: lineErr } = await supabase
               .from('green_purchase_lines')
@@ -1116,30 +1116,31 @@ function CreatePurchaseModal({
               costing_status: 'INCOMPLETE',
               expected_delivery_date: null,
               received_date: null,
-              origin_country: line.origin_country || null,
-              region: line.region.trim() || null,
-              producer: line.producer.trim() || null,
-              variety: line.variety.trim() || null,
-              crop_year: line.crop_year.trim() || null,
               fx_rate: fxRateNum,
               freight_cad: freightCad,
               carry_fees_usd: carryAllocated,
               other_costs_cad: fxRateNum ? otherAllocated * fxRateNum : otherAllocated,
               warehouse_location: line.warehouse_location.trim() || null,
               notes_internal: line.notes.trim() || null,
-              po_number: poNumber,
               created_by: authUser!.id,
             } as any)
             .select('id')
             .single();
           if (lotErr) throw lotErr;
 
-          if (line.category) {
-            await supabase.from('green_lots').update({ category: line.category } as any).eq('id', lot.id);
-          }
-
           const priceAmt = parseFloat(line.price_amount) || 0;
           const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
+
+          await supabase.from('green_lots').update({
+            origin_country: line.origin_country || null,
+            region: line.region.trim() || null,
+            producer: line.producer.trim() || null,
+            variety: line.variety.trim() || null,
+            crop_year: line.crop_year.trim() || null,
+            category: line.category || null,
+            price_per_lb_usd: converted ? converted.value : null,
+            po_number: poNumber,
+          } as any).eq('id', lot.id);
 
           const { error: lineErr } = await supabase
             .from('green_purchase_lines')
@@ -1628,15 +1629,9 @@ function AddCoffeeLineModal({
           kg_on_hand: lineKg,
           status: 'EN_ROUTE' as any,
           costing_status: 'INCOMPLETE',
-          origin_country: originCountry || null,
-          region: region.trim() || null,
-          producer: producer.trim() || null,
-          variety: variety.trim() || null,
-          crop_year: cropYear.trim() || null,
           fx_rate: fxRateNum,
           warehouse_location: warehouseLocation.trim() || null,
           notes_internal: notes.trim() || null,
-          po_number: poNumber,
           created_by: authUser!.id,
         } as any)
         .select('id')
@@ -1644,9 +1639,15 @@ function AddCoffeeLineModal({
 
       if (lotErr) throw lotErr;
 
-      if (category) {
-        await supabase.from('green_lots').update({ category } as any).eq('id', lot.id);
-      }
+      await supabase.from('green_lots').update({
+        origin_country: originCountry || null,
+        region: region.trim() || null,
+        producer: producer.trim() || null,
+        variety: variety.trim() || null,
+        crop_year: cropYear.trim() || null,
+        category: category || null,
+        po_number: poNumber,
+      } as any).eq('id', lot.id);
 
       // Insert purchase line
       const { error: lineErr } = await supabase
