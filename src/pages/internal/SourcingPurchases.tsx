@@ -1200,6 +1200,7 @@ function CreatePurchaseModal({
         </DialogHeader>
 
         {step === 1 ? (
+          <>
           <div className="flex-1 overflow-y-auto space-y-4 pr-1">
             {/* Vendor */}
             <div>
@@ -1316,7 +1317,9 @@ function CreatePurchaseModal({
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
               <Button disabled={!vendorId} onClick={() => setStep(2)}>Next</Button>
             </DialogFooter>
+          </>
         ) : (
+          <>
           <div className="flex-1 overflow-y-auto space-y-4 pr-1">
             {/* Coffee line cards */}
             {lines.map((line, idx) => (
@@ -1528,6 +1531,7 @@ function CreatePurchaseModal({
                 {saveMutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save Changes' : 'Create Purchase & Lots')}
               </Button>
             </DialogFooter>
+          </>
         )}
       </DialogContent>
     </Dialog>
