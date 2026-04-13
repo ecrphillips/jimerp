@@ -693,8 +693,14 @@ function CreatePurchaseModal({
         other: { amount: otherNum, currency: sharedCosts.other.currency, label: sharedCosts.other.label.trim() },
       };
 
+      // Build original_prices array for JSONB
+      const originalPrices = lines
+        .filter(l => l.lot_identifier.trim() && l.price_amount)
+        .map(l => ({ lot_identifier: l.lot_identifier.trim(), price_amount: parseFloat(l.price_amount) || 0, price_unit: l.price_unit }));
+
       const notesPayload = JSON.stringify({
         shared_costs: sharedCostsJson,
+        original_prices: originalPrices,
         notes_text: headerNotes.trim(),
       });
 
@@ -787,6 +793,10 @@ function CreatePurchaseModal({
 
         if (lotErr) throw lotErr;
 
+        // Convert price to USD/lb for storage
+        const priceAmt = parseFloat(line.price_amount) || 0;
+        const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
+
         // Insert purchase line linking to both purchase and lot
         const { error: lineErr } = await supabase
           .from('green_purchase_lines')
@@ -801,7 +811,7 @@ function CreatePurchaseModal({
             category: line.category || null,
             bags: line.bags,
             bag_size_kg: line.bag_size_kg,
-            price_per_lb_usd: line.price_per_lb_usd ? parseFloat(line.price_per_lb_usd) : null,
+            price_per_lb_usd: converted ? converted.value : null,
             warehouse_location: line.warehouse_location.trim() || null,
             notes: line.notes.trim() || null,
             lot_id: lot.id,
