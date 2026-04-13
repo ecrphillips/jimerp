@@ -1835,6 +1835,143 @@ export type Database = {
           },
         ]
       }
+      green_purchase_lines: {
+        Row: {
+          bag_size_kg: number
+          bags: number
+          category: string | null
+          created_at: string
+          crop_year: string | null
+          display_order: number
+          id: string
+          lot_id: string | null
+          lot_identifier: string | null
+          notes: string | null
+          origin_country: string | null
+          price_per_lb_usd: number | null
+          producer: string | null
+          purchase_id: string
+          region: string | null
+          variety: string | null
+          warehouse_location: string | null
+        }
+        Insert: {
+          bag_size_kg?: number
+          bags?: number
+          category?: string | null
+          created_at?: string
+          crop_year?: string | null
+          display_order?: number
+          id?: string
+          lot_id?: string | null
+          lot_identifier?: string | null
+          notes?: string | null
+          origin_country?: string | null
+          price_per_lb_usd?: number | null
+          producer?: string | null
+          purchase_id: string
+          region?: string | null
+          variety?: string | null
+          warehouse_location?: string | null
+        }
+        Update: {
+          bag_size_kg?: number
+          bags?: number
+          category?: string | null
+          created_at?: string
+          crop_year?: string | null
+          display_order?: number
+          id?: string
+          lot_id?: string | null
+          lot_identifier?: string | null
+          notes?: string | null
+          origin_country?: string | null
+          price_per_lb_usd?: number | null
+          producer?: string | null
+          purchase_id?: string
+          region?: string | null
+          variety?: string | null
+          warehouse_location?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_purchase_lines_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "green_lots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "green_purchase_lines_purchase_id_fkey"
+            columns: ["purchase_id"]
+            isOneToOne: false
+            referencedRelation: "green_purchases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      green_purchases: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          due_date: string | null
+          fx_rate: number | null
+          fx_rate_is_cad: boolean
+          id: string
+          invoice_date: string | null
+          invoice_number: string | null
+          notes: string | null
+          shared_carry_usd: number
+          shared_freight_usd: number
+          shared_other_label: string | null
+          shared_other_usd: number
+          updated_at: string
+          vendor_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          due_date?: string | null
+          fx_rate?: number | null
+          fx_rate_is_cad?: boolean
+          id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
+          notes?: string | null
+          shared_carry_usd?: number
+          shared_freight_usd?: number
+          shared_other_label?: string | null
+          shared_other_usd?: number
+          updated_at?: string
+          vendor_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          due_date?: string | null
+          fx_rate?: number | null
+          fx_rate_is_cad?: boolean
+          id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
+          notes?: string | null
+          shared_carry_usd?: number
+          shared_freight_usd?: number
+          shared_other_label?: string | null
+          shared_other_usd?: number
+          updated_at?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_purchases_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "green_vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       green_sample_notes: {
         Row: {
           created_at: string
