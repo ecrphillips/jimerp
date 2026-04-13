@@ -920,7 +920,7 @@ function CreatePurchaseModal({
         notes_text: headerNotes.trim(),
       });
 
-      const purchasePayload = {
+      const purchasePayload: any = {
         vendor_id: vendorId,
         invoice_number: invoiceNumber.trim() || null,
         invoice_date: invoiceDate ? format(invoiceDate, 'yyyy-MM-dd') : null,
@@ -933,6 +933,9 @@ function CreatePurchaseModal({
         shared_other_label: sharedCosts.other.label.trim() || null,
         notes: notesPayload,
       };
+      if (markPaid) {
+        purchasePayload.paid_at = paidDate ? format(paidDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+      }
 
       const fxRateNum = fxRate ? parseFloat(fxRate) : null;
       let purchaseId: string;
