@@ -1192,7 +1192,7 @@ function CreatePurchaseModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>
             {step === 1 ? `${titlePrefix} — Invoice Details` : `${titlePrefix} — Coffees (${selectedVendor?.name || ''}${invoiceNumber ? ` · ${invoiceNumber}` : ''})`}
@@ -1200,7 +1200,7 @@ function CreatePurchaseModal({
         </DialogHeader>
 
         {step === 1 ? (
-          <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1">
             {/* Vendor */}
             <div>
               <Label>Vendor *</Label>
@@ -1317,7 +1317,7 @@ function CreatePurchaseModal({
             </DialogFooter>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1">
             {/* Coffee line cards */}
             {lines.map((line, idx) => (
               <Card key={line.key} className="relative">
