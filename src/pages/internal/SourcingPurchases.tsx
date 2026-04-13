@@ -1311,11 +1311,11 @@ function CreatePurchaseModal({
               <Textarea value={headerNotes} onChange={e => setHeaderNotes(e.target.value)} rows={2} placeholder="Optional" />
             </div>
 
+            </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
               <Button disabled={!vendorId} onClick={() => setStep(2)}>Next</Button>
             </DialogFooter>
-          </div>
         ) : (
           <div className="flex-1 overflow-y-auto space-y-4 pr-1">
             {/* Coffee line cards */}
@@ -1521,13 +1521,13 @@ function CreatePurchaseModal({
               );
             })()}
 
+            </div>
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
               <Button disabled={!canCreate || saveMutation.isPending} onClick={() => saveMutation.mutate()}>
                 {saveMutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save Changes' : 'Create Purchase & Lots')}
               </Button>
             </DialogFooter>
-          </div>
         )}
       </DialogContent>
     </Dialog>
