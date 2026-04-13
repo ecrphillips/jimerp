@@ -1161,6 +1161,7 @@ function CreatePurchaseModal({
               warehouse_location: line.warehouse_location.trim() || null,
               notes_internal: line.notes.trim() || null,
               created_by: authUser!.id,
+              purchase_id: purchaseId,
             } as any)
             .select('id')
             .single();
@@ -1752,6 +1753,7 @@ function AddCoffeeLineModal({
           warehouse_location: warehouseLocation.trim() || null,
           notes_internal: notes.trim() || null,
           created_by: authUser!.id,
+          purchase_id: purchase.id,
         } as any)
         .select('id')
         .single();
