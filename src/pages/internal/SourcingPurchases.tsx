@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGr
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import { Plus, CalendarIcon, Trash2, ExternalLink } from 'lucide-react';
+import { Plus, CalendarIcon, Trash2, ExternalLink, Pencil } from 'lucide-react';
 import { formatMoney } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
@@ -237,6 +237,8 @@ function emptyLine(): CoffeeLine {
     price_unit: 'USD_LB',
     warehouse_location: '',
     notes: '',
+    lot_id: null,
+    purchase_line_id: null,
   };
 }
 
@@ -255,6 +257,48 @@ interface CoffeeLine {
   price_unit: PriceUnit;
   warehouse_location: string;
   notes: string;
+  lot_id: string | null;
+  purchase_line_id: string | null;
+}
+
+// Helper to parse original_prices from JSONB notes
+interface OriginalPrice {
+  lot_identifier: string;
+  price_amount: number;
+  price_unit: PriceUnit;
+}
+
+function parseOriginalPrices(notes: string | null): OriginalPrice[] {
+  if (!notes) return [];
+  try {
+    const parsed = JSON.parse(notes);
+    return parsed?.original_prices || [];
+  } catch {
+    return [];
+  }
+}
+
+function purchaseLineToCoffeeLine(line: PurchaseLine, originalPrices: OriginalPrice[]): CoffeeLine {
+  // Try to find original price for this line
+  const orig = originalPrices.find(op => op.lot_identifier === (line.lot_identifier || ''));
+  return {
+    key: crypto.randomUUID(),
+    lot_identifier: line.lot_identifier || '',
+    origin_country: line.origin_country || '',
+    region: line.region || '',
+    producer: line.producer || '',
+    variety: line.variety || '',
+    crop_year: line.crop_year || '',
+    category: line.category || 'BLENDER',
+    bags: line.bags,
+    bag_size_kg: line.bag_size_kg,
+    price_amount: orig ? String(orig.price_amount) : (line.price_per_lb_usd != null ? String(line.price_per_lb_usd) : ''),
+    price_unit: orig ? orig.price_unit : 'USD_LB',
+    warehouse_location: line.warehouse_location || '',
+    notes: line.notes || '',
+    lot_id: line.lot_id || null,
+    purchase_line_id: line.id,
+  };
 }
 
 // ─── Page Component ────────────────────────────────────────
@@ -265,6 +309,7 @@ export default function SourcingPurchases() {
   const navigate = useNavigate();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingPurchase, setEditingPurchase] = useState<PurchaseRow | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Fetch vendors
@@ -343,6 +388,15 @@ export default function SourcingPurchases() {
 
   const selectedPurchase = purchases.find(p => p.id === selectedId) || null;
   const selectedLines = selectedId ? (linesByPurchase[selectedId] || []) : [];
+  const editingLines = editingPurchase ? (linesByPurchase[editingPurchase.id] || []) : [];
+
+  const modalOpen = createOpen || !!editingPurchase;
+  const handleModalClose = (o: boolean) => {
+    if (!o) {
+      setCreateOpen(false);
+      setEditingPurchase(null);
+    }
+  };
 
   return (
     <>
@@ -412,11 +466,13 @@ export default function SourcingPurchases() {
         )}
       </div>
 
-      {/* Create Modal */}
+      {/* Create / Edit Modal */}
       <CreatePurchaseModal
-        open={createOpen}
-        onOpenChange={setCreateOpen}
+        open={modalOpen}
+        onOpenChange={handleModalClose}
         vendors={vendors}
+        existingPurchase={editingPurchase || undefined}
+        existingLines={editingPurchase ? editingLines : undefined}
       />
 
       {/* Detail Sheet */}
@@ -435,6 +491,10 @@ export default function SourcingPurchases() {
                 queryClient.invalidateQueries({ queryKey: ['green-purchases'] });
                 queryClient.invalidateQueries({ queryKey: ['green-purchase-lines'] });
               }}
+              onEdit={() => {
+                setSelectedId(null);
+                setEditingPurchase(selectedPurchase);
+              }}
             />
           )}
         </SheetContent>
@@ -450,11 +510,13 @@ function PurchaseDetailContent({
   lines,
   vendor,
   onDeleted,
+  onEdit,
 }: {
   purchase: PurchaseRow;
   lines: PurchaseLine[];
   vendor: Vendor | undefined;
   onDeleted: () => void;
+  onEdit: () => void;
 }) {
   const navigate = useNavigate();
   const { isAdmin, isOps } = useAuth();
@@ -512,30 +574,35 @@ function PurchaseDetailContent({
 
   return (
     <div className="space-y-6 pt-4">
-      {/* Delete button — ADMIN only */}
-      {isAdmin && (
-        <div className="flex justify-end">
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm" className="gap-1.5">
-                <Trash2 className="h-3.5 w-3.5" /> Delete Purchase
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete this purchase?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will not delete the lots that were already created from it. This action cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete} disabled={deleting}>
-                  {deleting ? 'Deleting…' : 'Delete'}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+      {/* Action buttons — ADMIN/OPS */}
+      {(isAdmin || isOps) && (
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={onEdit}>
+            <Pencil className="h-3.5 w-3.5" /> Edit Purchase
+          </Button>
+          {isAdmin && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm" className="gap-1.5">
+                  <Trash2 className="h-3.5 w-3.5" /> Delete Purchase
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this purchase?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will not delete the lots that were already created from it. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete} disabled={deleting}>
+                    {deleting ? 'Deleting…' : 'Delete'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       )}
 
@@ -680,14 +747,20 @@ function CreatePurchaseModal({
   open,
   onOpenChange,
   vendors,
+  existingPurchase,
+  existingLines,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   vendors: Vendor[];
+  existingPurchase?: PurchaseRow;
+  existingLines?: PurchaseLine[];
 }) {
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+
+  const isEdit = !!existingPurchase;
 
   const [step, setStep] = useState<1 | 2>(1);
 
@@ -720,10 +793,55 @@ function CreatePurchaseModal({
     prevFxRef.current = fxRate;
   }, [fxRate]);
 
-  // Reset on open
+  // Reset / pre-fill on open
   React.useEffect(() => {
-    if (open) {
-      setStep(1);
+    if (!open) return;
+    setStep(1);
+
+    if (existingPurchase) {
+      // Edit mode: pre-fill from existing purchase
+      setVendorId(existingPurchase.vendor_id);
+      setInvoiceNumber(existingPurchase.invoice_number || '');
+      setInvoiceDate(existingPurchase.invoice_date ? parseISO(existingPurchase.invoice_date) : undefined);
+      setDueDate(existingPurchase.due_date ? parseISO(existingPurchase.due_date) : undefined);
+      setFxRate(existingPurchase.fx_rate != null ? String(existingPurchase.fx_rate) : '');
+
+      // Parse shared costs from JSONB notes
+      const sc = parseSharedCostsFromNotes(existingPurchase.notes);
+      if (sc) {
+        setSharedCosts({
+          carry: { amount: String(sc.carry?.amount ?? 0), currency: (sc.carry?.currency as Currency) || 'CAD' },
+          freight: { amount: String(sc.freight?.amount ?? 0), currency: (sc.freight?.currency as Currency) || 'CAD' },
+          duties: { amount: String(sc.duties?.amount ?? 0), currency: (sc.duties?.currency as Currency) || 'CAD' },
+          fees: { amount: String(sc.fees?.amount ?? 0), currency: (sc.fees?.currency as Currency) || 'CAD' },
+          other: { amount: String(sc.other?.amount ?? 0), currency: (sc.other?.currency as Currency) || 'CAD', label: sc.other?.label || '' },
+        });
+      } else {
+        setSharedCosts({
+          carry: { amount: String(existingPurchase.shared_carry_usd), currency: 'USD' },
+          freight: { amount: String(existingPurchase.shared_freight_usd), currency: 'USD' },
+          duties: { amount: '0', currency: 'CAD' },
+          fees: { amount: '0', currency: 'CAD' },
+          other: { amount: String(existingPurchase.shared_other_usd), currency: 'USD', label: existingPurchase.shared_other_label || '' },
+        });
+      }
+
+      // Parse notes text
+      let notesText = existingPurchase.notes || '';
+      try { notesText = JSON.parse(notesText)?.notes_text || ''; } catch { /* not JSON */ }
+      setHeaderNotes(notesText);
+
+      // Pre-fill lines
+      const originalPrices = parseOriginalPrices(existingPurchase.notes);
+      if (existingLines && existingLines.length > 0) {
+        setLines(existingLines.map(l => purchaseLineToCoffeeLine(l, originalPrices)));
+      } else {
+        setLines([emptyLine()]);
+      }
+
+      prevFxRef.current = existingPurchase.fx_rate != null ? String(existingPurchase.fx_rate) : '';
+    } else {
+      // Create mode: reset
       setVendorId('');
       setInvoiceNumber('');
       setInvoiceDate(undefined);
@@ -734,7 +852,7 @@ function CreatePurchaseModal({
       setLines([emptyLine()]);
       prevFxRef.current = '';
     }
-  }, [open]);
+  }, [open, existingPurchase, existingLines]);
 
   const selectedVendor = vendors.find(v => v.id === vendorId);
 
@@ -764,7 +882,7 @@ function CreatePurchaseModal({
 
   const canCreate = lines.some(l => l.lot_identifier.trim() && l.bags > 0 && l.bag_size_kg > 0);
 
-  const createMutation = useMutation({
+  const saveMutation = useMutation({
     mutationFn: async () => {
       // Build JSONB for notes field
       const sharedCostsJson = {
@@ -786,146 +904,292 @@ function CreatePurchaseModal({
         notes_text: headerNotes.trim(),
       });
 
-      // 1. Insert purchase
-      const { data: purchase, error: purchaseErr } = await supabase
-        .from('green_purchases')
-        .insert({
-          vendor_id: vendorId,
-          invoice_number: invoiceNumber.trim() || null,
-          invoice_date: invoiceDate ? format(invoiceDate, 'yyyy-MM-dd') : null,
-          due_date: dueDate ? format(dueDate, 'yyyy-MM-dd') : null,
-          fx_rate: fxRate ? parseFloat(fxRate) : null,
-          fx_rate_is_cad: false,
-          shared_freight_usd: freightNum,
-          shared_carry_usd: carryNum,
-          shared_other_usd: otherNum,
-          shared_other_label: sharedCosts.other.label.trim() || null,
-          notes: notesPayload,
-          created_by: authUser!.id,
-        } as any)
-        .select('id')
-        .single();
-
-      if (purchaseErr) throw purchaseErr;
-      const purchaseId = purchase.id;
+      const purchasePayload = {
+        vendor_id: vendorId,
+        invoice_number: invoiceNumber.trim() || null,
+        invoice_date: invoiceDate ? format(invoiceDate, 'yyyy-MM-dd') : null,
+        due_date: dueDate ? format(dueDate, 'yyyy-MM-dd') : null,
+        fx_rate: fxRate ? parseFloat(fxRate) : null,
+        fx_rate_is_cad: false,
+        shared_freight_usd: freightNum,
+        shared_carry_usd: carryNum,
+        shared_other_usd: otherNum,
+        shared_other_label: sharedCosts.other.label.trim() || null,
+        notes: notesPayload,
+      };
 
       const fxRateNum = fxRate ? parseFloat(fxRate) : null;
-      let lotCount = 0;
+      let purchaseId: string;
 
-      // 2. For each line: create lot + purchase line
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (!line.lot_identifier.trim() || line.bags <= 0 || line.bag_size_kg <= 0) continue;
+      if (isEdit && existingPurchase) {
+        // ── EDIT MODE ──
+        const { error: updateErr } = await supabase
+          .from('green_purchases')
+          .update(purchasePayload as any)
+          .eq('id', existingPurchase.id);
+        if (updateErr) throw updateErr;
+        purchaseId = existingPurchase.id;
 
-        const lineKg = line.bags * line.bag_size_kg;
-        const share = totalKgAll > 0 ? lineKg / totalKgAll : 0;
-        const freightAllocated = freightNum * share;
-        const carryAllocated = carryNum * share;
-        const otherAllocated = otherNum * share;
+        let newLotCount = 0;
 
-        // Generate lot number: VENDOR_ABBR-ORIGIN_COUNTRY-PO###
-        let poNumber = '';
-        try {
-          const { data: seqData, error: seqErr } = await supabase.rpc('nextval_text' as any, { seq_name: 'po_number_seq' });
-          if (seqErr) throw seqErr;
-          const seqVal = typeof seqData === 'number' ? seqData : parseInt(String(seqData));
-          poNumber = `PO-${String(seqVal).padStart(3, '0')}`;
-        } catch {
-          poNumber = `PO-${String(Date.now()).slice(-6)}`;
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (!line.lot_identifier.trim() || line.bags <= 0 || line.bag_size_kg <= 0) continue;
+
+          const lineKg = line.bags * line.bag_size_kg;
+          const priceAmt = parseFloat(line.price_amount) || 0;
+          const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
+
+          if (line.lot_id && line.purchase_line_id) {
+            // Existing line — UPDATE purchase line + lot
+            const { error: plErr } = await supabase
+              .from('green_purchase_lines')
+              .update({
+                lot_identifier: line.lot_identifier.trim(),
+                origin_country: line.origin_country || null,
+                region: line.region.trim() || null,
+                producer: line.producer.trim() || null,
+                variety: line.variety.trim() || null,
+                crop_year: line.crop_year.trim() || null,
+                category: line.category || null,
+                bags: line.bags,
+                bag_size_kg: line.bag_size_kg,
+                price_per_lb_usd: converted ? converted.value : null,
+                warehouse_location: line.warehouse_location.trim() || null,
+                notes: line.notes.trim() || null,
+                display_order: i,
+              } as any)
+              .eq('id', line.purchase_line_id);
+            if (plErr) throw plErr;
+
+            // Update linked lot (do NOT update kg_on_hand)
+            const { error: lotUpErr } = await supabase
+              .from('green_lots')
+              .update({
+                lot_identifier: line.lot_identifier.trim(),
+                origin_country: line.origin_country || null,
+                region: line.region.trim() || null,
+                producer: line.producer.trim() || null,
+                variety: line.variety.trim() || null,
+                crop_year: line.crop_year.trim() || null,
+                category: line.category || null,
+                bags_released: line.bags,
+                bag_size_kg: line.bag_size_kg,
+                kg_received: lineKg,
+                fx_rate: fxRateNum,
+                warehouse_location: line.warehouse_location.trim() || null,
+                notes_internal: line.notes.trim() || null,
+              } as any)
+              .eq('id', line.lot_id);
+            if (lotUpErr) throw lotUpErr;
+          } else {
+            // New line — INSERT lot + purchase line (same as create mode)
+            let poNumber = '';
+            try {
+              const { data: seqData, error: seqErr } = await supabase.rpc('nextval_text' as any, { seq_name: 'po_number_seq' });
+              if (seqErr) throw seqErr;
+              const seqVal = typeof seqData === 'number' ? seqData : parseInt(String(seqData));
+              poNumber = `PO-${String(seqVal).padStart(3, '0')}`;
+            } catch {
+              poNumber = `PO-${String(Date.now()).slice(-6)}`;
+            }
+
+            const vendorAbbr = selectedVendor?.abbreviation || '???';
+            const originCode = line.origin_country || '???';
+            const lotNumber = `${vendorAbbr}-${originCode}-${poNumber}`;
+
+            const freightAllocated = totalKgAll > 0 ? freightNum * (lineKg / totalKgAll) : 0;
+            const carryAllocated = totalKgAll > 0 ? carryNum * (lineKg / totalKgAll) : 0;
+            const otherAllocated = totalKgAll > 0 ? otherNum * (lineKg / totalKgAll) : 0;
+            const freightCad = fxRateNum ? freightAllocated * fxRateNum : freightAllocated;
+
+            const { data: lot, error: lotErr } = await supabase
+              .from('green_lots')
+              .insert({
+                lot_number: lotNumber,
+                lot_identifier: line.lot_identifier.trim(),
+                contract_id: null as any,
+                bags_released: line.bags,
+                bag_size_kg: line.bag_size_kg,
+                kg_received: lineKg,
+                kg_on_hand: lineKg,
+                status: 'EN_ROUTE' as any,
+                costing_status: 'INCOMPLETE',
+                origin_country: line.origin_country || null,
+                region: line.region.trim() || null,
+                producer: line.producer.trim() || null,
+                variety: line.variety.trim() || null,
+                crop_year: line.crop_year.trim() || null,
+                category: line.category || null,
+                fx_rate: fxRateNum,
+                freight_cad: freightCad,
+                carry_fees_usd: carryAllocated,
+                other_costs_cad: fxRateNum ? otherAllocated * fxRateNum : otherAllocated,
+                warehouse_location: line.warehouse_location.trim() || null,
+                notes_internal: line.notes.trim() || null,
+                po_number: poNumber,
+                created_by: authUser!.id,
+              } as any)
+              .select('id')
+              .single();
+            if (lotErr) throw lotErr;
+
+            const { error: lineErr } = await supabase
+              .from('green_purchase_lines')
+              .insert({
+                purchase_id: purchaseId,
+                lot_identifier: line.lot_identifier.trim(),
+                origin_country: line.origin_country || null,
+                region: line.region.trim() || null,
+                producer: line.producer.trim() || null,
+                variety: line.variety.trim() || null,
+                crop_year: line.crop_year.trim() || null,
+                category: line.category || null,
+                bags: line.bags,
+                bag_size_kg: line.bag_size_kg,
+                price_per_lb_usd: converted ? converted.value : null,
+                warehouse_location: line.warehouse_location.trim() || null,
+                notes: line.notes.trim() || null,
+                lot_id: lot.id,
+                display_order: i,
+              } as any);
+            if (lineErr) throw lineErr;
+            newLotCount++;
+          }
         }
 
-        const vendorAbbr = selectedVendor?.abbreviation || '???';
-        const originCode = line.origin_country || '???';
-        const lotNumber = `${vendorAbbr}-${originCode}-${poNumber}`;
-
-        // Freight in CAD if fx_rate provided, else store USD
-        const freightCad = fxRateNum ? freightAllocated * fxRateNum : freightAllocated;
-
-        const { data: lot, error: lotErr } = await supabase
-          .from('green_lots')
+        return { mode: 'edit' as const, newLotCount };
+      } else {
+        // ── CREATE MODE ──
+        const { data: purchase, error: purchaseErr } = await supabase
+          .from('green_purchases')
           .insert({
-            lot_number: lotNumber,
-            lot_identifier: line.lot_identifier.trim(),
-            contract_id: null as any, // No contract for direct purchases
-            bags_released: line.bags,
-            bag_size_kg: line.bag_size_kg,
-            kg_received: lineKg,
-            kg_on_hand: lineKg,
-            status: 'EN_ROUTE' as any,
-            costing_status: 'INCOMPLETE',
-            expected_delivery_date: null,
-            received_date: null,
-            origin_country: line.origin_country || null,
-            region: line.region.trim() || null,
-            producer: line.producer.trim() || null,
-            variety: line.variety.trim() || null,
-            crop_year: line.crop_year.trim() || null,
-            category: line.category || null,
-            fx_rate: fxRateNum,
-            freight_cad: freightCad,
-            carry_fees_usd: carryAllocated,
-            other_costs_cad: fxRateNum ? otherAllocated * fxRateNum : otherAllocated,
-            warehouse_location: line.warehouse_location.trim() || null,
-            notes_internal: line.notes.trim() || null,
-            po_number: poNumber,
+            ...purchasePayload,
             created_by: authUser!.id,
           } as any)
           .select('id')
           .single();
+        if (purchaseErr) throw purchaseErr;
+        purchaseId = purchase.id;
 
-        if (lotErr) throw lotErr;
+        let lotCount = 0;
 
-        // Convert price to USD/lb for storage
-        const priceAmt = parseFloat(line.price_amount) || 0;
-        const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (!line.lot_identifier.trim() || line.bags <= 0 || line.bag_size_kg <= 0) continue;
 
-        // Insert purchase line linking to both purchase and lot
-        const { error: lineErr } = await supabase
-          .from('green_purchase_lines')
-          .insert({
-            purchase_id: purchaseId,
-            lot_identifier: line.lot_identifier.trim(),
-            origin_country: line.origin_country || null,
-            region: line.region.trim() || null,
-            producer: line.producer.trim() || null,
-            variety: line.variety.trim() || null,
-            crop_year: line.crop_year.trim() || null,
-            category: line.category || null,
-            bags: line.bags,
-            bag_size_kg: line.bag_size_kg,
-            price_per_lb_usd: converted ? converted.value : null,
-            warehouse_location: line.warehouse_location.trim() || null,
-            notes: line.notes.trim() || null,
-            lot_id: lot.id,
-            display_order: i,
-          } as any);
+          const lineKg = line.bags * line.bag_size_kg;
+          const share = totalKgAll > 0 ? lineKg / totalKgAll : 0;
+          const freightAllocated = freightNum * share;
+          const carryAllocated = carryNum * share;
+          const otherAllocated = otherNum * share;
 
-        if (lineErr) throw lineErr;
-        lotCount++;
+          let poNumber = '';
+          try {
+            const { data: seqData, error: seqErr } = await supabase.rpc('nextval_text' as any, { seq_name: 'po_number_seq' });
+            if (seqErr) throw seqErr;
+            const seqVal = typeof seqData === 'number' ? seqData : parseInt(String(seqData));
+            poNumber = `PO-${String(seqVal).padStart(3, '0')}`;
+          } catch {
+            poNumber = `PO-${String(Date.now()).slice(-6)}`;
+          }
+
+          const vendorAbbr = selectedVendor?.abbreviation || '???';
+          const originCode = line.origin_country || '???';
+          const lotNumber = `${vendorAbbr}-${originCode}-${poNumber}`;
+          const freightCad = fxRateNum ? freightAllocated * fxRateNum : freightAllocated;
+
+          const { data: lot, error: lotErr } = await supabase
+            .from('green_lots')
+            .insert({
+              lot_number: lotNumber,
+              lot_identifier: line.lot_identifier.trim(),
+              contract_id: null as any,
+              bags_released: line.bags,
+              bag_size_kg: line.bag_size_kg,
+              kg_received: lineKg,
+              kg_on_hand: lineKg,
+              status: 'EN_ROUTE' as any,
+              costing_status: 'INCOMPLETE',
+              expected_delivery_date: null,
+              received_date: null,
+              origin_country: line.origin_country || null,
+              region: line.region.trim() || null,
+              producer: line.producer.trim() || null,
+              variety: line.variety.trim() || null,
+              crop_year: line.crop_year.trim() || null,
+              category: line.category || null,
+              fx_rate: fxRateNum,
+              freight_cad: freightCad,
+              carry_fees_usd: carryAllocated,
+              other_costs_cad: fxRateNum ? otherAllocated * fxRateNum : otherAllocated,
+              warehouse_location: line.warehouse_location.trim() || null,
+              notes_internal: line.notes.trim() || null,
+              po_number: poNumber,
+              created_by: authUser!.id,
+            } as any)
+            .select('id')
+            .single();
+          if (lotErr) throw lotErr;
+
+          const priceAmt = parseFloat(line.price_amount) || 0;
+          const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
+
+          const { error: lineErr } = await supabase
+            .from('green_purchase_lines')
+            .insert({
+              purchase_id: purchaseId,
+              lot_identifier: line.lot_identifier.trim(),
+              origin_country: line.origin_country || null,
+              region: line.region.trim() || null,
+              producer: line.producer.trim() || null,
+              variety: line.variety.trim() || null,
+              crop_year: line.crop_year.trim() || null,
+              category: line.category || null,
+              bags: line.bags,
+              bag_size_kg: line.bag_size_kg,
+              price_per_lb_usd: converted ? converted.value : null,
+              warehouse_location: line.warehouse_location.trim() || null,
+              notes: line.notes.trim() || null,
+              lot_id: lot.id,
+              display_order: i,
+            } as any);
+          if (lineErr) throw lineErr;
+          lotCount++;
+        }
+
+        return { mode: 'create' as const, newLotCount: lotCount };
       }
-
-      return lotCount;
     },
-    onSuccess: (lotCount) => {
-      toast.success(`Purchase created — ${lotCount} lot${lotCount !== 1 ? 's' : ''} added to inventory`);
+    onSuccess: (result) => {
+      if (result.mode === 'edit') {
+        const msg = result.newLotCount > 0
+          ? `Purchase updated — ${result.newLotCount} new lot${result.newLotCount !== 1 ? 's' : ''} added`
+          : 'Purchase updated';
+        toast.success(msg);
+      } else {
+        toast.success(`Purchase created — ${result.newLotCount} lot${result.newLotCount !== 1 ? 's' : ''} added to inventory`);
+      }
       onOpenChange(false);
       queryClient.invalidateQueries({ queryKey: ['green-purchases'] });
       queryClient.invalidateQueries({ queryKey: ['green-purchase-lines'] });
       queryClient.invalidateQueries({ queryKey: ['green-lots'] });
       queryClient.invalidateQueries({ queryKey: ['green-lots-all'] });
-      navigate('/sourcing/lots');
+      if (!isEdit) navigate('/sourcing/lots');
     },
     onError: (err: any) => {
-      toast.error(`Failed to create purchase: ${err?.message || 'Unknown error'}`);
+      toast.error(`Failed to ${isEdit ? 'update' : 'create'} purchase: ${err?.message || 'Unknown error'}`);
     },
   });
+
+  const titlePrefix = isEdit ? 'Edit Purchase' : 'New Purchase';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {step === 1 ? 'New Purchase — Invoice Details' : `New Purchase — Coffees (${selectedVendor?.name || ''}${invoiceNumber ? ` · ${invoiceNumber}` : ''})`}
+            {step === 1 ? `${titlePrefix} — Invoice Details` : `${titlePrefix} — Coffees (${selectedVendor?.name || ''}${invoiceNumber ? ` · ${invoiceNumber}` : ''})`}
           </DialogTitle>
         </DialogHeader>
 
@@ -1249,8 +1513,8 @@ function CreatePurchaseModal({
 
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
-              <Button disabled={!canCreate || createMutation.isPending} onClick={() => createMutation.mutate()}>
-                {createMutation.isPending ? 'Creating…' : 'Create Purchase & Lots'}
+              <Button disabled={!canCreate || saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+                {saveMutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save Changes' : 'Create Purchase & Lots')}
               </Button>
             </DialogFooter>
           </div>
