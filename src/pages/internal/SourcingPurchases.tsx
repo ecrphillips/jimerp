@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Plus, CalendarIcon, Trash2, ExternalLink } from 'lucide-react';
+import { formatMoney } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { COMMON_ORIGINS, OTHER_ORIGINS, getCountryName } from '@/lib/coffeeOrigins';
@@ -429,6 +430,11 @@ export default function SourcingPurchases() {
               purchase={selectedPurchase}
               lines={selectedLines}
               vendor={allVendorMap[selectedPurchase.vendor_id]}
+              onDeleted={() => {
+                setSelectedId(null);
+                queryClient.invalidateQueries({ queryKey: ['green-purchases'] });
+                queryClient.invalidateQueries({ queryKey: ['green-purchase-lines'] });
+              }}
             />
           )}
         </SheetContent>
@@ -443,13 +449,41 @@ function PurchaseDetailContent({
   purchase,
   lines,
   vendor,
+  onDeleted,
 }: {
   purchase: PurchaseRow;
   lines: PurchaseLine[];
   vendor: Vendor | undefined;
+  onDeleted: () => void;
 }) {
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
+  const [deleting, setDeleting] = useState(false);
   const totalKg = lines.reduce((sum, l) => sum + l.bags * l.bag_size_kg, 0);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const { error: linesErr } = await supabase
+        .from('green_purchase_lines')
+        .delete()
+        .eq('purchase_id', purchase.id);
+      if (linesErr) throw linesErr;
+
+      const { error: purchaseErr } = await supabase
+        .from('green_purchases')
+        .delete()
+        .eq('id', purchase.id);
+      if (purchaseErr) throw purchaseErr;
+
+      toast.success('Purchase deleted');
+      onDeleted();
+    } catch (err: any) {
+      toast.error(`Delete failed: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   // Try to parse structured shared costs from notes
   const sc = parseSharedCostsFromNotes(purchase.notes);
@@ -463,13 +497,11 @@ function PurchaseDetailContent({
     if (sc.fees && sc.fees.amount > 0) costLines.push({ label: 'Fees', amount: sc.fees.amount, currency: sc.fees.currency });
     if (sc.other && sc.other.amount > 0) costLines.push({ label: sc.other.label || 'Other', amount: sc.other.amount, currency: sc.other.currency });
   } else {
-    // Legacy fallback
     if (purchase.shared_carry_usd > 0) costLines.push({ label: 'Carry / Storage', amount: purchase.shared_carry_usd, currency: 'USD' });
     if (purchase.shared_freight_usd > 0) costLines.push({ label: 'Freight', amount: purchase.shared_freight_usd, currency: 'USD' });
     if (purchase.shared_other_usd > 0) costLines.push({ label: purchase.shared_other_label || 'Other', amount: purchase.shared_other_usd, currency: 'USD' });
   }
 
-  // Extract plain notes text (strip JSON if present)
   let displayNotes = purchase.notes || '';
   try {
     const parsed = JSON.parse(displayNotes);
@@ -478,6 +510,33 @@ function PurchaseDetailContent({
 
   return (
     <div className="space-y-6 pt-4">
+      {/* Delete button — ADMIN only */}
+      {isAdmin && (
+        <div className="flex justify-end">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm" className="gap-1.5">
+                <Trash2 className="h-3.5 w-3.5" /> Delete Purchase
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this purchase?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will not delete the lots that were already created from it. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDelete} disabled={deleting}>
+                  {deleting ? 'Deleting…' : 'Delete'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      )}
+
       {/* Header fields */}
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div>
