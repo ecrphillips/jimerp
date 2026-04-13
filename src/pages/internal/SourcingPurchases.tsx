@@ -457,8 +457,10 @@ function PurchaseDetailContent({
   onDeleted: () => void;
 }) {
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isOps } = useAuth();
+  const queryClient = useQueryClient();
   const [deleting, setDeleting] = useState(false);
+  const [addCoffeeOpen, setAddCoffeeOpen] = useState(false);
   const totalKg = lines.reduce((sum, l) => sum + l.bags * l.bag_size_kg, 0);
 
   const handleDelete = async () => {
@@ -585,13 +587,19 @@ function PurchaseDetailContent({
 
       {/* Coffee lines */}
       <div className="border-t pt-4">
-        <h3 className="text-sm font-semibold mb-3">Coffees ({lines.length})</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold">Coffees ({lines.length})</h3>
+          {(isAdmin || isOps) && (
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setAddCoffeeOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> Add Coffee
+            </Button>
+          )}
+        </div>
         <div className="space-y-3">
           {lines.map(line => {
             const lineKg = line.bags * line.bag_size_kg;
             const share = totalKg > 0 ? lineKg / totalKg : 0;
 
-            // Build per-line cost shares from structured data or legacy
             const costShares: { label: string; value: string }[] = [];
             if (sc) {
               if (sc.carry && sc.carry.amount > 0) costShares.push({ label: `Carry (${sc.carry.currency})`, value: `$${(sc.carry.amount * share).toFixed(2)}` });
@@ -648,6 +656,20 @@ function PurchaseDetailContent({
           })}
         </div>
       </div>
+
+      {/* Add Coffee Line Modal */}
+      <AddCoffeeLineModal
+        open={addCoffeeOpen}
+        onOpenChange={setAddCoffeeOpen}
+        purchase={purchase}
+        vendor={vendor}
+        existingLineCount={lines.length}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['green-purchase-lines'] });
+          queryClient.invalidateQueries({ queryKey: ['green-lots'] });
+          queryClient.invalidateQueries({ queryKey: ['green-lots-all'] });
+        }}
+      />
     </div>
   );
 }
@@ -1233,6 +1255,263 @@ function CreatePurchaseModal({
             </DialogFooter>
           </div>
         )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Add Coffee Line Modal ────────────────────────────────
+
+function AddCoffeeLineModal({
+  open,
+  onOpenChange,
+  purchase,
+  vendor,
+  existingLineCount,
+  onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  purchase: PurchaseRow;
+  vendor: Vendor | undefined;
+  existingLineCount: number;
+  onSuccess: () => void;
+}) {
+  const { authUser } = useAuth();
+  const [saving, setSaving] = useState(false);
+
+  const [lotIdentifier, setLotIdentifier] = useState('');
+  const [originCountry, setOriginCountry] = useState('');
+  const [region, setRegion] = useState('');
+  const [producer, setProducer] = useState('');
+  const [variety, setVariety] = useState('');
+  const [cropYear, setCropYear] = useState('');
+  const [category, setCategory] = useState('BLENDER');
+  const [bags, setBags] = useState(0);
+  const [bagSizeKg, setBagSizeKg] = useState(0);
+  const [priceAmount, setPriceAmount] = useState('');
+  const [priceUnit, setPriceUnit] = useState<PriceUnit>('USD_LB');
+  const [warehouseLocation, setWarehouseLocation] = useState('');
+  const [notes, setNotes] = useState('');
+
+  React.useEffect(() => {
+    if (open) {
+      setLotIdentifier('');
+      setOriginCountry('');
+      setRegion('');
+      setProducer('');
+      setVariety('');
+      setCropYear('');
+      setCategory('BLENDER');
+      setBags(0);
+      setBagSizeKg(0);
+      setPriceAmount('');
+      setPriceUnit('USD_LB');
+      setWarehouseLocation('');
+      setNotes('');
+    }
+  }, [open]);
+
+  const fxRateNum = purchase.fx_rate ? Number(purchase.fx_rate) : null;
+  const canSave = lotIdentifier.trim() && bags > 0 && bagSizeKg > 0;
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const lineKg = bags * bagSizeKg;
+      const priceAmt = parseFloat(priceAmount) || 0;
+      const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, priceUnit, fxRateNum) : null;
+
+      // Generate lot number
+      let poNumber = '';
+      try {
+        const { data: seqData, error: seqErr } = await supabase.rpc('nextval_text' as any, { seq_name: 'po_number_seq' });
+        if (seqErr) throw seqErr;
+        const seqVal = typeof seqData === 'number' ? seqData : parseInt(String(seqData));
+        poNumber = `PO-${String(seqVal).padStart(3, '0')}`;
+      } catch {
+        poNumber = `PO-${String(Date.now()).slice(-6)}`;
+      }
+
+      const vendorAbbr = vendor?.abbreviation || '???';
+      const originCode = originCountry || '???';
+      const lotNumber = `${vendorAbbr}-${originCode}-${poNumber}`;
+
+      // Insert lot
+      const { data: lot, error: lotErr } = await supabase
+        .from('green_lots')
+        .insert({
+          lot_number: lotNumber,
+          lot_identifier: lotIdentifier.trim(),
+          contract_id: null as any,
+          bags_released: bags,
+          bag_size_kg: bagSizeKg,
+          kg_received: lineKg,
+          kg_on_hand: lineKg,
+          status: 'EN_ROUTE' as any,
+          costing_status: 'INCOMPLETE',
+          origin_country: originCountry || null,
+          region: region.trim() || null,
+          producer: producer.trim() || null,
+          variety: variety.trim() || null,
+          crop_year: cropYear.trim() || null,
+          category: category || null,
+          fx_rate: fxRateNum,
+          warehouse_location: warehouseLocation.trim() || null,
+          notes_internal: notes.trim() || null,
+          po_number: poNumber,
+          created_by: authUser!.id,
+        } as any)
+        .select('id')
+        .single();
+
+      if (lotErr) throw lotErr;
+
+      // Insert purchase line
+      const { error: lineErr } = await supabase
+        .from('green_purchase_lines')
+        .insert({
+          purchase_id: purchase.id,
+          lot_identifier: lotIdentifier.trim(),
+          origin_country: originCountry || null,
+          region: region.trim() || null,
+          producer: producer.trim() || null,
+          variety: variety.trim() || null,
+          crop_year: cropYear.trim() || null,
+          category: category || null,
+          bags,
+          bag_size_kg: bagSizeKg,
+          price_per_lb_usd: converted ? converted.value : null,
+          warehouse_location: warehouseLocation.trim() || null,
+          notes: notes.trim() || null,
+          lot_id: lot.id,
+          display_order: existingLineCount,
+        } as any);
+
+      if (lineErr) throw lineErr;
+
+      toast.success('Coffee line added — lot created');
+      onOpenChange(false);
+      onSuccess();
+    } catch (err: any) {
+      toast.error(`Failed to add coffee: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Add Coffee Line</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Lot Identifier *</Label>
+              <Input value={lotIdentifier} onChange={e => setLotIdentifier(e.target.value)} placeholder="e.g. Estrellas de Aji" />
+            </div>
+            <div>
+              <Label className="text-xs">Origin Country</Label>
+              <Select value={originCountry} onValueChange={setOriginCountry}>
+                <SelectTrigger><SelectValue placeholder="Select country" /></SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Common Origins</SelectLabel>
+                    {COMMON_ORIGINS.map(c => (
+                      <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>
+                    ))}
+                  </SelectGroup>
+                  <SelectSeparator />
+                  <SelectGroup>
+                    <SelectLabel>Other Origins</SelectLabel>
+                    {OTHER_ORIGINS.map(c => (
+                      <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <Label className="text-xs">Region</Label>
+              <Input value={region} onChange={e => setRegion(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Producer</Label>
+              <Input value={producer} onChange={e => setProducer(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Variety</Label>
+              <Input value={variety} onChange={e => setVariety(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-3">
+            <div>
+              <Label className="text-xs">Crop Year</Label>
+              <Input value={cropYear} onChange={e => setCropYear(e.target.value)} placeholder="e.g. 2024" />
+            </div>
+            <div>
+              <Label className="text-xs">Category</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CATEGORY_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Bags *</Label>
+              <Input type="number" value={bags || ''} onChange={e => setBags(parseInt(e.target.value) || 0)} />
+            </div>
+            <div>
+              <Label className="text-xs">Bag Size (kg) *</Label>
+              <Input type="number" step="0.1" value={bagSizeKg || ''} onChange={e => setBagSizeKg(parseFloat(e.target.value) || 0)} placeholder="e.g. 69" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <Label className="text-xs">Price</Label>
+              <div className="flex gap-1.5">
+                <Input type="number" step="0.0001" value={priceAmount} onChange={e => setPriceAmount(e.target.value)} placeholder="0.0000" className="flex-1" />
+                <Select value={priceUnit} onValueChange={(v: PriceUnit) => setPriceUnit(v)}>
+                  <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {PRICE_UNIT_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {(priceUnit === 'CAD_LB' || priceUnit === 'CAD_KG') && !fxRateNum && parseFloat(priceAmount) > 0 && (
+                <p className="text-xs text-amber-600 mt-1">FX rate not set — CAD price stored unconverted</p>
+              )}
+            </div>
+            <div>
+              <Label className="text-xs">Warehouse</Label>
+              <Input value={warehouseLocation} onChange={e => setWarehouseLocation(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Notes</Label>
+              <Input value={notes} onChange={e => setNotes(e.target.value)} />
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button disabled={!canSave || saving} onClick={handleSave}>
+            {saving ? 'Adding…' : 'Add Coffee & Create Lot'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
