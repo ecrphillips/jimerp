@@ -1652,6 +1652,7 @@ export type Database = {
           other_costs_confirmed_by: string | null
           other_costs_description: string | null
           po_number: string | null
+          purchase_id: string | null
           received_date: string | null
           status: string
           transaction_fees_cad: number | null
@@ -1732,6 +1733,7 @@ export type Database = {
           other_costs_confirmed_by?: string | null
           other_costs_description?: string | null
           po_number?: string | null
+          purchase_id?: string | null
           received_date?: string | null
           status?: string
           transaction_fees_cad?: number | null
@@ -1812,6 +1814,7 @@ export type Database = {
           other_costs_confirmed_by?: string | null
           other_costs_description?: string | null
           po_number?: string | null
+          purchase_id?: string | null
           received_date?: string | null
           status?: string
           transaction_fees_cad?: number | null
@@ -1831,6 +1834,13 @@ export type Database = {
             columns: ["contract_id"]
             isOneToOne: false
             referencedRelation: "green_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "green_lots_purchase_id_fkey"
+            columns: ["purchase_id"]
+            isOneToOne: false
+            referencedRelation: "green_purchases"
             referencedColumns: ["id"]
           },
         ]
