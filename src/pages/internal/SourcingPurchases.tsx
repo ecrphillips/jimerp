@@ -457,8 +457,10 @@ function PurchaseDetailContent({
   onDeleted: () => void;
 }) {
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isOps } = useAuth();
+  const queryClient = useQueryClient();
   const [deleting, setDeleting] = useState(false);
+  const [addCoffeeOpen, setAddCoffeeOpen] = useState(false);
   const totalKg = lines.reduce((sum, l) => sum + l.bags * l.bag_size_kg, 0);
 
   const handleDelete = async () => {
