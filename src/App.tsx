@@ -31,6 +31,7 @@ import SourcingVendors from "@/pages/internal/SourcingVendors";
 import SourcingSamples from "@/pages/internal/SourcingSamples";
 import SourcingContracts from "@/pages/internal/SourcingContracts";
 import SourcingLots from "@/pages/internal/SourcingLots";
+import SourcingPurchases from "@/pages/internal/SourcingPurchases";
 import CoRoastMembers from "@/pages/internal/CoRoastMembers";
 import CoRoastMemberDetail from "@/pages/internal/CoRoastMemberDetail";
 import CoRoastLoringSchedule from "@/pages/internal/CoRoastLoringSchedule";
