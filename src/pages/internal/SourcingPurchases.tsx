@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGr
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import { Plus, CalendarIcon, Trash2, ExternalLink } from 'lucide-react';
+import { Plus, CalendarIcon, Trash2, ExternalLink, Pencil } from 'lucide-react';
 import { formatMoney } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
