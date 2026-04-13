@@ -309,6 +309,7 @@ export default function SourcingPurchases() {
   const navigate = useNavigate();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingPurchase, setEditingPurchase] = useState<PurchaseRow | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Fetch vendors
@@ -387,6 +388,15 @@ export default function SourcingPurchases() {
 
   const selectedPurchase = purchases.find(p => p.id === selectedId) || null;
   const selectedLines = selectedId ? (linesByPurchase[selectedId] || []) : [];
+  const editingLines = editingPurchase ? (linesByPurchase[editingPurchase.id] || []) : [];
+
+  const modalOpen = createOpen || !!editingPurchase;
+  const handleModalClose = (o: boolean) => {
+    if (!o) {
+      setCreateOpen(false);
+      setEditingPurchase(null);
+    }
+  };
 
   return (
     <>
@@ -456,11 +466,13 @@ export default function SourcingPurchases() {
         )}
       </div>
 
-      {/* Create Modal */}
+      {/* Create / Edit Modal */}
       <CreatePurchaseModal
-        open={createOpen}
-        onOpenChange={setCreateOpen}
+        open={modalOpen}
+        onOpenChange={handleModalClose}
         vendors={vendors}
+        existingPurchase={editingPurchase || undefined}
+        existingLines={editingPurchase ? editingLines : undefined}
       />
 
       {/* Detail Sheet */}
@@ -479,6 +491,10 @@ export default function SourcingPurchases() {
                 queryClient.invalidateQueries({ queryKey: ['green-purchases'] });
                 queryClient.invalidateQueries({ queryKey: ['green-purchase-lines'] });
               }}
+              onEdit={() => {
+                setSelectedId(null);
+                setEditingPurchase(selectedPurchase);
+              }}
             />
           )}
         </SheetContent>
@@ -494,11 +510,13 @@ function PurchaseDetailContent({
   lines,
   vendor,
   onDeleted,
+  onEdit,
 }: {
   purchase: PurchaseRow;
   lines: PurchaseLine[];
   vendor: Vendor | undefined;
   onDeleted: () => void;
+  onEdit: () => void;
 }) {
   const navigate = useNavigate();
   const { isAdmin, isOps } = useAuth();
