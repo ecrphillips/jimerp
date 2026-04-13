@@ -241,6 +241,7 @@ function emptyLine(): CoffeeLine {
     lot_id: null,
     purchase_line_id: null,
     importer_payment_terms_days: null,
+    received: true,
   };
 }
 
@@ -262,6 +263,7 @@ interface CoffeeLine {
   lot_id: string | null;
   purchase_line_id: string | null;
   importer_payment_terms_days: number | null;
+  received: boolean;
 }
 
 // Helper to parse original_prices from JSONB notes
@@ -302,6 +304,7 @@ function purchaseLineToCoffeeLine(line: PurchaseLine, originalPrices: OriginalPr
     lot_id: line.lot_id || null,
     purchase_line_id: line.id,
     importer_payment_terms_days: null,
+    received: true,
   };
 }
 
