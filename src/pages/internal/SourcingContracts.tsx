@@ -23,7 +23,8 @@ import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { COFFEE_ORIGIN_COUNTRIES, COMMON_ORIGINS, OTHER_ORIGINS, getCountryName, getCountryDisplayLabel } from '@/lib/coffeeOrigins';
 
 type ContractStatus = 'ACTIVE' | 'DEPLETED' | 'CANCELLED';
-type GreenCategory = 'BLENDER' | 'SINGLE_ORIGIN';
+// NOTE: Existing SINGLE_ORIGIN records remain in the DB but display as "Blender" via fallback. No automated migration needed.
+type GreenCategory = 'BLENDER' | 'SINGLE_ORIGIN' | 'MICRO_LOT' | 'HYPER_PREMIUM';
 type PriceUnit = 'usd_kg' | 'usd_lb' | 'cad_kg';
 
 interface Contract {
@@ -100,7 +101,7 @@ interface ApprovedSample {
   status: string;
 }
 
-const CATEGORY_LABELS: Record<GreenCategory, string> = { BLENDER: 'Blender', SINGLE_ORIGIN: 'Single Origin' };
+const CATEGORY_LABELS: Record<string, string> = { BLENDER: 'Blender', SINGLE_ORIGIN: 'Blender', MICRO_LOT: 'Micro-lot', HYPER_PREMIUM: 'Hyper Premium' };
 const STATUS_LABELS: Record<ContractStatus, string> = { ACTIVE: 'Active', DEPLETED: 'Depleted', CANCELLED: 'Cancelled' };
 const CROP_YEAR_OPTIONS = ['2023', '2023/2024', '2024', '2024/2025', '2025', '2025/2026', '2026', '2026/2027'];
 
@@ -225,7 +226,7 @@ export default function SourcingContracts() {
           ))}
         </div>
         <div className="flex gap-1.5">
-          {(['ALL', 'BLENDER', 'SINGLE_ORIGIN'] as const).map(c => (
+          {(['ALL', 'BLENDER', 'MICRO_LOT', 'HYPER_PREMIUM'] as const).map(c => (
             <Button key={c} variant={categoryFilter === c ? 'default' : 'outline'} size="sm" onClick={() => setCategoryFilter(c)}>
               {c === 'ALL' ? 'All' : CATEGORY_LABELS[c]}
             </Button>
@@ -699,7 +700,8 @@ function ContractDetailPanel({
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="BLENDER">Blender</SelectItem>
-                        <SelectItem value="SINGLE_ORIGIN">Single Origin</SelectItem>
+                        <SelectItem value="MICRO_LOT">Micro-lot</SelectItem>
+                        <SelectItem value="HYPER_PREMIUM">Hyper Premium</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1388,7 +1390,8 @@ function AddContractModal({ open, onOpenChange, vendors }: { open: boolean; onOp
                 <SelectTrigger className={prefilledCls('category')}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="BLENDER">Blender</SelectItem>
-                  <SelectItem value="SINGLE_ORIGIN">Single Origin</SelectItem>
+                  <SelectItem value="MICRO_LOT">Micro-lot</SelectItem>
+                  <SelectItem value="HYPER_PREMIUM">Hyper Premium</SelectItem>
                 </SelectContent>
               </Select>
             </div>
