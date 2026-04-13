@@ -267,6 +267,10 @@ export default function CreateOrderForClient() {
       toast.error('Add at least one product');
       return;
     }
+    if (!workDeadlineAt) {
+      toast.error('Please set a work deadline before submitting');
+      return;
+    }
 
     const missingPrice = lineItems.find((li) => li.price === null);
     if (missingPrice) {
@@ -650,7 +654,7 @@ export default function CreateOrderForClient() {
                   />
                 </div>
                 <div>
-                  <Label>Work Deadline</Label>
+                  <Label>Work Deadline <span className="text-destructive">*</span></Label>
                   <WorkDeadlinePicker
                     value={workDeadlineAt}
                     onChange={setWorkDeadlineAt}
