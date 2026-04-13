@@ -66,7 +66,15 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
   // Step 6: Lifecycle
   const [lifecycle, setLifecycle] = useState<LifecycleType | null>(initialLifecycle ?? null);
   const [lifecycleOverridden, setLifecycleOverridden] = useState(false);
-  
+
+  // Sync lifecycle when modal opens with a new initialLifecycle
+  useEffect(() => {
+    if (open && initialLifecycle) {
+      setLifecycle(initialLifecycle);
+      setLifecycleOverridden(false);
+    }
+  }, [open, initialLifecycle]);
+
   // Queries
   const { data: clients } = useQuery({
     queryKey: ['all-accounts-with-code'],
