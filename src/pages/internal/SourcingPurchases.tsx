@@ -237,6 +237,8 @@ function emptyLine(): CoffeeLine {
     price_unit: 'USD_LB',
     warehouse_location: '',
     notes: '',
+    lot_id: null,
+    purchase_line_id: null,
   };
 }
 
@@ -255,6 +257,48 @@ interface CoffeeLine {
   price_unit: PriceUnit;
   warehouse_location: string;
   notes: string;
+  lot_id: string | null;
+  purchase_line_id: string | null;
+}
+
+// Helper to parse original_prices from JSONB notes
+interface OriginalPrice {
+  lot_identifier: string;
+  price_amount: number;
+  price_unit: PriceUnit;
+}
+
+function parseOriginalPrices(notes: string | null): OriginalPrice[] {
+  if (!notes) return [];
+  try {
+    const parsed = JSON.parse(notes);
+    return parsed?.original_prices || [];
+  } catch {
+    return [];
+  }
+}
+
+function purchaseLineToCoffeeLine(line: PurchaseLine, originalPrices: OriginalPrice[]): CoffeeLine {
+  // Try to find original price for this line
+  const orig = originalPrices.find(op => op.lot_identifier === (line.lot_identifier || ''));
+  return {
+    key: crypto.randomUUID(),
+    lot_identifier: line.lot_identifier || '',
+    origin_country: line.origin_country || '',
+    region: line.region || '',
+    producer: line.producer || '',
+    variety: line.variety || '',
+    crop_year: line.crop_year || '',
+    category: line.category || 'BLENDER',
+    bags: line.bags,
+    bag_size_kg: line.bag_size_kg,
+    price_amount: orig ? String(orig.price_amount) : (line.price_per_lb_usd != null ? String(line.price_per_lb_usd) : ''),
+    price_unit: orig ? orig.price_unit : 'USD_LB',
+    warehouse_location: line.warehouse_location || '',
+    notes: line.notes || '',
+    lot_id: line.lot_id || null,
+    purchase_line_id: line.id,
+  };
 }
 
 // ─── Page Component ────────────────────────────────────────
