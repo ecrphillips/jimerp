@@ -587,13 +587,19 @@ function PurchaseDetailContent({
 
       {/* Coffee lines */}
       <div className="border-t pt-4">
-        <h3 className="text-sm font-semibold mb-3">Coffees ({lines.length})</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold">Coffees ({lines.length})</h3>
+          {(isAdmin || isOps) && (
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setAddCoffeeOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> Add Coffee
+            </Button>
+          )}
+        </div>
         <div className="space-y-3">
           {lines.map(line => {
             const lineKg = line.bags * line.bag_size_kg;
             const share = totalKg > 0 ? lineKg / totalKg : 0;
 
-            // Build per-line cost shares from structured data or legacy
             const costShares: { label: string; value: string }[] = [];
             if (sc) {
               if (sc.carry && sc.carry.amount > 0) costShares.push({ label: `Carry (${sc.carry.currency})`, value: `$${(sc.carry.amount * share).toFixed(2)}` });
@@ -650,6 +656,20 @@ function PurchaseDetailContent({
           })}
         </div>
       </div>
+
+      {/* Add Coffee Line Modal */}
+      <AddCoffeeLineModal
+        open={addCoffeeOpen}
+        onOpenChange={setAddCoffeeOpen}
+        purchase={purchase}
+        vendor={vendor}
+        existingLineCount={lines.length}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['green-purchase-lines'] });
+          queryClient.invalidateQueries({ queryKey: ['green-lots'] });
+          queryClient.invalidateQueries({ queryKey: ['green-lots-all'] });
+        }}
+      />
     </div>
   );
 }
