@@ -54,7 +54,30 @@ export function OrderDeleteModal({
         p_order_id: orderId,
       });
       if (error) throw error;
-      return data as unknown as PreflightData;
+      const result = data as unknown as PreflightData;
+
+      // Fallback: if RPC returns an error (e.g. "Order not found" for SHIPPED orders),
+      // verify the order exists via a direct query and build a minimal preflight object.
+      if (result?.error) {
+        const { data: order, error: orderErr } = await supabase
+          .from('orders')
+          .select('id, order_number, status, order_line_items(count)')
+          .eq('id', orderId)
+          .single();
+        if (!orderErr && order) {
+          return {
+            order_number: order.order_number,
+            order_status: order.status,
+            line_items_count: (order.order_line_items as any)?.[0]?.count ?? 0,
+            ship_picks_count: 0,
+            ship_picks_units: 0,
+            inventory_txns_count: 0,
+            production_plan_count: 0,
+          } as PreflightData;
+        }
+      }
+
+      return result;
     },
     enabled: open,
   });
