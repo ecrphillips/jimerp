@@ -33,12 +33,13 @@ interface RoastGroup {
 interface NewSingleOriginProductModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialLifecycle?: LifecycleType | null;
 }
 
 type RoastGroupMode = 'existing' | 'new';
 type LifecycleType = 'perennial' | 'seasonal';
 
-export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOriginProductModalProps) {
+export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecycle }: NewSingleOriginProductModalProps) {
   const queryClient = useQueryClient();
   
   // Step 1: Client
@@ -63,7 +64,8 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
   const [priceInput, setPriceInput] = useState('');
   
   // Step 6: Lifecycle
-  const [lifecycle, setLifecycle] = useState<LifecycleType | null>(null);
+  const [lifecycle, setLifecycle] = useState<LifecycleType | null>(initialLifecycle ?? null);
+  const [lifecycleOverridden, setLifecycleOverridden] = useState(false);
   
   // Queries
   const { data: clients } = useQuery({
@@ -186,7 +188,8 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
     setFinishedGoodName('');
     setPackagingVariants([]);
     setPriceInput('');
-    setLifecycle(null);
+    setLifecycle(initialLifecycle ?? null);
+    setLifecycleOverridden(false);
   };
   
   // Save mutation
@@ -539,26 +542,43 @@ export function NewSingleOriginProductModal({ open, onOpenChange }: NewSingleOri
           {/* Step 6: Lifecycle */}
           <div>
             <Label>6. Product Lifecycle</Label>
-            <RadioGroup 
-              value={lifecycle ?? ''} 
-              onValueChange={(v) => setLifecycle(v as LifecycleType)}
-              className="flex gap-6 mt-2"
-            >
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="perennial" id="lc-perennial" />
-                <Label htmlFor="lc-perennial" className="font-normal cursor-pointer">
-                  Perennial
-                </Label>
+            {initialLifecycle && !lifecycleOverridden ? (
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-sm">
+                  {lifecycle === 'perennial' ? 'Perennial' : 'One-Off / Seasonal'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setLifecycleOverridden(true)}
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                  Change
+                </button>
               </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="seasonal" id="lc-seasonal" />
-                <Label htmlFor="lc-seasonal" className="font-normal cursor-pointer">
-                  Seasonal
-                </Label>
-              </div>
-            </RadioGroup>
-            {!lifecycle && (
-              <p className="text-xs text-destructive mt-1">Please select a lifecycle</p>
+            ) : (
+              <>
+                <RadioGroup 
+                  value={lifecycle ?? ''} 
+                  onValueChange={(v) => setLifecycle(v as LifecycleType)}
+                  className="flex gap-6 mt-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="perennial" id="lc-perennial" />
+                    <Label htmlFor="lc-perennial" className="font-normal cursor-pointer">
+                      Perennial
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="seasonal" id="lc-seasonal" />
+                    <Label htmlFor="lc-seasonal" className="font-normal cursor-pointer">
+                      Seasonal
+                    </Label>
+                  </div>
+                </RadioGroup>
+                {!lifecycle && (
+                  <p className="text-xs text-destructive mt-1">Please select a lifecycle</p>
+                )}
+              </>
             )}
           </div>
           
