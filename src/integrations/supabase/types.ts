@@ -3401,7 +3401,11 @@ export type Database = {
         | "WIP_ADJUSTMENT"
         | "DECONSTRUCT"
         | "OTHER"
-      green_coffee_category: "BLENDER" | "SINGLE_ORIGIN"
+      green_coffee_category:
+        | "BLENDER"
+        | "SINGLE_ORIGIN"
+        | "MICRO_LOT"
+        | "HYPER_PREMIUM"
       grind_option: "WHOLE_BEAN" | "ESPRESSO" | "FILTER"
       inventory_transaction_type:
         | "ROAST_OUTPUT"
@@ -3629,7 +3633,12 @@ export const Constants = {
         "DECONSTRUCT",
         "OTHER",
       ],
-      green_coffee_category: ["BLENDER", "SINGLE_ORIGIN"],
+      green_coffee_category: [
+        "BLENDER",
+        "SINGLE_ORIGIN",
+        "MICRO_LOT",
+        "HYPER_PREMIUM",
+      ],
       grind_option: ["WHOLE_BEAN", "ESPRESSO", "FILTER"],
       inventory_transaction_type: [
         "ROAST_OUTPUT",

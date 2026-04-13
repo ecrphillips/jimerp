@@ -1,0 +1,2 @@
+ALTER TYPE green_coffee_category ADD VALUE IF NOT EXISTS 'MICRO_LOT';
+ALTER TYPE green_coffee_category ADD VALUE IF NOT EXISTS 'HYPER_PREMIUM';
