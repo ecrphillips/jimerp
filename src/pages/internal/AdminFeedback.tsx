@@ -6,9 +6,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { X } from 'lucide-react';
+import { X, FileText } from 'lucide-react';
+import { toast } from 'sonner';
 
 const STATUS_OPTIONS = ['NEW', 'ACKNOWLEDGED', 'BUILDING', 'DONE', 'WONT_DO'] as const;
 const CATEGORY_OPTIONS = ['BUG', 'UX_IMPROVEMENT', 'FEATURE_REQUEST', 'OTHER'] as const;
@@ -89,6 +91,51 @@ export default function AdminFeedback() {
     setEditStatus(item.status);
     setEditNote(item.admin_note ?? '');
   };
+  const [briefFallbackText, setBriefFallbackText] = useState<string | null>(null);
+
+  const handleBriefMe = async () => {
+    const { data, error } = await supabase
+      .from('feedback_submissions')
+      .select('id, created_at, category, status, message')
+      .not('status', 'in', '("DONE","WONT_DO")')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      toast.error('Failed to load feedback');
+      return;
+    }
+
+    const BRIEF_STATUS_ORDER = ['NEW', 'ACKNOWLEDGED', 'BUILDING'] as const;
+    const BRIEF_STATUS_LABELS: Record<string, string> = { NEW: 'New', ACKNOWLEDGED: 'Acknowledged', BUILDING: 'In Progress' };
+    const BRIEF_CAT_ORDER = ['BUG', 'UX_IMPROVEMENT', 'FEATURE_REQUEST', 'OTHER'] as const;
+    const BRIEF_CAT_LABELS: Record<string, string> = { BUG: 'Bugs', UX_IMPROVEMENT: 'UX Improvements', FEATURE_REQUEST: 'Feature Requests', OTHER: 'Other' };
+
+    let lines: string[] = ['--- JIM Feedback Brief ---', '', `Generated: ${format(new Date(), 'MMM d, yyyy h:mm a')}`, ''];
+
+    for (const st of BRIEF_STATUS_ORDER) {
+      const byStatus = (data ?? []).filter((d: any) => d.status === st);
+      if (byStatus.length === 0) continue;
+      lines.push(`=== ${BRIEF_STATUS_LABELS[st]?.toUpperCase() ?? st} ===`, '');
+      for (const cat of BRIEF_CAT_ORDER) {
+        const byCat = byStatus.filter((d: any) => d.category === cat);
+        if (byCat.length === 0) continue;
+        lines.push(`${BRIEF_CAT_LABELS[cat]} (${byCat.length})`, '');
+        for (const item of byCat) {
+          lines.push(`- ${(item as any).message}`);
+        }
+        lines.push('');
+      }
+    }
+
+    const text = lines.join('\n');
+
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Copied to clipboard');
+    } catch {
+      setBriefFallbackText(text);
+    }
+  };
 
   return (
     <div className="flex h-full">
@@ -115,7 +162,19 @@ export default function AdminFeedback() {
               ))}
             </SelectContent>
           </Select>
+          <Button variant="outline" size="sm" onClick={handleBriefMe}>
+            <FileText className="h-4 w-4 mr-1.5" />
+            Brief Me
+          </Button>
         </div>
+
+        {/* Brief fallback modal */}
+        <Dialog open={!!briefFallbackText} onOpenChange={() => setBriefFallbackText(null)}>
+          <DialogContent className="max-w-lg max-h-[70vh]">
+            <DialogHeader><DialogTitle>Feedback Brief</DialogTitle></DialogHeader>
+            <Textarea readOnly value={briefFallbackText ?? ''} rows={18} className="font-mono text-xs" />
+          </DialogContent>
+        </Dialog>
 
         {/* List */}
         {isLoading ? (
