@@ -1,0 +1,1 @@
+ALTER TABLE public.green_lots ADD COLUMN IF NOT EXISTS purchase_id uuid REFERENCES public.green_purchases(id) ON DELETE SET NULL;
