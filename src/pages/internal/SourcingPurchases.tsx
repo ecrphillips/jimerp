@@ -1071,7 +1071,7 @@ function CreatePurchaseModal({
               lotUpdateFields.freight_confirmed_at = now;
               lotUpdateFields.freight_confirmed_by = authUser!.id;
             }
-            const { error: updateErr } = await supabase.from('green_lots').update(lotUpdateFields).eq('id', lot.id);
+            const { error: updateErr } = await (supabase.from('green_lots' as any) as any).update(lotUpdateFields as any).eq('id', lot.id);
             if (updateErr) throw updateErr;
 
             const { error: lineErr } = await supabase
@@ -1193,7 +1193,7 @@ function CreatePurchaseModal({
             lotUpdateFields2.freight_confirmed_at = now;
             lotUpdateFields2.freight_confirmed_by = authUser!.id;
           }
-          const { error: updateErr2 } = await supabase.from('green_lots').update(lotUpdateFields2).eq('id', lot.id);
+          const { error: updateErr2 } = await (supabase.from('green_lots' as any) as any).update(lotUpdateFields2 as any).eq('id', lot.id);
           if (updateErr2) throw updateErr2;
 
           const { error: lineErr } = await supabase
@@ -1757,7 +1757,7 @@ function AddCoffeeLineModal({
 
       if (lotErr) throw lotErr;
 
-      const { error: updateErr } = await supabase.from('green_lots').update({
+      const { error: updateErr } = await (supabase.from('green_lots' as any) as any).update({
         origin_country: originCountry || null,
         region: region.trim() || null,
         producer: producer.trim() || null,
