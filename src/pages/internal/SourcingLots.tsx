@@ -363,11 +363,14 @@ function LotDetailPanel({
   onClose: () => void;
   contractMap: Record<string, ContractInfo>;
 }) {
-  const { authUser } = useAuth();
+  const { authUser, isInternal } = useAuth();
   const queryClient = useQueryClient();
   const open = !!lotId;
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const isAdmin = authUser?.role === 'ADMIN';
+  const [editingKgOnHand, setEditingKgOnHand] = useState(false);
+  const [draftKgOnHand, setDraftKgOnHand] = useState<string>('');
+  const [draftKgNote, setDraftKgNote] = useState('');
 
   const deleteLotMutation = useMutation({
     mutationFn: async () => {
