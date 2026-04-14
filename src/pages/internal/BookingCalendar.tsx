@@ -43,7 +43,7 @@ export default function BookingCalendar() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_bookings')
-        .select('id, member_id, billing_period_id, booking_date, start_time, end_time, duration_hours, status, recurring_block_id, notes_internal, accounts(account_name)')
+        .select('id, member_id, account_id, billing_period_id, booking_date, start_time, end_time, duration_hours, status, recurring_block_id, notes_internal, accounts(account_name)')
         .order('booking_date');
       if (error) throw error;
       return (data ?? []) as BookingRow[];
