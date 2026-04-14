@@ -941,9 +941,9 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
 const OVERRIDE_FIELDS = [
   { key: 'coroast_custom_base_fee', label: 'Base Fee ($/month)', tierKey: 'base', isDollar: true },
   { key: 'coroast_custom_included_hours', label: 'Included Hours', tierKey: 'includedHours', isDollar: false },
-  { key: 'coroast_custom_overage_rate', label: 'Overage Rate ($/hr)', tierKey: 'overageRate' },
-  { key: 'coroast_custom_included_pallets', label: 'Included Pallets', tierKey: 'includedPallets' },
-  { key: 'coroast_custom_storage_rate', label: 'Storage Rate ($/pallet/mo)', tierKey: 'storageRate' },
+  { key: 'coroast_custom_overage_rate', label: 'Overage Rate ($/hr)', tierKey: 'overageRate', isDollar: true },
+  { key: 'coroast_custom_included_pallets', label: 'Included Pallets', tierKey: 'includedPallets', isDollar: false },
+  { key: 'coroast_custom_storage_rate', label: 'Storage Rate ($/pallet/mo)', tierKey: 'storageRate', isDollar: true },
 ] as const;
 
 const TIER_DEFAULTS: Record<string, Record<string, number>> = {
