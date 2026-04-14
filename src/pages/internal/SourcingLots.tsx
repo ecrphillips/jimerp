@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { formatMoney, formatPerKg } from '@/lib/formatMoney';
+import { formatMoney, formatPerKg, formatPerLb } from '@/lib/formatMoney';
 import { format } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -1122,13 +1122,13 @@ function LotDetailPanel({
                     {liveSummary.fields.map(f => (
                       <div key={f.label} className={`flex justify-between text-sm ${!f.confirmed && f.cad != null && f.cad > 0 ? 'italic text-muted-foreground' : ''}`}>
                         <span>{f.label} {!f.confirmed && f.cad != null && f.cad > 0 && <span className="text-xs">(pending)</span>}</span>
-                        <span className={f.cad == null || f.cad === 0 ? 'text-muted-foreground' : ''}>{f.cad != null && f.cad > 0 ? formatMoney(f.cad) : '—'}</span>
+                        <span className={f.cad == null || f.cad === 0 ? 'text-muted-foreground' : ''}>{f.cad != null && f.cad > 0 ? formatMoney(Math.round((f.cad) * 10000) / 10000) : '—'}</span>
                       </div>
                     ))}
                     <Separator className="my-2" />
                     <div className="flex justify-between text-sm font-medium">
                       <span>Total Costs (CAD)</span>
-                      <span>{formatMoney(liveSummary.totalCosts)}</span>
+                      <span>{formatMoney(Math.round(liveSummary.totalCosts * 10000) / 10000)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>kg Received</span>
@@ -1137,23 +1137,27 @@ function LotDetailPanel({
                     <Separator className="my-2" />
                     <div className="flex justify-between text-base font-bold">
                       <span>Book Value/kg</span>
-                      <span>{liveSummary.bvPerKg != null ? formatPerKg(liveSummary.bvPerKg) : '—'}</span>
+                      <span>{liveSummary.bvPerKg != null ? formatPerKg(Math.round(liveSummary.bvPerKg * 10000) / 10000) : '—'}</span>
                     </div>
+                    {liveSummary.bvPerKg != null && (
+                      <p className="text-xs text-muted-foreground">{formatPerLb(Math.round((liveSummary.bvPerKg / 2.20462) * 10000) / 10000)}</p>
+                    )}
                     {liveSummary.bvPerKg == null && (
                       <p className="text-xs text-muted-foreground">Confirm cost fields above to calculate.</p>
                     )}
                     {liveSummary.financingCostPerKg != null && (
                       <div className="flex justify-between text-sm text-muted-foreground">
                         <span>Financing Cost/kg</span>
-                        <span>{formatPerKg(liveSummary.financingCostPerKg)}</span>
+                        <span>{formatPerKg(Math.round(liveSummary.financingCostPerKg * 10000) / 10000)}</span>
                       </div>
                     )}
                     {liveSummary.mvPerKg != null && (
                       <>
                         <div className="flex justify-between text-base font-bold">
                           <span>Market Value/kg</span>
-                          <span>{formatPerKg(liveSummary.mvPerKg)}</span>
+                          <span>{formatPerKg(Math.round(liveSummary.mvPerKg * 10000) / 10000)}</span>
                         </div>
+                        <p className="text-xs text-muted-foreground">{formatPerLb(Math.round((liveSummary.mvPerKg / 2.20462) * 10000) / 10000)}</p>
                         <p className="text-xs text-muted-foreground italic">Financing estimate: 60 days @ 12% APR — placeholder, to be revisited.</p>
                       </>
                     )}
