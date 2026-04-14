@@ -195,14 +195,17 @@ export default function SourcingLots() {
       if (search) {
         const s = search.toLowerCase();
         const c = contractMap[l.contract_id];
+        const pl = purchaseLineByLotId[l.id];
         if (
           !l.lot_number.toLowerCase().includes(s) &&
-          !(c?.name || '').toLowerCase().includes(s)
+          !(c?.name || '').toLowerCase().includes(s) &&
+          !(pl?.origin_country || '').toLowerCase().includes(s) &&
+          !(pl?.lot_identifier || '').toLowerCase().includes(s)
         ) return false;
       }
       return true;
     });
-  }, [sorted, physicalFilter, costingFilter, search, contractMap]);
+  }, [sorted, physicalFilter, costingFilter, search, contractMap, purchaseLineByLotId]);
 
   return (
     <div className="page-container space-y-6">
