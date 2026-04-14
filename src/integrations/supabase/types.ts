@@ -158,6 +158,11 @@ export type Database = {
           coroast_certified: boolean
           coroast_certified_by: string | null
           coroast_certified_date: string | null
+          coroast_custom_base_fee: number | null
+          coroast_custom_included_hours: number | null
+          coroast_custom_included_pallets: number | null
+          coroast_custom_overage_rate: number | null
+          coroast_custom_storage_rate: number | null
           coroast_joined_date: string | null
           coroast_tier: string | null
           created_at: string
@@ -178,6 +183,11 @@ export type Database = {
           coroast_certified?: boolean
           coroast_certified_by?: string | null
           coroast_certified_date?: string | null
+          coroast_custom_base_fee?: number | null
+          coroast_custom_included_hours?: number | null
+          coroast_custom_included_pallets?: number | null
+          coroast_custom_overage_rate?: number | null
+          coroast_custom_storage_rate?: number | null
           coroast_joined_date?: string | null
           coroast_tier?: string | null
           created_at?: string
@@ -198,6 +208,11 @@ export type Database = {
           coroast_certified?: boolean
           coroast_certified_by?: string | null
           coroast_certified_date?: string | null
+          coroast_custom_base_fee?: number | null
+          coroast_custom_included_hours?: number | null
+          coroast_custom_included_pallets?: number | null
+          coroast_custom_overage_rate?: number | null
+          coroast_custom_storage_rate?: number | null
           coroast_joined_date?: string | null
           coroast_tier?: string | null
           created_at?: string
