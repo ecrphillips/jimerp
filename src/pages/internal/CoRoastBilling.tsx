@@ -233,7 +233,7 @@ export default function CoRoastBilling() {
         };
       });
 
-      const { error } = await supabase.from('coroast_storage_allocations').insert(inserts);
+      const { error } = await supabase.from('coroast_storage_allocations').insert(inserts as any);
       if (error) {
         console.error('Failed to auto-create storage allocations:', error);
         return;
