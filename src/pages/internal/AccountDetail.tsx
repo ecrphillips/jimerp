@@ -939,11 +939,11 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
 
 // ─── Custom Rate Overrides (Admin only, COROASTING accounts) ───
 const OVERRIDE_FIELDS = [
-  { key: 'coroast_custom_base_fee', label: 'Base Fee ($/month)', tierKey: 'base' },
-  { key: 'coroast_custom_included_hours', label: 'Included Hours', tierKey: 'includedHours' },
-  { key: 'coroast_custom_overage_rate', label: 'Overage Rate ($/hr)', tierKey: 'overageRate' },
-  { key: 'coroast_custom_included_pallets', label: 'Included Pallets', tierKey: 'includedPallets' },
-  { key: 'coroast_custom_storage_rate', label: 'Storage Rate ($/pallet/mo)', tierKey: 'storageRate' },
+  { key: 'coroast_custom_base_fee', label: 'Base Fee ($/month)', tierKey: 'base', isDollar: true },
+  { key: 'coroast_custom_included_hours', label: 'Included Hours', tierKey: 'includedHours', isDollar: false },
+  { key: 'coroast_custom_overage_rate', label: 'Overage Rate ($/hr)', tierKey: 'overageRate', isDollar: true },
+  { key: 'coroast_custom_included_pallets', label: 'Included Pallets', tierKey: 'includedPallets', isDollar: false },
+  { key: 'coroast_custom_storage_rate', label: 'Storage Rate ($/pallet/mo)', tierKey: 'storageRate', isDollar: true },
 ] as const;
 
 const TIER_DEFAULTS: Record<string, Record<string, number>> = {
@@ -1016,7 +1016,7 @@ function CustomRateOverrides({ account, refetch }: { account: any; refetch: () =
                 <Input
                   type="number"
                   step="0.01"
-                  placeholder={`Tier default: $${tierDefaults[field.tierKey]}`}
+                  placeholder={`Tier default: ${field.isDollar ? '$' : ''}${tierDefaults[field.tierKey]}`}
                   value={form[field.key] ?? ''}
                   onChange={(e) => setForm({ ...form, [field.key]: e.target.value })}
                 />
@@ -1038,7 +1038,7 @@ function CustomRateOverrides({ account, refetch }: { account: any; refetch: () =
                 <div key={field.key} className="flex justify-between">
                   <span className="text-muted-foreground">{field.label}</span>
                   <span className={val != null ? 'font-medium' : 'text-muted-foreground'}>
-                    {val != null ? `$${Number(val).toLocaleString()}` : `Tier default ($${tierDefaults[field.tierKey]})`}
+                    {val != null ? `${field.isDollar ? '$' : ''}${Number(val).toLocaleString()}` : `Tier default (${field.isDollar ? '$' : ''}${tierDefaults[field.tierKey]})`}
                   </span>
                 </div>
               );
