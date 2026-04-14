@@ -12,6 +12,14 @@ interface LineItem {
   amount: string;
 }
 
+interface ExtraLineItem {
+  description: string;
+  qty: number;
+  unit_price: number;
+  apply_gst: boolean;
+  apply_pst: boolean;
+}
+
 interface QuickBooksInstructionsModalProps {
   open: boolean;
   onClose: () => void;
@@ -31,6 +39,9 @@ interface QuickBooksInstructionsModalProps {
   subtotal: number;
   gst: number;
   grandTotal: number;
+  extras: ExtraLineItem[];
+  extrasGst: number;
+  extrasPst: number;
 }
 
 export default function QuickBooksInstructionsModal({
@@ -52,6 +63,9 @@ export default function QuickBooksInstructionsModal({
   subtotal,
   gst,
   grandTotal,
+  extras,
+  extrasGst,
+  extrasPst,
 }: QuickBooksInstructionsModalProps) {
   const tierLabel = tier === 'GROWTH' ? 'Growth' : tier === 'PRODUCTION' ? 'Production' : tier === 'MEMBER' ? 'Member' : 'Access';
   const invoiceDate = periodEnd;
@@ -89,6 +103,20 @@ export default function QuickBooksInstructionsModal({
       amount: formatMoney(storageCharge),
     });
   }
+
+  // Add extras
+  for (const ex of extras) {
+    const lineTotal = ex.qty * ex.unit_price;
+    lineItems.push({
+      name: `Co-Roasting — Misc: ${ex.description}`,
+      qty: ex.qty.toString(),
+      rate: formatMoney(ex.unit_price),
+      amount: formatMoney(lineTotal),
+    });
+  }
+
+  const pstExtras = extras.filter((ex) => ex.apply_pst);
+  const hasPst = pstExtras.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={() => { /* prevent close on overlay/escape — force explicit choice */ }}>
@@ -148,6 +176,12 @@ export default function QuickBooksInstructionsModal({
                 </TableBody>
               </Table>
             </div>
+            {hasPst && (
+              <p className="text-xs text-muted-foreground mt-2">
+                <span className="font-medium text-foreground">Note:</span> PST (7%) applies to the following items:{' '}
+                {pstExtras.map((ex) => ex.description).join(', ')}. Enter these as separate line items in QBO with PST tax code.
+              </p>
+            )}
           </div>
 
           <Separator />
@@ -156,9 +190,9 @@ export default function QuickBooksInstructionsModal({
           <div>
             <p className="font-semibold text-foreground mb-1">Step 4 — Tax</p>
             <p className="text-muted-foreground">
-              Apply GST (5%) to all line items. Note: confirm PST treatment with your accountant
-              before your first real invoice — current assumption is GST only applies to these
-              service fees in BC.
+              {hasPst
+                ? 'Apply GST (5%) to all line items. Apply PST (7%) to the items noted above.'
+                : 'Apply GST (5%) to all line items. Note: confirm PST treatment with your accountant before your first real invoice — current assumption is GST only applies to these service fees in BC.'}
             </p>
           </div>
 
@@ -175,8 +209,19 @@ export default function QuickBooksInstructionsModal({
               + GST{' '}
               <span className="font-medium text-foreground">
                 ${gst.toFixed(2)}
-              </span>{' '}
-              ={' '}
+              </span>
+              {extrasGst > 0 && (
+                <> (incl. extras GST ${extrasGst.toFixed(2)})</>
+              )}
+              {extrasPst > 0 && (
+                <>
+                  {' '}+ PST{' '}
+                  <span className="font-medium text-foreground">
+                    ${extrasPst.toFixed(2)}
+                  </span>
+                </>
+              )}
+              {' '}={' '}
               <span className="font-medium text-foreground">
                 ${grandTotal.toFixed(2)}
               </span>
