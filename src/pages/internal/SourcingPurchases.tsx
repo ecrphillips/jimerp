@@ -1047,12 +1047,6 @@ function CreatePurchaseModal({
             if (lotErr) throw lotErr;
 
             const lotUpdateFields: any = {
-              origin_country: line.origin_country || null,
-              region: line.region.trim() || null,
-              producer: line.producer.trim() || null,
-              variety: line.variety.trim() || null,
-              crop_year: line.crop_year.trim() || null,
-              price_per_lb_usd: converted ? converted.value : null,
               po_number: poNumber,
               vendor_invoice_number: invoiceNumber.trim() || null,
               importer_payment_terms_days: line.importer_payment_terms_days || null,
@@ -1151,7 +1145,7 @@ function CreatePurchaseModal({
               status: (line.received ? 'RECEIVED' : 'EN_ROUTE') as any,
               costing_status: confirmCosting ? 'COMPLETE' : 'INCOMPLETE',
               expected_delivery_date: null,
-              received_date: null,
+              received_date: line.received ? format(new Date(), 'yyyy-MM-dd') : null,
               fx_rate: fxRateNum,
               freight_cad: freightCad,
               carry_fees_usd: carryAllocated,
@@ -1160,6 +1154,9 @@ function CreatePurchaseModal({
               notes_internal: line.notes.trim() || null,
               created_by: authUser!.id,
               purchase_id: purchaseId,
+              po_number: poNumber,
+              vendor_invoice_number: invoiceNumber.trim() || null,
+              importer_payment_terms_days: line.importer_payment_terms_days || null,
             } as any)
             .select('id')
             .single();
@@ -1167,33 +1164,6 @@ function CreatePurchaseModal({
 
           const priceAmt = parseFloat(line.price_amount) || 0;
           const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
-
-          const lotUpdateFields2: any = {
-            origin_country: line.origin_country || null,
-            region: line.region.trim() || null,
-            producer: line.producer.trim() || null,
-            variety: line.variety.trim() || null,
-            crop_year: line.crop_year.trim() || null,
-            price_per_lb_usd: converted ? converted.value : null,
-            po_number: poNumber,
-            vendor_invoice_number: invoiceNumber.trim() || null,
-            importer_payment_terms_days: line.importer_payment_terms_days || null,
-            received_date: line.received ? format(new Date(), 'yyyy-MM-dd') : null,
-          };
-          if (confirmCosting) {
-            const now = new Date().toISOString();
-            lotUpdateFields2.costing_status = 'COMPLETE';
-            lotUpdateFields2.invoice_confirmed_at = now;
-            lotUpdateFields2.invoice_confirmed_by = authUser!.id;
-            lotUpdateFields2.fx_rate_confirmed_at = now;
-            lotUpdateFields2.fx_rate_confirmed_by = authUser!.id;
-            lotUpdateFields2.carry_fees_confirmed_at = now;
-            lotUpdateFields2.carry_fees_confirmed_by = authUser!.id;
-            lotUpdateFields2.freight_confirmed_at = now;
-            lotUpdateFields2.freight_confirmed_by = authUser!.id;
-          }
-          const { error: updateErr2 } = await (supabase.from('green_lots' as any) as any).update(lotUpdateFields2 as any).eq('id', lot.id);
-          if (updateErr2) throw updateErr2;
 
           const { error: lineErr } = await supabase
             .from('green_purchase_lines')
