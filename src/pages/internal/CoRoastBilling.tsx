@@ -51,12 +51,20 @@ export default function CoRoastBilling() {
     queryKey: ['coroast-billing-members'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('coroast_members')
-        .select('id, business_name, tier, is_active, contact_email, joined_date')
+        .from('accounts')
+        .select('id, account_name, coroast_tier, is_active, billing_email, coroast_joined_date')
+        .contains('programs', ['COROASTING'])
         .eq('is_active', true)
-        .order('business_name');
+        .order('account_name');
       if (error) throw error;
-      return data;
+      return (data ?? []).map((a: any) => ({
+        id: a.id,
+        business_name: a.account_name,
+        tier: a.coroast_tier ?? 'MEMBER',
+        is_active: a.is_active,
+        contact_email: a.billing_email,
+        joined_date: a.coroast_joined_date,
+      }));
     },
   });
 
@@ -78,7 +86,7 @@ export default function CoRoastBilling() {
     if (members.length === 0) return;
 
     const membersWithoutPeriod = members.filter(
-      (m) => !billingPeriods.some((bp) => bp.member_id === m.id)
+      (m) => !billingPeriods.some((bp) => ((bp as any).account_id === m.id || bp.member_id === m.id))
     );
 
     if (membersWithoutPeriod.length === 0) return;
@@ -112,7 +120,7 @@ export default function CoRoastBilling() {
         }
 
         return {
-          member_id: m.id,
+          account_id: m.id,
           period_start: monthStart,
           period_end: monthEnd,
           tier_snapshot: tier,
@@ -159,7 +167,7 @@ export default function CoRoastBilling() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_bookings')
-        .select('id, member_id, booking_date, start_time, end_time, duration_hours, status')
+        .select('id, member_id, account_id, booking_date, start_time, end_time, duration_hours, status')
         .gte('booking_date', periodStart)
         .lte('booking_date', periodEnd)
         .in('status', BILLABLE_STATUSES);
@@ -174,7 +182,7 @@ export default function CoRoastBilling() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_bookings')
-        .select('id, member_id, start_time, end_time, duration_hours, status')
+        .select('id, member_id, account_id, start_time, end_time, duration_hours, status')
         .gte('booking_date', prevPeriodStart)
         .lte('booking_date', prevPeriodEnd)
         .in('status', BILLABLE_STATUSES);
@@ -203,9 +211,9 @@ export default function CoRoastBilling() {
     if (billingPeriods.length === 0 || members.length === 0) return;
 
     const membersWithoutStorage = members.filter((m) => {
-      const bp = billingPeriods.find((bp) => bp.member_id === m.id);
+      const bp = billingPeriods.find((bp) => ((bp as any).account_id === m.id || bp.member_id === m.id));
       if (!bp) return false;
-      return !storageAllocations.some((s) => s.member_id === m.id && s.billing_period_id === bp.id);
+      return !storageAllocations.some((s) => ((s as any).account_id === m.id || s.member_id === m.id) && s.billing_period_id === bp.id);
     });
 
     if (membersWithoutStorage.length === 0) return;
@@ -214,9 +222,9 @@ export default function CoRoastBilling() {
       const inserts = membersWithoutStorage.map((m) => {
         const tier = m.tier ?? 'MEMBER';
         const sRates = STORAGE_RATES[tier] ?? STORAGE_RATES.MEMBER;
-        const bp = billingPeriods.find((bp) => bp.member_id === m.id)!;
+        const bp = billingPeriods.find((bp) => ((bp as any).account_id === m.id || bp.member_id === m.id))!;
         return {
-          member_id: m.id,
+          account_id: m.id,
           billing_period_id: bp.id,
           included_pallets: sRates.includedPallets,
           paid_pallets: 0,
@@ -262,7 +270,7 @@ export default function CoRoastBilling() {
     const map = new Map<string, number>();
     for (const bk of bookings) {
       const hours = calcBookingHours(bk);
-      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + hours);
+      map.set(((bk as any).account_id ?? bk.member_id), (map.get(((bk as any).account_id ?? bk.member_id)) ?? 0) + hours);
     }
     return map;
   }, [bookings]);
@@ -271,7 +279,7 @@ export default function CoRoastBilling() {
     const map = new Map<string, number>();
     for (const bk of prevBookings) {
       const hours = calcBookingHours(bk as any);
-      map.set(bk.member_id, (map.get(bk.member_id) ?? 0) + hours);
+      map.set(((bk as any).account_id ?? bk.member_id), (map.get(((bk as any).account_id ?? bk.member_id)) ?? 0) + hours);
     }
     return map;
   }, [prevBookings]);
@@ -280,7 +288,7 @@ export default function CoRoastBilling() {
     return members.map((m) => {
       const tier = m.tier ?? 'MEMBER';
       const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
-      const bp = billingPeriods.find((bp) => bp.member_id === m.id);
+      const bp = billingPeriods.find((bp) => ((bp as any).account_id === m.id || bp.member_id === m.id));
 
       // Use prorated base fee if available, otherwise full rate
       const proratedBaseFee = bp ? (bp as any).prorated_base_fee as number | null : null;
@@ -290,7 +298,7 @@ export default function CoRoastBilling() {
       const isClosed = bp ? !!(bp as any).is_closed : periodIsClosed;
 
       // For closed periods with an invoice, use snapshotted values
-      const invoice = bp ? invoices.find((inv: any) => inv.member_id === m.id && inv.billing_period_id === bp.id) : null;
+      const invoice = bp ? invoices.find((inv: any) => (inv.account_id === m.id || inv.member_id === m.id) && inv.billing_period_id === bp.id) : null;
 
       let usedHours: number;
       let overageHours: number;
@@ -308,7 +316,7 @@ export default function CoRoastBilling() {
         overageCharge = overageHours * rates.overageRate;
       }
 
-      const storage = storageAllocations.find((s) => s.member_id === m.id);
+      const storage = storageAllocations.find((s) => ((s as any).account_id === m.id || s.member_id === m.id));
       const includedPallets = storage?.included_pallets ?? 0;
       const paidPallets = storage?.paid_pallets ?? 0;
       const palletRate = Number(storage?.rate_per_add_pallet ?? 0);
@@ -369,7 +377,7 @@ export default function CoRoastBilling() {
     mutationFn: async (data: (typeof memberBillingData)[number]) => {
       if (!data.bp) throw new Error('No billing period found for this member');
       const { error } = await supabase.from('coroast_invoices').insert({
-        member_id: data.member.id,
+        account_id: data.member.id,
         billing_period_id: data.bp.id,
         period_start: periodStart,
         period_end: periodEnd,
