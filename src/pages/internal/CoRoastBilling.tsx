@@ -532,7 +532,7 @@ export default function CoRoastBilling() {
   });
 
 
-    setAddingForMember(null);
+    function resetAddForm() {
     setNewDescription('');
     setNewQty('1');
     setNewUnitPrice('');
