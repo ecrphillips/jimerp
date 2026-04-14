@@ -514,7 +514,24 @@ export default function CoRoastBilling() {
     onError: (err: Error) => toast.error(err.message),
   });
 
-  function resetAddForm() {
+  const resetPeriodMutation = useMutation({
+    mutationFn: async (periodId: string) => {
+      const { error } = await (supabase.from('coroast_billing_periods') as any).delete().eq('id', periodId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Billing period reset — recalculating…');
+      setResetConfirmId(null);
+      refetchPeriods();
+      queryClient.invalidateQueries({ queryKey: ['coroast-billing-extras', selectedMonth] });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to reset billing period');
+      setResetConfirmId(null);
+    },
+  });
+
+
     setAddingForMember(null);
     setNewDescription('');
     setNewQty('1');
