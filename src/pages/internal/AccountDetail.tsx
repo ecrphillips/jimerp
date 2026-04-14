@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -931,6 +931,8 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
           <p className="text-sm text-muted-foreground">Booking history and billing will display here.</p>
         </CardContent>
       </Card>
+
+      <CustomRateOverrides account={account} refetch={refetch} />
     </div>
   );
 }
