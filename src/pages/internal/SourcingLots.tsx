@@ -292,7 +292,7 @@ export default function SourcingLots() {
         </TabsContent>
       </Tabs>
 
-      <LotDetailPanel lotId={selectedLotId} onClose={() => setSelectedLotId(null)} contractMap={contractMap} />
+      <LotDetailPanel lotId={selectedLotId} onClose={() => setSelectedLotId(null)} contractMap={contractMap} purchaseLineByLotId={purchaseLineByLotId} />
     </div>
   );
 }
