@@ -162,6 +162,22 @@ export default function SourcingLots() {
   });
   const contractMap = useMemo(() => Object.fromEntries(contracts.map(c => [c.id, c])), [contracts]);
 
+  const { data: purchaseLines = [] } = useQuery({
+    queryKey: ['green-purchase-lines-for-lots'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('green_purchase_lines')
+        .select('*');
+      if (error) throw error;
+      return (data ?? []) as PurchaseLine[];
+    },
+  });
+
+  const purchaseLineByLotId = useMemo(
+    () => Object.fromEntries(purchaseLines.filter(pl => pl.lot_id).map(pl => [pl.lot_id!, pl])),
+    [purchaseLines]
+  );
+
   const sorted = useMemo(() => {
     return [...lots].sort((a, b) => {
       if (a.received_date && b.received_date) return b.received_date.localeCompare(a.received_date);
