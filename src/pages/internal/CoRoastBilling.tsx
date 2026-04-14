@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { CheckCircle2, TrendingUp, Lock, Trash2, Plus } from 'lucide-react';
+import { CheckCircle2, TrendingUp, Lock, Trash2, Plus, RotateCcw } from 'lucide-react';
 import { format, endOfMonth, subMonths, addMonths, startOfMonth, getDaysInMonth, isAfter } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -50,6 +50,7 @@ export default function CoRoastBilling() {
   const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
   const [modalData, setModalData] = useState<any>(null);
   const [undoInvoiceId, setUndoInvoiceId] = useState<string | null>(null);
+  const [resetConfirmId, setResetConfirmId] = useState<string | null>(null);
 
   // Inline add-charge form state per member
   const [addingForMember, setAddingForMember] = useState<string | null>(null);
@@ -513,8 +514,25 @@ export default function CoRoastBilling() {
     onError: (err: Error) => toast.error(err.message),
   });
 
-  function resetAddForm() {
-    setAddingForMember(null);
+  const resetPeriodMutation = useMutation({
+    mutationFn: async (periodId: string) => {
+      const { error } = await (supabase.from('coroast_billing_periods') as any).delete().eq('id', periodId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Billing period reset — recalculating…');
+      setResetConfirmId(null);
+      refetchPeriods();
+      queryClient.invalidateQueries({ queryKey: ['coroast-billing-extras', selectedMonth] });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to reset billing period');
+      setResetConfirmId(null);
+    },
+  });
+
+
+    function resetAddForm() {
     setNewDescription('');
     setNewQty('1');
     setNewUnitPrice('');
@@ -631,9 +649,43 @@ export default function CoRoastBilling() {
                       )}
                     </div>
                   ) : (
-                    <Button size="sm" onClick={() => setModalData(d)} disabled={!d.bp}>
-                      Record Invoice
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={() => setModalData(d)} disabled={!d.bp}>
+                        Record Invoice
+                      </Button>
+                      {authUser?.role === 'ADMIN' && d.bp && !d.invoice && (
+                        resetConfirmId === d.bp.id ? (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-7 text-xs"
+                              onClick={() => resetPeriodMutation.mutate(d.bp!.id)}
+                              disabled={resetPeriodMutation.isPending}
+                            >
+                              {resetPeriodMutation.isPending ? 'Resetting…' : 'Confirm Reset?'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs"
+                              onClick={() => setResetConfirmId(null)}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2"
+                            onClick={() => setResetConfirmId(d.bp!.id)}
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          </Button>
+                        )
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
