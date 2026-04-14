@@ -393,10 +393,12 @@ function LotDetailPanel({
   lotId,
   onClose,
   contractMap,
+  purchaseLineByLotId,
 }: {
   lotId: string | null;
   onClose: () => void;
   contractMap: Record<string, ContractInfo>;
+  purchaseLineByLotId: Record<string, PurchaseLine>;
 }) {
   const { authUser, isInternal } = useAuth();
   const queryClient = useQueryClient();
@@ -432,6 +434,15 @@ function LotDetailPanel({
   });
 
   const contract = lot ? contractMap[lot.contract_id] : null;
+  const purchaseLine = lot?.purchase_id ? purchaseLineByLotId[lot.id] : null;
+  const info = {
+    origin: purchaseLine?.origin_country ?? contract?.origin ?? null,
+    region: purchaseLine?.region ?? contract?.region ?? null,
+    producer: purchaseLine?.producer ?? contract?.producer ?? null,
+    variety: purchaseLine?.variety ?? contract?.variety ?? null,
+    crop_year: purchaseLine?.crop_year ?? contract?.crop_year ?? null,
+    category: purchaseLine?.category ?? contract?.category ?? null,
+  };
   const kgReceived = lot ? lot.bags_released * lot.bag_size_kg : 0;
 
   // Roast group links
