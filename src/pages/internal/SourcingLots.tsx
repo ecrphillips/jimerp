@@ -915,12 +915,12 @@ function LotDetailPanel({
               <Separator className="my-2" />
 
               <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                <div><span className="text-muted-foreground">Contract:</span> {contract?.name || '—'}</div>
-                <div><span className="text-muted-foreground">Origin:</span> {contract?.origin || '—'}</div>
-                <div><span className="text-muted-foreground">Region:</span> {contract?.region || '—'}</div>
-                <div><span className="text-muted-foreground">Producer:</span> {contract?.producer || '—'}</div>
-                <div><span className="text-muted-foreground">Variety:</span> {contract?.variety || '—'}</div>
-                <div><span className="text-muted-foreground">Crop Year:</span> {contract?.crop_year || '—'}</div>
+                <div><span className="text-muted-foreground">Source:</span> {contract ? contract.name : lot.purchase_id ? 'Purchase' : '—'}</div>
+                <div><span className="text-muted-foreground">Origin:</span> {info.origin || '—'}</div>
+                <div><span className="text-muted-foreground">Region:</span> {info.region || '—'}</div>
+                <div><span className="text-muted-foreground">Producer:</span> {info.producer || '—'}</div>
+                <div><span className="text-muted-foreground">Variety:</span> {info.variety || '—'}</div>
+                <div><span className="text-muted-foreground">Crop Year:</span> {info.crop_year || '—'}</div>
                 <div><span className="text-muted-foreground">Warehouse:</span> {lot.warehouse_location || '—'}</div>
                 <div><span className="text-muted-foreground">Bags:</span> {lot.bags_released}</div>
                 <div><span className="text-muted-foreground">Bag Size:</span> {lot.bag_size_kg} kg</div>
