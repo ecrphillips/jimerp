@@ -26,6 +26,7 @@ interface LotRow {
   id: string;
   lot_number: string;
   contract_id: string;
+  purchase_id: string | null;
   bags_released: number;
   bag_size_kg: number;
   kg_received: number | null;
@@ -76,6 +77,19 @@ interface LotRow {
   // timestamps
   created_at: string;
   updated_at: string;
+}
+
+interface PurchaseLine {
+  id: string;
+  purchase_id: string;
+  lot_id: string | null;
+  origin_country: string | null;
+  region: string | null;
+  producer: string | null;
+  variety: string | null;
+  crop_year: string | null;
+  category: string | null;
+  lot_identifier: string | null;
 }
 
 interface ContractInfo {
