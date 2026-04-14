@@ -23,11 +23,18 @@ export default function BookingCalendar() {
     queryKey: ['booking-calendar', 'members'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('coroast_members')
-        .select('id, business_name, tier, is_active')
-        .order('business_name');
+        .from('accounts')
+        .select('id, account_name, coroast_tier, is_active')
+        .contains('programs', ['CO_ROASTING'])
+        .eq('is_active', true)
+        .order('account_name');
       if (error) throw error;
-      return (data ?? []) as MemberRow[];
+      return (data ?? []).map(a => ({
+        id: a.id,
+        business_name: a.account_name,
+        tier: (a.coroast_tier ?? 'MEMBER') as any,
+        is_active: a.is_active,
+      })) as MemberRow[];
     },
   });
 
@@ -36,7 +43,7 @@ export default function BookingCalendar() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_bookings')
-        .select('id, member_id, billing_period_id, booking_date, start_time, end_time, duration_hours, status, recurring_block_id, notes_internal, coroast_members(business_name)')
+        .select('id, member_id, billing_period_id, booking_date, start_time, end_time, duration_hours, status, recurring_block_id, notes_internal, accounts(account_name)')
         .order('booking_date');
       if (error) throw error;
       return (data ?? []) as BookingRow[];

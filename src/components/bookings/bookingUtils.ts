@@ -21,7 +21,7 @@ export interface BookingRow {
   status: string;
   recurring_block_id: string | null;
   notes_internal: string | null;
-  coroast_members: { business_name: string } | null;
+  accounts: { account_name: string } | null;
 }
 
 export interface BlockRow {
@@ -91,7 +91,7 @@ export function checkOverlap(
     const bStart = timeToMinutes(bk.start_time);
     const bEnd = timeToMinutes(bk.end_time);
     if (startMin < bEnd && endMin > bStart) {
-      return `Conflicts with existing booking for ${bk.coroast_members?.business_name ?? 'a member'} (${formatTime12(bk.start_time)} – ${formatTime12(bk.end_time)})`;
+      return `Conflicts with existing booking for ${bk.accounts?.account_name ?? 'a member'} (${formatTime12(bk.start_time)} – ${formatTime12(bk.end_time)})`;
     }
   }
 
