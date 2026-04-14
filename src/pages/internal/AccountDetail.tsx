@@ -937,6 +937,119 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
   );
 }
 
+// ─── Custom Rate Overrides (Admin only, COROASTING accounts) ───
+const OVERRIDE_FIELDS = [
+  { key: 'coroast_custom_base_fee', label: 'Base Fee ($/month)', tierKey: 'base' },
+  { key: 'coroast_custom_included_hours', label: 'Included Hours', tierKey: 'includedHours' },
+  { key: 'coroast_custom_overage_rate', label: 'Overage Rate ($/hr)', tierKey: 'overageRate' },
+  { key: 'coroast_custom_included_pallets', label: 'Included Pallets', tierKey: 'includedPallets' },
+  { key: 'coroast_custom_storage_rate', label: 'Storage Rate ($/pallet/mo)', tierKey: 'storageRate' },
+] as const;
+
+const TIER_DEFAULTS: Record<string, Record<string, number>> = {
+  MEMBER: { base: 399, includedHours: 3, overageRate: 160, includedPallets: 0, storageRate: 175 },
+  GROWTH: { base: 859, includedHours: 7, overageRate: 145, includedPallets: 1, storageRate: 175 },
+  PRODUCTION: { base: 1399, includedHours: 12, overageRate: 130, includedPallets: 2, storageRate: 175 },
+};
+
+function CustomRateOverrides({ account, refetch }: { account: any; refetch: () => void }) {
+  const { authUser } = useAuth();
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<Record<string, string>>({});
+
+  const isAdmin = authUser?.role === 'ADMIN';
+  const hasCoroasting = account.programs?.includes('COROASTING');
+
+  if (!isAdmin || !hasCoroasting) return null;
+
+  const tier = account.coroast_tier ?? 'MEMBER';
+  const tierDefaults = TIER_DEFAULTS[tier] ?? TIER_DEFAULTS.MEMBER;
+
+  const startEdit = () => {
+    const f: Record<string, string> = {};
+    for (const field of OVERRIDE_FIELDS) {
+      const val = account[field.key];
+      f[field.key] = val != null ? String(val) : '';
+    }
+    setForm(f);
+    setEditing(true);
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const payload: Record<string, number | null> = {};
+      for (const field of OVERRIDE_FIELDS) {
+        const raw = form[field.key]?.trim();
+        payload[field.key] = raw ? Number(raw) : null;
+      }
+      const { error } = await supabase.from('accounts').update(payload as any).eq('id', account.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['account-detail'] });
+      toast.success('Rate overrides saved');
+      setEditing(false);
+      refetch();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm">Custom Rate Overrides</CardTitle>
+          {!editing && (
+            <Button variant="ghost" size="sm" onClick={startEdit}>
+              <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {editing ? (
+          <>
+            {OVERRIDE_FIELDS.map((field) => (
+              <div key={field.key}>
+                <Label className="text-xs">{field.label}</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder={`Tier default: $${tierDefaults[field.tierKey]}`}
+                  value={form[field.key] ?? ''}
+                  onChange={(e) => setForm({ ...form, [field.key]: e.target.value })}
+                />
+              </div>
+            ))}
+            <p className="text-xs text-muted-foreground">Leave blank to use the tier default.</p>
+            <div className="flex gap-2 pt-1">
+              <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? 'Saving…' : 'Save Overrides'}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-1 text-sm">
+            {OVERRIDE_FIELDS.map((field) => {
+              const val = account[field.key];
+              return (
+                <div key={field.key} className="flex justify-between">
+                  <span className="text-muted-foreground">{field.label}</span>
+                  <span className={val != null ? 'font-medium' : 'text-muted-foreground'}>
+                    {val != null ? `$${Number(val).toLocaleString()}` : `Tier default ($${tierDefaults[field.tierKey]})`}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Main Detail Page ──────────────────────────────────────────
 export default function AccountDetail() {
   const { id } = useParams<{ id: string }>();
