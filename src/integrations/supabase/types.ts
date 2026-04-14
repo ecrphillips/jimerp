@@ -449,6 +449,53 @@ export type Database = {
         }
         Relationships: []
       }
+      coroast_billing_extras: {
+        Row: {
+          apply_gst: boolean
+          apply_pst: boolean
+          billing_period_id: string
+          created_at: string
+          created_by: string | null
+          description: string
+          id: string
+          qty: number
+          unit_price: number
+          updated_at: string
+        }
+        Insert: {
+          apply_gst?: boolean
+          apply_pst?: boolean
+          billing_period_id: string
+          created_at?: string
+          created_by?: string | null
+          description: string
+          id?: string
+          qty?: number
+          unit_price: number
+          updated_at?: string
+        }
+        Update: {
+          apply_gst?: boolean
+          apply_pst?: boolean
+          billing_period_id?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          id?: string
+          qty?: number
+          unit_price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_billing_extras_billing_period_id_fkey"
+            columns: ["billing_period_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_billing_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coroast_billing_periods: {
         Row: {
           account_id: string | null

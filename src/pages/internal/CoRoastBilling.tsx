@@ -4,19 +4,23 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { CheckCircle2, TrendingUp, Lock } from 'lucide-react';
+import { CheckCircle2, TrendingUp, Lock, Trash2, Plus } from 'lucide-react';
 import { format, endOfMonth, subMonths, addMonths, startOfMonth, getDaysInMonth, isAfter } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { TIER_RATES, STORAGE_RATES, timeToMinutes } from '@/components/bookings/bookingUtils';
 import { resolveAccountRates } from '@/components/bookings/resolveRates';
+import { useAuth } from '@/contexts/AuthContext';
 import QuickBooksInstructionsModal from '@/components/coroast/QuickBooksInstructionsModal';
 
 const BILLABLE_STATUSES = ['CONFIRMED', 'COMPLETED', 'NO_SHOW'] as const;
 type BillableStatus = (typeof BILLABLE_STATUSES)[number];
 const GST_RATE = 0.05;
+const PST_RATE = 0.07;
 
 function buildMonthOptions() {
   const opts: { value: string; label: string }[] = [];
@@ -29,12 +33,31 @@ function buildMonthOptions() {
   return opts;
 }
 
+interface ExtraRow {
+  id: string;
+  billing_period_id: string;
+  description: string;
+  qty: number;
+  unit_price: number;
+  apply_gst: boolean;
+  apply_pst: boolean;
+}
+
 export default function CoRoastBilling() {
   const queryClient = useQueryClient();
+  const { authUser } = useAuth();
   const monthOptions = useMemo(() => buildMonthOptions(), []);
   const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
   const [modalData, setModalData] = useState<any>(null);
   const [undoInvoiceId, setUndoInvoiceId] = useState<string | null>(null);
+
+  // Inline add-charge form state per member
+  const [addingForMember, setAddingForMember] = useState<string | null>(null);
+  const [newDescription, setNewDescription] = useState('');
+  const [newQty, setNewQty] = useState('1');
+  const [newUnitPrice, setNewUnitPrice] = useState('');
+  const [newApplyGst, setNewApplyGst] = useState(true);
+  const [newApplyPst, setNewApplyPst] = useState(false);
 
   const [selYear, selMonthNum] = selectedMonth.split('-').map(Number);
   const selectedDate = new Date(selYear, selMonthNum - 1, 1);
@@ -261,6 +284,23 @@ export default function CoRoastBilling() {
     enabled: billingPeriods.length > 0,
   });
 
+  // Fetch extras for billing periods
+  const { data: allExtras = [] } = useQuery({
+    queryKey: ['coroast-billing-extras', selectedMonth],
+    queryFn: async () => {
+      const bpIds = billingPeriods.map((bp) => bp.id);
+      if (bpIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from('coroast_billing_extras')
+        .select('id, billing_period_id, description, qty, unit_price, apply_gst, apply_pst')
+        .in('billing_period_id', bpIds)
+        .order('created_at');
+      if (error) throw error;
+      return (data ?? []) as ExtraRow[];
+    },
+    enabled: billingPeriods.length > 0,
+  });
+
   function calcBookingHours(bk: { duration_hours: number | null; start_time: string; end_time: string }) {
     const dh = Number(bk.duration_hours);
     if (!isNaN(dh) && dh > 0) return dh;
@@ -324,9 +364,22 @@ export default function CoRoastBilling() {
       const palletRate = Number(storage?.rate_per_add_pallet ?? 0);
       const storageCharge = paidPallets * palletRate;
 
-      const subtotal = baseFee + overageCharge + storageCharge;
-      const gst = subtotal * GST_RATE;
-      const grandTotal = subtotal + gst;
+      // Extras for this member's billing period
+      const memberExtras = bp ? allExtras.filter((ex) => ex.billing_period_id === bp.id) : [];
+      let extrasSubtotal = 0;
+      let extrasGst = 0;
+      let extrasPst = 0;
+      for (const ex of memberExtras) {
+        const lineTotal = Number(ex.qty) * Number(ex.unit_price);
+        extrasSubtotal += lineTotal;
+        if (ex.apply_gst) extrasGst += lineTotal * GST_RATE;
+        if (ex.apply_pst) extrasPst += lineTotal * PST_RATE;
+      }
+
+      const coreSubtotal = baseFee + overageCharge + storageCharge;
+      const subtotal = coreSubtotal + extrasSubtotal;
+      const gst = coreSubtotal * GST_RATE + extrasGst;
+      const grandTotal = subtotal + gst + extrasPst;
 
       const prevUsed = prevMemberHoursUsed.get(m.id) ?? 0;
       const nudgeMemberToGrowth = tier === 'MEMBER' && usedHours > 6 && prevUsed > 6;
@@ -350,6 +403,10 @@ export default function CoRoastBilling() {
         paidPallets,
         palletRate,
         storageCharge,
+        extras: memberExtras,
+        extrasSubtotal,
+        extrasGst,
+        extrasPst,
         subtotal,
         gst,
         grandTotal,
@@ -360,19 +417,20 @@ export default function CoRoastBilling() {
         contactEmail: (m as any).contact_email ?? null,
       };
     });
-  }, [members, billingPeriods, memberHoursUsed, prevMemberHoursUsed, storageAllocations, invoices, periodIsClosed]);
+  }, [members, billingPeriods, memberHoursUsed, prevMemberHoursUsed, storageAllocations, invoices, periodIsClosed, allExtras]);
 
   const totals = useMemo(() => {
-    let baseFees = 0, overageCharges = 0, storageCharges = 0, subtotal = 0, gst = 0, grandTotal = 0;
+    let baseFees = 0, overageCharges = 0, storageCharges = 0, extrasTotal = 0, subtotal = 0, gst = 0, grandTotal = 0;
     for (const d of memberBillingData) {
       baseFees += d.baseFee;
       overageCharges += d.overageCharge;
       storageCharges += d.storageCharge;
+      extrasTotal += d.extrasSubtotal;
       subtotal += d.subtotal;
       gst += d.gst;
       grandTotal += d.grandTotal;
     }
-    return { baseFees, overageCharges, storageCharges, subtotal, gst, grandTotal };
+    return { baseFees, overageCharges, storageCharges, extrasTotal, subtotal, gst, grandTotal };
   }, [memberBillingData]);
 
   const markReadyMutation = useMutation({
@@ -421,6 +479,53 @@ export default function CoRoastBilling() {
       setUndoInvoiceId(null);
     },
   });
+
+  const addExtraMutation = useMutation({
+    mutationFn: async (payload: { billing_period_id: string; description: string; qty: number; unit_price: number; apply_gst: boolean; apply_pst: boolean }) => {
+      const { error } = await supabase.from('coroast_billing_extras').insert({
+        ...payload,
+        created_by: authUser?.id ?? null,
+      } as any);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Extra charge added');
+      queryClient.invalidateQueries({ queryKey: ['coroast-billing-extras', selectedMonth] });
+      resetAddForm();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const deleteExtraMutation = useMutation({
+    mutationFn: async (extraId: string) => {
+      const { error } = await supabase.from('coroast_billing_extras').delete().eq('id', extraId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Extra charge removed');
+      queryClient.invalidateQueries({ queryKey: ['coroast-billing-extras', selectedMonth] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  function resetAddForm() {
+    setAddingForMember(null);
+    setNewDescription('');
+    setNewQty('1');
+    setNewUnitPrice('');
+    setNewApplyGst(true);
+    setNewApplyPst(false);
+  }
+
+  function handleSaveExtra(bpId: string) {
+    const qty = Number(newQty);
+    const unitPrice = Number(newUnitPrice);
+    if (!newDescription.trim() || isNaN(qty) || qty <= 0 || isNaN(unitPrice)) {
+      toast.error('Please fill in all fields correctly');
+      return;
+    }
+    addExtraMutation.mutate({ billing_period_id: bpId, description: newDescription.trim(), qty, unit_price: unitPrice, apply_gst: newApplyGst, apply_pst: newApplyPst });
+  }
 
   const fmt = (n: number) => n.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -578,6 +683,135 @@ export default function CoRoastBilling() {
                 </div>
               </div>
 
+              {/* Extras section */}
+              {(d.extras.length > 0 || (!d.isClosed && !d.invoice)) && (
+                <div className="mt-3">
+                  <Separator className="mb-3" />
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Extras</p>
+
+                  {d.extras.length > 0 && (
+                    <div className="space-y-1 mb-2">
+                      {d.extras.map((ex) => {
+                        const lineTotal = Number(ex.qty) * Number(ex.unit_price);
+                        return (
+                          <div key={ex.id} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <span>{ex.description}</span>
+                              <span className="text-muted-foreground text-xs">
+                                {Number(ex.qty)} × ${fmt(Number(ex.unit_price))} = ${fmt(lineTotal)}
+                              </span>
+                              {ex.apply_gst && (
+                                <Badge variant="outline" className="text-[10px] px-1 py-0">GST</Badge>
+                              )}
+                              {ex.apply_pst && (
+                                <Badge variant="outline" className="text-[10px] px-1 py-0">PST</Badge>
+                              )}
+                            </div>
+                            {!d.isClosed && !d.invoice && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                onClick={() => deleteExtraMutation.mutate(ex.id)}
+                                disabled={deleteExtraMutation.isPending}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Inline add form */}
+                  {!d.isClosed && !d.invoice && d.bp && (
+                    <>
+                      {addingForMember === d.member.id ? (
+                        <div className="space-y-2 p-2 rounded-md border bg-muted/30">
+                          <Input
+                            placeholder="Description"
+                            value={newDescription}
+                            onChange={(e) => setNewDescription(e.target.value)}
+                            className="h-8 text-sm"
+                          />
+                          <div className="flex items-center gap-2">
+                            <div className="w-20">
+                              <Input
+                                type="number"
+                                placeholder="Qty"
+                                value={newQty}
+                                onChange={(e) => setNewQty(e.target.value)}
+                                className="h-8 text-sm"
+                                min={0}
+                                step="any"
+                              />
+                            </div>
+                            <div className="relative w-28">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                              <Input
+                                type="number"
+                                placeholder="Unit Price"
+                                value={newUnitPrice}
+                                onChange={(e) => setNewUnitPrice(e.target.value)}
+                                className="h-8 text-sm pl-5"
+                                min={0}
+                                step="any"
+                              />
+                            </div>
+                            <label className="flex items-center gap-1 text-xs">
+                              <Checkbox
+                                checked={newApplyGst}
+                                onCheckedChange={(v) => setNewApplyGst(!!v)}
+                                className="h-3.5 w-3.5"
+                              />
+                              GST 5%
+                            </label>
+                            <label className="flex items-center gap-1 text-xs">
+                              <Checkbox
+                                checked={newApplyPst}
+                                onCheckedChange={(v) => setNewApplyPst(!!v)}
+                                className="h-3.5 w-3.5"
+                              />
+                              PST 7%
+                            </label>
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => handleSaveExtra(d.bp!.id)}
+                              disabled={addExtraMutation.isPending}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs"
+                              onClick={resetAddForm}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs gap-1 text-muted-foreground"
+                          onClick={() => {
+                            resetAddForm();
+                            setAddingForMember(d.member.id);
+                          }}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Add Charge
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
               <Separator className="my-3" />
 
               <div className="space-y-1">
@@ -589,8 +823,14 @@ export default function CoRoastBilling() {
                   <span className="text-sm text-muted-foreground">GST (5%)</span>
                   <span className="text-sm font-semibold">${fmt(d.gst)}</span>
                 </div>
+                {d.extrasPst > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">PST (7%)</span>
+                    <span className="text-sm font-semibold">${fmt(d.extrasPst)}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Total incl. GST</span>
+                  <span className="text-sm font-medium text-muted-foreground">Total incl. tax</span>
                   <span className="text-lg font-bold">${fmt(d.grandTotal)}</span>
                 </div>
               </div>
@@ -618,16 +858,22 @@ export default function CoRoastBilling() {
                 <p className="text-muted-foreground text-xs">Total Storage Charges</p>
                 <p className="font-bold text-lg">${fmt(totals.storageCharges)}</p>
               </div>
+              {totals.extrasTotal > 0 && (
+                <div>
+                  <p className="text-muted-foreground text-xs">Total Extras</p>
+                  <p className="font-bold text-lg">${fmt(totals.extrasTotal)}</p>
+                </div>
+              )}
               <div>
                 <p className="text-muted-foreground text-xs">Subtotal</p>
                 <p className="font-bold text-lg">${fmt(totals.subtotal)}</p>
               </div>
               <div>
-                <p className="text-muted-foreground text-xs">Total GST (5%)</p>
+                <p className="text-muted-foreground text-xs">Total Tax</p>
                 <p className="font-bold text-lg">${fmt(totals.gst)}</p>
               </div>
               <div>
-                <p className="text-muted-foreground text-xs">Grand Total incl. GST</p>
+                <p className="text-muted-foreground text-xs">Grand Total incl. Tax</p>
                 <p className="font-bold text-xl text-primary">${fmt(totals.grandTotal)}</p>
               </div>
             </div>
@@ -655,6 +901,15 @@ export default function CoRoastBilling() {
           subtotal={modalData.subtotal}
           gst={modalData.gst}
           grandTotal={modalData.grandTotal}
+          extras={modalData.extras.map((ex: ExtraRow) => ({
+            description: ex.description,
+            qty: Number(ex.qty),
+            unit_price: Number(ex.unit_price),
+            apply_gst: ex.apply_gst,
+            apply_pst: ex.apply_pst,
+          }))}
+          extrasGst={modalData.extrasGst}
+          extrasPst={modalData.extrasPst}
         />
       )}
     </div>
