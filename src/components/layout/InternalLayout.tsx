@@ -226,6 +226,9 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 <NavItem to="/co-roasting/bookings" icon={Calendar} label="Booking Calendar" onClick={closeSidebar} />
                 <NavItem to="/co-roasting/loring-schedule" icon={Calendar} label="Loring Schedule" onClick={closeSidebar} />
                 <NavItem to="/co-roasting/billing" icon={Receipt} label="Billing" onClick={closeSidebar} />
+                {authUser?.role === 'ADMIN' && (
+                  <NavItem to="/co-roasting/pricing" icon={Settings} label="Pricing" onClick={closeSidebar} />
+                )}
               </NavGroup>
 
 
