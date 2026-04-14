@@ -11,6 +11,7 @@ import { format, endOfMonth, subMonths, addMonths, startOfMonth, getDaysInMonth,
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { TIER_RATES, STORAGE_RATES, timeToMinutes } from '@/components/bookings/bookingUtils';
+import { resolveAccountRates } from '@/components/bookings/resolveRates';
 import QuickBooksInstructionsModal from '@/components/coroast/QuickBooksInstructionsModal';
 
 const BILLABLE_STATUSES = ['CONFIRMED', 'COMPLETED', 'NO_SHOW'] as const;
@@ -95,9 +96,10 @@ export default function CoRoastBilling() {
     const monthEnd = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
 
     const createMissing = async () => {
-      const inserts = membersWithoutPeriod.map((m) => {
+      const inserts = [];
+      for (const m of membersWithoutPeriod) {
         const tier = m.tier ?? 'MEMBER';
-        const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
+        const rates = await resolveAccountRates(m.id, tier);
 
         // Proration logic
         let baseFee = rates.base;
@@ -110,7 +112,6 @@ export default function CoRoastBilling() {
           const joinedYear = joinedD.getFullYear();
           const joinedMonth = joinedD.getMonth();
           if (joinedYear === selYear && joinedMonth === selMonthNum - 1) {
-            // Member joined this month — prorate
             const dayOfMonth = joinedD.getDate();
             const daysRemaining = 30 - (dayOfMonth - 1);
             proratedBaseFee = Math.round(((daysRemaining / 30) * rates.base) * 100) / 100;
@@ -119,7 +120,7 @@ export default function CoRoastBilling() {
           }
         }
 
-        return {
+        inserts.push({
           account_id: m.id,
           period_start: monthStart,
           period_end: monthEnd,
@@ -130,8 +131,8 @@ export default function CoRoastBilling() {
           prorated_base_fee: proratedBaseFee,
           proration_note: prorationNote,
           is_closed: periodIsClosed,
-        };
-      });
+        });
+      }
 
       const { error } = await supabase.from('coroast_billing_periods').insert(inserts as any);
       if (error) {
@@ -219,19 +220,20 @@ export default function CoRoastBilling() {
     if (membersWithoutStorage.length === 0) return;
 
     const createMissingStorage = async () => {
-      const inserts = membersWithoutStorage.map((m) => {
+      const inserts = [];
+      for (const m of membersWithoutStorage) {
         const tier = m.tier ?? 'MEMBER';
-        const sRates = STORAGE_RATES[tier] ?? STORAGE_RATES.MEMBER;
+        const rates = await resolveAccountRates(m.id, tier);
         const bp = billingPeriods.find((bp) => ((bp as any).account_id === m.id || bp.member_id === m.id))!;
-        return {
+        inserts.push({
           account_id: m.id,
           billing_period_id: bp.id,
-          included_pallets: sRates.includedPallets,
+          included_pallets: rates.includedPallets,
           paid_pallets: 0,
           pallets_in_use: 0,
-          rate_per_add_pallet: sRates.ratePerPallet,
-        };
-      });
+          rate_per_add_pallet: rates.storageRate,
+        });
+      }
 
       const { error } = await supabase.from('coroast_storage_allocations').insert(inserts as any);
       if (error) {
