@@ -1116,6 +1116,8 @@ function CreatePurchaseModal({
           const freightAllocated = freightNum * share;
           const carryAllocated = carryNum * share;
           const otherAllocated = otherNum * share;
+          const dutiesAllocated = dutiesNum * share;
+          const feesAllocated = feesNum * share;
 
           let poNumber = '';
           try {
@@ -1130,7 +1132,12 @@ function CreatePurchaseModal({
           const vendorAbbr = selectedVendor?.abbreviation || '???';
           const originCode = line.origin_country || '???';
           const lotNumber = `${vendorAbbr}-${originCode}-${poNumber}`;
-          const freightCad = fxRateNum ? freightAllocated * fxRateNum : freightAllocated;
+
+          const priceAmt = parseFloat(line.price_amount) || 0;
+          const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
+          const invoiceAmountUsd = converted ? converted.value * lineKg * KG_PER_LB : null;
+
+          const freightCad = sharedCosts.freight.currency === 'USD' && fxRateNum ? freightAllocated * fxRateNum : freightAllocated;
 
           const { data: lot, error: lotErr } = await supabase
             .from('green_lots')
@@ -1147,9 +1154,14 @@ function CreatePurchaseModal({
               expected_delivery_date: null,
               received_date: line.received ? format(new Date(), 'yyyy-MM-dd') : null,
               fx_rate: fxRateNum,
+              invoice_amount_usd: invoiceAmountUsd,
+              invoice_amount_cad: invoiceAmountUsd != null ? (fxRateNum ? invoiceAmountUsd * fxRateNum : invoiceAmountUsd) : null,
+              invoice_is_usd: fxRateNum ? true : false,
               freight_cad: freightCad,
-              carry_fees_usd: carryAllocated,
-              other_costs_cad: fxRateNum ? otherAllocated * fxRateNum : otherAllocated,
+              carry_fees_cad: sharedCosts.carry.currency === 'USD' && fxRateNum ? carryAllocated * fxRateNum : carryAllocated,
+              duties_cad: sharedCosts.duties.currency === 'USD' && fxRateNum ? dutiesAllocated * fxRateNum : dutiesAllocated,
+              transaction_fees_cad: sharedCosts.fees.currency === 'USD' && fxRateNum ? feesAllocated * fxRateNum : feesAllocated,
+              other_costs_cad: sharedCosts.other.currency === 'USD' && fxRateNum ? otherAllocated * fxRateNum : otherAllocated,
               warehouse_location: line.warehouse_location.trim() || null,
               notes_internal: line.notes.trim() || null,
               created_by: authUser!.id,
@@ -1161,9 +1173,6 @@ function CreatePurchaseModal({
             .select('id')
             .single();
           if (lotErr) throw lotErr;
-
-          const priceAmt = parseFloat(line.price_amount) || 0;
-          const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
 
           const { error: lineErr } = await supabase
             .from('green_purchase_lines')
