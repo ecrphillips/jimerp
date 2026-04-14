@@ -256,12 +256,14 @@ export default function SourcingLots() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map(lot => {
                 const c = contractMap[lot.contract_id];
+                const pl = purchaseLineByLotId[lot.id];
+                const subtitle = c ? c.name : pl?.origin_country ? pl.origin_country : null;
                 const kgReceived = lot.bags_released * lot.bag_size_kg;
                 return (
                   <Card key={lot.id}>
                     <CardContent className="p-4 space-y-2">
                       <p className="font-semibold text-base leading-tight">{lot.lot_number}</p>
-                      {c && <p className="text-sm text-muted-foreground">{c.name}</p>}
+                      {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
                       <div className="flex flex-wrap items-center gap-1.5">
                         <PhysicalStatusBadge status={lot.status} />
                         <CostingStatusBadge costingStatus={lot.costing_status} />
