@@ -144,7 +144,7 @@ export function BookingFormDialog({
     const { data: existing } = await supabase
       .from('coroast_billing_periods')
       .select('id')
-      .eq('member_id', mId)
+      .eq('account_id', mId)
       .lte('period_start', monthEnd)
       .gte('period_end', monthStart)
       .limit(1);
@@ -158,7 +158,7 @@ export function BookingFormDialog({
     const { data: created, error } = await supabase
       .from('coroast_billing_periods')
       .insert({
-        member_id: mId,
+        account_id: mId,
         period_start: monthStart,
         period_end: monthEnd,
         tier_snapshot: tier,
@@ -222,7 +222,7 @@ export function BookingFormDialog({
           const { data: booking, error: bErr } = await supabase
             .from('coroast_bookings')
             .insert({
-              member_id: memberId,
+              account_id: memberId,
               billing_period_id: billingPeriodId,
               booking_date: ds,
               start_time: formStartTime,
@@ -237,7 +237,7 @@ export function BookingFormDialog({
 
           const bookingDurationHrs = (timeToMinutes(formEndTime) - timeToMinutes(formStartTime)) / 60;
           await supabase.from('coroast_hour_ledger').insert({
-            member_id: memberId,
+            account_id: memberId,
             billing_period_id: billingPeriodId,
             booking_id: booking.id,
             entry_type: 'BOOKING_CONFIRMED' as any,
@@ -256,7 +256,7 @@ export function BookingFormDialog({
         const { data: booking, error } = await supabase
           .from('coroast_bookings')
           .insert({
-            member_id: memberId,
+            account_id: memberId,
             billing_period_id: billingPeriodId,
             booking_date: saveDateStr,
             start_time: formStartTime,
@@ -270,7 +270,7 @@ export function BookingFormDialog({
 
         const singleDurationHrs = (timeToMinutes(formEndTime) - timeToMinutes(formStartTime)) / 60;
         await supabase.from('coroast_hour_ledger').insert({
-          member_id: memberId,
+          account_id: memberId,
           billing_period_id: billingPeriodId,
           booking_id: booking.id,
           entry_type: 'BOOKING_CONFIRMED' as any,

@@ -47,7 +47,7 @@ export default function CoRoastLoringSchedule() {
         .gte('booking_date', today)
         .order('booking_date', { ascending: true });
       if (error) throw error;
-      return (data ?? []) as BookingWithMember[];
+      return (data ?? []) as unknown as BookingWithMember[];
     },
   });
 
