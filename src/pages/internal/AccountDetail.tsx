@@ -1016,7 +1016,7 @@ function CustomRateOverrides({ account, refetch }: { account: any; refetch: () =
                 <Input
                   type="number"
                   step="0.01"
-                  placeholder={`Tier default: $${tierDefaults[field.tierKey]}`}
+                  placeholder={`Tier default: ${field.isDollar ? '$' : ''}${tierDefaults[field.tierKey]}`}
                   value={form[field.key] ?? ''}
                   onChange={(e) => setForm({ ...form, [field.key]: e.target.value })}
                 />
@@ -1038,7 +1038,7 @@ function CustomRateOverrides({ account, refetch }: { account: any; refetch: () =
                 <div key={field.key} className="flex justify-between">
                   <span className="text-muted-foreground">{field.label}</span>
                   <span className={val != null ? 'font-medium' : 'text-muted-foreground'}>
-                    {val != null ? `$${Number(val).toLocaleString()}` : `Tier default ($${tierDefaults[field.tierKey]})`}
+                    {val != null ? `${field.isDollar ? '$' : ''}${Number(val).toLocaleString()}` : `Tier default (${field.isDollar ? '$' : ''}${tierDefaults[field.tierKey]})`}
                   </span>
                 </div>
               );
