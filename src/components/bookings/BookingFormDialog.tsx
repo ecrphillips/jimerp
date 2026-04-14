@@ -204,7 +204,7 @@ export function BookingFormDialog({
         const { data: recurBlock, error: rbErr } = await supabase
           .from('coroast_recurring_blocks')
           .insert({
-            member_id: memberId,
+            account_id: memberId,
             day_of_week: recurringDay as any,
             start_time: formStartTime,
             end_time: formEndTime,

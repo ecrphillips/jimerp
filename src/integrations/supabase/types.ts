@@ -726,7 +726,7 @@ export type Database = {
           id: string
           included_hours: number
           included_pallets: number
-          member_id: string
+          member_id: string | null
           notes: string | null
           overage_charge: number
           overage_hours: number
@@ -749,7 +749,7 @@ export type Database = {
           id?: string
           included_hours: number
           included_pallets?: number
-          member_id: string
+          member_id?: string | null
           notes?: string | null
           overage_charge?: number
           overage_hours?: number
@@ -772,7 +772,7 @@ export type Database = {
           id?: string
           included_hours?: number
           included_pallets?: number
-          member_id?: string
+          member_id?: string | null
           notes?: string | null
           overage_charge?: number
           overage_hours?: number
@@ -799,13 +799,6 @@ export type Database = {
             columns: ["billing_period_id"]
             isOneToOne: false
             referencedRelation: "coroast_billing_periods"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "coroast_invoices_member_id_fkey"
-            columns: ["member_id"]
-            isOneToOne: false
-            referencedRelation: "coroast_members"
             referencedColumns: ["id"]
           },
         ]
@@ -1016,7 +1009,7 @@ export type Database = {
           end_time: string
           id: string
           is_active: boolean
-          member_id: string
+          member_id: string | null
           notes: string | null
           start_time: string
           updated_at: string
@@ -1030,7 +1023,7 @@ export type Database = {
           end_time: string
           id?: string
           is_active?: boolean
-          member_id: string
+          member_id?: string | null
           notes?: string | null
           start_time: string
           updated_at?: string
@@ -1044,20 +1037,12 @@ export type Database = {
           end_time?: string
           id?: string
           is_active?: boolean
-          member_id?: string
+          member_id?: string | null
           notes?: string | null
           start_time?: string
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "coroast_recurring_blocks_member_id_fkey"
-            columns: ["member_id"]
-            isOneToOne: false
-            referencedRelation: "coroast_members"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       coroast_storage_allocations: {
         Row: {
@@ -1066,7 +1051,7 @@ export type Database = {
           created_at: string
           id: string
           included_pallets: number
-          member_id: string
+          member_id: string | null
           paid_pallets: number
           pallets_in_use: number
           rate_per_add_pallet: number
@@ -1081,7 +1066,7 @@ export type Database = {
           created_at?: string
           id?: string
           included_pallets?: number
-          member_id: string
+          member_id?: string | null
           paid_pallets?: number
           pallets_in_use?: number
           rate_per_add_pallet: number
@@ -1096,7 +1081,7 @@ export type Database = {
           created_at?: string
           id?: string
           included_pallets?: number
-          member_id?: string
+          member_id?: string | null
           paid_pallets?: number
           pallets_in_use?: number
           rate_per_add_pallet?: number
@@ -1120,13 +1105,6 @@ export type Database = {
             referencedRelation: "coroast_billing_periods"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "coroast_storage_allocations_member_id_fkey"
-            columns: ["member_id"]
-            isOneToOne: false
-            referencedRelation: "coroast_members"
-            referencedColumns: ["id"]
-          },
         ]
       }
       coroast_waiver_log: {
@@ -1136,7 +1114,7 @@ export type Database = {
           created_at: string
           fee_amount_waived: number
           id: string
-          member_id: string
+          member_id: string | null
           waive_reason: string | null
           waived_by: string | null
         }
@@ -1146,7 +1124,7 @@ export type Database = {
           created_at?: string
           fee_amount_waived: number
           id?: string
-          member_id: string
+          member_id?: string | null
           waive_reason?: string | null
           waived_by?: string | null
         }
@@ -1156,7 +1134,7 @@ export type Database = {
           created_at?: string
           fee_amount_waived?: number
           id?: string
-          member_id?: string
+          member_id?: string | null
           waive_reason?: string | null
           waived_by?: string | null
         }
@@ -1173,13 +1151,6 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: false
             referencedRelation: "coroast_bookings"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "coroast_waiver_log_member_id_fkey"
-            columns: ["member_id"]
-            isOneToOne: false
-            referencedRelation: "coroast_members"
             referencedColumns: ["id"]
           },
         ]
