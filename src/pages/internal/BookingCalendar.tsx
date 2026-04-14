@@ -25,7 +25,7 @@ export default function BookingCalendar() {
       const { data, error } = await supabase
         .from('accounts')
         .select('id, account_name, coroast_tier, is_active')
-        .contains('programs', ['CO_ROASTING'])
+        .contains('programs', ['COROASTING'])
         .eq('is_active', true)
         .order('account_name');
       if (error) throw error;
