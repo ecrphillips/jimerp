@@ -443,7 +443,7 @@ export type Database = {
           id: string
           included_hours: number
           is_closed: boolean
-          member_id: string
+          member_id: string | null
           overage_rate_per_hr: number
           period_end: string
           period_start: string
@@ -460,7 +460,7 @@ export type Database = {
           id?: string
           included_hours: number
           is_closed?: boolean
-          member_id: string
+          member_id?: string | null
           overage_rate_per_hr: number
           period_end: string
           period_start: string
@@ -477,7 +477,7 @@ export type Database = {
           id?: string
           included_hours?: number
           is_closed?: boolean
-          member_id?: string
+          member_id?: string | null
           overage_rate_per_hr?: number
           period_end?: string
           period_start?: string
@@ -492,13 +492,6 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "coroast_billing_periods_member_id_fkey"
-            columns: ["member_id"]
-            isOneToOne: false
-            referencedRelation: "coroast_members"
             referencedColumns: ["id"]
           },
         ]
@@ -518,7 +511,7 @@ export type Database = {
           end_time: string
           id: string
           is_prime_time: boolean
-          member_id: string
+          member_id: string | null
           notes_internal: string | null
           notes_member: string | null
           recurring_block_id: string | null
@@ -542,7 +535,7 @@ export type Database = {
           end_time: string
           id?: string
           is_prime_time?: boolean
-          member_id: string
+          member_id?: string | null
           notes_internal?: string | null
           notes_member?: string | null
           recurring_block_id?: string | null
@@ -566,7 +559,7 @@ export type Database = {
           end_time?: string
           id?: string
           is_prime_time?: boolean
-          member_id?: string
+          member_id?: string | null
           notes_internal?: string | null
           notes_member?: string | null
           recurring_block_id?: string | null
@@ -592,13 +585,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "coroast_bookings_member_id_fkey"
-            columns: ["member_id"]
-            isOneToOne: false
-            referencedRelation: "coroast_members"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "coroast_bookings_recurring_block_fkey"
             columns: ["recurring_block_id"]
             isOneToOne: false
@@ -617,7 +603,7 @@ export type Database = {
           entry_type: Database["public"]["Enums"]["coroast_ledger_entry_type"]
           hours_delta: number
           id: string
-          member_id: string
+          member_id: string | null
           notes: string
         }
         Insert: {
@@ -629,7 +615,7 @@ export type Database = {
           entry_type: Database["public"]["Enums"]["coroast_ledger_entry_type"]
           hours_delta: number
           id?: string
-          member_id: string
+          member_id?: string | null
           notes?: string
         }
         Update: {
@@ -641,7 +627,7 @@ export type Database = {
           entry_type?: Database["public"]["Enums"]["coroast_ledger_entry_type"]
           hours_delta?: number
           id?: string
-          member_id?: string
+          member_id?: string | null
           notes?: string
         }
         Relationships: [
@@ -664,13 +650,6 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: false
             referencedRelation: "coroast_bookings"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "coroast_hour_ledger_member_id_fkey"
-            columns: ["member_id"]
-            isOneToOne: false
-            referencedRelation: "coroast_members"
             referencedColumns: ["id"]
           },
         ]
