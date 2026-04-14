@@ -109,9 +109,14 @@ export default function CoRoastBilling() {
   useEffect(() => {
     if (members.length === 0) return;
 
-    const membersWithoutPeriod = members.filter(
-      (m) => !billingPeriods.some((bp) => ((bp as any).account_id === m.id || bp.member_id === m.id))
-    );
+    const monthEndDate = endOfMonth(selectedDate);
+    const membersWithoutPeriod = members.filter((m) => {
+      const alreadyHasPeriod = billingPeriods.some((bp) => ((bp as any).account_id === m.id || bp.member_id === m.id));
+      if (alreadyHasPeriod) return false;
+      if (!m.joined_date) return true;
+      const joined = new Date(m.joined_date + 'T00:00:00');
+      return joined <= monthEndDate;
+    });
 
     if (membersWithoutPeriod.length === 0) return;
 
