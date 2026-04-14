@@ -649,9 +649,43 @@ export default function CoRoastBilling() {
                       )}
                     </div>
                   ) : (
-                    <Button size="sm" onClick={() => setModalData(d)} disabled={!d.bp}>
-                      Record Invoice
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={() => setModalData(d)} disabled={!d.bp}>
+                        Record Invoice
+                      </Button>
+                      {authUser?.role === 'ADMIN' && d.bp && !d.invoice && (
+                        resetConfirmId === d.bp.id ? (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-7 text-xs"
+                              onClick={() => resetPeriodMutation.mutate(d.bp!.id)}
+                              disabled={resetPeriodMutation.isPending}
+                            >
+                              {resetPeriodMutation.isPending ? 'Resetting…' : 'Confirm Reset?'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs"
+                              onClick={() => setResetConfirmId(null)}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2"
+                            onClick={() => setResetConfirmId(d.bp!.id)}
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          </Button>
+                        )
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
