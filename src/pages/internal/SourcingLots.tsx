@@ -26,6 +26,7 @@ interface LotRow {
   id: string;
   lot_number: string;
   contract_id: string;
+  purchase_id: string | null;
   bags_released: number;
   bag_size_kg: number;
   kg_received: number | null;
@@ -76,6 +77,19 @@ interface LotRow {
   // timestamps
   created_at: string;
   updated_at: string;
+}
+
+interface PurchaseLine {
+  id: string;
+  purchase_id: string;
+  lot_id: string | null;
+  origin_country: string | null;
+  region: string | null;
+  producer: string | null;
+  variety: string | null;
+  crop_year: string | null;
+  category: string | null;
+  lot_identifier: string | null;
 }
 
 interface ContractInfo {
@@ -148,6 +162,22 @@ export default function SourcingLots() {
   });
   const contractMap = useMemo(() => Object.fromEntries(contracts.map(c => [c.id, c])), [contracts]);
 
+  const { data: purchaseLines = [] } = useQuery({
+    queryKey: ['green-purchase-lines-for-lots'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('green_purchase_lines')
+        .select('*');
+      if (error) throw error;
+      return (data ?? []) as PurchaseLine[];
+    },
+  });
+
+  const purchaseLineByLotId = useMemo(
+    () => Object.fromEntries(purchaseLines.filter(pl => pl.lot_id).map(pl => [pl.lot_id!, pl])),
+    [purchaseLines]
+  );
+
   const sorted = useMemo(() => {
     return [...lots].sort((a, b) => {
       if (a.received_date && b.received_date) return b.received_date.localeCompare(a.received_date);
@@ -165,14 +195,17 @@ export default function SourcingLots() {
       if (search) {
         const s = search.toLowerCase();
         const c = contractMap[l.contract_id];
+        const pl = purchaseLineByLotId[l.id];
         if (
           !l.lot_number.toLowerCase().includes(s) &&
-          !(c?.name || '').toLowerCase().includes(s)
+          !(c?.name || '').toLowerCase().includes(s) &&
+          !(pl?.origin_country || '').toLowerCase().includes(s) &&
+          !(pl?.lot_identifier || '').toLowerCase().includes(s)
         ) return false;
       }
       return true;
     });
-  }, [sorted, physicalFilter, costingFilter, search, contractMap]);
+  }, [sorted, physicalFilter, costingFilter, search, contractMap, purchaseLineByLotId]);
 
   return (
     <div className="page-container space-y-6">
@@ -223,12 +256,14 @@ export default function SourcingLots() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map(lot => {
                 const c = contractMap[lot.contract_id];
+                const pl = purchaseLineByLotId[lot.id];
+                const subtitle = c ? c.name : pl?.origin_country ? pl.origin_country : null;
                 const kgReceived = lot.bags_released * lot.bag_size_kg;
                 return (
                   <Card key={lot.id}>
                     <CardContent className="p-4 space-y-2">
                       <p className="font-semibold text-base leading-tight">{lot.lot_number}</p>
-                      {c && <p className="text-sm text-muted-foreground">{c.name}</p>}
+                      {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
                       <div className="flex flex-wrap items-center gap-1.5">
                         <PhysicalStatusBadge status={lot.status} />
                         <CostingStatusBadge costingStatus={lot.costing_status} />
@@ -257,7 +292,7 @@ export default function SourcingLots() {
         </TabsContent>
       </Tabs>
 
-      <LotDetailPanel lotId={selectedLotId} onClose={() => setSelectedLotId(null)} contractMap={contractMap} />
+      <LotDetailPanel lotId={selectedLotId} onClose={() => setSelectedLotId(null)} contractMap={contractMap} purchaseLineByLotId={purchaseLineByLotId} />
     </div>
   );
 }
@@ -358,10 +393,12 @@ function LotDetailPanel({
   lotId,
   onClose,
   contractMap,
+  purchaseLineByLotId,
 }: {
   lotId: string | null;
   onClose: () => void;
   contractMap: Record<string, ContractInfo>;
+  purchaseLineByLotId: Record<string, PurchaseLine>;
 }) {
   const { authUser, isInternal } = useAuth();
   const queryClient = useQueryClient();
@@ -397,6 +434,15 @@ function LotDetailPanel({
   });
 
   const contract = lot ? contractMap[lot.contract_id] : null;
+  const purchaseLine = lot?.purchase_id ? purchaseLineByLotId[lot.id] : null;
+  const info = {
+    origin: purchaseLine?.origin_country ?? contract?.origin ?? null,
+    region: purchaseLine?.region ?? contract?.region ?? null,
+    producer: purchaseLine?.producer ?? contract?.producer ?? null,
+    variety: purchaseLine?.variety ?? contract?.variety ?? null,
+    crop_year: purchaseLine?.crop_year ?? contract?.crop_year ?? null,
+    category: purchaseLine?.category ?? contract?.category ?? null,
+  };
   const kgReceived = lot ? lot.bags_released * lot.bag_size_kg : 0;
 
   // Roast group links
@@ -719,14 +765,14 @@ function LotDetailPanel({
     if (lot.po_number) lines.push(`PO Number: ${lot.po_number}`);
     if (lot.lot_identifier) lines.push(`Lot Identifier: ${lot.lot_identifier}`);
     if (lot.vendor_invoice_number) lines.push(`Vendor Invoice #: ${lot.vendor_invoice_number}`);
-    lines.push(`Contract: ${c?.name || '—'}`);
+    lines.push(`Source: ${c ? c.name : lot.purchase_id ? 'Purchase' : '—'}`);
     if (c?.internal_contract_number) lines.push(`Internal Contract #: ${c.internal_contract_number}`);
     if (c?.vendor_contract_number) lines.push(`Vendor Contract #: ${c.vendor_contract_number}`);
-    lines.push(`Origin: ${c?.origin || '—'}`);
-    if (c?.region) lines.push(`Region: ${c.region}`);
-    if (c?.producer) lines.push(`Producer: ${c.producer}`);
-    if (c?.variety) lines.push(`Variety: ${c.variety}`);
-    if (c?.crop_year) lines.push(`Crop Year: ${c.crop_year}`);
+    lines.push(`Origin: ${info.origin || '—'}`);
+    if (info.region) lines.push(`Region: ${info.region}`);
+    if (info.producer) lines.push(`Producer: ${info.producer}`);
+    if (info.variety) lines.push(`Variety: ${info.variety}`);
+    if (info.crop_year) lines.push(`Crop Year: ${info.crop_year}`);
     lines.push(`Status: ${lot.status === 'EN_ROUTE' ? 'En Route' : 'Received'}`);
     lines.push(`Costing: ${lot.costing_status === 'COMPLETE' ? 'Complete' : 'Incomplete'}`);
     lines.push(`Bags: ${lot.bags_released}`);
@@ -869,12 +915,12 @@ function LotDetailPanel({
               <Separator className="my-2" />
 
               <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                <div><span className="text-muted-foreground">Contract:</span> {contract?.name || '—'}</div>
-                <div><span className="text-muted-foreground">Origin:</span> {contract?.origin || '—'}</div>
-                <div><span className="text-muted-foreground">Region:</span> {contract?.region || '—'}</div>
-                <div><span className="text-muted-foreground">Producer:</span> {contract?.producer || '—'}</div>
-                <div><span className="text-muted-foreground">Variety:</span> {contract?.variety || '—'}</div>
-                <div><span className="text-muted-foreground">Crop Year:</span> {contract?.crop_year || '—'}</div>
+                <div><span className="text-muted-foreground">Source:</span> {contract ? contract.name : lot.purchase_id ? 'Purchase' : '—'}</div>
+                <div><span className="text-muted-foreground">Origin:</span> {info.origin || '—'}</div>
+                <div><span className="text-muted-foreground">Region:</span> {info.region || '—'}</div>
+                <div><span className="text-muted-foreground">Producer:</span> {info.producer || '—'}</div>
+                <div><span className="text-muted-foreground">Variety:</span> {info.variety || '—'}</div>
+                <div><span className="text-muted-foreground">Crop Year:</span> {info.crop_year || '—'}</div>
                 <div><span className="text-muted-foreground">Warehouse:</span> {lot.warehouse_location || '—'}</div>
                 <div><span className="text-muted-foreground">Bags:</span> {lot.bags_released}</div>
                 <div><span className="text-muted-foreground">Bag Size:</span> {lot.bag_size_kg} kg</div>
