@@ -37,6 +37,7 @@ import CoRoastMemberDetail from "@/pages/internal/CoRoastMemberDetail";
 import CoRoastLoringSchedule from "@/pages/internal/CoRoastLoringSchedule";
 import BookingCalendar from "@/pages/internal/BookingCalendar";
 import CoRoastBilling from "@/pages/internal/CoRoastBilling";
+import CoRoastPricing from "@/pages/internal/CoRoastPricing";
 import BoardsDisabled from "@/pages/internal/BoardsDisabled";
 import BulkProducts from "@/pages/internal/BulkProducts";
 import Inventory from "@/pages/internal/Inventory";
@@ -220,6 +221,11 @@ const App = () => (
             <Route path="/co-roasting/billing" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><CoRoastBilling /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/co-roasting/pricing" element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <InternalLayout><CoRoastPricing /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/co-roasting/loring-schedule" element={

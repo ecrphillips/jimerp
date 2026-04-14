@@ -18,6 +18,7 @@ import {
   checkOverlap, TIER_RATES, timeToMinutes,
   type MemberRow, type BookingRow, type BlockRow,
 } from './bookingUtils';
+import { resolveAccountRates } from './resolveRates';
 import { AvailabilityTimeSelect } from './AvailabilityTimeSelect';
 import { PastBookingConfirmModal } from './PastBookingConfirmModal';
 
@@ -153,7 +154,7 @@ export function BookingFormDialog({
 
     const member = members.find(m => m.id === mId);
     const tier = member?.tier ?? 'MEMBER';
-    const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
+    const rates = await resolveAccountRates(mId, tier);
 
     const { data: created, error } = await supabase
       .from('coroast_billing_periods')
