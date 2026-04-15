@@ -89,7 +89,7 @@ export function BookingFormDialog({
       if (slotMin < timeToMinutes(b.end_time) && slotEnd > timeToMinutes(b.start_time)) return true;
     }
     for (const bk of bookings) {
-      if (bk.booking_date !== dateStr || bk.status === 'CANCELLED') continue;
+      if (bk.booking_date !== dateStr || ['CANCELLED', 'CANCELLED_FREE', 'CANCELLED_CHARGED', 'CANCELLED_WAIVED', 'NO_SHOW'].includes(bk.status)) continue;
       if (slotMin < timeToMinutes(bk.end_time) && slotEnd > timeToMinutes(bk.start_time)) return true;
     }
     return false;
