@@ -449,6 +449,36 @@ export type Database = {
         }
         Relationships: []
       }
+      coroast_availability_windows: {
+        Row: {
+          close_time: string
+          created_at: string
+          day_of_week: string
+          id: string
+          is_active: boolean
+          notes: string | null
+          open_time: string
+        }
+        Insert: {
+          close_time: string
+          created_at?: string
+          day_of_week: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          open_time: string
+        }
+        Update: {
+          close_time?: string
+          created_at?: string
+          day_of_week?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          open_time?: string
+        }
+        Relationships: []
+      }
       coroast_billing_extras: {
         Row: {
           apply_gst: boolean
