@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreview } from '@/contexts/PreviewContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
@@ -8,19 +9,20 @@ import { ShieldCheck, Mail, Building2, CalendarDays } from 'lucide-react';
 
 export default function MemberAccount() {
   const { authUser } = useAuth();
-
+  const { previewAccountId } = usePreview();
+  const effectiveAccountId = previewAccountId ?? authUser?.accountId;
   const { data: account, isLoading } = useQuery({
-    queryKey: ['my-coroast-account', authUser?.accountId],
+    queryKey: ['my-coroast-account', effectiveAccountId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('accounts')
         .select('id, account_name, coroast_tier, coroast_certified, coroast_joined_date, billing_contact_name, billing_email')
-        .eq('id', authUser!.accountId!)
+        .eq('id', effectiveAccountId!)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
-    enabled: !!authUser?.accountId,
+    enabled: !!effectiveAccountId,
   });
 
   if (isLoading) {

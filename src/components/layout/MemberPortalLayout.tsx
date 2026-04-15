@@ -1,9 +1,10 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreview } from '@/contexts/PreviewContext';
 import { Button } from '@/components/ui/button';
 import { AccountSheet } from '@/components/account/AccountSheet';
-import { CalendarDays, BarChart3, User, LogOut, Coffee, Menu, X } from 'lucide-react';
+import { CalendarDays, BarChart3, User, LogOut, Coffee, Menu, X, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MemberPortalLayoutProps {
@@ -18,6 +19,7 @@ const navItems = [
 
 export function MemberPortalLayout({ children }: MemberPortalLayoutProps) {
   const { authUser, signOut } = useAuth();
+  const { isPreviewMode, previewAccountName, exitPreview } = usePreview();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = React.useState(false);
@@ -28,7 +30,24 @@ export function MemberPortalLayout({ children }: MemberPortalLayoutProps) {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
+      {isPreviewMode && (
+        <div className="sticky top-0 z-[60] flex items-center justify-between gap-4 bg-amber-400 px-4 py-2 text-amber-950">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Eye className="h-4 w-4" />
+            Previewing as {previewAccountName}
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 border-amber-600 bg-amber-300 text-amber-950 hover:bg-amber-200"
+            onClick={() => { exitPreview(); navigate('/dashboard'); }}
+          >
+            Exit Preview
+          </Button>
+        </div>
+      )}
+      <div className="flex flex-1">
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-foreground/20 backdrop-blur-sm lg:hidden"
@@ -114,6 +133,8 @@ export function MemberPortalLayout({ children }: MemberPortalLayoutProps) {
           {children}
         </main>
       </div>
+      </div>
+    </div>
     </div>
   );
 }

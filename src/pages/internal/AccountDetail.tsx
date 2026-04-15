@@ -18,10 +18,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ArrowLeft, Info, CalendarIcon, Plus, Pencil, CheckCircle2, ExternalLink, ShieldCheck, Lock } from 'lucide-react';
+import { ArrowLeft, Info, CalendarIcon, Plus, Pencil, CheckCircle2, ExternalLink, ShieldCheck, Lock, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreview } from '@/contexts/PreviewContext';
 
 // ─── Profile Tab ───────────────────────────────────────────────
 function ProfileTab({ account, refetch }: { account: any; refetch: () => void }) {
@@ -1054,6 +1055,8 @@ function CustomRateOverrides({ account, refetch }: { account: any; refetch: () =
 export default function AccountDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { authUser } = useAuth();
+  const { enterPreview } = usePreview();
 
   const { data: account, isLoading, refetch } = useQuery({
     queryKey: ['account-detail', id],
@@ -1102,6 +1105,20 @@ export default function AccountDetail() {
           {hasCoroasting && <Badge variant="outline" className="border-amber-500 text-amber-600">Co-Roasting</Badge>}
           {!account.is_active && <Badge variant="destructive">Inactive</Badge>}
         </div>
+        {hasCoroasting && authUser?.role === 'ADMIN' && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            onClick={() => {
+              enterPreview(account.id, account.account_name);
+              navigate('/member-portal');
+            }}
+          >
+            <Eye className="h-4 w-4 mr-1.5" />
+            Preview Portal
+          </Button>
+        )}
       </div>
 
       <Tabs defaultValue="profile">

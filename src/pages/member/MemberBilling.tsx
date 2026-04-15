@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreview } from '@/contexts/PreviewContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -15,22 +16,23 @@ const GST_RATE = 0.05;
 
 export default function MemberBilling() {
   const { authUser } = useAuth();
-
+  const { previewAccountId } = usePreview();
+  const effectiveAccountId = previewAccountId ?? authUser?.accountId;
   const { data: member } = useQuery({
-    queryKey: ['my-account-billing', authUser?.accountId],
+    queryKey: ['my-account-billing', effectiveAccountId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('accounts')
         .select('id, account_name, coroast_tier, coroast_joined_date')
-        .eq('id', authUser!.accountId!)
+        .eq('id', effectiveAccountId!)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
-    enabled: !!authUser?.accountId,
+    enabled: !!effectiveAccountId,
   });
 
-  const accountId = authUser?.accountId;
+  const accountId = effectiveAccountId;
   const tier = member?.coroast_tier ?? 'MEMBER';
   const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
 

@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreview } from '@/contexts/PreviewContext';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -67,24 +68,26 @@ type CalendarEvent = {
 
 export default function MemberSchedule() {
   const { authUser } = useAuth();
+  const { previewAccountId } = usePreview();
   const queryClient = useQueryClient();
+  const effectiveAccountId = previewAccountId ?? authUser?.accountId;
 
   // Fetch account record for this member
   const { data: member } = useQuery({
-    queryKey: ['my-account-schedule', authUser?.accountId],
+    queryKey: ['my-account-schedule', effectiveAccountId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('accounts')
         .select('id, account_name, coroast_tier, is_active, coroast_joined_date')
-        .eq('id', authUser!.accountId!)
+        .eq('id', effectiveAccountId!)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
-    enabled: !!authUser?.accountId,
+    enabled: !!effectiveAccountId,
   });
 
-  const memberId = authUser?.accountId;
+  const memberId = effectiveAccountId;
   const tier = member?.coroast_tier ?? 'MEMBER';
   const isGrowth = tier === 'GROWTH' || tier === 'PRODUCTION';
   const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
