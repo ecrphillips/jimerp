@@ -142,6 +142,14 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
     return arr;
   }, []);
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = (6 - HOUR_START) * ROW_HEIGHT;
+    }
+  }, []);
+
   const jumpToToday = () => setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }));
 
   const handleGridClick = (day: Date, e: React.MouseEvent<HTMLDivElement>) => {
