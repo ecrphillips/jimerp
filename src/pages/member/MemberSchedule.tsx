@@ -432,6 +432,14 @@ export default function MemberSchedule() {
     onError: () => toast.error('Failed to cancel booking'),
   });
 
+  const scheduleScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scheduleScrollRef.current) {
+      scheduleScrollRef.current.scrollTop = (6 - HOUR_START) * ROW_HEIGHT;
+    }
+  }, []);
+
   if (!member) {
     return (
       <div className="p-6">
