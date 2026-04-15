@@ -179,7 +179,7 @@ export function BookingFormDialog({
       if (!memberId) throw new Error('Select a member');
       if (!formDate) throw new Error('Date is required');
       if (!formStartTime || !formEndTime) throw new Error('Start and end times required');
-      if (formEndTime <= formStartTime) throw new Error('End time must be after start time');
+      if (timeToMinutes(formEndTime) <= timeToMinutes(formStartTime)) throw new Error('End time must be after start time');
 
       const saveDateStr = format(formDate, 'yyyy-MM-dd');
 

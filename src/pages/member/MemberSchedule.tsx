@@ -310,7 +310,7 @@ export default function MemberSchedule() {
   const createBookingMutation = useMutation({
     mutationFn: async () => {
       if (!memberId || !formDate || !formStartTime || !formEndTime) throw new Error('Missing fields');
-      if (formEndTime <= formStartTime) throw new Error('End time must be after start time');
+      if (timeToMinutes(formEndTime) <= timeToMinutes(formStartTime)) throw new Error('End time must be after start time');
       if (horizonError) throw new Error(horizonError);
 
       const saveDateStr = format(formDate, 'yyyy-MM-dd');

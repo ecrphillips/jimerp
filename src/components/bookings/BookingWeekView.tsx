@@ -73,7 +73,7 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
       let running = 0;
       for (const bk of bks) {
         const dur = bk.duration_hours ?? 0;
-        if (running >= included || running + dur > included) set.add(bk.id);
+        if (running + dur > included) set.add(bk.id);
         running += dur;
       }
     }

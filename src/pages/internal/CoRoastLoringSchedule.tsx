@@ -19,6 +19,7 @@ import {
   BLOCK_TYPE_LABELS, BLOCK_TYPE_BADGE_VARIANT, formatTime,
   DAYS_OF_WEEK, DAY_LABELS,
 } from '@/components/coroast/types';
+import { timeToMinutes } from '@/components/bookings/bookingUtils';
 import { BlockFormDialog } from '@/components/coroast/BlockFormDialog';
 import { BlockDeleteDialog } from '@/components/coroast/BlockDeleteDialog';
 import { BlockCalendarView } from '@/components/coroast/BlockCalendarView';
@@ -121,7 +122,7 @@ export default function CoRoastLoringSchedule() {
   // Window mutations
   const saveWindowMutation = useMutation({
     mutationFn: async () => {
-      if (windowCloseTime <= windowOpenTime) throw new Error('Close time must be after open time');
+      if (timeToMinutes(windowCloseTime) <= timeToMinutes(windowOpenTime)) throw new Error('Close time must be after open time');
       if (editingWindowId) {
         const { error } = await supabase
           .from('coroast_availability_windows')

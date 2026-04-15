@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { TimeSelect } from './TimeSelect';
+import { timeToMinutes } from '@/components/bookings/bookingUtils';
 import {
   LoringBlock, LoringBlockType, BLOCK_TYPE_LABELS,
   DAYS_OF_WEEK, DAY_LABELS, JS_DAY_TO_STRING,
@@ -102,7 +103,7 @@ export function BlockFormDialog({ open, onOpenChange, editingBlock, onSuccess }:
         throw new Error('Date required');
       }
       if (!formStartTime || !formEndTime) throw new Error('Start and end times required');
-      if (formEndTime <= formStartTime) throw new Error('End time must be after start time');
+      if (timeToMinutes(formEndTime) <= timeToMinutes(formStartTime)) throw new Error('End time must be after start time');
 
       if (isEditing) {
         if (hasSeries && editScope === 'future') {
@@ -184,7 +185,7 @@ export function BlockFormDialog({ open, onOpenChange, editingBlock, onSuccess }:
       toast.error('Start and end times are required');
       return;
     }
-    if (formEndTime <= formStartTime) {
+    if (timeToMinutes(formEndTime) <= timeToMinutes(formStartTime)) {
       toast.error('End time must be after start time');
       return;
     }

@@ -58,7 +58,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
     for (const bk of monthBookings) {
       const dur = (timeToMinutes(bk.end_time) - timeToMinutes(bk.start_time)) / 60;
       if (bk.id === booking.id) {
-        return running >= rates.includedHours ? 'Overage' : running + dur > rates.includedHours ? 'Partial overage' : 'Included';
+        return running + dur > rates.includedHours ? (running >= rates.includedHours ? 'Overage' : 'Partial overage') : 'Included';
       }
       running += dur;
     }
