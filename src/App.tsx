@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { PreviewProvider } from "@/contexts/PreviewContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { InternalLayout } from "@/components/layout/InternalLayout";
 import { ClientLayout } from "@/components/layout/ClientLayout";
@@ -62,6 +63,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <PreviewProvider>
         <AuthProvider>
           <Routes>
             {/* Public auth routes */}
@@ -291,6 +293,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
+        </PreviewProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

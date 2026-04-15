@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreview } from '@/contexts/PreviewContext';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import type { AppRole } from '@/types/database';
@@ -12,6 +13,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { user, authUser, loading, signOut } = useAuth();
+  const { isPreviewMode } = usePreview();
   const location = useLocation();
 
   // For CLIENT users with an accountId, check if the account has COROASTING in programs
@@ -76,7 +78,10 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
 
   // Check role access
   if (allowedRoles && !allowedRoles.includes(authUser.role)) {
-    if (authUser.role === 'CLIENT') {
+    // In preview mode, allow ADMIN/OPS through CLIENT routes
+    if (isPreviewMode && (authUser.role === 'ADMIN' || authUser.role === 'OPS') && allowedRoles.includes('CLIENT')) {
+      // Allow through
+    } else if (authUser.role === 'CLIENT') {
       // If user only has coroast access (no place orders), go to member portal
       if (isCoroastMember && !authUser.canPlaceOrders) {
         return <Navigate to="/member-portal" replace />;
@@ -93,8 +98,8 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     return <Navigate to="/member-portal" replace />;
   }
 
-  // ADMIN/OPS trying to access member portal — redirect away
-  if ((authUser.role === 'ADMIN' || authUser.role === 'OPS') && location.pathname.startsWith('/member-portal')) {
+  // ADMIN/OPS trying to access member portal — redirect away (unless preview mode)
+  if (!isPreviewMode && (authUser.role === 'ADMIN' || authUser.role === 'OPS') && location.pathname.startsWith('/member-portal')) {
     return <Navigate to="/dashboard" replace />;
   }
 
