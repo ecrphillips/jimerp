@@ -133,7 +133,6 @@ export function MemberPortalLayout({ children }: MemberPortalLayoutProps) {
           {children}
         </main>
       </div>
-      </div>
     </div>
     </div>
   );
