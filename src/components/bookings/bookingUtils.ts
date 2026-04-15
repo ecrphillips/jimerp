@@ -87,7 +87,7 @@ export function checkOverlap(
   for (const bk of bookings) {
     if (excludeBookingId && bk.id === excludeBookingId) continue;
     if (bk.booking_date !== date) continue;
-    if (bk.status === 'CANCELLED') continue;
+    if (['CANCELLED', 'CANCELLED_FREE', 'CANCELLED_CHARGED', 'CANCELLED_WAIVED', 'NO_SHOW'].includes(bk.status)) continue;
     const bStart = timeToMinutes(bk.start_time);
     const bEnd = timeToMinutes(bk.end_time);
     if (startMin < bEnd && endMin > bStart) {
