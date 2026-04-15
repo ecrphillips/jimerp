@@ -1,7 +1,13 @@
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { timeToMinutes, type BlockRow, type BookingRow } from './bookingUtils';
+import { supabase } from '@/integrations/supabase/client';
+import { timeToMinutes, type BlockRow, type BookingRow, type AvailabilityWindow } from './bookingUtils';
+
+const JS_DOW_TO_STRING: Record<number, string> = {
+  0: 'SUN', 1: 'MON', 2: 'TUE', 3: 'WED', 4: 'THU', 5: 'FRI', 6: 'SAT',
+};
 
 const TIME_OPTIONS: { value: string; label: string }[] = [];
 for (let h = 5; h <= 22; h++) {
@@ -12,6 +18,8 @@ for (let h = 5; h <= 22; h++) {
     TIME_OPTIONS.push({ value, label: `${h12}:${String(m).padStart(2, '0')} ${ampm}` });
   }
 }
+
+const CANCELLED_STATUSES = ['CANCELLED', 'CANCELLED_FREE', 'CANCELLED_CHARGED', 'CANCELLED_WAIVED', 'NO_SHOW'];
 
 /** Check if a 30-min slot starting at `slotMin` is blocked */
 function isSlotBlocked(
@@ -29,7 +37,7 @@ function isSlotBlocked(
   }
   for (const bk of bookings) {
     if (bk.booking_date !== dateStr) continue;
-    if (bk.status === 'CANCELLED') continue;
+    if (CANCELLED_STATUSES.includes(bk.status)) continue;
     const bStart = timeToMinutes(bk.start_time);
     const bEnd = timeToMinutes(bk.end_time);
     if (slotMin < bEnd && slotEnd > bStart) return true;
@@ -53,12 +61,31 @@ function isRangeBlocked(
   }
   for (const bk of bookings) {
     if (bk.booking_date !== dateStr) continue;
-    if (bk.status === 'CANCELLED') continue;
+    if (CANCELLED_STATUSES.includes(bk.status)) continue;
     const bStart = timeToMinutes(bk.start_time);
     const bEnd = timeToMinutes(bk.end_time);
     if (startMin < bEnd && endMin > bStart) return true;
   }
   return false;
+}
+
+/** Check if a time (in minutes) falls outside the availability window */
+function isOutsideWindow(
+  slotMin: number,
+  windows: AvailabilityWindow[],
+  dow: string,
+  isEndTime: boolean,
+): boolean {
+  // No windows configured → fully open (legacy)
+  if (windows.length === 0) return false;
+  const win = windows.find(w => w.day_of_week === dow && w.is_active);
+  if (!win) return true; // Day has no active window → fully unavailable
+  const openMin = timeToMinutes(win.open_time);
+  const closeMin = timeToMinutes(win.close_time);
+  if (isEndTime) {
+    return slotMin < openMin || slotMin > closeMin;
+  }
+  return slotMin < openMin || slotMin >= closeMin;
 }
 
 interface AvailabilityTimeSelectProps {
@@ -84,6 +111,29 @@ export function AvailabilityTimeSelect({
   startTimeForRange,
   isConflicted,
 }: AvailabilityTimeSelectProps) {
+  const { data: windows = [] } = useQuery({
+    queryKey: ['coroast-availability-windows'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('coroast_availability_windows')
+        .select('*');
+      if (error) throw error;
+      return (data ?? []) as AvailabilityWindow[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const dow = useMemo(() => {
+    if (!dateStr) return '';
+    return JS_DOW_TO_STRING[new Date(dateStr + 'T00:00:00').getDay()];
+  }, [dateStr]);
+
+  // Check if the entire day is unavailable (windows exist but none active for this day)
+  const dayFullyClosed = useMemo(() => {
+    if (!dateStr || windows.length === 0) return false;
+    return !windows.some(w => w.day_of_week === dow && w.is_active);
+  }, [dateStr, windows, dow]);
+
   const blockedSet = useMemo(() => {
     if (!dateStr) return new Set<string>();
     const set = new Set<string>();
@@ -91,6 +141,14 @@ export function AvailabilityTimeSelect({
 
     for (const opt of TIME_OPTIONS) {
       const optMin = timeToMinutes(opt.value);
+      const isEnd = startMin !== null;
+
+      // Check availability window
+      if (windows.length > 0 && isOutsideWindow(optMin, windows, dow, isEnd)) {
+        set.add(opt.value);
+        continue;
+      }
+
       if (startMin !== null) {
         // End-time mode: only show times after start, check full range
         if (optMin <= startMin) {
@@ -106,7 +164,15 @@ export function AvailabilityTimeSelect({
       }
     }
     return set;
-  }, [dateStr, blocks, bookings, startTimeForRange]);
+  }, [dateStr, blocks, bookings, startTimeForRange, windows, dow]);
+
+  if (dayFullyClosed) {
+    return (
+      <div className="flex items-center h-10 px-3 rounded-md border border-input bg-muted text-sm text-muted-foreground">
+        Closed this day
+      </div>
+    );
+  }
 
   return (
     <Select value={value} onValueChange={onValueChange}>
@@ -126,7 +192,7 @@ export function AvailabilityTimeSelect({
               <span className="flex items-center gap-2">
                 {opt.label}
                 {blocked && (
-                  <span className="text-[10px] text-muted-foreground font-medium">Blocked</span>
+                  <span className="text-[10px] text-muted-foreground font-medium">Unavailable</span>
                 )}
               </span>
             </SelectItem>

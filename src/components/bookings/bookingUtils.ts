@@ -34,6 +34,15 @@ export interface BlockRow {
   notes: string | null;
 }
 
+export interface AvailabilityWindow {
+  id: string;
+  day_of_week: string;
+  open_time: string;
+  close_time: string;
+  is_active: boolean;
+  notes: string | null;
+}
+
 // Distinct member colors — using HSL-compatible classes
 const MEMBER_COLORS = [
   { bg: 'hsl(210 70% 50%)', text: '#fff', class: 'bg-[hsl(210_70%_50%)]' },
@@ -65,6 +74,42 @@ export function formatTime12(t: string): string {
   return `${h12}:${m} ${ampm}`;
 }
 
+const JS_DOW_TO_STRING: Record<number, string> = {
+  0: 'SUN', 1: 'MON', 2: 'TUE', 3: 'WED', 4: 'THU', 5: 'FRI', 6: 'SAT',
+};
+
+/**
+ * Check if a booking falls outside the defined availability window for that day.
+ * Returns an error string if outside, null if OK.
+ * If no windows are configured at all, returns null (fully open / legacy behaviour).
+ */
+export function checkAvailabilityWindow(
+  date: string,
+  startTime: string,
+  endTime: string,
+  windows: AvailabilityWindow[],
+): string | null {
+  // If no windows configured at all, treat as fully open (backward compat)
+  if (windows.length === 0) return null;
+
+  const dow = JS_DOW_TO_STRING[new Date(date + 'T00:00:00').getDay()];
+  const window = windows.find(w => w.day_of_week === dow && w.is_active);
+  if (!window) {
+    return `Bookings are not available on ${dow.charAt(0) + dow.slice(1).toLowerCase()}`;
+  }
+
+  const startMin = timeToMinutes(startTime);
+  const endMin = timeToMinutes(endTime);
+  const openMin = timeToMinutes(window.open_time);
+  const closeMin = timeToMinutes(window.close_time);
+
+  if (startMin < openMin || endMin > closeMin) {
+    return `Booking must be within ${formatTime12(window.open_time)} – ${formatTime12(window.close_time)}`;
+  }
+
+  return null;
+}
+
 export function checkOverlap(
   date: string,
   startTime: string,
@@ -72,7 +117,14 @@ export function checkOverlap(
   blocks: BlockRow[],
   bookings: BookingRow[],
   excludeBookingId?: string,
+  windows?: AvailabilityWindow[],
 ): string | null {
+  // Check availability window first
+  if (windows) {
+    const windowErr = checkAvailabilityWindow(date, startTime, endTime, windows);
+    if (windowErr) return windowErr;
+  }
+
   const startMin = timeToMinutes(startTime);
   const endMin = timeToMinutes(endTime);
 
