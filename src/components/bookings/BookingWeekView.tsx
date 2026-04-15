@@ -189,9 +189,9 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
       </div>
 
       {/* Grid */}
-      <div className="border rounded-md overflow-auto">
-        <div className="grid" style={{ gridTemplateColumns: '56px repeat(7, 1fr)', minWidth: 700 }}>
-          {/* Header */}
+      <div className="border rounded-md overflow-hidden">
+        {/* Sticky header */}
+        <div className="grid bg-background" style={{ gridTemplateColumns: '56px repeat(7, 1fr)', minWidth: 700 }}>
           <div className="border-b border-r bg-muted/50 p-1" />
           {weekDays.map(day => {
             const isToday = format(day, 'yyyy-MM-dd') === todayStr;
@@ -202,81 +202,86 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
               </div>
             );
           })}
+        </div>
 
-          {/* Time labels */}
-          <div className="border-r relative" style={{ height: TOTAL_HOURS * ROW_HEIGHT }}>
-            {hours.map(h => (
-              <div key={h} className="absolute right-2 text-[10px] text-muted-foreground leading-none" style={{ top: (h - HOUR_START) * ROW_HEIGHT - 6 }}>
-                {h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`}
-              </div>
-            ))}
-          </div>
+        {/* Scrollable body */}
+        <div ref={scrollRef} style={{ height: 11 * ROW_HEIGHT, overflowY: 'auto', overflowX: 'auto' }}>
+          <div className="grid" style={{ gridTemplateColumns: '56px repeat(7, 1fr)', minWidth: 700 }}>
+            {/* Time labels */}
+            <div className="border-r relative" style={{ height: TOTAL_HOURS * ROW_HEIGHT }}>
+              {hours.map(h => (
+                <div key={h} className="absolute right-2 text-[10px] text-muted-foreground leading-none" style={{ top: (h - HOUR_START) * ROW_HEIGHT - 6 }}>
+                  {h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`}
+                </div>
+              ))}
+            </div>
 
-          {/* Day columns */}
-          {weekDays.map(day => {
-            const dateStr = format(day, 'yyyy-MM-dd');
-            const dayEvents = eventsByDate.get(dateStr) || [];
-            const isToday = dateStr === todayStr;
+            {/* Day columns */}
+            {weekDays.map(day => {
+              const dateStr = format(day, 'yyyy-MM-dd');
+              const dayEvents = eventsByDate.get(dateStr) || [];
+              const isToday = dateStr === todayStr;
 
-            return (
-              <div
-                key={dateStr}
-                className={cn('relative border-l cursor-crosshair', isToday && 'bg-primary/5')}
-                style={{ height: TOTAL_HOURS * ROW_HEIGHT }}
-                onClick={(e) => handleGridClick(day, e)}
-              >
-                {hours.map(h => (
-                  <div key={h} className="absolute w-full border-t border-border/40" style={{ top: (h - HOUR_START) * ROW_HEIGHT }} />
-                ))}
+              return (
+                <div
+                  key={dateStr}
+                  className={cn('relative border-l cursor-crosshair', isToday && 'bg-primary/5')}
+                  style={{ height: TOTAL_HOURS * ROW_HEIGHT }}
+                  onClick={(e) => handleGridClick(day, e)}
+                >
+                  {hours.map(h => (
+                    <div key={h} className="absolute w-full border-t border-border/40" style={{ top: (h - HOUR_START) * ROW_HEIGHT }} />
+                  ))}
 
-                {dayEvents.map(ev => {
-                  const clampedStart = Math.max(ev.startMin, HOUR_START * 60);
-                  const clampedEnd = Math.min(ev.endMin, HOUR_END * 60);
-                  if (clampedEnd <= clampedStart) return null;
+                  {dayEvents.map(ev => {
+                    const clampedStart = Math.max(ev.startMin, HOUR_START * 60);
+                    const clampedEnd = Math.min(ev.endMin, HOUR_END * 60);
+                    if (clampedEnd <= clampedStart) return null;
 
-                  const top = minutesToPx(clampedStart);
-                  const height = Math.max(minutesToPx(clampedEnd) - top, 16);
+                    const top = minutesToPx(clampedStart);
+                    const height = Math.max(minutesToPx(clampedEnd) - top, 16);
 
-                  return (
-                    <div
-                      key={ev.id}
-                      className={cn(
-                        'absolute left-0.5 right-0.5 rounded px-1 text-[10px] leading-tight overflow-hidden',
-                        ev.isBlock ? 'cursor-not-allowed opacity-90' : 'cursor-pointer',
-                        ev.isOverage && 'ring-1 ring-inset ring-white/40',
-                        !ev.isBlock && ev.urgency === 'amber' && 'ring-2 ring-amber-400',
-                        !ev.isBlock && ev.urgency === 'red' && 'ring-2 ring-destructive',
-                      )}
-                      style={{
-                        top, height,
-                        backgroundColor: ev.bgColor,
-                        color: ev.textColor,
-                        backgroundImage: ev.isOverage
-                          ? 'repeating-linear-gradient(135deg, transparent, transparent 3px, rgba(255,255,255,0.15) 3px, rgba(255,255,255,0.15) 6px)'
-                          : undefined,
-                      }}
-                      title={ev.tooltip}
-                      onClick={(e) => handleEventClick(ev, e)}
-                    >
-                      <div className="flex items-center gap-0.5 truncate pt-0.5">
-                        {ev.urgency === 'red' && !ev.isBlock && <Lock className="h-2.5 w-2.5 flex-shrink-0" />}
-                        {ev.recurring && <Repeat className="h-2.5 w-2.5 flex-shrink-0" />}
-                        {ev.isOverage && <DollarSign className="h-2.5 w-2.5 flex-shrink-0" />}
-                        <span className="truncate font-medium">{ev.label}</span>
-                      </div>
-                      {height > 24 && (
-                        <div className="truncate opacity-80">
-                          {formatTime12(`${Math.floor(ev.startMin / 60).toString().padStart(2, '0')}:${(ev.startMin % 60).toString().padStart(2, '0')}`)}
-                          {' – '}
-                          {formatTime12(`${Math.floor(ev.endMin / 60).toString().padStart(2, '0')}:${(ev.endMin % 60).toString().padStart(2, '0')}`)}
+                    return (
+                      <div
+                        key={ev.id}
+                        className={cn(
+                          'absolute left-0.5 right-0.5 rounded px-1 text-[10px] leading-tight overflow-hidden',
+                          ev.isBlock ? 'cursor-not-allowed opacity-90' : 'cursor-pointer',
+                          ev.isOverage && 'ring-1 ring-inset ring-white/40',
+                          !ev.isBlock && ev.urgency === 'amber' && 'ring-2 ring-amber-400',
+                          !ev.isBlock && ev.urgency === 'red' && 'ring-2 ring-destructive',
+                        )}
+                        style={{
+                          top, height,
+                          backgroundColor: ev.bgColor,
+                          color: ev.textColor,
+                          backgroundImage: ev.isOverage
+                            ? 'repeating-linear-gradient(135deg, transparent, transparent 3px, rgba(255,255,255,0.15) 3px, rgba(255,255,255,0.15) 6px)'
+                            : undefined,
+                        }}
+                        title={ev.tooltip}
+                        onClick={(e) => handleEventClick(ev, e)}
+                      >
+                        <div className="flex items-center gap-0.5 truncate pt-0.5">
+                          {ev.urgency === 'red' && !ev.isBlock && <Lock className="h-2.5 w-2.5 flex-shrink-0" />}
+                          {ev.recurring && <Repeat className="h-2.5 w-2.5 flex-shrink-0" />}
+                          {ev.isOverage && <DollarSign className="h-2.5 w-2.5 flex-shrink-0" />}
+                          <span className="truncate font-medium">{ev.label}</span>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
+                        {height > 24 && (
+                          <div className="truncate opacity-80">
+                            {formatTime12(`${Math.floor(ev.startMin / 60).toString().padStart(2, '0')}:${(ev.startMin % 60).toString().padStart(2, '0')}`)}
+                            {' – '}
+                            {formatTime12(`${Math.floor(ev.endMin / 60).toString().padStart(2, '0')}:${(ev.endMin % 60).toString().padStart(2, '0')}`)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
