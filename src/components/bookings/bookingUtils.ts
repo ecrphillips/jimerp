@@ -13,6 +13,7 @@ export interface MemberRow {
 export interface BookingRow {
   id: string;
   member_id: string;
+  account_id?: string;
   billing_period_id: string;
   booking_date: string;
   start_time: string;

@@ -12,7 +12,7 @@ interface MemberSummaryPanelProps {
 
 function getMonthBookings(bookings: BookingRow[], memberId: string, month: string) {
   return bookings.filter(
-    b => b.member_id === memberId && b.booking_date.startsWith(month) && b.status !== 'CANCELLED'
+    b => (b.account_id === memberId || b.member_id === memberId) && b.booking_date.startsWith(month) && !['CANCELLED', 'CANCELLED_FREE', 'CANCELLED_CHARGED', 'CANCELLED_WAIVED', 'NO_SHOW'].includes(b.status)
   );
 }
 
@@ -45,7 +45,7 @@ export function MemberSummaryPanel({ members, bookings, currentMonth }: MemberSu
           return (
             <button
               key={member.id}
-              onClick={() => navigate(`/co-roasting/members/${member.id}`)}
+              onClick={() => navigate(`/accounts/${member.id}`)}
               className="flex items-start gap-2 rounded-md border p-2 text-xs min-w-[190px] max-w-[220px] shrink-0 text-left transition-colors hover:bg-accent hover:border-accent-foreground/20 cursor-pointer"
             >
               <div
