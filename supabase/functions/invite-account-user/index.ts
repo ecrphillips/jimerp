@@ -207,10 +207,12 @@ Deno.serve(async (req) => {
 
       userId = inviteData.user.id;
 
-      // Create user_roles record
+      // Create user_roles record (with mirror client_id to satisfy check constraint)
+      const mirrorClientId = await findOrCreateClientId();
       const { error: roleInsertError } = await adminClient.from('user_roles').insert({
         user_id: userId,
         role: 'CLIENT',
+        client_id: mirrorClientId,
       });
 
       if (roleInsertError) {
