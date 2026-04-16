@@ -146,7 +146,16 @@ export default function MemberSchedule() {
     },
   });
 
-  const { data: allBookings = [] } = useQuery({
+  const { data: windows = [] } = useQuery({
+    queryKey: ['member-portal-availability-windows'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('coroast_availability_windows')
+        .select('id, day_of_week, open_time, close_time, is_active, notes');
+      if (error) throw error;
+      return (data ?? []) as AvailabilityWindow[];
+    },
+  });
     queryKey: ['member-portal-bookings'],
     queryFn: async () => {
       const { data, error } = await supabase
