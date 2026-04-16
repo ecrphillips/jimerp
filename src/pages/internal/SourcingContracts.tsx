@@ -375,7 +375,7 @@ export default function SourcingContracts() {
         </div>
       )}
 
-      <ContractDetailPanel contractId={selectedContractId} onClose={() => setSelectedContractId(null)} vendors={vendors} vendorMap={vendorMap} lots={lotsByContract} />
+      <ContractDetailPanel contractId={selectedContractId} onClose={() => setSelectedContractId(null)} vendors={vendors} vendorMap={vendorMap} lots={lotsByContract} requestedByContract={requestedByContract} />
       <AddContractModal open={addModalOpen} onOpenChange={setAddModalOpen} vendors={vendors} />
       <CreateReleaseModal
         open={createReleaseOpen}
