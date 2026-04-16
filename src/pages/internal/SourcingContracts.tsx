@@ -317,19 +317,19 @@ export default function SourcingContracts() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Vendor</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Lot ID</TableHead>
-                <TableHead>Origin</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Bags</TableHead>
-                <TableHead className="text-right">Price</TableHead>
+                <SortHeader k="vendor" label="Vendor" />
+                <SortHeader k="name" label="Name" />
+                <SortHeader k="lot_id" label="Lot ID" />
+                <SortHeader k="origin" label="Origin" />
+                <SortHeader k="category" label="Category" />
+                <SortHeader k="bags" label="Bags" align="right" />
+                <SortHeader k="price" label="Price" align="right" />
+                <SortHeader k="created" label="Created" />
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map(c => {
+              {sorted.map(c => {
                 const vendor = c.vendor_id ? vendorMap[c.vendor_id] : null;
                 const lots = lotsByContract[c.id] || [];
                 const bagsReleased = lots.reduce((sum, l) => sum + l.bags_released, 0);
@@ -341,9 +341,9 @@ export default function SourcingContracts() {
                     <TableCell>{c.lot_identifier || '—'}</TableCell>
                     <TableCell>{[c.origin, c.region].filter(Boolean).join(' — ') || '—'}</TableCell>
                     <TableCell>{CATEGORY_LABELS[c.category] || c.category}</TableCell>
-                    <TableCell>{STATUS_LABELS[c.status] || c.status}</TableCell>
                     <TableCell className="text-right">{totalBags > 0 ? `${bagsReleased} / ${totalBags}` : '—'}</TableCell>
                     <TableCell className="text-right">{c.contracted_price_per_kg != null ? formatPrice(c.contracted_price_per_kg, c.contracted_price_currency) : '—'}</TableCell>
+                    <TableCell className="whitespace-nowrap">{c.created_at ? format(new Date(c.created_at), 'MMM d, yyyy') : '—'}</TableCell>
                     <TableCell>
                       <Button variant="outline" size="sm" onClick={() => setSelectedContractId(c.id)}>View</Button>
                     </TableCell>
