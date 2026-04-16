@@ -361,7 +361,7 @@ export default function SourcingContracts() {
                     <TableCell>{c.lot_identifier || '—'}</TableCell>
                     <TableCell>{[c.origin, c.region].filter(Boolean).join(' — ') || '—'}</TableCell>
                     <TableCell>{CATEGORY_LABELS[c.category] || c.category}</TableCell>
-                    <TableCell className="text-right">{totalBags > 0 ? `${bagsReleased} / ${totalBags}` : '—'}</TableCell>
+                    <TableCell className="text-right">{totalBags > 0 ? `${totalBags - (requestedByContract[c.id] || 0)} / ${totalBags}` : '—'}</TableCell>
                     <TableCell className="text-right">{c.contracted_price_per_kg != null ? formatPrice(c.contracted_price_per_kg, c.contracted_price_currency) : '—'}</TableCell>
                     <TableCell className="whitespace-nowrap">{c.created_at ? format(new Date(c.created_at), 'MMM d, yyyy') : '—'}</TableCell>
                     <TableCell>
