@@ -22,6 +22,7 @@ import { Plus, CalendarIcon, Trash2, ExternalLink, Pencil } from 'lucide-react';
 import { formatMoney } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
+import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
 import { COMMON_ORIGINS, OTHER_ORIGINS, getCountryName } from '@/lib/coffeeOrigins';
 import { useNavigate } from 'react-router-dom';
 

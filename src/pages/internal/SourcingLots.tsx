@@ -19,6 +19,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, Check, FileText, AlertTriangle, CheckCircle2, Pencil, Trash2 } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { CoverageCalendar } from '@/components/sourcing/CoverageCalendar';
+import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 // ─── Types ─────────────────────────────────────────────────
 

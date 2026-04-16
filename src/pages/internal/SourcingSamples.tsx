@@ -17,6 +17,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, Plus, Check, FileText, X, Trash2 } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
+import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 type SampleStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 // NOTE: Existing SINGLE_ORIGIN records remain in the DB but display as "Blender" via fallback. No automated migration needed.

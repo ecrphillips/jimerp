@@ -20,6 +20,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Search, Plus, Check, FileText, AlertTriangle, Copy, Mail, CalendarIcon, PackageCheck, Trash2 } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
+import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { COFFEE_ORIGIN_COUNTRIES, COMMON_ORIGINS, OTHER_ORIGINS, getCountryName, getCountryDisplayLabel } from '@/lib/coffeeOrigins';
 
 type ContractStatus = 'ACTIVE' | 'DEPLETED' | 'CANCELLED';
