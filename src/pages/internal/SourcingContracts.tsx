@@ -244,11 +244,50 @@ export default function SourcingContracts() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : filtered.length === 0 ? (
         <p className="text-sm text-muted-foreground">{search || statusFilter !== 'ALL' || categoryFilter !== 'ALL' ? 'No contracts match your filters.' : 'No contracts yet. Add one to get started.'}</p>
-      ) : (
+      ) : viewMode === 'cards' ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map(c => (
             <ContractCard key={c.id} contract={c} vendor={c.vendor_id ? vendorMap[c.vendor_id] : null} lots={lotsByContract[c.id] || []} onView={() => setSelectedContractId(c.id)} />
           ))}
+        </div>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Vendor</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Origin</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Bags</TableHead>
+                <TableHead className="text-right">Price</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map(c => {
+                const vendor = c.vendor_id ? vendorMap[c.vendor_id] : null;
+                const lots = lotsByContract[c.id] || [];
+                const bagsReleased = lots.reduce((sum, l) => sum + l.bags_released, 0);
+                const totalBags = c.num_bags || 0;
+                return (
+                  <TableRow key={c.id} className={c.status === 'CANCELLED' ? 'opacity-60' : ''}>
+                    <TableCell className="font-medium">{vendor?.name || '—'}</TableCell>
+                    <TableCell>{c.name}</TableCell>
+                    <TableCell>{[c.origin, c.region].filter(Boolean).join(' — ') || '—'}</TableCell>
+                    <TableCell>{CATEGORY_LABELS[c.category] || c.category}</TableCell>
+                    <TableCell>{STATUS_LABELS[c.status] || c.status}</TableCell>
+                    <TableCell className="text-right">{totalBags > 0 ? `${bagsReleased} / ${totalBags}` : '—'}</TableCell>
+                    <TableCell className="text-right">{c.contracted_price_per_kg != null ? formatPrice(c.contracted_price_per_kg, c.contracted_price_currency) : '—'}</TableCell>
+                    <TableCell>
+                      <Button variant="outline" size="sm" onClick={() => setSelectedContractId(c.id)}>View</Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </div>
       )}
 

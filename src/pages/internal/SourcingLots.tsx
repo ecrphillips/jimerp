@@ -219,6 +219,7 @@ export default function SourcingLots() {
           <h1 className="page-title">Lots</h1>
           <p className="text-sm text-muted-foreground">Green coffee inventory</p>
         </div>
+        <ViewToggle value={viewMode} onChange={setViewMode} />
       </div>
 
       <Tabs defaultValue={initialTab}>
