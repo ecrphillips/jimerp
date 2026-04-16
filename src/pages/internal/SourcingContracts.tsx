@@ -195,6 +195,26 @@ export default function SourcingContracts() {
     return map;
   }, [allLots]);
 
+  // Bags requested across all non-cancelled releases, grouped by contract.
+  // Drives the "Remaining Bags" display (total - requested).
+  const { data: requestedByContract = {} } = useQuery({
+    queryKey: ['green-release-lines-by-contract'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('green_release_lines')
+        .select('contract_id, bags_requested, green_releases!inner(status)');
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      for (const row of (data as any[]) || []) {
+        const status = row.green_releases?.status;
+        if (status === 'CANCELLED') continue;
+        if (!row.contract_id) continue;
+        map[row.contract_id] = (map[row.contract_id] || 0) + (row.bags_requested || 0);
+      }
+      return map;
+    },
+  });
+
   const filtered = useMemo(() => {
     return contracts.filter(c => {
       if (statusFilter !== 'ALL' && c.status !== statusFilter) return false;
