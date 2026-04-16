@@ -450,12 +450,14 @@ function ContractDetailPanel({
   vendors,
   vendorMap,
   lots: lotsByContract,
+  requestedByContract,
 }: {
   contractId: string | null;
   onClose: () => void;
   vendors: Vendor[];
   vendorMap: Record<string, Vendor>;
   lots: Record<string, Lot[]>;
+  requestedByContract: Record<string, number>;
 }) {
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
@@ -487,6 +489,8 @@ function ContractDetailPanel({
   });
 
   const contractLots = contractId ? (lotsByContract[contractId] || []) : [];
+  // Bags requested via non-cancelled releases (drives "remaining" math).
+  const bagsRequested = contractId ? (requestedByContract[contractId] || 0) : 0;
   const bagsReleased = contractLots.reduce((sum, l) => sum + l.bags_released, 0);
 
   const { data: notes = [] } = useQuery({
