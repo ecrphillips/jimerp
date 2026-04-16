@@ -1726,20 +1726,12 @@ function AddCoffeeLineModal({
       const priceAmt = parseFloat(priceAmount) || 0;
       const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, priceUnit, fxRateNum) : null;
 
-      // Generate lot number
-      let poNumber = '';
-      try {
-        const { data: seqData, error: seqErr } = await supabase.rpc('nextval_text' as any, { seq_name: 'po_number_seq' });
-        if (seqErr) throw seqErr;
-        const seqVal = typeof seqData === 'number' ? seqData : parseInt(String(seqData));
-        poNumber = `PO-${String(seqVal).padStart(3, '0')}`;
-      } catch {
-        poNumber = `PO-${String(Date.now()).slice(-6)}`;
-      }
-
+      // Generate lot number: {VENDOR_ABBR}-{ORIGIN}-PO### (per vendor+origin sequence)
       const vendorAbbr = vendor?.abbreviation || '???';
       const originCode = originCountry || '???';
-      const lotNumber = `${vendorAbbr}-${originCode}-${poNumber}`;
+      const lotNumber = await generateLotNumber(vendorAbbr, originCode);
+      const poMatch = lotNumber.match(/PO\d+$/);
+      const poNumber = poMatch ? poMatch[0] : '';
 
       // Insert lot
       const { data: lot, error: lotErr } = await supabase
