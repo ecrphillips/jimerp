@@ -264,6 +264,7 @@ export default function SourcingContracts() {
               <TableRow>
                 <TableHead>Vendor</TableHead>
                 <TableHead>Name</TableHead>
+                <TableHead>Lot ID</TableHead>
                 <TableHead>Origin</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Status</TableHead>
@@ -282,6 +283,7 @@ export default function SourcingContracts() {
                   <TableRow key={c.id} className={c.status === 'CANCELLED' ? 'opacity-60' : ''}>
                     <TableCell className="font-medium">{vendor?.name || '—'}</TableCell>
                     <TableCell>{c.name}</TableCell>
+                    <TableCell>{c.lot_identifier || '—'}</TableCell>
                     <TableCell>{[c.origin, c.region].filter(Boolean).join(' — ') || '—'}</TableCell>
                     <TableCell>{CATEGORY_LABELS[c.category] || c.category}</TableCell>
                     <TableCell>{STATUS_LABELS[c.status] || c.status}</TableCell>
