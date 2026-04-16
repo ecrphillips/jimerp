@@ -148,6 +148,9 @@ export default function SourcingContracts() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [createReleaseOpen, setCreateReleaseOpen] = useState(false);
   const [viewMode, setViewMode] = useViewMode('sourcing_view_contracts', 'cards');
+  type SortKey = 'vendor' | 'name' | 'lot_id' | 'origin' | 'category' | 'bags' | 'price' | 'created';
+  const [sortKey, setSortKey] = useState<SortKey>('created');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const navigate = useNavigate();
 
   const { data: contracts = [], isLoading } = useQuery({
