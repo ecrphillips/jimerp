@@ -113,7 +113,7 @@ export function CreateReleaseModal({ open, onOpenChange, onSuccess }: Props) {
   // Step 2 state
   const [etaDate, setEtaDate] = useState<Date | undefined>();
   const [notes, setNotes] = useState('');
-  const [markReceived, setMarkReceived] = useState(false);
+  const [markReceived, setMarkReceived] = useState(true);
   const [receivedDate, setReceivedDate] = useState<Date | undefined>(new Date());
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [sharedCosts, setSharedCosts] = useState<SharedCostsJson>(emptySharedCosts('USD'));
@@ -128,7 +128,7 @@ export function CreateReleaseModal({ open, onOpenChange, onSuccess }: Props) {
     setSelected({});
     setEtaDate(undefined);
     setNotes('');
-    setMarkReceived(false);
+    setMarkReceived(true);
     setReceivedDate(new Date());
     setInvoiceNumber('');
     setSharedCosts(emptySharedCosts('USD'));
@@ -363,7 +363,7 @@ ${userName}`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{step === 1 ? 'New Release — Select Contracts' : 'New Release — Details & Pricing'}</DialogTitle>
         </DialogHeader>
@@ -404,7 +404,6 @@ ${userName}`;
                           <TableHead className="text-right">Bag Size</TableHead>
                           <TableHead className="text-right">Price</TableHead>
                           <TableHead className="text-right w-32">Bags Requested</TableHead>
-                          <TableHead className="w-32">Arrival</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -443,20 +442,6 @@ ${userName}`;
                                   />
                                 ) : <span className="text-muted-foreground">—</span>}
                               </TableCell>
-                              <TableCell>
-                                {sel ? (
-                                  <Select
-                                    value={sel.arrival_status}
-                                    onValueChange={(v) => updateLine(c.id, { arrival_status: v as any })}
-                                  >
-                                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="EN_ROUTE">En Route</SelectItem>
-                                      <SelectItem value="RECEIVED">Received</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                ) : <span className="text-muted-foreground">—</span>}
-                              </TableCell>
                             </TableRow>
                           );
                         })}
@@ -479,38 +464,40 @@ ${userName}`;
             {/* Header section */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>ETA Date (optional)</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn('w-full justify-start text-left font-normal', !etaDate && 'text-muted-foreground')}>
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {etaDate ? format(etaDate, 'PPP') : 'Pick a date'}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={etaDate} onSelect={setEtaDate} initialFocus className={cn('p-3 pointer-events-auto')} />
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div>
                 <Label>Invoice Number (optional — sets status to Invoiced)</Label>
                 <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="e.g. INV-12345" />
               </div>
-            </div>
-
-            <div>
-              <Label>Notes (optional)</Label>
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+              <div>
+                <Label>Notes (optional)</Label>
+                <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Internal notes…" />
+              </div>
             </div>
 
             {/* Before you save */}
-            <div className="border rounded-md p-3 bg-muted/30 space-y-2">
+            <div className="border rounded-md p-3 bg-muted/30 space-y-3">
               <p className="text-sm font-semibold">Before you save</p>
-              <div className="flex items-center gap-2">
-                <Checkbox id="mark-received" checked={markReceived} onCheckedChange={(c) => setMarkReceived(!!c)} />
-                <Label htmlFor="mark-received" className="cursor-pointer text-sm font-normal">Mark as received</Label>
+              <div className="space-y-2">
+                <Label className="text-xs">Arrival status (applies to all lots)</Label>
+                <div className="inline-flex rounded-md border border-input overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setMarkReceived(false)}
+                    className={cn(
+                      'px-3 py-1.5 text-xs font-medium transition-colors',
+                      !markReceived ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted',
+                    )}
+                  >En Route</button>
+                  <button
+                    type="button"
+                    onClick={() => setMarkReceived(true)}
+                    className={cn(
+                      'px-3 py-1.5 text-xs font-medium transition-colors',
+                      markReceived ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted',
+                    )}
+                  >Received</button>
+                </div>
               </div>
-              {markReceived && (
+              {markReceived ? (
                 <div>
                   <Label className="text-xs">Received Date</Label>
                   <Popover>
@@ -522,6 +509,21 @@ ${userName}`;
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar mode="single" selected={receivedDate} onSelect={setReceivedDate} initialFocus className={cn('p-3 pointer-events-auto')} />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              ) : (
+                <div>
+                  <Label className="text-xs">ETA Date (optional)</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className={cn('w-56 justify-start text-left font-normal', !etaDate && 'text-muted-foreground')}>
+                        <CalendarIcon className="mr-2 h-3 w-3" />
+                        {etaDate ? format(etaDate, 'PPP') : 'Pick a date'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar mode="single" selected={etaDate} onSelect={setEtaDate} initialFocus className={cn('p-3 pointer-events-auto')} />
                     </PopoverContent>
                   </Popover>
                 </div>
