@@ -296,13 +296,10 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
     if (!gContractId || !gBags) return;
     setGSaving(true);
     try {
-      // Generate lot number: {VENDOR_ABBR}-{ORIGIN}-PO### (per vendor+origin)
+      // Allocate fresh PO + lot number atomically.
       const vendor = (gContract as any)?.green_vendors;
-      const vendorAbbr = vendor?.abbreviation || '???';
-      const country = gContract?.origin_country || '???';
-      const lotNumber = await generateLotNumber(vendorAbbr, country);
-      const poMatch = lotNumber.match(/PO\d+$/);
-      const poNumber = poMatch ? poMatch[0] : '';
+      const po = await allocatePoNumber(vendor?.abbreviation);
+      const lotNumber = await allocateSingleLotNumber(po, gContract?.origin_country);
 
       const { data: lot, error } = await supabase.from('green_lots').insert({
         lot_number: lotNumber,
@@ -315,7 +312,7 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
         lot_identifier: gLotIdentifier.trim() || null,
         kg_on_hand: 0,
         created_by: authUser!.id,
-        po_number: poNumber,
+        po_number: po.poNumber,
       } as any).select('id, lot_number').single();
       if (error) throw error;
 
