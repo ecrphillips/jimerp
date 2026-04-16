@@ -241,6 +241,7 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
               const dateStr = format(day, 'yyyy-MM-dd');
               const dayEvents = eventsByDate.get(dateStr) || [];
               const isToday = dateStr === todayStr;
+              const outsideBands = getOutsideHourBands(day, windows);
 
               return (
                 <div
@@ -252,6 +253,21 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
                   {hours.map(h => (
                     <div key={h} className="absolute w-full border-t border-border/40" style={{ top: (h - HOUR_START) * ROW_HEIGHT }} />
                   ))}
+
+                  {/* Outside-hours shading (blocks new bookings) */}
+                  {outsideBands.map(([s, e], i) => {
+                    const top = minutesToPx(s);
+                    const height = minutesToPx(e) - top;
+                    return (
+                      <div
+                        key={`oh-${i}`}
+                        className="absolute left-0 right-0 bg-foreground/40 cursor-not-allowed z-10"
+                        style={{ top, height }}
+                        title="Outside booking hours"
+                        onClick={(ev) => ev.stopPropagation()}
+                      />
+                    );
+                  })}
 
                   {dayEvents.map(ev => {
                     const clampedStart = Math.max(ev.startMin, HOUR_START * 60);
