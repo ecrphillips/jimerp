@@ -195,6 +195,26 @@ export default function SourcingContracts() {
     return map;
   }, [allLots]);
 
+  // Bags requested across all non-cancelled releases, grouped by contract.
+  // Drives the "Remaining Bags" display (total - requested).
+  const { data: requestedByContract = {} } = useQuery({
+    queryKey: ['green-release-lines-by-contract'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('green_release_lines')
+        .select('contract_id, bags_requested, green_releases!inner(status)');
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      for (const row of (data as any[]) || []) {
+        const status = row.green_releases?.status;
+        if (status === 'CANCELLED') continue;
+        if (!row.contract_id) continue;
+        map[row.contract_id] = (map[row.contract_id] || 0) + (row.bags_requested || 0);
+      }
+      return map;
+    },
+  });
+
   const filtered = useMemo(() => {
     return contracts.filter(c => {
       if (statusFilter !== 'ALL' && c.status !== statusFilter) return false;
@@ -226,14 +246,18 @@ export default function SourcingContracts() {
         case 'lot_id': return cmp(a.lot_identifier, b.lot_identifier);
         case 'origin': return cmp([a.origin, a.region].filter(Boolean).join(' — ') || null, [b.origin, b.region].filter(Boolean).join(' — ') || null);
         case 'category': return cmp(CATEGORY_LABELS[a.category] || a.category, CATEGORY_LABELS[b.category] || b.category);
-        case 'bags': return cmp(a.num_bags ?? null, b.num_bags ?? null);
+        case 'bags': {
+          const aRem = a.num_bags != null ? a.num_bags - (requestedByContract[a.id] || 0) : null;
+          const bRem = b.num_bags != null ? b.num_bags - (requestedByContract[b.id] || 0) : null;
+          return cmp(aRem, bRem);
+        }
         case 'price': return cmp(a.contracted_price_per_kg ?? null, b.contracted_price_per_kg ?? null);
         case 'created': return cmp(a.created_at, b.created_at);
         default: return 0;
       }
     });
     return arr;
-  }, [filtered, sortKey, sortDir, vendorMap]);
+  }, [filtered, sortKey, sortDir, vendorMap, requestedByContract]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -322,7 +346,7 @@ export default function SourcingContracts() {
                 <SortHeader k="lot_id" label="Lot ID" />
                 <SortHeader k="origin" label="Origin" />
                 <SortHeader k="category" label="Category" />
-                <SortHeader k="bags" label="Bags" align="right" />
+                <SortHeader k="bags" label="Remaining Bags" align="right" />
                 <SortHeader k="price" label="Price" align="right" />
                 <SortHeader k="created" label="Created" />
                 <TableHead></TableHead>
@@ -341,7 +365,7 @@ export default function SourcingContracts() {
                     <TableCell>{c.lot_identifier || '—'}</TableCell>
                     <TableCell>{[c.origin, c.region].filter(Boolean).join(' — ') || '—'}</TableCell>
                     <TableCell>{CATEGORY_LABELS[c.category] || c.category}</TableCell>
-                    <TableCell className="text-right">{totalBags > 0 ? `${bagsReleased} / ${totalBags}` : '—'}</TableCell>
+                    <TableCell className="text-right">{totalBags > 0 ? `${totalBags - (requestedByContract[c.id] || 0)} / ${totalBags}` : '—'}</TableCell>
                     <TableCell className="text-right">{c.contracted_price_per_kg != null ? formatPrice(c.contracted_price_per_kg, c.contracted_price_currency) : '—'}</TableCell>
                     <TableCell className="whitespace-nowrap">{c.created_at ? format(new Date(c.created_at), 'MMM d, yyyy') : '—'}</TableCell>
                     <TableCell>
@@ -355,7 +379,7 @@ export default function SourcingContracts() {
         </div>
       )}
 
-      <ContractDetailPanel contractId={selectedContractId} onClose={() => setSelectedContractId(null)} vendors={vendors} vendorMap={vendorMap} lots={lotsByContract} />
+      <ContractDetailPanel contractId={selectedContractId} onClose={() => setSelectedContractId(null)} vendors={vendors} vendorMap={vendorMap} lots={lotsByContract} requestedByContract={requestedByContract} />
       <AddContractModal open={addModalOpen} onOpenChange={setAddModalOpen} vendors={vendors} />
       <CreateReleaseModal
         open={createReleaseOpen}
@@ -430,12 +454,14 @@ function ContractDetailPanel({
   vendors,
   vendorMap,
   lots: lotsByContract,
+  requestedByContract,
 }: {
   contractId: string | null;
   onClose: () => void;
   vendors: Vendor[];
   vendorMap: Record<string, Vendor>;
   lots: Record<string, Lot[]>;
+  requestedByContract: Record<string, number>;
 }) {
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
@@ -467,6 +493,8 @@ function ContractDetailPanel({
   });
 
   const contractLots = contractId ? (lotsByContract[contractId] || []) : [];
+  // Bags requested via non-cancelled releases (drives "remaining" math).
+  const bagsRequested = contractId ? (requestedByContract[contractId] || 0) : 0;
   const bagsReleased = contractLots.reduce((sum, l) => sum + l.bags_released, 0);
 
   const { data: notes = [] } = useQuery({
@@ -630,7 +658,7 @@ function ContractDetailPanel({
     lines.push(`Category: ${CATEGORY_LABELS[contract.category]}`);
     lines.push(`Status: ${STATUS_LABELS[contract.status]}`);
     lines.push(`Price: ${formatPrice(contract.contracted_price_per_kg, contract.contracted_price_currency)}`);
-    lines.push(`Bags: ${contract.num_bags || 0} total, ${bagsReleased} released, ${(contract.num_bags || 0) - bagsReleased} remaining`);
+    lines.push(`Bags: ${contract.num_bags || 0} total, ${bagsRequested} released, ${(contract.num_bags || 0) - bagsRequested} remaining`);
     const enRoute = contractLots.filter(l => l.status === 'EN_ROUTE').reduce((s, l) => s + l.bags_released, 0);
     lines.push(`En Route: ${enRoute} bags`);
     lines.push(`Warehouse: ${contract.warehouse_location || '—'}`);
@@ -902,7 +930,7 @@ function ContractDetailPanel({
                     <Plus className="h-3.5 w-3.5" /> Release Coffee
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground mb-2">{bagsReleased} of {contract.num_bags || 0} bags released</p>
+                <p className="text-xs text-muted-foreground mb-2">{(contract.num_bags || 0) - bagsRequested} of {contract.num_bags || 0} bags remaining</p>
                 {contractLots.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No lots released yet.</p>
                 ) : (
@@ -984,7 +1012,7 @@ function ContractDetailPanel({
           onOpenChange={setReleaseOpen}
           contract={contract}
           vendor={contract.vendor_id ? vendorMap[contract.vendor_id] : null}
-          bagsReleased={bagsReleased}
+          bagsRequested={bagsRequested}
           existingLotCount={contractLots.length}
         />
       )}
@@ -1026,19 +1054,19 @@ function ReleaseCoffeeModal({
   onOpenChange,
   contract,
   vendor,
-  bagsReleased,
+  bagsRequested,
   existingLotCount,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   contract: Contract;
   vendor: Vendor | null;
-  bagsReleased: number;
+  bagsRequested: number;
   existingLotCount: number;
 }) {
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
-  const remaining = (contract.num_bags || 0) - bagsReleased;
+  const remaining = (contract.num_bags || 0) - bagsRequested;
 
   const [lotIdentifier, setLotIdentifier] = useState('');
   const [bags, setBags] = useState('');
