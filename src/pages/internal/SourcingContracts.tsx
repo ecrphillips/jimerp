@@ -209,6 +209,58 @@ export default function SourcingContracts() {
     });
   }, [contracts, statusFilter, categoryFilter, search, vendorMap]);
 
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const cmp = (a: any, b: any) => {
+      if (a == null && b == null) return 0;
+      if (a == null) return 1;
+      if (b == null) return -1;
+      if (typeof a === 'number' && typeof b === 'number') return (a - b) * dir;
+      return String(a).localeCompare(String(b)) * dir;
+    };
+    arr.sort((a, b) => {
+      switch (sortKey) {
+        case 'vendor': return cmp(a.vendor_id ? vendorMap[a.vendor_id]?.name : null, b.vendor_id ? vendorMap[b.vendor_id]?.name : null);
+        case 'name': return cmp(a.name, b.name);
+        case 'lot_id': return cmp(a.lot_identifier, b.lot_identifier);
+        case 'origin': return cmp([a.origin, a.region].filter(Boolean).join(' — ') || null, [b.origin, b.region].filter(Boolean).join(' — ') || null);
+        case 'category': return cmp(CATEGORY_LABELS[a.category] || a.category, CATEGORY_LABELS[b.category] || b.category);
+        case 'bags': return cmp(a.num_bags ?? null, b.num_bags ?? null);
+        case 'price': return cmp(a.contracted_price_per_kg ?? null, b.contracted_price_per_kg ?? null);
+        case 'created': return cmp(a.created_at, b.created_at);
+        default: return 0;
+      }
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir, vendorMap]);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const SortHeader = ({ k, label, align }: { k: SortKey; label: string; align?: 'right' }) => (
+    <TableHead className={align === 'right' ? 'text-right' : ''}>
+      <button
+        type="button"
+        onClick={() => toggleSort(k)}
+        className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${align === 'right' ? 'flex-row-reverse' : ''}`}
+      >
+        {label}
+        {sortKey === k ? (
+          sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-40" />
+        )}
+      </button>
+    </TableHead>
+  );
+
   return (
     <div className="page-container space-y-6">
       <GreenCoffeeAlerts />
