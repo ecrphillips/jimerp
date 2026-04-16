@@ -926,7 +926,7 @@ function ContractDetailPanel({
                     <Plus className="h-3.5 w-3.5" /> Release Coffee
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground mb-2">{bagsReleased} of {contract.num_bags || 0} bags released</p>
+                <p className="text-xs text-muted-foreground mb-2">{(contract.num_bags || 0) - bagsRequested} of {contract.num_bags || 0} bags remaining</p>
                 {contractLots.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No lots released yet.</p>
                 ) : (
