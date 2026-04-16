@@ -396,6 +396,8 @@ ${userName}`;
                         <TableRow>
                           <TableHead className="w-10"></TableHead>
                           <TableHead>Contract</TableHead>
+                          <TableHead>Vendor Contract #</TableHead>
+                          <TableHead>Lot ID</TableHead>
                           <TableHead>Origin / Description</TableHead>
                           <TableHead className="text-right">Bags Remaining</TableHead>
                           <TableHead className="text-right">Bag Size</TableHead>
