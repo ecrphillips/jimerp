@@ -1057,12 +1057,12 @@ function ReleaseCoffeeModal({
   onOpenChange: (o: boolean) => void;
   contract: Contract;
   vendor: Vendor | null;
-  bagsReleased: number;
+  bagsRequested: number;
   existingLotCount: number;
 }) {
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
-  const remaining = (contract.num_bags || 0) - bagsReleased;
+  const remaining = (contract.num_bags || 0) - bagsRequested;
 
   const [lotIdentifier, setLotIdentifier] = useState('');
   const [bags, setBags] = useState('');
