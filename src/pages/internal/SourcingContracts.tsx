@@ -211,9 +211,12 @@ export default function SourcingContracts() {
           <h1 className="page-title">Contracts</h1>
           <p className="text-sm text-muted-foreground">Purchase commitments with vendors</p>
         </div>
-        <Button onClick={() => setAddModalOpen(true)} className="gap-1.5">
-          <Plus className="h-4 w-4" /> Add Contract
-        </Button>
+        <div className="flex items-center gap-2">
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+          <Button onClick={() => setAddModalOpen(true)} className="gap-1.5">
+            <Plus className="h-4 w-4" /> Add Contract
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

@@ -448,7 +448,7 @@ export default function SourcingSamples() {
         <p className="text-sm text-muted-foreground">
           {search || statusFilter !== 'ALL' || categoryFilter !== 'ALL' ? 'No samples match your filters.' : 'No samples yet. Add one to get started.'}
         </p>
-      ) : (
+      ) : viewMode === 'cards' ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((sample) => (
             <SampleCard
@@ -459,6 +459,37 @@ export default function SourcingSamples() {
               onView={() => setSelectedSampleId(sample.id)}
             />
           ))}
+        </div>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Vendor</TableHead>
+                <TableHead>Origin</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Score</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((sample) => (
+                <TableRow key={sample.id}>
+                  <TableCell className="font-medium">{sample.name}</TableCell>
+                  <TableCell>{sample.vendor_id ? vendorMap[sample.vendor_id] : '—'}</TableCell>
+                  <TableCell>{[sample.origin, sample.region].filter(Boolean).join(' — ') || '—'}</TableCell>
+                  <TableCell>{CATEGORY_LABELS[sample.category] || sample.category}</TableCell>
+                  <TableCell>{STATUS_LABELS[sample.status]}</TableCell>
+                  <TableCell className="text-right">{sample.score ?? '—'}</TableCell>
+                  <TableCell>
+                    <Button variant="outline" size="sm" onClick={() => setSelectedSampleId(sample.id)}>View</Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
 
