@@ -8,15 +8,35 @@ import { cn } from '@/lib/utils';
 import {
   getMemberColor, formatTime12, timeToMinutes, TIER_RATES,
   HOUR_START, HOUR_END, TOTAL_HOURS, ROW_HEIGHT,
-  type MemberRow, type BookingRow, type BlockRow,
+  type MemberRow, type BookingRow, type BlockRow, type AvailabilityWindow,
 } from './bookingUtils';
 
 interface BookingWeekViewProps {
   blocks: BlockRow[];
   bookings: BookingRow[];
   members: MemberRow[];
+  windows?: AvailabilityWindow[];
   onSlotClick: (date: string, time: string) => void;
   onBookingClick?: (booking: BookingRow) => void;
+}
+
+const JS_DOW_TO_STRING: Record<number, string> = {
+  0: 'SUN', 1: 'MON', 2: 'TUE', 3: 'WED', 4: 'THU', 5: 'FRI', 6: 'SAT',
+};
+
+/** Returns array of [startMin, endMin] ranges that are OUTSIDE booking hours for the given date. */
+function getOutsideHourBands(date: Date, windows: AvailabilityWindow[]): Array<[number, number]> {
+  const fullDay: [number, number] = [HOUR_START * 60, HOUR_END * 60];
+  if (!windows || windows.length === 0) return []; // no config = fully open
+  const dow = JS_DOW_TO_STRING[date.getDay()];
+  const w = windows.find(x => x.day_of_week === dow && x.is_active);
+  if (!w) return [fullDay]; // no window for this day = fully shaded
+  const openMin = Math.max(timeToMinutes(w.open_time), HOUR_START * 60);
+  const closeMin = Math.min(timeToMinutes(w.close_time), HOUR_END * 60);
+  const bands: Array<[number, number]> = [];
+  if (openMin > HOUR_START * 60) bands.push([HOUR_START * 60, openMin]);
+  if (closeMin < HOUR_END * 60) bands.push([closeMin, HOUR_END * 60]);
+  return bands;
 }
 
 function minutesToPx(minutes: number): number {
@@ -45,7 +65,7 @@ type CalendarEvent = {
   isNoShow: boolean;
 };
 
-export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBookingClick }: BookingWeekViewProps) {
+export function BookingWeekView({ blocks, bookings, members, windows = [], onSlotClick, onBookingClick }: BookingWeekViewProps) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const weekEnd = useMemo(() => endOfWeek(weekStart, { weekStartsOn: 1 }), [weekStart]);
   const weekDays = useMemo(() => eachDayOfInterval({ start: weekStart, end: weekEnd }), [weekStart, weekEnd]);
@@ -221,6 +241,7 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
               const dateStr = format(day, 'yyyy-MM-dd');
               const dayEvents = eventsByDate.get(dateStr) || [];
               const isToday = dateStr === todayStr;
+              const outsideBands = getOutsideHourBands(day, windows);
 
               return (
                 <div
@@ -232,6 +253,21 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
                   {hours.map(h => (
                     <div key={h} className="absolute w-full border-t border-border/40" style={{ top: (h - HOUR_START) * ROW_HEIGHT }} />
                   ))}
+
+                  {/* Outside-hours shading (blocks new bookings) */}
+                  {outsideBands.map(([s, e], i) => {
+                    const top = minutesToPx(s);
+                    const height = minutesToPx(e) - top;
+                    return (
+                      <div
+                        key={`oh-${i}`}
+                        className="absolute left-0 right-0 bg-foreground/40 cursor-not-allowed z-10"
+                        style={{ top, height }}
+                        title="Outside booking hours"
+                        onClick={(ev) => ev.stopPropagation()}
+                      />
+                    );
+                  })}
 
                   {dayEvents.map(ev => {
                     const clampedStart = Math.max(ev.startMin, HOUR_START * 60);
@@ -245,7 +281,7 @@ export function BookingWeekView({ blocks, bookings, members, onSlotClick, onBook
                       <div
                         key={ev.id}
                         className={cn(
-                          'absolute left-0.5 right-0.5 rounded px-1 text-[10px] leading-tight overflow-hidden',
+                          'absolute left-0.5 right-0.5 rounded px-1 text-[10px] leading-tight overflow-hidden z-20',
                           ev.isBlock ? 'cursor-not-allowed opacity-90' : 'cursor-pointer',
                           ev.isOverage && 'ring-1 ring-inset ring-white/40',
                           !ev.isBlock && ev.urgency === 'amber' && 'ring-2 ring-amber-400',
