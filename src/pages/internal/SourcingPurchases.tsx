@@ -49,6 +49,7 @@ interface PurchaseRow {
   shared_other_usd: number;
   shared_other_label: string | null;
   notes: string | null;
+  po_number: string | null;
   created_at: string;
   created_by: string | null;
   updated_at: string;
@@ -1157,11 +1158,9 @@ function CreatePurchaseModal({
           const dutiesAllocated = dutiesNum * share;
           const feesAllocated = feesNum * share;
 
-          const vendorAbbr = selectedVendor?.abbreviation || '???';
-          const originCode = line.origin_country || '???';
-          const lotNumber = await generateLotNumber(vendorAbbr, originCode);
-          const poMatch = lotNumber.match(/PO\d+$/);
-          const poNumber = poMatch ? poMatch[0] : '';
+          // Generate lot number under the just-allocated PO for this purchase
+          const lotNumber = await allocateSingleLotNumber(po, line.origin_country);
+          const poNumber = po.poNumber;
 
           const priceAmt = parseFloat(line.price_amount) || 0;
           const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
