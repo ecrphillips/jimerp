@@ -463,6 +463,7 @@ function LotDetailPanel({
     },
     onSuccess: () => {
       toast.success('Lot deleted');
+      queryClient.invalidateQueries({ queryKey: ['green-lots'] });
       queryClient.invalidateQueries({ queryKey: ['green-lots-all'] });
       queryClient.invalidateQueries({ queryKey: ['coverage-calendar-lots'] });
       onClose();
@@ -889,9 +890,14 @@ function LotDetailPanel({
         </SheetHeader>
 
         {confirmingDelete ? (
-          <div className="flex flex-col items-center gap-4 pt-12 text-center">
+          <div className="flex flex-col items-center gap-4 pt-12 text-center px-4">
             <p className="text-lg font-semibold">Delete "{lot?.lot_number}"?</p>
-            <p className="text-sm text-muted-foreground">This cannot be undone.</p>
+            <p className="text-sm text-muted-foreground">This will permanently delete this lot and cannot be undone.</p>
+            {lot?.release_id && (
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                This lot was created from a release. Deleting it will not affect the release record.
+              </p>
+            )}
             <div className="flex gap-3">
               <Button variant="outline" onClick={() => setConfirmingDelete(false)}>Cancel</Button>
               <Button variant="destructive" disabled={deleteLotMutation.isPending} onClick={() => deleteLotMutation.mutate()}>
