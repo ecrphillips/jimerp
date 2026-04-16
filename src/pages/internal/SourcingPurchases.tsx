@@ -1045,19 +1045,13 @@ function CreatePurchaseModal({
             if (lotUpErr) throw lotUpErr;
           } else {
             // New line — INSERT lot + purchase line (same as create mode)
-            let poNumber = '';
-            try {
-              const { data: seqData, error: seqErr } = await supabase.rpc('nextval_text' as any, { seq_name: 'po_number_seq' });
-              if (seqErr) throw seqErr;
-              const seqVal = typeof seqData === 'number' ? seqData : parseInt(String(seqData));
-              poNumber = `PO-${String(seqVal).padStart(3, '0')}`;
-            } catch {
-              poNumber = `PO-${String(Date.now()).slice(-6)}`;
-            }
-
             const vendorAbbr = selectedVendor?.abbreviation || '???';
             const originCode = line.origin_country || '???';
-            const lotNumber = `${vendorAbbr}-${originCode}-${poNumber}`;
+            const lotNumber = await generateLotNumber(vendorAbbr, originCode);
+            // Extract PO### portion for po_number column (back-compat)
+            const poMatch = lotNumber.match(/PO\d+$/);
+            const poNumber = poMatch ? poMatch[0] : '';
+
 
             const freightAllocated = totalKgAll > 0 ? freightNum * (lineKg / totalKgAll) : 0;
             const carryAllocated = totalKgAll > 0 ? carryNum * (lineKg / totalKgAll) : 0;
