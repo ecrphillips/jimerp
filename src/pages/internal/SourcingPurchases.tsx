@@ -412,10 +412,14 @@ export default function SourcingPurchases() {
       <GreenCoffeeAlerts />
       <div className="p-6 space-y-6 max-w-6xl mx-auto">
         <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Purchases</h1>
-          <Button className="gap-1.5" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> New Purchase
-          </Button>
+          <div className="flex items-center gap-2">
+            <ViewToggle value={viewMode} onChange={setViewMode} />
+            <Button className="gap-1.5" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" /> New Purchase
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -426,7 +430,7 @@ export default function SourcingPurchases() {
               No purchases yet. Click "New Purchase" to get started.
             </CardContent>
           </Card>
-        ) : (
+        ) : viewMode === 'list' ? (
           <div className="border rounded-lg overflow-hidden">
             <Table>
               <TableHeader>
@@ -471,6 +475,43 @@ export default function SourcingPurchases() {
                 })}
               </TableBody>
             </Table>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {purchases.map(p => {
+              const lines = linesByPurchase[p.id] || [];
+              const coffeeCount = lines.length;
+              const totalKg = lines.reduce((sum, l) => sum + l.bags * l.bag_size_kg, 0);
+              const overdue = p.due_date && isPast(parseISO(p.due_date));
+              const vendor = allVendorMap[p.vendor_id];
+
+              return (
+                <Card key={p.id}>
+                  <CardContent className="p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-semibold text-base leading-tight">{vendor?.name || '—'}</p>
+                      {p.invoice_number && (
+                        <span className="text-xs text-muted-foreground font-mono shrink-0">{p.invoice_number}</span>
+                      )}
+                    </div>
+                    {p.invoice_date && (
+                      <p className="text-sm text-muted-foreground">
+                        Invoiced {format(parseISO(p.invoice_date), 'MMM d, yyyy')}
+                      </p>
+                    )}
+                    <p className="text-sm">{coffeeCount} {coffeeCount === 1 ? 'coffee' : 'coffees'} · {totalKg > 0 ? `${totalKg.toLocaleString()} kg` : '—'}</p>
+                    {p.due_date && (
+                      <p className={cn('text-xs', overdue ? 'text-amber-600 font-medium' : 'text-muted-foreground')}>
+                        Due {format(parseISO(p.due_date), 'MMM d, yyyy')}{overdue && ' (overdue)'}
+                      </p>
+                    )}
+                    <div className="pt-1">
+                      <Button size="sm" variant="outline" onClick={() => setSelectedId(p.id)}>View</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
