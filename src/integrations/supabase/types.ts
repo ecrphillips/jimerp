@@ -1984,6 +1984,7 @@ export type Database = {
           invoice_number: string | null
           notes: string | null
           paid_at: string | null
+          po_number: string | null
           shared_carry_usd: number
           shared_freight_usd: number
           shared_other_label: string | null
@@ -2002,6 +2003,7 @@ export type Database = {
           invoice_number?: string | null
           notes?: string | null
           paid_at?: string | null
+          po_number?: string | null
           shared_carry_usd?: number
           shared_freight_usd?: number
           shared_other_label?: string | null
@@ -2020,6 +2022,7 @@ export type Database = {
           invoice_number?: string | null
           notes?: string | null
           paid_at?: string | null
+          po_number?: string | null
           shared_carry_usd?: number
           shared_freight_usd?: number
           shared_other_label?: string | null
@@ -2107,6 +2110,7 @@ export type Database = {
           id: string
           invoice_number: string | null
           notes: string | null
+          po_number: string | null
           received_date: string | null
           shared_costs: Json
           status: string
@@ -2121,6 +2125,7 @@ export type Database = {
           id?: string
           invoice_number?: string | null
           notes?: string | null
+          po_number?: string | null
           received_date?: string | null
           shared_costs?: Json
           status?: string
@@ -2135,6 +2140,7 @@ export type Database = {
           id?: string
           invoice_number?: string | null
           notes?: string | null
+          po_number?: string | null
           received_date?: string | null
           shared_costs?: Json
           status?: string
@@ -3503,6 +3509,27 @@ export type Database = {
           },
         ]
       }
+      sourcing_sequences: {
+        Row: {
+          id: string
+          key: string
+          next_val: number
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          key: string
+          next_val?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          key?: string
+          next_val?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           client_id: string | null
@@ -3624,6 +3651,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      allocate_sourcing_sequence: {
+        Args: { _count?: number; _key: string }
+        Returns: number
+      }
       can_access_client: {
         Args: { _client_id: string; _user_id: string }
         Returns: boolean
