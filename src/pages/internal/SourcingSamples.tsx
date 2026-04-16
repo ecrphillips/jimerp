@@ -398,10 +398,13 @@ export default function SourcingSamples() {
           <h1 className="page-title">Samples</h1>
           <p className="text-sm text-muted-foreground">Coffee sample evaluation</p>
         </div>
-        <Button onClick={() => setAddModalOpen(true)} className="gap-1.5">
-          <Plus className="h-4 w-4" />
-          Add Sample
-        </Button>
+        <div className="flex items-center gap-2">
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+          <Button onClick={() => setAddModalOpen(true)} className="gap-1.5">
+            <Plus className="h-4 w-4" />
+            Add Sample
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-3">
