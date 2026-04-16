@@ -34,7 +34,7 @@ import {
   priceUsdPerLbToUsdPerKg,
 } from './releaseUtils';
 
-interface Vendor { id: string; name: string; }
+interface Vendor { id: string; name: string; abbreviation: string | null; }
 
 interface ContractRow {
   id: string;
