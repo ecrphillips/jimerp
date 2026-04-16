@@ -1008,7 +1008,7 @@ function ContractDetailPanel({
           onOpenChange={setReleaseOpen}
           contract={contract}
           vendor={contract.vendor_id ? vendorMap[contract.vendor_id] : null}
-          bagsReleased={bagsReleased}
+          bagsRequested={bagsRequested}
           existingLotCount={contractLots.length}
         />
       )}
@@ -1050,7 +1050,7 @@ function ReleaseCoffeeModal({
   onOpenChange,
   contract,
   vendor,
-  bagsReleased,
+  bagsRequested,
   existingLotCount,
 }: {
   open: boolean;
