@@ -281,7 +281,7 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
                       <div
                         key={ev.id}
                         className={cn(
-                          'absolute left-0.5 right-0.5 rounded px-1 text-[10px] leading-tight overflow-hidden',
+                          'absolute left-0.5 right-0.5 rounded px-1 text-[10px] leading-tight overflow-hidden z-20',
                           ev.isBlock ? 'cursor-not-allowed opacity-90' : 'cursor-pointer',
                           ev.isOverage && 'ring-1 ring-inset ring-white/40',
                           !ev.isBlock && ev.urgency === 'amber' && 'ring-2 ring-amber-400',
