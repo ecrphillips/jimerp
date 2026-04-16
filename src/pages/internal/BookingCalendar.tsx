@@ -9,7 +9,7 @@ import { BookingWeekView } from '@/components/bookings/BookingWeekView';
 import { BookingFormDialog } from '@/components/bookings/BookingFormDialog';
 import { BookingDetailModal } from '@/components/bookings/BookingDetailModal';
 import { MemberSummaryPanel } from '@/components/bookings/MemberSummaryPanel';
-import type { MemberRow, BookingRow, BlockRow } from '@/components/bookings/bookingUtils';
+import type { MemberRow, BookingRow, BlockRow, AvailabilityWindow } from '@/components/bookings/bookingUtils';
 
 export default function BookingCalendar() {
   const [showBookingDialog, setShowBookingDialog] = useState(false);
@@ -62,6 +62,17 @@ export default function BookingCalendar() {
     },
   });
 
+  const { data: windows = [] } = useQuery({
+    queryKey: ['booking-calendar', 'availability-windows'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('coroast_availability_windows')
+        .select('id, day_of_week, open_time, close_time, is_active, notes');
+      if (error) throw error;
+      return (data ?? []) as AvailabilityWindow[];
+    },
+  });
+
   const handleSlotClick = (date: string, time: string) => {
     setPrefillDate(date);
     setPrefillTime(time);
@@ -91,6 +102,7 @@ export default function BookingCalendar() {
             blocks={blocks}
             bookings={bookings}
             members={members}
+            windows={windows}
             onSlotClick={handleSlotClick}
             onBookingClick={(bk) => setDetailBooking(bk)}
           />
