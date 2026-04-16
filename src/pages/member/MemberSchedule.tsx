@@ -23,10 +23,28 @@ import {
 import {
   checkOverlap, timeToMinutes, formatTime12, TIER_RATES,
   HOUR_START, HOUR_END, TOTAL_HOURS, ROW_HEIGHT,
-  type BookingRow, type BlockRow,
+  type BookingRow, type BlockRow, type AvailabilityWindow,
 } from '@/components/bookings/bookingUtils';
 import { AvailabilityTimeSelect } from '@/components/bookings/AvailabilityTimeSelect';
 import { DAYS_OF_WEEK, DAY_LABELS, JS_DAY_TO_STRING } from '@/components/coroast/types';
+
+const JS_DOW_TO_STRING: Record<number, string> = {
+  0: 'SUN', 1: 'MON', 2: 'TUE', 3: 'WED', 4: 'THU', 5: 'FRI', 6: 'SAT',
+};
+
+function getOutsideHourBands(date: Date, windows: AvailabilityWindow[]): Array<[number, number]> {
+  const fullDay: [number, number] = [HOUR_START * 60, HOUR_END * 60];
+  if (!windows || windows.length === 0) return [];
+  const dow = JS_DOW_TO_STRING[date.getDay()];
+  const w = windows.find(x => x.day_of_week === dow && x.is_active);
+  if (!w) return [fullDay];
+  const openMin = Math.max(timeToMinutes(w.open_time), HOUR_START * 60);
+  const closeMin = Math.min(timeToMinutes(w.close_time), HOUR_END * 60);
+  const bands: Array<[number, number]> = [];
+  if (openMin > HOUR_START * 60) bands.push([HOUR_START * 60, openMin]);
+  if (closeMin < HOUR_END * 60) bands.push([closeMin, HOUR_END * 60]);
+  return bands;
+}
 
 const MEMBER_COLOR = { bg: 'hsl(210 70% 50%)', text: '#fff' };
 const OTHER_COLOR = { bg: 'hsl(0 0% 75%)', text: 'hsl(0 0% 30%)' };
