@@ -40,6 +40,7 @@ interface ContractRow {
   name: string;
   internal_contract_number: string | null;
   vendor_contract_number: string | null;
+  lot_identifier: string | null;
   origin_country: string | null;
   origin: string | null;
   region: string | null;
