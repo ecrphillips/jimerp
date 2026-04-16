@@ -270,9 +270,14 @@ ${userName}`;
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
+      // Defensive: never allow save unless user reached Step 2
+      if (step !== 2) throw new Error('Please complete Step 2 before saving.');
+
       // 1. Insert release
       const status = invoiceNumber.trim() ? 'INVOICED' : 'PENDING';
-      const arrival = markReceived ? 'RECEIVED' : 'EN_ROUTE';
+      const arrival: 'RECEIVED' | 'EN_ROUTE' = markReceived ? 'RECEIVED' : 'EN_ROUTE';
+      const etaStr = etaDate ? format(etaDate, 'yyyy-MM-dd') : null;
+      const recStr = receivedDate ? format(receivedDate, 'yyyy-MM-dd') : null;
 
       const { data: rel, error: relErr } = await supabase
         .from('green_releases')
@@ -280,8 +285,8 @@ ${userName}`;
           vendor_id: vendorId,
           status,
           invoice_number: invoiceNumber.trim() || null,
-          eta_date: etaDate ? format(etaDate, 'yyyy-MM-dd') : null,
-          received_date: markReceived && receivedDate ? format(receivedDate, 'yyyy-MM-dd') : null,
+          eta_date: arrival === 'EN_ROUTE' ? etaStr : null,
+          received_date: arrival === 'RECEIVED' ? recStr : null,
           arrival_status: arrival,
           shared_costs: sharedCosts as any,
           notes: notes.trim() || null,
@@ -293,36 +298,78 @@ ${userName}`;
       const releaseId = rel!.id;
 
       // 2. Insert release lines + create lots
-      const sharedShareUsdPerKg = totalKgAll > 0 ? totalSharedUsd / totalKgAll : 0;
+      // Per-kg shared cost share, prorated by weighted kg average across all lines.
+      // Compute totals per shared cost bucket so we can map to the lot's
+      // currency-specific cost columns (USD vs CAD).
+      const bucketTotals = SHARED_COST_KEYS.reduce<Record<SharedCostKey, { usd: number; cad: number }>>((acc, k) => {
+        const line = sharedCosts[k];
+        const amt = Number(line?.amount) || 0;
+        const cur = (line?.currency || 'USD') as Currency;
+        acc[k] = { usd: cur === 'USD' ? amt : 0, cad: cur === 'CAD' ? amt : 0 };
+        return acc;
+      }, {} as any);
 
       for (const l of selectedList) {
         const priceAmount = parseFloat(l.price_amount) || 0;
         const priceUsdPerLb = toUsdPerLb(priceAmount, l.price_unit);
         const bagSize = Number(l.contract.bag_size_kg || 0);
         const totalKg = l.bags_requested * bagSize;
-        const lineArrival = markReceived ? 'RECEIVED' : l.arrival_status;
+
+        // Weight share for proration (kg fraction of full release)
+        const kgShare = totalKgAll > 0 ? totalKg / totalKgAll : 0;
+
+        // Coffee cost (invoice) — total USD for this lot's coffee
+        const coffeeCostUsd = priceUsdPerLb > 0 ? priceUsdPerLb * KG_PER_LB * totalKg : null;
+
+        // Prorated shared costs by bucket (USD or CAD), per lot
+        const lotCarryUsd = bucketTotals.carry.usd * kgShare;
+        const lotCarryCad = bucketTotals.carry.cad * kgShare;
+        const lotFreightCad = (bucketTotals.freight.usd + bucketTotals.freight.cad) * kgShare; // freight column is CAD only — fold any USD freight in (best-effort, no FX context)
+        const lotDutiesCad = (bucketTotals.duties.usd + bucketTotals.duties.cad) * kgShare;
+        const lotFeesCad = (bucketTotals.fees.usd + bucketTotals.fees.cad) * kgShare;
+        const lotOtherCad = (bucketTotals.other.usd + bucketTotals.other.cad) * kgShare;
+
+        // Book value (USD/kg) using the global per-kg shared share
+        const sharedShareUsdPerKg = totalKgAll > 0 ? totalSharedUsd / totalKgAll : 0;
         const bookPerKg = bookValuePerKgUsd(priceUsdPerLb, sharedShareUsdPerKg);
 
         // Generate lot number
         const lotNumber = `REL-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
-        // Create lot
+        const isReceived = arrival === 'RECEIVED';
+
+        // Create lot — arrival status is global (Step 2 toggle)
         const { data: lot, error: lotErr } = await supabase
           .from('green_lots')
           .insert({
             lot_number: lotNumber,
             contract_id: l.contract_id,
             release_id: releaseId,
+            lot_identifier: l.contract.lot_identifier || null,
             bag_size_kg: bagSize,
             bags_released: l.bags_requested,
-            kg_on_hand: lineArrival === 'RECEIVED' ? totalKg : 0,
-            kg_received: lineArrival === 'RECEIVED' ? totalKg : null,
-            received_date: lineArrival === 'RECEIVED' && receivedDate ? format(receivedDate, 'yyyy-MM-dd') : null,
-            expected_delivery_date: etaDate ? format(etaDate, 'yyyy-MM-dd') : null,
+            kg_on_hand: isReceived ? totalKg : 0,
+            kg_received: isReceived ? totalKg : null,
+            received_date: isReceived ? recStr : null,
+            expected_delivery_date: !isReceived ? etaStr : null,
+            status: isReceived ? 'RECEIVED' : 'EN_ROUTE',
+            // Coffee cost
+            invoice_amount_usd: coffeeCostUsd,
+            invoice_is_usd: true,
+            // Prorated shared costs
+            carry_fees_usd: lotCarryUsd > 0 ? lotCarryUsd : null,
+            carry_fees_cad: lotCarryCad > 0 ? lotCarryCad : null,
+            carry_fees_is_usd: lotCarryUsd >= lotCarryCad,
+            freight_cad: lotFreightCad > 0 ? lotFreightCad : null,
+            freight_is_usd: false,
+            duties_cad: lotDutiesCad > 0 ? lotDutiesCad : null,
+            transaction_fees_cad: lotFeesCad > 0 ? lotFeesCad : null,
+            other_costs_cad: lotOtherCad > 0 ? lotOtherCad : null,
+            // Computed values
             book_value_per_kg: bookPerKg > 0 ? bookPerKg : null,
+            market_value_per_kg: bookPerKg > 0 ? bookPerKg : null,
             costing_status: invoiceNumber.trim() ? 'COMPLETE' : 'INCOMPLETE',
             costing_complete: !!invoiceNumber.trim(),
-            status: lineArrival === 'RECEIVED' ? 'RECEIVED' : 'IN_TRANSIT',
             notes_internal: l.line_notes.trim() || null,
             created_by: authUser?.id || null,
           })
