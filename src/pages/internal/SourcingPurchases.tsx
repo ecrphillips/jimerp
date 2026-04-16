@@ -436,6 +436,7 @@ export default function SourcingPurchases() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>PO #</TableHead>
                   <TableHead>Vendor</TableHead>
                   <TableHead>Invoice #</TableHead>
                   <TableHead>Invoice Date</TableHead>
@@ -455,6 +456,7 @@ export default function SourcingPurchases() {
 
                   return (
                     <TableRow key={p.id}>
+                      <TableCell className="font-mono text-xs">{p.po_number || <span className="text-muted-foreground">—</span>}</TableCell>
                       <TableCell className="font-medium">{vendor?.name || '—'}</TableCell>
                       <TableCell>{p.invoice_number || '—'}</TableCell>
                       <TableCell>{p.invoice_date ? format(parseISO(p.invoice_date), 'MMM d, yyyy') : '—'}</TableCell>
@@ -659,6 +661,10 @@ function PurchaseDetailContent({
 
       {/* Header fields */}
       <div className="grid grid-cols-2 gap-4 text-sm">
+        <div>
+          <p className="text-muted-foreground text-xs">PO Number</p>
+          <p className="font-mono font-semibold">{purchase.po_number || '—'}</p>
+        </div>
         <div>
           <p className="text-muted-foreground text-xs">Vendor</p>
           <p className="font-medium">{vendor?.name || '—'}</p>

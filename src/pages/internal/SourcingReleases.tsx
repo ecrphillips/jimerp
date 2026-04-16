@@ -22,6 +22,7 @@ interface ReleaseRow {
   vendor_id: string | null;
   status: string;
   invoice_number: string | null;
+  po_number: string | null;
   eta_date: string | null;
   received_date: string | null;
   arrival_status: string;
@@ -165,6 +166,7 @@ export default function SourcingReleases() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>PO #</TableHead>
                   <TableHead>Vendor</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Lots</TableHead>
@@ -185,6 +187,7 @@ export default function SourcingReleases() {
                       : '—';
                   return (
                     <TableRow key={r.id}>
+                      <TableCell className="font-mono text-xs">{r.po_number || <span className="text-muted-foreground">—</span>}</TableCell>
                       <TableCell className="font-medium">{(r.vendor_id && vendorMap[r.vendor_id]) || '—'}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={statusBadgeClass(r.status)}>{r.status}</Badge>
@@ -219,6 +222,7 @@ export default function SourcingReleases() {
                       <p className="font-semibold text-base leading-tight">{(r.vendor_id && vendorMap[r.vendor_id]) || '—'}</p>
                       <Badge variant="outline" className={statusBadgeClass(r.status)}>{r.status}</Badge>
                     </div>
+                    {r.po_number && <p className="text-xs font-mono text-foreground">{r.po_number}</p>}
                     <p className="text-sm">{lots} {lots === 1 ? 'lot' : 'lots'} · {totalKg > 0 ? `${totalKg.toLocaleString()} kg` : '—'}</p>
                     <p className="text-xs text-muted-foreground font-mono">{r.invoice_number || '— Pending'}</p>
                     {dateLabel && <p className="text-xs text-muted-foreground">{dateLabel}</p>}
