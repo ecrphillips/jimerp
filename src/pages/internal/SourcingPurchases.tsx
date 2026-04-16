@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
 import { COMMON_ORIGINS, OTHER_ORIGINS, getCountryName } from '@/lib/coffeeOrigins';
-import { generateLotNumber } from '@/lib/lotNumberGenerator';
+import { allocatePoNumber, poFromExisting, allocateSingleLotNumber } from '@/lib/lotNumberGenerator';
 import { useNavigate } from 'react-router-dom';
 
 // ─── Types ─────────────────────────────────────────────────

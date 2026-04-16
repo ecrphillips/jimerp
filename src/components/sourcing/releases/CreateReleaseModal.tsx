@@ -19,7 +19,7 @@ import { CalendarIcon, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatPerKg, formatPerLb, formatMoney } from '@/lib/formatMoney';
 import { getCountryName } from '@/lib/coffeeOrigins';
-import { generateLotNumber } from '@/lib/lotNumberGenerator';
+import { allocatePoNumber, allocateLotNumbers } from '@/lib/lotNumberGenerator';
 import {
   KG_PER_LB,
   Currency,

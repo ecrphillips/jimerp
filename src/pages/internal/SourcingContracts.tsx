@@ -25,7 +25,7 @@ import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { COFFEE_ORIGIN_COUNTRIES, COMMON_ORIGINS, OTHER_ORIGINS, getCountryName, getCountryDisplayLabel } from '@/lib/coffeeOrigins';
-import { generateLotNumber } from '@/lib/lotNumberGenerator';
+import { allocatePoNumber, allocateSingleLotNumber, type AllocatedPo } from '@/lib/lotNumberGenerator';
 
 type ContractStatus = 'ACTIVE' | 'DEPLETED' | 'CANCELLED';
 // NOTE: Existing SINGLE_ORIGIN records remain in the DB but display as "Blender" via fallback. No automated migration needed.
