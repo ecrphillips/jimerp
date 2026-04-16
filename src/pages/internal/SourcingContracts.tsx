@@ -217,6 +217,9 @@ export default function SourcingContracts() {
         </div>
         <div className="flex items-center gap-2">
           <ViewToggle value={viewMode} onChange={setViewMode} />
+          <Button variant="outline" onClick={() => setCreateReleaseOpen(true)} className="gap-1.5">
+            <Plus className="h-4 w-4" /> New Release
+          </Button>
           <Button onClick={() => setAddModalOpen(true)} className="gap-1.5">
             <Plus className="h-4 w-4" /> Add Contract
           </Button>
