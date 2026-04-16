@@ -256,7 +256,7 @@ export default function SourcingLots() {
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : filtered.length === 0 ? (
             <p className="text-sm text-muted-foreground">{search || physicalFilter !== 'ALL' || costingFilter !== 'ALL' ? 'No lots match your filters.' : 'No lots yet. Release coffee from a contract to create lots.'}</p>
-          ) : (
+          ) : viewMode === 'cards' ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map(lot => {
                 const c = contractMap[lot.contract_id];
@@ -287,6 +287,49 @@ export default function SourcingLots() {
                   </Card>
                 );
               })}
+            </div>
+          ) : (
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Lot #</TableHead>
+                    <TableHead>Contract / Origin</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Costing</TableHead>
+                    <TableHead className="text-right">Bags</TableHead>
+                    <TableHead className="text-right">kg on hand</TableHead>
+                    <TableHead className="text-right">Book value</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map(lot => {
+                    const c = contractMap[lot.contract_id];
+                    const pl = purchaseLineByLotId[lot.id];
+                    const subtitle = c ? c.name : pl?.origin_country ? pl.origin_country : '—';
+                    return (
+                      <TableRow key={lot.id}>
+                        <TableCell className="font-medium">
+                          <span className="flex items-center gap-1.5">
+                            {lot.lot_number}
+                            {lot.exceptions_noted && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
+                          </span>
+                        </TableCell>
+                        <TableCell>{subtitle}</TableCell>
+                        <TableCell><PhysicalStatusBadge status={lot.status} /></TableCell>
+                        <TableCell><CostingStatusBadge costingStatus={lot.costing_status} /></TableCell>
+                        <TableCell className="text-right">{lot.bags_released}</TableCell>
+                        <TableCell className="text-right">{lot.kg_on_hand.toLocaleString()} kg</TableCell>
+                        <TableCell className="text-right">{lot.costing_status === 'COMPLETE' && lot.book_value_per_kg != null ? formatPerKg(lot.book_value_per_kg) : '—'}</TableCell>
+                        <TableCell>
+                          <Button variant="outline" size="sm" onClick={() => setSelectedLotId(lot.id)}>View</Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             </div>
           )}
         </TabsContent>
