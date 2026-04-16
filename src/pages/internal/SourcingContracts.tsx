@@ -342,7 +342,7 @@ export default function SourcingContracts() {
                 <SortHeader k="lot_id" label="Lot ID" />
                 <SortHeader k="origin" label="Origin" />
                 <SortHeader k="category" label="Category" />
-                <SortHeader k="bags" label="Bags" align="right" />
+                <SortHeader k="bags" label="Remaining Bags" align="right" />
                 <SortHeader k="price" label="Price" align="right" />
                 <SortHeader k="created" label="Created" />
                 <TableHead></TableHead>
