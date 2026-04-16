@@ -338,7 +338,11 @@ ${userName}`;
 
         const isReceived = arrival === 'RECEIVED';
 
-        // Create lot — arrival status is global (Step 2 toggle)
+        // Create lot — arrival status is global (Step 2 toggle).
+        // We store costs in both _usd columns AND mirror into _cad columns (with
+        // _is_usd=true and fx_rate=1 placeholder) so the lot detail panel —
+        // which back-converts from the *_cad columns — surfaces non-zero values
+        // before any FX has been confirmed.
         const { data: lot, error: lotErr } = await supabase
           .from('green_lots')
           .insert({
@@ -353,12 +357,15 @@ ${userName}`;
             received_date: isReceived ? recStr : null,
             expected_delivery_date: !isReceived ? etaStr : null,
             status: isReceived ? 'RECEIVED' : 'EN_ROUTE',
+            // FX placeholder so mirrored *_cad values back-convert cleanly to original USD
+            fx_rate: 1,
             // Coffee cost
             invoice_amount_usd: coffeeCostUsd,
+            invoice_amount_cad: coffeeCostUsd,
             invoice_is_usd: true,
-            // Prorated shared costs
+            // Prorated shared costs (mirror USD into CAD column with is_usd=true)
             carry_fees_usd: lotCarryUsd > 0 ? lotCarryUsd : null,
-            carry_fees_cad: lotCarryCad > 0 ? lotCarryCad : null,
+            carry_fees_cad: (lotCarryUsd + lotCarryCad) > 0 ? (lotCarryUsd + lotCarryCad) : null,
             carry_fees_is_usd: lotCarryUsd >= lotCarryCad,
             freight_cad: lotFreightCad > 0 ? lotFreightCad : null,
             freight_is_usd: false,
