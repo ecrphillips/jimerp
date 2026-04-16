@@ -17,6 +17,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, Plus, Check, FileText, X, Trash2 } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
+import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 type SampleStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 // NOTE: Existing SINGLE_ORIGIN records remain in the DB but display as "Blender" via fallback. No automated migration needed.
@@ -305,6 +307,7 @@ export default function SourcingSamples() {
   const [categoryFilter, setCategoryFilter] = useState<GreenCategory | 'ALL'>('ALL');
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useViewMode('sourcing_view_samples', 'cards');
 
   const { data: vendors = [] } = useQuery({
     queryKey: ['green-vendors-active'],
@@ -395,10 +398,13 @@ export default function SourcingSamples() {
           <h1 className="page-title">Samples</h1>
           <p className="text-sm text-muted-foreground">Coffee sample evaluation</p>
         </div>
-        <Button onClick={() => setAddModalOpen(true)} className="gap-1.5">
-          <Plus className="h-4 w-4" />
-          Add Sample
-        </Button>
+        <div className="flex items-center gap-2">
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+          <Button onClick={() => setAddModalOpen(true)} className="gap-1.5">
+            <Plus className="h-4 w-4" />
+            Add Sample
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -442,7 +448,7 @@ export default function SourcingSamples() {
         <p className="text-sm text-muted-foreground">
           {search || statusFilter !== 'ALL' || categoryFilter !== 'ALL' ? 'No samples match your filters.' : 'No samples yet. Add one to get started.'}
         </p>
-      ) : (
+      ) : viewMode === 'cards' ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((sample) => (
             <SampleCard
@@ -453,6 +459,37 @@ export default function SourcingSamples() {
               onView={() => setSelectedSampleId(sample.id)}
             />
           ))}
+        </div>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Vendor</TableHead>
+                <TableHead>Origin</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Score</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((sample) => (
+                <TableRow key={sample.id}>
+                  <TableCell className="font-medium">{sample.name}</TableCell>
+                  <TableCell>{sample.vendor_id ? vendorMap[sample.vendor_id] : '—'}</TableCell>
+                  <TableCell>{[sample.origin, sample.region].filter(Boolean).join(' — ') || '—'}</TableCell>
+                  <TableCell>{CATEGORY_LABELS[sample.category] || sample.category}</TableCell>
+                  <TableCell>{STATUS_LABELS[sample.status]}</TableCell>
+                  <TableCell className="text-right">{sample.score ?? '—'}</TableCell>
+                  <TableCell>
+                    <Button variant="outline" size="sm" onClick={() => setSelectedSampleId(sample.id)}>View</Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
 

@@ -20,6 +20,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Search, Plus, Check, FileText, AlertTriangle, Copy, Mail, CalendarIcon, PackageCheck, Trash2 } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
+import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { COFFEE_ORIGIN_COUNTRIES, COMMON_ORIGINS, OTHER_ORIGINS, getCountryName, getCountryDisplayLabel } from '@/lib/coffeeOrigins';
 
 type ContractStatus = 'ACTIVE' | 'DEPLETED' | 'CANCELLED';
@@ -142,6 +144,7 @@ export default function SourcingContracts() {
   const [categoryFilter, setCategoryFilter] = useState<GreenCategory | 'ALL'>('ALL');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useViewMode('sourcing_view_contracts', 'cards');
 
   const { data: contracts = [], isLoading } = useQuery({
     queryKey: ['green-contracts'],
@@ -208,9 +211,12 @@ export default function SourcingContracts() {
           <h1 className="page-title">Contracts</h1>
           <p className="text-sm text-muted-foreground">Purchase commitments with vendors</p>
         </div>
-        <Button onClick={() => setAddModalOpen(true)} className="gap-1.5">
-          <Plus className="h-4 w-4" /> Add Contract
-        </Button>
+        <div className="flex items-center gap-2">
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+          <Button onClick={() => setAddModalOpen(true)} className="gap-1.5">
+            <Plus className="h-4 w-4" /> Add Contract
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -238,11 +244,50 @@ export default function SourcingContracts() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : filtered.length === 0 ? (
         <p className="text-sm text-muted-foreground">{search || statusFilter !== 'ALL' || categoryFilter !== 'ALL' ? 'No contracts match your filters.' : 'No contracts yet. Add one to get started.'}</p>
-      ) : (
+      ) : viewMode === 'cards' ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map(c => (
             <ContractCard key={c.id} contract={c} vendor={c.vendor_id ? vendorMap[c.vendor_id] : null} lots={lotsByContract[c.id] || []} onView={() => setSelectedContractId(c.id)} />
           ))}
+        </div>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Vendor</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Origin</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Bags</TableHead>
+                <TableHead className="text-right">Price</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map(c => {
+                const vendor = c.vendor_id ? vendorMap[c.vendor_id] : null;
+                const lots = lotsByContract[c.id] || [];
+                const bagsReleased = lots.reduce((sum, l) => sum + l.bags_released, 0);
+                const totalBags = c.num_bags || 0;
+                return (
+                  <TableRow key={c.id} className={c.status === 'CANCELLED' ? 'opacity-60' : ''}>
+                    <TableCell className="font-medium">{vendor?.name || '—'}</TableCell>
+                    <TableCell>{c.name}</TableCell>
+                    <TableCell>{[c.origin, c.region].filter(Boolean).join(' — ') || '—'}</TableCell>
+                    <TableCell>{CATEGORY_LABELS[c.category] || c.category}</TableCell>
+                    <TableCell>{STATUS_LABELS[c.status] || c.status}</TableCell>
+                    <TableCell className="text-right">{totalBags > 0 ? `${bagsReleased} / ${totalBags}` : '—'}</TableCell>
+                    <TableCell className="text-right">{c.contracted_price_per_kg != null ? formatPrice(c.contracted_price_per_kg, c.contracted_price_currency) : '—'}</TableCell>
+                    <TableCell>
+                      <Button variant="outline" size="sm" onClick={() => setSelectedContractId(c.id)}>View</Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </div>
       )}
 
