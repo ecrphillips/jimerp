@@ -156,7 +156,7 @@ export function CreateReleaseModal({ open, onOpenChange, onSuccess }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('green_contracts')
-        .select('id, name, internal_contract_number, vendor_contract_number, origin_country, origin, region, producer, variety, num_bags, bag_size_kg, contracted_price_per_kg, contracted_price_currency, vendor_id')
+        .select('id, name, internal_contract_number, vendor_contract_number, lot_identifier, origin_country, origin, region, producer, variety, num_bags, bag_size_kg, contracted_price_per_kg, contracted_price_currency, vendor_id')
         .eq('vendor_id', vendorId)
         .eq('status', 'ACTIVE')
         .order('name');
