@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
+import { generateLotNumber } from '@/lib/lotNumberGenerator';
 import {
   ShoppingCart, Package, Coffee, Boxes, UserPlus,
   ArrowLeft, Search, CalendarIcon, Loader2, Check, ExternalLink,
