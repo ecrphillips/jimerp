@@ -1132,7 +1132,8 @@ Home Island Coffee Partners`;
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const lotNumber = computedLotNumber || `${vendor?.abbreviation || '???'}-${contract.origin_country || '???'}-${poNumber}`;
+      // Recompute fresh at save time to avoid stale numbering
+      const lotNumber = await generateLotNumber(vendor?.abbreviation, contract.origin_country);
 
       const { data: lot, error } = await supabase.from('green_lots').insert({
         lot_number: lotNumber,
