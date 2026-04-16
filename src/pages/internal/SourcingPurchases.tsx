@@ -1133,10 +1133,14 @@ function CreatePurchaseModal({
         return { mode: 'edit' as const, newLotCount };
       } else {
         // ── CREATE MODE ──
+        // Allocate one PO for the whole purchase (atomic)
+        const po = await allocatePoNumber(selectedVendor?.abbreviation);
+
         const { data: purchase, error: purchaseErr } = await supabase
           .from('green_purchases')
           .insert({
             ...purchasePayload,
+            po_number: po.poNumber,
             created_by: authUser!.id,
           } as any)
           .select('id')
@@ -1726,12 +1730,13 @@ function AddCoffeeLineModal({
       const priceAmt = parseFloat(priceAmount) || 0;
       const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, priceUnit, fxRateNum) : null;
 
-      // Generate lot number: {VENDOR_ABBR}-{ORIGIN}-PO### (per vendor+origin sequence)
-      const vendorAbbr = vendor?.abbreviation || '???';
-      const originCode = originCountry || '???';
-      const lotNumber = await generateLotNumber(vendorAbbr, originCode);
-      const poMatch = lotNumber.match(/PO\d+$/);
-      const poNumber = poMatch ? poMatch[0] : '';
+      // Reuse this purchase's PO if present; else allocate one and persist back to the purchase.
+      const sharedPo = await poFromExisting(purchase.po_number, vendor?.abbreviation);
+      if (!purchase.po_number) {
+        await (supabase.from('green_purchases' as any) as any).update({ po_number: sharedPo.poNumber }).eq('id', purchase.id);
+      }
+      const lotNumber = await allocateSingleLotNumber(sharedPo, originCountry);
+      const poNumber = sharedPo.poNumber;
 
       // Insert lot
       const { data: lot, error: lotErr } = await supabase
