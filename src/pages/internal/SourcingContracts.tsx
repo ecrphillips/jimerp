@@ -264,6 +264,7 @@ export default function SourcingContracts() {
               <TableRow>
                 <TableHead>Vendor</TableHead>
                 <TableHead>Name</TableHead>
+                <TableHead>Lot ID</TableHead>
                 <TableHead>Origin</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Status</TableHead>
