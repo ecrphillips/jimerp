@@ -19,6 +19,7 @@ import { CalendarIcon, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatPerKg, formatPerLb, formatMoney } from '@/lib/formatMoney';
 import { getCountryName } from '@/lib/coffeeOrigins';
+import { generateLotNumber } from '@/lib/lotNumberGenerator';
 import {
   KG_PER_LB,
   Currency,
@@ -33,7 +34,7 @@ import {
   priceUsdPerLbToUsdPerKg,
 } from './releaseUtils';
 
-interface Vendor { id: string; name: string; }
+interface Vendor { id: string; name: string; abbreviation: string | null; }
 
 interface ContractRow {
   id: string;
@@ -141,7 +142,7 @@ export function CreateReleaseModal({ open, onOpenChange, onSuccess }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('green_vendors')
-        .select('id, name')
+        .select('id, name, abbreviation')
         .eq('is_active', true)
         .order('name');
       if (error) throw error;
@@ -333,8 +334,9 @@ ${userName}`;
         const sharedShareUsdPerKg = totalKgAll > 0 ? totalSharedUsd / totalKgAll : 0;
         const bookPerKg = bookValuePerKgUsd(priceUsdPerLb, sharedShareUsdPerKg);
 
-        // Generate lot number
-        const lotNumber = `REL-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+        // Generate lot number: {VENDOR_ABBR}-{ORIGIN}-PO### (per vendor+origin)
+        const vendorAbbr = vendors.find(v => v.id === vendorId)?.abbreviation || '???';
+        const lotNumber = await generateLotNumber(vendorAbbr, l.contract.origin_country);
 
         const isReceived = arrival === 'RECEIVED';
 

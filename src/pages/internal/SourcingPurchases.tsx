@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
 import { COMMON_ORIGINS, OTHER_ORIGINS, getCountryName } from '@/lib/coffeeOrigins';
+import { generateLotNumber } from '@/lib/lotNumberGenerator';
 import { useNavigate } from 'react-router-dom';
 
 // ─── Types ─────────────────────────────────────────────────
@@ -1044,19 +1045,13 @@ function CreatePurchaseModal({
             if (lotUpErr) throw lotUpErr;
           } else {
             // New line — INSERT lot + purchase line (same as create mode)
-            let poNumber = '';
-            try {
-              const { data: seqData, error: seqErr } = await supabase.rpc('nextval_text' as any, { seq_name: 'po_number_seq' });
-              if (seqErr) throw seqErr;
-              const seqVal = typeof seqData === 'number' ? seqData : parseInt(String(seqData));
-              poNumber = `PO-${String(seqVal).padStart(3, '0')}`;
-            } catch {
-              poNumber = `PO-${String(Date.now()).slice(-6)}`;
-            }
-
             const vendorAbbr = selectedVendor?.abbreviation || '???';
             const originCode = line.origin_country || '???';
-            const lotNumber = `${vendorAbbr}-${originCode}-${poNumber}`;
+            const lotNumber = await generateLotNumber(vendorAbbr, originCode);
+            // Extract PO### portion for po_number column (back-compat)
+            const poMatch = lotNumber.match(/PO\d+$/);
+            const poNumber = poMatch ? poMatch[0] : '';
+
 
             const freightAllocated = totalKgAll > 0 ? freightNum * (lineKg / totalKgAll) : 0;
             const carryAllocated = totalKgAll > 0 ? carryNum * (lineKg / totalKgAll) : 0;
@@ -1161,19 +1156,11 @@ function CreatePurchaseModal({
           const dutiesAllocated = dutiesNum * share;
           const feesAllocated = feesNum * share;
 
-          let poNumber = '';
-          try {
-            const { data: seqData, error: seqErr } = await supabase.rpc('nextval_text' as any, { seq_name: 'po_number_seq' });
-            if (seqErr) throw seqErr;
-            const seqVal = typeof seqData === 'number' ? seqData : parseInt(String(seqData));
-            poNumber = `PO-${String(seqVal).padStart(3, '0')}`;
-          } catch {
-            poNumber = `PO-${String(Date.now()).slice(-6)}`;
-          }
-
           const vendorAbbr = selectedVendor?.abbreviation || '???';
           const originCode = line.origin_country || '???';
-          const lotNumber = `${vendorAbbr}-${originCode}-${poNumber}`;
+          const lotNumber = await generateLotNumber(vendorAbbr, originCode);
+          const poMatch = lotNumber.match(/PO\d+$/);
+          const poNumber = poMatch ? poMatch[0] : '';
 
           const priceAmt = parseFloat(line.price_amount) || 0;
           const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
@@ -1739,20 +1726,12 @@ function AddCoffeeLineModal({
       const priceAmt = parseFloat(priceAmount) || 0;
       const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, priceUnit, fxRateNum) : null;
 
-      // Generate lot number
-      let poNumber = '';
-      try {
-        const { data: seqData, error: seqErr } = await supabase.rpc('nextval_text' as any, { seq_name: 'po_number_seq' });
-        if (seqErr) throw seqErr;
-        const seqVal = typeof seqData === 'number' ? seqData : parseInt(String(seqData));
-        poNumber = `PO-${String(seqVal).padStart(3, '0')}`;
-      } catch {
-        poNumber = `PO-${String(Date.now()).slice(-6)}`;
-      }
-
+      // Generate lot number: {VENDOR_ABBR}-{ORIGIN}-PO### (per vendor+origin sequence)
       const vendorAbbr = vendor?.abbreviation || '???';
       const originCode = originCountry || '???';
-      const lotNumber = `${vendorAbbr}-${originCode}-${poNumber}`;
+      const lotNumber = await generateLotNumber(vendorAbbr, originCode);
+      const poMatch = lotNumber.match(/PO\d+$/);
+      const poNumber = poMatch ? poMatch[0] : '';
 
       // Insert lot
       const { data: lot, error: lotErr } = await supabase

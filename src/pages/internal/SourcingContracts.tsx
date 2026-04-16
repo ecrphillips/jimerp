@@ -25,6 +25,7 @@ import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { COFFEE_ORIGIN_COUNTRIES, COMMON_ORIGINS, OTHER_ORIGINS, getCountryName, getCountryDisplayLabel } from '@/lib/coffeeOrigins';
+import { generateLotNumber } from '@/lib/lotNumberGenerator';
 
 type ContractStatus = 'ACTIVE' | 'DEPLETED' | 'CANCELLED';
 // NOTE: Existing SINGLE_ORIGIN records remain in the DB but display as "Blender" via fallback. No automated migration needed.
@@ -1089,26 +1090,20 @@ function ReleaseCoffeeModal({
       setPoNumber('');
       setPoLoading(true);
 
-      // Fetch next PO sequence value
+      // Compute next per-vendor+origin PO number for live lot number preview
       (async () => {
         try {
-          const { data, error } = await supabase.rpc('nextval_text' as any, { seq_name: 'po_number_seq' });
-          if (error) {
-            const nextNum = existingLotCount + 1;
-            setPoNumber(`PO-${String(nextNum).padStart(3, '0')}`);
-          } else {
-            const seqVal = typeof data === 'number' ? data : parseInt(String(data));
-            setPoNumber(`PO-${String(seqVal).padStart(3, '0')}`);
-          }
+          const ln = await generateLotNumber(vendor?.abbreviation, contract.origin_country);
+          const m = ln.match(/PO(\d+)$/);
+          setPoNumber(m ? `PO-${m[1]}` : `PO-001`);
         } catch {
-          const nextNum = existingLotCount + 1;
-          setPoNumber(`PO-${String(nextNum).padStart(3, '0')}`);
+          setPoNumber(`PO-001`);
         } finally {
           setPoLoading(false);
         }
       })();
     }
-  }, [open, existingLotCount, contract.lot_identifier]);
+  }, [open, existingLotCount, contract.lot_identifier, vendor?.abbreviation, contract.origin_country]);
 
   // Compute lot number live: VENDOR_ABBR-ORIGIN-POXXX
   const computedLotNumber = useMemo(() => {
@@ -1137,7 +1132,8 @@ Home Island Coffee Partners`;
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const lotNumber = computedLotNumber || `${vendor?.abbreviation || '???'}-${contract.origin_country || '???'}-${poNumber}`;
+      // Recompute fresh at save time to avoid stale numbering
+      const lotNumber = await generateLotNumber(vendor?.abbreviation, contract.origin_country);
 
       const { data: lot, error } = await supabase.from('green_lots').insert({
         lot_number: lotNumber,

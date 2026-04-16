@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
+import { generateLotNumber } from '@/lib/lotNumberGenerator';
 import {
   ShoppingCart, Package, Coffee, Boxes, UserPlus,
   ArrowLeft, Search, CalendarIcon, Loader2, Check, ExternalLink,
@@ -295,21 +296,13 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
     if (!gContractId || !gBags) return;
     setGSaving(true);
     try {
-      // Generate PO number
-      let poNumber = '';
-      try {
-        const { data, error } = await supabase.rpc('nextval_text' as any, { seq_name: 'po_number_seq' });
-        if (error) throw error;
-        const seqVal = typeof data === 'number' ? data : parseInt(String(data));
-        poNumber = `PO-${String(seqVal).padStart(3, '0')}`;
-      } catch {
-        poNumber = `PO-${String(Date.now()).slice(-4)}`;
-      }
-
+      // Generate lot number: {VENDOR_ABBR}-{ORIGIN}-PO### (per vendor+origin)
       const vendor = (gContract as any)?.green_vendors;
       const vendorAbbr = vendor?.abbreviation || '???';
       const country = gContract?.origin_country || '???';
-      const lotNumber = `${vendorAbbr}-${country}-${poNumber}`;
+      const lotNumber = await generateLotNumber(vendorAbbr, country);
+      const poMatch = lotNumber.match(/PO\d+$/);
+      const poNumber = poMatch ? poMatch[0] : '';
 
       const { data: lot, error } = await supabase.from('green_lots').insert({
         lot_number: lotNumber,
