@@ -319,6 +319,7 @@ export default function SourcingPurchases() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingPurchase, setEditingPurchase] = useState<PurchaseRow | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useViewMode('sourcing_view_purchases', 'list');
 
   // Fetch vendors
   const { data: vendors = [] } = useQuery({
