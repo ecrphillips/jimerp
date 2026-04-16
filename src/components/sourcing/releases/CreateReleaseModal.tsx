@@ -728,7 +728,13 @@ ${userName}`;
 
             <DialogFooter>
               <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
-              <Button onClick={() => saveMutation.mutate()} disabled={saving || saveMutation.isPending}>
+              <Button
+                onClick={() => {
+                  if (step !== 2) return;
+                  saveMutation.mutate();
+                }}
+                disabled={step !== 2 || saving || saveMutation.isPending}
+              >
                 {saveMutation.isPending ? 'Saving…' : 'Save Release'}
               </Button>
             </DialogFooter>
