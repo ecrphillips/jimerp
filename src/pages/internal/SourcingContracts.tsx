@@ -144,6 +144,7 @@ export default function SourcingContracts() {
   const [categoryFilter, setCategoryFilter] = useState<GreenCategory | 'ALL'>('ALL');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useViewMode('sourcing_view_contracts', 'cards');
 
   const { data: contracts = [], isLoading } = useQuery({
     queryKey: ['green-contracts'],

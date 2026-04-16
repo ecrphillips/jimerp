@@ -141,6 +141,7 @@ export default function SourcingLots() {
   const [physicalFilter, setPhysicalFilter] = useState<string>('ALL');
   const [costingFilter, setCostingFilter] = useState<string>('ALL');
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useViewMode('sourcing_view_lots', 'cards');
 
   const { data: lots = [], isLoading } = useQuery({
     queryKey: ['green-lots'],

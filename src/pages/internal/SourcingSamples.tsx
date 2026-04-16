@@ -307,6 +307,7 @@ export default function SourcingSamples() {
   const [categoryFilter, setCategoryFilter] = useState<GreenCategory | 'ALL'>('ALL');
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useViewMode('sourcing_view_samples', 'cards');
 
   const { data: vendors = [] } = useQuery({
     queryKey: ['green-vendors-active'],
