@@ -662,6 +662,7 @@ function LotDetailPanel({
   // Editable lot fields
   const [editLotIdentifier, setEditLotIdentifier] = useState('');
   const [editVendorInvoice, setEditVendorInvoice] = useState('');
+  const [editLotNumber, setEditLotNumber] = useState('');
 
   // Sync from DB
   useEffect(() => {
@@ -693,6 +694,7 @@ function LotDetailPanel({
       setEstDaysConsume(lot.estimated_days_to_consume);
       setEditLotIdentifier(lot.lot_identifier || '');
       setEditVendorInvoice(lot.vendor_invoice_number || '');
+      setEditLotNumber(lot.lot_number || '');
     }
   }, [lot]);
 
@@ -1011,10 +1013,28 @@ function LotDetailPanel({
                     </div>
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Lot Number</Label>
-                    <div className="mt-1">
-                      <Badge variant="outline" className="text-xs font-mono">{lot.lot_number}</Badge>
-                    </div>
+                    <Label className="text-xs text-muted-foreground">Lot Number {isAdmin && <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">(admin editable)</span>}</Label>
+                    {isAdmin ? (
+                      <Input
+                        value={editLotNumber}
+                        onChange={(e) => setEditLotNumber(e.target.value)}
+                        onBlur={() => {
+                          const trimmed = editLotNumber.trim();
+                          if (trimmed && trimmed !== (lot.lot_number || '')) {
+                            saveFinancingField('lot_number', trimmed);
+                          } else if (!trimmed) {
+                            // Don't allow blank — restore
+                            setEditLotNumber(lot.lot_number || '');
+                          }
+                        }}
+                        className="font-mono text-xs h-8 mt-1"
+                        placeholder="Lot number"
+                      />
+                    ) : (
+                      <div className="mt-1">
+                        <Badge variant="outline" className="text-xs font-mono">{lot.lot_number}</Badge>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div>

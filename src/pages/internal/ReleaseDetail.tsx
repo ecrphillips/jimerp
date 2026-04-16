@@ -38,6 +38,7 @@ interface ReleaseRow {
   vendor_id: string | null;
   status: string;
   invoice_number: string | null;
+  po_number: string | null;
   eta_date: string | null;
   received_date: string | null;
   arrival_status: string;
@@ -330,6 +331,9 @@ export default function ReleaseDetail() {
         <CardContent className="p-5 space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold">{vendor?.name || 'Release'}</h1>
+            {release.po_number && (
+              <Badge variant="outline" className="font-mono text-sm">{release.po_number}</Badge>
+            )}
             <Badge variant="outline" className={statusBadgeClass(release.status)}>{release.status}</Badge>
             <span className="text-xs text-muted-foreground ml-auto">Created {format(parseISO(release.created_at), 'MMM d, yyyy')}</span>
           </div>

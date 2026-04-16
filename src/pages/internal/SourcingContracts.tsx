@@ -25,7 +25,7 @@ import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { COFFEE_ORIGIN_COUNTRIES, COMMON_ORIGINS, OTHER_ORIGINS, getCountryName, getCountryDisplayLabel } from '@/lib/coffeeOrigins';
-import { generateLotNumber } from '@/lib/lotNumberGenerator';
+import { allocatePoNumber, allocateSingleLotNumber, type AllocatedPo } from '@/lib/lotNumberGenerator';
 
 type ContractStatus = 'ACTIVE' | 'DEPLETED' | 'CANCELLED';
 // NOTE: Existing SINGLE_ORIGIN records remain in the DB but display as "Blender" via fallback. No automated migration needed.
@@ -1078,7 +1078,9 @@ function ReleaseCoffeeModal({
   const [poNumber, setPoNumber] = useState('');
   const [poLoading, setPoLoading] = useState(false);
 
-  // Fetch PO number on modal open
+  // Reset on open. We do NOT pre-allocate a PO/lot number — that would burn
+  // sequence numbers every time the modal opens. The real number is allocated
+  // atomically at save time. We just show a friendly placeholder preview here.
   useEffect(() => {
     if (open) {
       setLotIdentifier(contract.lot_identifier ?? '');
@@ -1088,30 +1090,16 @@ function ReleaseCoffeeModal({
       setNotes('');
       setMsgCopied(false);
       setPoNumber('');
-      setPoLoading(true);
-
-      // Compute next per-vendor+origin PO number for live lot number preview
-      (async () => {
-        try {
-          const ln = await generateLotNumber(vendor?.abbreviation, contract.origin_country);
-          const m = ln.match(/PO(\d+)$/);
-          setPoNumber(m ? `PO-${m[1]}` : `PO-001`);
-        } catch {
-          setPoNumber(`PO-001`);
-        } finally {
-          setPoLoading(false);
-        }
-      })();
+      setPoLoading(false);
     }
-  }, [open, existingLotCount, contract.lot_identifier, vendor?.abbreviation, contract.origin_country]);
+  }, [open, contract.lot_identifier]);
 
-  // Compute lot number live: VENDOR_ABBR-ORIGIN-POXXX
+  // Live preview only — actual numbers are assigned at save.
   const computedLotNumber = useMemo(() => {
     const vendorAbbr = vendor?.abbreviation || '???';
-    const country = contract.origin_country || '???';
-    if (!poNumber) return '';
-    return `${vendorAbbr}-${country}-${poNumber}`;
-  }, [vendor?.abbreviation, contract.origin_country, poNumber]);
+    const country = contract.origin_country || 'UNK';
+    return `${vendorAbbr}-P####-${country}-L####`;
+  }, [vendor?.abbreviation, contract.origin_country]);
 
   const originCountryName = getCountryName(contract.origin_country);
 
@@ -1121,7 +1109,7 @@ function ReleaseCoffeeModal({
 
   const emailBody = `Hello,
 
-Please release ${bags || '___'} bags of ${originCountryName || '[origin country]'} - ${contract.name} - ${lotIdentifier.trim() || '[lot identifier]'} from contract ${vendorContractNum}. Please confirm upon receipt and copy orders@homeislandcoffee.com on DO's to warehouse, and payments@homeislandcoffee.com with the invoice. Please include our PO ${poNumber} on all documents.
+Please release ${bags || '___'} bags of ${originCountryName || '[origin country]'} - ${contract.name} - ${lotIdentifier.trim() || '[lot identifier]'} from contract ${vendorContractNum}. Please confirm upon receipt and copy orders@homeislandcoffee.com on DO's to warehouse, and payments@homeislandcoffee.com with the invoice. Please include our PO ${poNumber || '[PO will be assigned on save]'} on all documents.
 
 Thank you,
 Home Island Coffee Partners`;
@@ -1132,8 +1120,9 @@ Home Island Coffee Partners`;
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      // Recompute fresh at save time to avoid stale numbering
-      const lotNumber = await generateLotNumber(vendor?.abbreviation, contract.origin_country);
+      // Allocate PO + lot number atomically at save time.
+      const po = await allocatePoNumber(vendor?.abbreviation);
+      const lotNumber = await allocateSingleLotNumber(po, contract.origin_country);
 
       const { data: lot, error } = await supabase.from('green_lots').insert({
         lot_number: lotNumber,
@@ -1149,7 +1138,7 @@ Home Island Coffee Partners`;
         kg_on_hand: 0,
         created_by: authUser!.id,
         lot_identifier: lotIdentifier.trim() || null,
-        po_number: poNumber,
+        po_number: po.poNumber,
       } as any).select('id').single();
       if (error) throw error;
 

@@ -19,7 +19,7 @@ import { CalendarIcon, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatPerKg, formatPerLb, formatMoney } from '@/lib/formatMoney';
 import { getCountryName } from '@/lib/coffeeOrigins';
-import { generateLotNumber } from '@/lib/lotNumberGenerator';
+import { allocatePoNumber, allocateSingleLotNumber } from '@/lib/lotNumberGenerator';
 import {
   KG_PER_LB,
   Currency,
@@ -274,7 +274,11 @@ ${userName}`;
       // Defensive: never allow save unless user reached Step 2
       if (step !== 2) throw new Error('Please complete Step 2 before saving.');
 
-      // 1. Insert release
+      // 1. Allocate PO number for the release (atomic)
+      const vendorAbbrForPo = vendors.find(v => v.id === vendorId)?.abbreviation || null;
+      const po = await allocatePoNumber(vendorAbbrForPo);
+
+      // 2. Insert release
       const status = invoiceNumber.trim() ? 'INVOICED' : 'PENDING';
       const arrival: 'RECEIVED' | 'EN_ROUTE' = markReceived ? 'RECEIVED' : 'EN_ROUTE';
       const etaStr = etaDate ? format(etaDate, 'yyyy-MM-dd') : null;
@@ -291,8 +295,9 @@ ${userName}`;
           arrival_status: arrival,
           shared_costs: sharedCosts as any,
           notes: notes.trim() || null,
+          po_number: po.poNumber,
           created_by: authUser?.id || null,
-        })
+        } as any)
         .select('id')
         .single();
       if (relErr) throw relErr;
@@ -334,9 +339,8 @@ ${userName}`;
         const sharedShareUsdPerKg = totalKgAll > 0 ? totalSharedUsd / totalKgAll : 0;
         const bookPerKg = bookValuePerKgUsd(priceUsdPerLb, sharedShareUsdPerKg);
 
-        // Generate lot number: {VENDOR_ABBR}-{ORIGIN}-PO### (per vendor+origin)
-        const vendorAbbr = vendors.find(v => v.id === vendorId)?.abbreviation || '???';
-        const lotNumber = await generateLotNumber(vendorAbbr, l.contract.origin_country);
+        // Generate lot number under the just-allocated PO
+        const lotNumber = await allocateSingleLotNumber(po, l.contract.origin_country);
 
         const isReceived = arrival === 'RECEIVED';
 

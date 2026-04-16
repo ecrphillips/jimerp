@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
 import { COMMON_ORIGINS, OTHER_ORIGINS, getCountryName } from '@/lib/coffeeOrigins';
-import { generateLotNumber } from '@/lib/lotNumberGenerator';
+import { allocatePoNumber, poFromExisting, allocateSingleLotNumber } from '@/lib/lotNumberGenerator';
 import { useNavigate } from 'react-router-dom';
 
 // ─── Types ─────────────────────────────────────────────────
@@ -49,6 +49,7 @@ interface PurchaseRow {
   shared_other_usd: number;
   shared_other_label: string | null;
   notes: string | null;
+  po_number: string | null;
   created_at: string;
   created_by: string | null;
   updated_at: string;
@@ -435,6 +436,7 @@ export default function SourcingPurchases() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>PO #</TableHead>
                   <TableHead>Vendor</TableHead>
                   <TableHead>Invoice #</TableHead>
                   <TableHead>Invoice Date</TableHead>
@@ -454,6 +456,7 @@ export default function SourcingPurchases() {
 
                   return (
                     <TableRow key={p.id}>
+                      <TableCell className="font-mono text-xs">{p.po_number || <span className="text-muted-foreground">—</span>}</TableCell>
                       <TableCell className="font-medium">{vendor?.name || '—'}</TableCell>
                       <TableCell>{p.invoice_number || '—'}</TableCell>
                       <TableCell>{p.invoice_date ? format(parseISO(p.invoice_date), 'MMM d, yyyy') : '—'}</TableCell>
@@ -658,6 +661,10 @@ function PurchaseDetailContent({
 
       {/* Header fields */}
       <div className="grid grid-cols-2 gap-4 text-sm">
+        <div>
+          <p className="text-muted-foreground text-xs">PO Number</p>
+          <p className="font-mono font-semibold">{purchase.po_number || '—'}</p>
+        </div>
         <div>
           <p className="text-muted-foreground text-xs">Vendor</p>
           <p className="font-medium">{vendor?.name || '—'}</p>
@@ -1045,13 +1052,14 @@ function CreatePurchaseModal({
             if (lotUpErr) throw lotUpErr;
           } else {
             // New line — INSERT lot + purchase line (same as create mode)
-            const vendorAbbr = selectedVendor?.abbreviation || '???';
-            const originCode = line.origin_country || '???';
-            const lotNumber = await generateLotNumber(vendorAbbr, originCode);
-            // Extract PO### portion for po_number column (back-compat)
-            const poMatch = lotNumber.match(/PO\d+$/);
-            const poNumber = poMatch ? poMatch[0] : '';
-
+            // Reuse this purchase's PO if it already has one; else allocate a fresh PO.
+            const sharedPo = await poFromExisting(existingPurchase.po_number, selectedVendor?.abbreviation);
+            // If the purchase didn't have a PO yet, persist the freshly allocated one.
+            if (!existingPurchase.po_number) {
+              await (supabase.from('green_purchases' as any) as any).update({ po_number: sharedPo.poNumber }).eq('id', purchaseId);
+            }
+            const lotNumber = await allocateSingleLotNumber(sharedPo, line.origin_country);
+            const poNumber = sharedPo.poNumber;
 
             const freightAllocated = totalKgAll > 0 ? freightNum * (lineKg / totalKgAll) : 0;
             const carryAllocated = totalKgAll > 0 ? carryNum * (lineKg / totalKgAll) : 0;
@@ -1131,10 +1139,14 @@ function CreatePurchaseModal({
         return { mode: 'edit' as const, newLotCount };
       } else {
         // ── CREATE MODE ──
+        // Allocate one PO for the whole purchase (atomic)
+        const po = await allocatePoNumber(selectedVendor?.abbreviation);
+
         const { data: purchase, error: purchaseErr } = await supabase
           .from('green_purchases')
           .insert({
             ...purchasePayload,
+            po_number: po.poNumber,
             created_by: authUser!.id,
           } as any)
           .select('id')
@@ -1156,11 +1168,9 @@ function CreatePurchaseModal({
           const dutiesAllocated = dutiesNum * share;
           const feesAllocated = feesNum * share;
 
-          const vendorAbbr = selectedVendor?.abbreviation || '???';
-          const originCode = line.origin_country || '???';
-          const lotNumber = await generateLotNumber(vendorAbbr, originCode);
-          const poMatch = lotNumber.match(/PO\d+$/);
-          const poNumber = poMatch ? poMatch[0] : '';
+          // Generate lot number under the just-allocated PO for this purchase
+          const lotNumber = await allocateSingleLotNumber(po, line.origin_country);
+          const poNumber = po.poNumber;
 
           const priceAmt = parseFloat(line.price_amount) || 0;
           const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
@@ -1726,12 +1736,13 @@ function AddCoffeeLineModal({
       const priceAmt = parseFloat(priceAmount) || 0;
       const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, priceUnit, fxRateNum) : null;
 
-      // Generate lot number: {VENDOR_ABBR}-{ORIGIN}-PO### (per vendor+origin sequence)
-      const vendorAbbr = vendor?.abbreviation || '???';
-      const originCode = originCountry || '???';
-      const lotNumber = await generateLotNumber(vendorAbbr, originCode);
-      const poMatch = lotNumber.match(/PO\d+$/);
-      const poNumber = poMatch ? poMatch[0] : '';
+      // Reuse this purchase's PO if present; else allocate one and persist back to the purchase.
+      const sharedPo = await poFromExisting(purchase.po_number, vendor?.abbreviation);
+      if (!purchase.po_number) {
+        await (supabase.from('green_purchases' as any) as any).update({ po_number: sharedPo.poNumber }).eq('id', purchase.id);
+      }
+      const lotNumber = await allocateSingleLotNumber(sharedPo, originCountry);
+      const poNumber = sharedPo.poNumber;
 
       // Insert lot
       const { data: lot, error: lotErr } = await supabase
