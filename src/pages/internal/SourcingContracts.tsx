@@ -1078,7 +1078,9 @@ function ReleaseCoffeeModal({
   const [poNumber, setPoNumber] = useState('');
   const [poLoading, setPoLoading] = useState(false);
 
-  // Fetch PO number on modal open
+  // Reset on open. We do NOT pre-allocate a PO/lot number — that would burn
+  // sequence numbers every time the modal opens. The real number is allocated
+  // atomically at save time. We just show a friendly placeholder preview here.
   useEffect(() => {
     if (open) {
       setLotIdentifier(contract.lot_identifier ?? '');
@@ -1088,30 +1090,16 @@ function ReleaseCoffeeModal({
       setNotes('');
       setMsgCopied(false);
       setPoNumber('');
-      setPoLoading(true);
-
-      // Compute next per-vendor+origin PO number for live lot number preview
-      (async () => {
-        try {
-          const ln = await generateLotNumber(vendor?.abbreviation, contract.origin_country);
-          const m = ln.match(/PO(\d+)$/);
-          setPoNumber(m ? `PO-${m[1]}` : `PO-001`);
-        } catch {
-          setPoNumber(`PO-001`);
-        } finally {
-          setPoLoading(false);
-        }
-      })();
+      setPoLoading(false);
     }
-  }, [open, existingLotCount, contract.lot_identifier, vendor?.abbreviation, contract.origin_country]);
+  }, [open, contract.lot_identifier]);
 
-  // Compute lot number live: VENDOR_ABBR-ORIGIN-POXXX
+  // Live preview only — actual numbers are assigned at save.
   const computedLotNumber = useMemo(() => {
     const vendorAbbr = vendor?.abbreviation || '???';
-    const country = contract.origin_country || '???';
-    if (!poNumber) return '';
-    return `${vendorAbbr}-${country}-${poNumber}`;
-  }, [vendor?.abbreviation, contract.origin_country, poNumber]);
+    const country = contract.origin_country || 'UNK';
+    return `${vendorAbbr}-P####-${country}-L####`;
+  }, [vendor?.abbreviation, contract.origin_country]);
 
   const originCountryName = getCountryName(contract.origin_country);
 
