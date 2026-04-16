@@ -167,9 +167,11 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (!existingRole) {
+        const mirrorClientId = await findOrCreateClientId();
         await adminClient.from('user_roles').insert({
           user_id: userId,
           role: 'CLIENT',
+          client_id: mirrorClientId,
         });
       }
 
