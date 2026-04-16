@@ -303,8 +303,19 @@ export default function SourcingLots() {
                       {lot.costing_status === 'COMPLETE' && lot.book_value_per_kg != null && (
                         <p className="text-sm font-medium">{formatPerKg(lot.book_value_per_kg)}</p>
                       )}
-                      <div className="pt-1">
+                      <div className="pt-1 flex items-center gap-1">
                         <Button variant="outline" size="sm" onClick={() => setSelectedLotId(lot.id)}>View</Button>
+                        {isAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={(e) => { e.stopPropagation(); setPendingDeleteLot(lot); }}
+                            aria-label="Delete lot"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -345,8 +356,21 @@ export default function SourcingLots() {
                         <TableCell className="text-right">{lot.bags_released}</TableCell>
                         <TableCell className="text-right">{lot.kg_on_hand.toLocaleString()} kg</TableCell>
                         <TableCell className="text-right">{lot.costing_status === 'COMPLETE' && lot.book_value_per_kg != null ? formatPerKg(lot.book_value_per_kg) : '—'}</TableCell>
-                        <TableCell>
-                          <Button variant="outline" size="sm" onClick={() => setSelectedLotId(lot.id)}>View</Button>
+                        <TableCell className="text-right">
+                          <div className="inline-flex items-center gap-1">
+                            <Button variant="outline" size="sm" onClick={() => setSelectedLotId(lot.id)}>View</Button>
+                            {isAdmin && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={(e) => { e.stopPropagation(); setPendingDeleteLot(lot); }}
+                                aria-label="Delete lot"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -363,6 +387,32 @@ export default function SourcingLots() {
       </Tabs>
 
       <LotDetailPanel lotId={selectedLotId} onClose={() => setSelectedLotId(null)} contractMap={contractMap} purchaseLineByLotId={purchaseLineByLotId} />
+
+      <AlertDialog open={!!pendingDeleteLot} onOpenChange={(o) => { if (!o) setPendingDeleteLot(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete lot "{pendingDeleteLot?.lot_number}"?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">This will permanently delete this lot and cannot be undone.</span>
+              {pendingDeleteLot?.release_id && (
+                <span className="block text-amber-700 dark:text-amber-400">
+                  This lot was created from a release. Deleting it will not affect the release record.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => pendingDeleteLot && deleteLotMutation.mutate(pendingDeleteLot.id)}
+              disabled={deleteLotMutation.isPending}
+            >
+              {deleteLotMutation.isPending ? 'Deleting…' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
