@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { CreateReleaseModal } from '@/components/sourcing/releases/CreateReleaseModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -144,7 +146,9 @@ export default function SourcingContracts() {
   const [categoryFilter, setCategoryFilter] = useState<GreenCategory | 'ALL'>('ALL');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [createReleaseOpen, setCreateReleaseOpen] = useState(false);
   const [viewMode, setViewMode] = useViewMode('sourcing_view_contracts', 'cards');
+  const navigate = useNavigate();
 
   const { data: contracts = [], isLoading } = useQuery({
     queryKey: ['green-contracts'],
@@ -213,6 +217,9 @@ export default function SourcingContracts() {
         </div>
         <div className="flex items-center gap-2">
           <ViewToggle value={viewMode} onChange={setViewMode} />
+          <Button variant="outline" onClick={() => setCreateReleaseOpen(true)} className="gap-1.5">
+            <Plus className="h-4 w-4" /> New Release
+          </Button>
           <Button onClick={() => setAddModalOpen(true)} className="gap-1.5">
             <Plus className="h-4 w-4" /> Add Contract
           </Button>
@@ -293,6 +300,11 @@ export default function SourcingContracts() {
 
       <ContractDetailPanel contractId={selectedContractId} onClose={() => setSelectedContractId(null)} vendors={vendors} vendorMap={vendorMap} lots={lotsByContract} />
       <AddContractModal open={addModalOpen} onOpenChange={setAddModalOpen} vendors={vendors} />
+      <CreateReleaseModal
+        open={createReleaseOpen}
+        onOpenChange={setCreateReleaseOpen}
+        onSuccess={() => navigate('/sourcing/releases')}
+      />
     </div>
   );
 }
