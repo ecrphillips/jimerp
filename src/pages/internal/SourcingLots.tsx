@@ -29,6 +29,7 @@ interface LotRow {
   lot_number: string;
   contract_id: string;
   purchase_id: string | null;
+  release_id: string | null;
   bags_released: number;
   bag_size_kg: number;
   kg_received: number | null;
