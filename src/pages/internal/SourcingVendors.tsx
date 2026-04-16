@@ -46,6 +46,7 @@ export default function SourcingVendors() {
   const [search, setSearch] = useState('');
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useViewMode('sourcing_view_vendors', 'cards');
 
   const { data: vendors = [], isLoading } = useQuery({
     queryKey: ['green-vendors'],
@@ -71,10 +72,13 @@ export default function SourcingVendors() {
           <h1 className="page-title">Vendors</h1>
           <p className="text-sm text-muted-foreground">Green coffee suppliers</p>
         </div>
-        <Button onClick={() => setAddModalOpen(true)} className="gap-1.5">
-          <Plus className="h-4 w-4" />
-          Add Vendor
-        </Button>
+        <div className="flex items-center gap-2">
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+          <Button onClick={() => setAddModalOpen(true)} className="gap-1.5">
+            <Plus className="h-4 w-4" />
+            Add Vendor
+          </Button>
+        </div>
       </div>
 
       <div className="relative max-w-sm">
@@ -93,7 +97,7 @@ export default function SourcingVendors() {
         <p className="text-sm text-muted-foreground">
           {search ? 'No vendors match your search.' : 'No vendors yet. Add one to get started.'}
         </p>
-      ) : (
+      ) : viewMode === 'cards' ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((vendor) => (
             <VendorCard
@@ -102,6 +106,41 @@ export default function SourcingVendors() {
               onView={() => setSelectedVendorId(vendor.id)}
             />
           ))}
+        </div>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Abbr.</TableHead>
+                <TableHead>Contact</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Terms</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((vendor) => (
+                <TableRow key={vendor.id} className={vendor.is_active ? '' : 'opacity-60'}>
+                  <TableCell className="font-medium">{vendor.name}</TableCell>
+                  <TableCell className="font-mono text-xs">{vendor.abbreviation || '—'}</TableCell>
+                  <TableCell>{vendor.contact_name || '—'}</TableCell>
+                  <TableCell className="text-muted-foreground">{vendor.contact_email || '—'}</TableCell>
+                  <TableCell>{vendor.payment_terms_days ? `Net ${vendor.payment_terms_days}` : '—'}</TableCell>
+                  <TableCell>
+                    <Badge variant={vendor.is_active ? 'default' : 'secondary'} className="text-xs">
+                      {vendor.is_active ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button variant="outline" size="sm" onClick={() => setSelectedVendorId(vendor.id)}>View</Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
 
