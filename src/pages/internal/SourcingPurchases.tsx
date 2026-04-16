@@ -1045,13 +1045,14 @@ function CreatePurchaseModal({
             if (lotUpErr) throw lotUpErr;
           } else {
             // New line — INSERT lot + purchase line (same as create mode)
-            const vendorAbbr = selectedVendor?.abbreviation || '???';
-            const originCode = line.origin_country || '???';
-            const lotNumber = await generateLotNumber(vendorAbbr, originCode);
-            // Extract PO### portion for po_number column (back-compat)
-            const poMatch = lotNumber.match(/PO\d+$/);
-            const poNumber = poMatch ? poMatch[0] : '';
-
+            // Reuse this purchase's PO if it already has one; else allocate a fresh PO.
+            const sharedPo = await poFromExisting(existingPurchase.po_number, selectedVendor?.abbreviation);
+            // If the purchase didn't have a PO yet, persist the freshly allocated one.
+            if (!existingPurchase.po_number) {
+              await (supabase.from('green_purchases' as any) as any).update({ po_number: sharedPo.poNumber }).eq('id', purchaseId);
+            }
+            const lotNumber = await allocateSingleLotNumber(sharedPo, line.origin_country);
+            const poNumber = sharedPo.poNumber;
 
             const freightAllocated = totalKgAll > 0 ? freightNum * (lineKg / totalKgAll) : 0;
             const carryAllocated = totalKgAll > 0 ? carryNum * (lineKg / totalKgAll) : 0;
