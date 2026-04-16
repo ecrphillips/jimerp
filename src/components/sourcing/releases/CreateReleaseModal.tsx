@@ -421,6 +421,8 @@ ${userName}`;
                                 />
                               </TableCell>
                               <TableCell className="font-medium">{contractRef(c)}</TableCell>
+                              <TableCell className="text-sm">{c.vendor_contract_number || '—'}</TableCell>
+                              <TableCell className="text-sm">{c.lot_identifier || '—'}</TableCell>
                               <TableCell className="text-sm">{contractDescription(c) || '—'}</TableCell>
                               <TableCell className="text-right">{remaining} / {c.num_bags || 0}</TableCell>
                               <TableCell className="text-right">{c.bag_size_kg ? `${c.bag_size_kg} kg` : '—'}</TableCell>
