@@ -536,6 +536,7 @@ export default function MemberSchedule() {
               const ds = format(day, 'yyyy-MM-dd');
               const dayEvents = eventsByDate.get(ds) || [];
               const isToday = ds === todayStr;
+              const outsideBands = getOutsideHourBands(day, windows);
 
               return (
                 <div
@@ -547,6 +548,20 @@ export default function MemberSchedule() {
                   {hours.map(h => (
                     <div key={h} className="absolute w-full border-t border-border/40" style={{ top: (h - HOUR_START) * ROW_HEIGHT }} />
                   ))}
+
+                  {/* Outside-hours shading (no tooltip, blocks new bookings) */}
+                  {outsideBands.map(([s, e], i) => {
+                    const top = minutesToPx(s);
+                    const height = minutesToPx(e) - top;
+                    return (
+                      <div
+                        key={`oh-${i}`}
+                        className="absolute left-0 right-0 bg-foreground/40 cursor-not-allowed z-10"
+                        style={{ top, height }}
+                        onClick={(ev) => ev.stopPropagation()}
+                      />
+                    );
+                  })}
 
                   {dayEvents.map(ev => {
                     const clampedStart = Math.max(ev.startMin, HOUR_START * 60);
@@ -560,7 +575,7 @@ export default function MemberSchedule() {
                       <div
                         key={ev.id}
                         className={cn(
-                          'absolute left-0.5 right-0.5 rounded px-1 text-[10px] leading-tight overflow-hidden',
+                          'absolute left-0.5 right-0.5 rounded px-1 text-[10px] leading-tight overflow-hidden z-20',
                           ev.isBlock || !ev.isMine ? 'cursor-not-allowed opacity-80' : 'cursor-pointer hover:ring-2 hover:ring-primary/50',
                         )}
                         style={{ top, height, backgroundColor: ev.bgColor, color: ev.textColor }}
