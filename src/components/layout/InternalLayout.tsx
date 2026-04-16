@@ -216,8 +216,9 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 <NavItem to="/sourcing/vendors" icon={Users} label="Vendors" onClick={closeSidebar} />
                 <NavItem to="/sourcing/samples" icon={FlaskConical} label="Samples" onClick={closeSidebar} />
                 <NavItem to="/sourcing/contracts" icon={FileSignature} label="Forward Contracts" onClick={closeSidebar} />
-                <NavItem to="/sourcing/purchases" icon={Receipt} label="Purchases" onClick={closeSidebar} />
+                <NavItem to="/sourcing/releases" icon={Receipt} label="Releases" onClick={closeSidebar} />
                 <NavItem to="/sourcing/lots" icon={Boxes} label="Lots" onClick={closeSidebar} />
+                <NavItem to="/sourcing/purchases" icon={Receipt} label="Purchases" onClick={closeSidebar} />
               </NavGroup>
 
               {/* Co-Roasting */}
