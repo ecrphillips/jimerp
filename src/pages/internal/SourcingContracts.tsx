@@ -1090,26 +1090,20 @@ function ReleaseCoffeeModal({
       setPoNumber('');
       setPoLoading(true);
 
-      // Fetch next PO sequence value
+      // Compute next per-vendor+origin PO number for live lot number preview
       (async () => {
         try {
-          const { data, error } = await supabase.rpc('nextval_text' as any, { seq_name: 'po_number_seq' });
-          if (error) {
-            const nextNum = existingLotCount + 1;
-            setPoNumber(`PO-${String(nextNum).padStart(3, '0')}`);
-          } else {
-            const seqVal = typeof data === 'number' ? data : parseInt(String(data));
-            setPoNumber(`PO-${String(seqVal).padStart(3, '0')}`);
-          }
+          const ln = await generateLotNumber(vendor?.abbreviation, contract.origin_country);
+          const m = ln.match(/PO(\d+)$/);
+          setPoNumber(m ? `PO-${m[1]}` : `PO-001`);
         } catch {
-          const nextNum = existingLotCount + 1;
-          setPoNumber(`PO-${String(nextNum).padStart(3, '0')}`);
+          setPoNumber(`PO-001`);
         } finally {
           setPoLoading(false);
         }
       })();
     }
-  }, [open, existingLotCount, contract.lot_identifier]);
+  }, [open, existingLotCount, contract.lot_identifier, vendor?.abbreviation, contract.origin_country]);
 
   // Compute lot number live: VENDOR_ABBR-ORIGIN-POXXX
   const computedLotNumber = useMemo(() => {
