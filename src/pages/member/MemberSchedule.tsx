@@ -156,6 +156,8 @@ export default function MemberSchedule() {
       return (data ?? []) as AvailabilityWindow[];
     },
   });
+
+  const { data: allBookings = [] } = useQuery({
     queryKey: ['member-portal-bookings'],
     queryFn: async () => {
       const { data, error } = await supabase
