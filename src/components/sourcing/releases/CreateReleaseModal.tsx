@@ -142,7 +142,7 @@ export function CreateReleaseModal({ open, onOpenChange, onSuccess }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('green_vendors')
-        .select('id, name')
+        .select('id, name, abbreviation')
         .eq('is_active', true)
         .order('name');
       if (error) throw error;
