@@ -40,6 +40,7 @@ interface ContractRow {
   name: string;
   internal_contract_number: string | null;
   vendor_contract_number: string | null;
+  lot_identifier: string | null;
   origin_country: string | null;
   origin: string | null;
   region: string | null;
@@ -155,7 +156,7 @@ export function CreateReleaseModal({ open, onOpenChange, onSuccess }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('green_contracts')
-        .select('id, name, internal_contract_number, vendor_contract_number, origin_country, origin, region, producer, variety, num_bags, bag_size_kg, contracted_price_per_kg, contracted_price_currency, vendor_id')
+        .select('id, name, internal_contract_number, vendor_contract_number, lot_identifier, origin_country, origin, region, producer, variety, num_bags, bag_size_kg, contracted_price_per_kg, contracted_price_currency, vendor_id')
         .eq('vendor_id', vendorId)
         .eq('status', 'ACTIVE')
         .order('name');
@@ -395,6 +396,8 @@ ${userName}`;
                         <TableRow>
                           <TableHead className="w-10"></TableHead>
                           <TableHead>Contract</TableHead>
+                          <TableHead>Vendor Contract #</TableHead>
+                          <TableHead>Lot ID</TableHead>
                           <TableHead>Origin / Description</TableHead>
                           <TableHead className="text-right">Bags Remaining</TableHead>
                           <TableHead className="text-right">Bag Size</TableHead>
@@ -418,6 +421,8 @@ ${userName}`;
                                 />
                               </TableCell>
                               <TableCell className="font-medium">{contractRef(c)}</TableCell>
+                              <TableCell className="text-sm">{c.vendor_contract_number || '—'}</TableCell>
+                              <TableCell className="text-sm">{c.lot_identifier || '—'}</TableCell>
                               <TableCell className="text-sm">{contractDescription(c) || '—'}</TableCell>
                               <TableCell className="text-right">{remaining} / {c.num_bags || 0}</TableCell>
                               <TableCell className="text-right">{c.bag_size_kg ? `${c.bag_size_kg} kg` : '—'}</TableCell>
