@@ -94,6 +94,45 @@ Deno.serve(async (req) => {
 
     const redirectTo = `${SITE_URL}/auth/callback`;
 
+    // Find or create a legacy `clients` row mirroring this account.
+    // The user_roles table has a check constraint requiring CLIENT roles to have a client_id.
+    const findOrCreateClientId = async (): Promise<string | null> => {
+      const { data: existingClient } = await adminClient
+        .from('clients')
+        .select('id')
+        .eq('name', account.account_name)
+        .maybeSingle();
+      if (existingClient) return existingClient.id;
+
+      // Generate a 3-char client_code from account name
+      const baseCode = account.account_name
+        .replace(/[^A-Za-z0-9]/g, '')
+        .toUpperCase()
+        .slice(0, 3)
+        .padEnd(3, 'X') || 'CLT';
+      let code = baseCode;
+      for (let i = 0; i < 100; i++) {
+        const { data: existing } = await adminClient
+          .from('clients')
+          .select('id')
+          .eq('client_code', code)
+          .maybeSingle();
+        if (!existing) break;
+        code = baseCode.slice(0, 2) + i.toString(36).toUpperCase().slice(-1);
+      }
+
+      const { data: newClient, error: clientErr } = await adminClient
+        .from('clients')
+        .insert({ name: account.account_name, client_code: code, is_active: true })
+        .select('id')
+        .single();
+      if (clientErr) {
+        console.error('[invite-account-user] Failed to create mirror client:', clientErr.message);
+        return null;
+      }
+      return newClient.id;
+    };
+
     // Check if user already exists
     const { data: existingUsers } = await adminClient.auth.admin.listUsers();
     const existingUser = existingUsers?.users?.find(
