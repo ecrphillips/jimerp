@@ -654,7 +654,7 @@ function ContractDetailPanel({
     lines.push(`Category: ${CATEGORY_LABELS[contract.category]}`);
     lines.push(`Status: ${STATUS_LABELS[contract.status]}`);
     lines.push(`Price: ${formatPrice(contract.contracted_price_per_kg, contract.contracted_price_currency)}`);
-    lines.push(`Bags: ${contract.num_bags || 0} total, ${bagsReleased} released, ${(contract.num_bags || 0) - bagsReleased} remaining`);
+    lines.push(`Bags: ${contract.num_bags || 0} total, ${bagsRequested} released, ${(contract.num_bags || 0) - bagsRequested} remaining`);
     const enRoute = contractLots.filter(l => l.status === 'EN_ROUTE').reduce((s, l) => s + l.bags_released, 0);
     lines.push(`En Route: ${enRoute} bags`);
     lines.push(`Warehouse: ${contract.warehouse_location || '—'}`);
