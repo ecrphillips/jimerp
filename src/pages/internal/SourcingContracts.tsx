@@ -257,7 +257,7 @@ export default function SourcingContracts() {
       }
     });
     return arr;
-  }, [filtered, sortKey, sortDir, vendorMap]);
+  }, [filtered, sortKey, sortDir, vendorMap, requestedByContract]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
