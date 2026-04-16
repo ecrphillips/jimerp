@@ -398,6 +398,7 @@ ${userName}`;
                           <TableHead>Contract</TableHead>
                           <TableHead>Vendor Contract #</TableHead>
                           <TableHead>Lot ID</TableHead>
+                          <TableHead>Name / Description</TableHead>
                           <TableHead>Origin / Description</TableHead>
                           <TableHead className="text-right">Bags Remaining</TableHead>
                           <TableHead className="text-right">Bag Size</TableHead>
@@ -423,6 +424,7 @@ ${userName}`;
                               <TableCell className="font-medium">{contractRef(c)}</TableCell>
                               <TableCell className="text-sm">{c.vendor_contract_number || '—'}</TableCell>
                               <TableCell className="text-sm">{c.lot_identifier || '—'}</TableCell>
+                              <TableCell className="text-sm">{c.name || '—'}</TableCell>
                               <TableCell className="text-sm">{contractDescription(c) || '—'}</TableCell>
                               <TableCell className="text-right">{remaining} / {c.num_bags || 0}</TableCell>
                               <TableCell className="text-right">{c.bag_size_kg ? `${c.bag_size_kg} kg` : '—'}</TableCell>
@@ -534,12 +536,23 @@ ${userName}`;
                 return (
                   <Card key={l.contract_id}>
                     <CardContent className="p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-sm">{contractRef(l.contract)}</p>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                            <p className="font-medium text-sm">{contractRef(l.contract)}</p>
+                            {l.contract.lot_identifier && (
+                              <p className="text-xs text-muted-foreground"><span className="font-medium">Lot:</span> {l.contract.lot_identifier}</p>
+                            )}
+                            {l.contract.vendor_contract_number && (
+                              <p className="text-xs text-muted-foreground"><span className="font-medium">Vendor #:</span> {l.contract.vendor_contract_number}</p>
+                            )}
+                            {l.contract.name && (
+                              <p className="text-xs text-muted-foreground"><span className="font-medium">Name:</span> {l.contract.name}</p>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground">{contractDescription(l.contract) || '—'}</p>
                         </div>
-                        <p className="text-xs text-muted-foreground">{l.bags_requested} bags × {l.contract.bag_size_kg} kg = <span className="font-medium text-foreground">{totalKg.toLocaleString()} kg</span></p>
+                        <p className="text-xs text-muted-foreground whitespace-nowrap">{l.bags_requested} bags × {l.contract.bag_size_kg} kg = <span className="font-medium text-foreground">{totalKg.toLocaleString()} kg</span></p>
                       </div>
                       <div className="grid grid-cols-3 gap-2 items-end">
                         <div>
