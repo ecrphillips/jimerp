@@ -142,11 +142,29 @@ function CostingStatusBadge({ costingStatus }: { costingStatus: string }) {
 export default function SourcingLots() {
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') === 'coverage' ? 'coverage' : 'lots';
+  const { authUser } = useAuth();
+  const isAdmin = authUser?.role === 'ADMIN';
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [physicalFilter, setPhysicalFilter] = useState<string>('ALL');
   const [costingFilter, setCostingFilter] = useState<string>('ALL');
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
+  const [pendingDeleteLot, setPendingDeleteLot] = useState<LotRow | null>(null);
   const [viewMode, setViewMode] = useViewMode('sourcing_view_lots', 'cards');
+
+  const deleteLotMutation = useMutation({
+    mutationFn: async (lotId: string) => {
+      const { error } = await supabase.from('green_lots').delete().eq('id', lotId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Lot deleted');
+      queryClient.invalidateQueries({ queryKey: ['green-lots'] });
+      queryClient.invalidateQueries({ queryKey: ['coverage-calendar-lots'] });
+      setPendingDeleteLot(null);
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to delete lot'),
+  });
 
   const { data: lots = [], isLoading } = useQuery({
     queryKey: ['green-lots'],
