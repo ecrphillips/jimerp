@@ -23,7 +23,9 @@ import {
   Currency,
   SharedCostsJson,
   SHARED_COST_KEYS,
+  SharedCostKey,
   SHARED_COST_LABELS,
+  KG_PER_LB,
   emptySharedCosts,
   totalSharedCostsUsd,
   bookValuePerKgUsd,
@@ -187,17 +189,56 @@ export default function ReleaseDetail() {
         .eq('id', id!);
       if (error) throw error;
 
-      // Recalculate book_value_per_kg on linked lots
+      // Compute per-bucket totals for currency-aware proration
+      const bucketTotals = SHARED_COST_KEYS.reduce<Record<SharedCostKey, { usd: number; cad: number }>>((acc, k) => {
+        const line = editShared[k];
+        const amt = Number(line?.amount) || 0;
+        const cur = (line?.currency || 'USD') as Currency;
+        acc[k] = { usd: cur === 'USD' ? amt : 0, cad: cur === 'CAD' ? amt : 0 };
+        return acc;
+      }, {} as any);
+
+      // Push recalculated cost allocations + arrival/dates to every linked lot
       for (const l of lines) {
         if (!l.lot_id) continue;
+        const lineKg = (l.bags_requested || 0) * Number(l.bag_size_kg || 0);
+        const kgShare = totalKg > 0 ? lineKg / totalKg : 0;
+        const priceUsdPerLb = Number(l.price_per_lb_usd) || 0;
+        const coffeeCostUsd = priceUsdPerLb > 0 ? priceUsdPerLb * KG_PER_LB * lineKg : null;
+
+        const lotCarryUsd = bucketTotals.carry.usd * kgShare;
+        const lotCarryCad = bucketTotals.carry.cad * kgShare;
+        const lotFreightCad = (bucketTotals.freight.usd + bucketTotals.freight.cad) * kgShare;
+        const lotDutiesCad = (bucketTotals.duties.usd + bucketTotals.duties.cad) * kgShare;
+        const lotFeesCad = (bucketTotals.fees.usd + bucketTotals.fees.cad) * kgShare;
+        const lotOtherCad = (bucketTotals.other.usd + bucketTotals.other.cad) * kgShare;
+
         const newBookKg = bookValuePerKgUsd(l.price_per_lb_usd, sharedShareUsdPerKg);
+
         const lotPatch: any = {
+          // Arrival
+          status: editArrival === 'RECEIVED' ? 'RECEIVED' : 'EN_ROUTE',
+          // Costs (mirror USD into *_cad with fx_rate=1 placeholder for surfacing on the lot detail panel)
+          fx_rate: 1,
+          invoice_amount_usd: coffeeCostUsd,
+          invoice_amount_cad: coffeeCostUsd,
+          invoice_is_usd: true,
+          carry_fees_usd: lotCarryUsd > 0 ? lotCarryUsd : null,
+          carry_fees_cad: (lotCarryUsd + lotCarryCad) > 0 ? (lotCarryUsd + lotCarryCad) : null,
+          carry_fees_is_usd: lotCarryUsd >= lotCarryCad,
+          freight_cad: lotFreightCad > 0 ? lotFreightCad : null,
+          freight_is_usd: false,
+          duties_cad: lotDutiesCad > 0 ? lotDutiesCad : null,
+          transaction_fees_cad: lotFeesCad > 0 ? lotFeesCad : null,
+          other_costs_cad: lotOtherCad > 0 ? lotOtherCad : null,
           book_value_per_kg: newBookKg > 0 ? newBookKg : null,
-          status: editArrival === 'RECEIVED' ? 'RECEIVED' : 'IN_TRANSIT',
+          market_value_per_kg: newBookKg > 0 ? newBookKg : null,
         };
+
         if (editArrival === 'RECEIVED' && editReceived) {
           lotPatch.received_date = format(editReceived, 'yyyy-MM-dd');
           lotPatch.kg_on_hand = (l.bags_requested || 0) * Number(l.bag_size_kg || 0);
+          lotPatch.kg_received = (l.bags_requested || 0) * Number(l.bag_size_kg || 0);
         }
         if (editEta) lotPatch.expected_delivery_date = format(editEta, 'yyyy-MM-dd');
         if (editInvoice.trim()) {
@@ -213,6 +254,7 @@ export default function ReleaseDetail() {
       queryClient.invalidateQueries({ queryKey: ['green-releases'] });
       queryClient.invalidateQueries({ queryKey: ['green-lots-by-release'] });
       queryClient.invalidateQueries({ queryKey: ['green-lots'] });
+      queryClient.invalidateQueries({ queryKey: ['green-lot-detail'] });
     },
     onError: (err: any) => toast.error(`Save failed: ${err?.message || 'Unknown error'}`),
   });
