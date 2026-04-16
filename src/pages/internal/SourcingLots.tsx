@@ -16,6 +16,10 @@ import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Search, Check, FileText, AlertTriangle, CheckCircle2, Pencil, Trash2 } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { CoverageCalendar } from '@/components/sourcing/CoverageCalendar';
@@ -29,6 +33,7 @@ interface LotRow {
   lot_number: string;
   contract_id: string;
   purchase_id: string | null;
+  release_id: string | null;
   bags_released: number;
   bag_size_kg: number;
   kg_received: number | null;
@@ -137,11 +142,29 @@ function CostingStatusBadge({ costingStatus }: { costingStatus: string }) {
 export default function SourcingLots() {
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') === 'coverage' ? 'coverage' : 'lots';
+  const { authUser } = useAuth();
+  const isAdmin = authUser?.role === 'ADMIN';
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [physicalFilter, setPhysicalFilter] = useState<string>('ALL');
   const [costingFilter, setCostingFilter] = useState<string>('ALL');
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
+  const [pendingDeleteLot, setPendingDeleteLot] = useState<LotRow | null>(null);
   const [viewMode, setViewMode] = useViewMode('sourcing_view_lots', 'cards');
+
+  const deleteLotMutation = useMutation({
+    mutationFn: async (lotId: string) => {
+      const { error } = await supabase.from('green_lots').delete().eq('id', lotId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Lot deleted');
+      queryClient.invalidateQueries({ queryKey: ['green-lots'] });
+      queryClient.invalidateQueries({ queryKey: ['coverage-calendar-lots'] });
+      setPendingDeleteLot(null);
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to delete lot'),
+  });
 
   const { data: lots = [], isLoading } = useQuery({
     queryKey: ['green-lots'],
@@ -280,8 +303,19 @@ export default function SourcingLots() {
                       {lot.costing_status === 'COMPLETE' && lot.book_value_per_kg != null && (
                         <p className="text-sm font-medium">{formatPerKg(lot.book_value_per_kg)}</p>
                       )}
-                      <div className="pt-1">
+                      <div className="pt-1 flex items-center gap-1">
                         <Button variant="outline" size="sm" onClick={() => setSelectedLotId(lot.id)}>View</Button>
+                        {isAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={(e) => { e.stopPropagation(); setPendingDeleteLot(lot); }}
+                            aria-label="Delete lot"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -322,8 +356,21 @@ export default function SourcingLots() {
                         <TableCell className="text-right">{lot.bags_released}</TableCell>
                         <TableCell className="text-right">{lot.kg_on_hand.toLocaleString()} kg</TableCell>
                         <TableCell className="text-right">{lot.costing_status === 'COMPLETE' && lot.book_value_per_kg != null ? formatPerKg(lot.book_value_per_kg) : '—'}</TableCell>
-                        <TableCell>
-                          <Button variant="outline" size="sm" onClick={() => setSelectedLotId(lot.id)}>View</Button>
+                        <TableCell className="text-right">
+                          <div className="inline-flex items-center gap-1">
+                            <Button variant="outline" size="sm" onClick={() => setSelectedLotId(lot.id)}>View</Button>
+                            {isAdmin && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={(e) => { e.stopPropagation(); setPendingDeleteLot(lot); }}
+                                aria-label="Delete lot"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -340,6 +387,32 @@ export default function SourcingLots() {
       </Tabs>
 
       <LotDetailPanel lotId={selectedLotId} onClose={() => setSelectedLotId(null)} contractMap={contractMap} purchaseLineByLotId={purchaseLineByLotId} />
+
+      <AlertDialog open={!!pendingDeleteLot} onOpenChange={(o) => { if (!o) setPendingDeleteLot(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete lot "{pendingDeleteLot?.lot_number}"?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">This will permanently delete this lot and cannot be undone.</span>
+              {pendingDeleteLot?.release_id && (
+                <span className="block text-amber-700 dark:text-amber-400">
+                  This lot was created from a release. Deleting it will not affect the release record.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => pendingDeleteLot && deleteLotMutation.mutate(pendingDeleteLot.id)}
+              disabled={deleteLotMutation.isPending}
+            >
+              {deleteLotMutation.isPending ? 'Deleting…' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -463,6 +536,7 @@ function LotDetailPanel({
     },
     onSuccess: () => {
       toast.success('Lot deleted');
+      queryClient.invalidateQueries({ queryKey: ['green-lots'] });
       queryClient.invalidateQueries({ queryKey: ['green-lots-all'] });
       queryClient.invalidateQueries({ queryKey: ['coverage-calendar-lots'] });
       onClose();
@@ -889,9 +963,14 @@ function LotDetailPanel({
         </SheetHeader>
 
         {confirmingDelete ? (
-          <div className="flex flex-col items-center gap-4 pt-12 text-center">
+          <div className="flex flex-col items-center gap-4 pt-12 text-center px-4">
             <p className="text-lg font-semibold">Delete "{lot?.lot_number}"?</p>
-            <p className="text-sm text-muted-foreground">This cannot be undone.</p>
+            <p className="text-sm text-muted-foreground">This will permanently delete this lot and cannot be undone.</p>
+            {lot?.release_id && (
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                This lot was created from a release. Deleting it will not affect the release record.
+              </p>
+            )}
             <div className="flex gap-3">
               <Button variant="outline" onClick={() => setConfirmingDelete(false)}>Cancel</Button>
               <Button variant="destructive" disabled={deleteLotMutation.isPending} onClick={() => deleteLotMutation.mutate()}>
