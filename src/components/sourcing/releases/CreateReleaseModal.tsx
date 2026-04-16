@@ -334,8 +334,9 @@ ${userName}`;
         const sharedShareUsdPerKg = totalKgAll > 0 ? totalSharedUsd / totalKgAll : 0;
         const bookPerKg = bookValuePerKgUsd(priceUsdPerLb, sharedShareUsdPerKg);
 
-        // Generate lot number
-        const lotNumber = `REL-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+        // Generate lot number: {VENDOR_ABBR}-{ORIGIN}-PO### (per vendor+origin)
+        const vendorAbbr = vendors.find(v => v.id === vendorId)?.abbreviation || '???';
+        const lotNumber = await generateLotNumber(vendorAbbr, l.contract.origin_country);
 
         const isReceived = arrival === 'RECEIVED';
 
