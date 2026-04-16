@@ -1696,6 +1696,7 @@ export type Database = {
           po_number: string | null
           purchase_id: string | null
           received_date: string | null
+          release_id: string | null
           status: string
           transaction_fees_cad: number | null
           transaction_fees_cad_confirmed_at: string | null
@@ -1777,6 +1778,7 @@ export type Database = {
           po_number?: string | null
           purchase_id?: string | null
           received_date?: string | null
+          release_id?: string | null
           status?: string
           transaction_fees_cad?: number | null
           transaction_fees_cad_confirmed_at?: string | null
@@ -1858,6 +1860,7 @@ export type Database = {
           po_number?: string | null
           purchase_id?: string | null
           received_date?: string | null
+          release_id?: string | null
           status?: string
           transaction_fees_cad?: number | null
           transaction_fees_cad_confirmed_at?: string | null
@@ -1883,6 +1886,13 @@ export type Database = {
             columns: ["purchase_id"]
             isOneToOne: false
             referencedRelation: "green_purchases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "green_lots_release_id_fkey"
+            columns: ["release_id"]
+            isOneToOne: false
+            referencedRelation: "green_releases"
             referencedColumns: ["id"]
           },
         ]
@@ -2020,6 +2030,120 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "green_purchases_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "green_vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      green_release_lines: {
+        Row: {
+          bag_size_kg: number
+          bags_requested: number
+          contract_id: string | null
+          created_at: string
+          id: string
+          lot_id: string | null
+          notes: string | null
+          original_price: Json | null
+          price_per_lb_usd: number | null
+          release_id: string
+        }
+        Insert: {
+          bag_size_kg: number
+          bags_requested: number
+          contract_id?: string | null
+          created_at?: string
+          id?: string
+          lot_id?: string | null
+          notes?: string | null
+          original_price?: Json | null
+          price_per_lb_usd?: number | null
+          release_id: string
+        }
+        Update: {
+          bag_size_kg?: number
+          bags_requested?: number
+          contract_id?: string | null
+          created_at?: string
+          id?: string
+          lot_id?: string | null
+          notes?: string | null
+          original_price?: Json | null
+          price_per_lb_usd?: number | null
+          release_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_release_lines_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "green_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "green_release_lines_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "green_lots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "green_release_lines_release_id_fkey"
+            columns: ["release_id"]
+            isOneToOne: false
+            referencedRelation: "green_releases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      green_releases: {
+        Row: {
+          arrival_status: string
+          created_at: string
+          created_by: string | null
+          eta_date: string | null
+          id: string
+          invoice_number: string | null
+          notes: string | null
+          received_date: string | null
+          shared_costs: Json
+          status: string
+          updated_at: string
+          vendor_id: string | null
+        }
+        Insert: {
+          arrival_status?: string
+          created_at?: string
+          created_by?: string | null
+          eta_date?: string | null
+          id?: string
+          invoice_number?: string | null
+          notes?: string | null
+          received_date?: string | null
+          shared_costs?: Json
+          status?: string
+          updated_at?: string
+          vendor_id?: string | null
+        }
+        Update: {
+          arrival_status?: string
+          created_at?: string
+          created_by?: string | null
+          eta_date?: string | null
+          id?: string
+          invoice_number?: string | null
+          notes?: string | null
+          received_date?: string | null
+          shared_costs?: Json
+          status?: string
+          updated_at?: string
+          vendor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_releases_vendor_id_fkey"
             columns: ["vendor_id"]
             isOneToOne: false
             referencedRelation: "green_vendors"
