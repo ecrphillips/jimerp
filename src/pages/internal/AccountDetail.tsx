@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ArrowLeft, Info, CalendarIcon, Plus, Pencil, CheckCircle2, ExternalLink, ShieldCheck, Lock, Eye } from 'lucide-react';
+import { ArrowLeft, Info, CalendarIcon, Plus, Pencil, CheckCircle2, ExternalLink, ShieldCheck, Lock, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
@@ -466,7 +466,7 @@ function LocationsTab({ accountId }: { accountId: string }) {
 }
 
 // ─── Users Tab ─────────────────────────────────────────────────
-function UsersTab({ accountId }: { accountId: string }) {
+function UsersTab({ accountId, account }: { accountId: string; account: any }) {
   const queryClient = useQueryClient();
   const { authUser } = useAuth();
   const [showInvite, setShowInvite] = useState(false);
@@ -475,6 +475,63 @@ function UsersTab({ accountId }: { accountId: string }) {
     email: '', is_owner: false, can_place_orders: true, can_book_roaster: false,
     can_manage_locations: false, can_invite_users: false, location_access: 'ALL' as string,
     assigned_locations: [] as string[],
+  });
+
+  // ─── Create User (direct, with temp password) state ───
+  const programs: string[] = account?.programs || [];
+  const hasManufacturing = programs.includes('MANUFACTURING');
+  const hasCoroasting = programs.includes('COROASTING');
+
+  const buildCreateForm = () => ({
+    full_name: '',
+    email: '',
+    password: '',
+    confirm_password: '',
+    show_password: false,
+    is_owner: false,
+    can_place_orders: hasManufacturing,
+    can_book_roaster: hasCoroasting,
+  });
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(buildCreateForm());
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const resetCreateForm = () => {
+    setShowCreate(false);
+    setCreateError(null);
+    setCreateForm(buildCreateForm());
+  };
+
+  const createUserMutation = useMutation({
+    mutationFn: async () => {
+      // Client-side validation
+      if (!createForm.full_name.trim()) throw new Error('Full name is required');
+      if (!createForm.email.trim()) throw new Error('Email is required');
+      if (createForm.password.length < 8) throw new Error('Password must be at least 8 characters');
+      if (createForm.password !== createForm.confirm_password) throw new Error('Passwords do not match');
+
+      const { data, error: fnError } = await supabase.functions.invoke('create-account-user', {
+        body: {
+          email: createForm.email.trim(),
+          password: createForm.password,
+          full_name: createForm.full_name.trim(),
+          account_id: accountId,
+          is_owner: createForm.is_owner,
+          can_place_orders: createForm.can_place_orders,
+          can_book_roaster: createForm.can_book_roaster,
+        },
+      });
+      if (fnError) throw new Error(fnError.message || 'Failed to create user');
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['account-users'] });
+      toast.success(`User created. Share the temporary password with ${data?.name || createForm.full_name} directly.`);
+      resetCreateForm();
+    },
+    onError: (err: Error) => setCreateError(err.message),
   });
 
   const { data: users = [] } = useQuery({
@@ -616,7 +673,12 @@ function UsersTab({ accountId }: { accountId: string }) {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-sm font-semibold">Users</h3>
-        <Button size="sm" onClick={() => { resetForm(); setShowInvite(true); }}><Plus className="h-3.5 w-3.5 mr-1" /> Invite User</Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => { setCreateError(null); setCreateForm(buildCreateForm()); setShowCreate(true); }}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Create User
+          </Button>
+          <Button size="sm" onClick={() => { resetForm(); setShowInvite(true); }}><Plus className="h-3.5 w-3.5 mr-1" /> Invite User</Button>
+        </div>
       </div>
 
       {users.length === 0 ? (
@@ -727,6 +789,106 @@ function UsersTab({ accountId }: { accountId: string }) {
             <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
               {saveMutation.isPending ? 'Saving…' : editId ? 'Update' : 'Send Invite'}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Create User modal (direct creation with temporary password) ─── */}
+      <Dialog open={showCreate} onOpenChange={(open) => { if (!open) resetCreateForm(); else setShowCreate(true); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Create User</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            {createError && (
+              <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
+                {createError}
+              </div>
+            )}
+
+            <div>
+              <Label>Full name</Label>
+              <Input
+                value={createForm.full_name}
+                onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
+                placeholder="Jane Doe"
+              />
+            </div>
+
+            <div>
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={createForm.email}
+                onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                placeholder="jane@example.com"
+              />
+            </div>
+
+            <div>
+              <Label>Temporary password</Label>
+              <div className="relative">
+                <Input
+                  type={createForm.show_password ? 'text' : 'password'}
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                  placeholder="At least 8 characters"
+                  className="pr-9"
+                />
+                <button
+                  type="button"
+                  onClick={() => setCreateForm({ ...createForm, show_password: !createForm.show_password })}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                  aria-label={createForm.show_password ? 'Hide password' : 'Show password'}
+                >
+                  {createForm.show_password ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <Label>Confirm password</Label>
+              <Input
+                type={createForm.show_password ? 'text' : 'password'}
+                value={createForm.confirm_password}
+                onChange={(e) => setCreateForm({ ...createForm, confirm_password: e.target.value })}
+                placeholder="Re-enter password"
+              />
+            </div>
+
+            <div>
+              <Label className="mb-2 block">Permissions</Label>
+              <div className="grid grid-cols-1 gap-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={createForm.can_place_orders}
+                    onCheckedChange={(v) => setCreateForm({ ...createForm, can_place_orders: !!v })}
+                  /> can_place_orders
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={createForm.can_book_roaster}
+                    onCheckedChange={(v) => setCreateForm({ ...createForm, can_book_roaster: !!v })}
+                  /> can_book_roaster
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={createForm.is_owner}
+                    onCheckedChange={(v) => setCreateForm({ ...createForm, is_owner: !!v })}
+                  /> is_owner
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              You will need to share this temporary password with the user directly. They can change it after logging in using Forgot Password.
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <Button variant="outline" onClick={resetCreateForm} disabled={createUserMutation.isPending}>Cancel</Button>
+              <Button onClick={() => { setCreateError(null); createUserMutation.mutate(); }} disabled={createUserMutation.isPending}>
+                {createUserMutation.isPending ? 'Creating…' : 'Create User'}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -1140,7 +1302,7 @@ export default function AccountDetail() {
             </TabsContent>
           )}
           <TabsContent value="users">
-            <UsersTab accountId={account.id} />
+            <UsersTab accountId={account.id} account={account} />
           </TabsContent>
           {hasCoroasting && (
             <TabsContent value="coroasting">
