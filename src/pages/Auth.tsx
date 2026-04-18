@@ -18,6 +18,8 @@ const emailSchema = z.object({
   email: z.string().email('Please enter a valid email'),
 });
 
+type InviteState = 'checking' | 'none' | 'ready' | 'invalid';
+
 export default function Auth() {
   const { user, authUser, signIn, loading } = useAuth();
   const navigate = useNavigate();
@@ -36,8 +38,82 @@ export default function Auth() {
   // Forgot password state
   const [resetEmail, setResetEmail] = useState('');
 
-  // Redirect if already logged in
+  // Invite flow state
+  const [inviteState, setInviteState] = useState<InviteState>('checking');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Detect & process invite token (hash-based implicit flow OR PKCE code in query)
   useEffect(() => {
+    let cancelled = false;
+
+    const processInvite = async () => {
+      try {
+        const hash = window.location.hash.startsWith('#')
+          ? window.location.hash.substring(1)
+          : '';
+        const hashParams = new URLSearchParams(hash);
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        const hashType = hashParams.get('type');
+        const hashError = hashParams.get('error') || hashParams.get('error_description');
+
+        const code = searchParams.get('code');
+        const queryType = searchParams.get('type');
+        const queryError = searchParams.get('error') || searchParams.get('error_description');
+
+        const isInviteHash =
+          !!accessToken && !!refreshToken && (hashType === 'invite' || hashType === 'signup' || hashType === 'recovery');
+        const isInvitePkce = !!code && (queryType === 'invite' || queryType === 'signup' || queryType === 'recovery' || !queryType);
+
+        // Surface explicit errors from Supabase redirect
+        if (hashError || queryError) {
+          if (!cancelled) setInviteState('invalid');
+          return;
+        }
+
+        if (isInviteHash) {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken!,
+            refresh_token: refreshToken!,
+          });
+          if (sessionError) {
+            if (!cancelled) setInviteState('invalid');
+            return;
+          }
+          // Clear hash so refresh doesn't re-trigger
+          window.history.replaceState(null, '', window.location.pathname);
+          if (!cancelled) setInviteState('ready');
+          return;
+        }
+
+        if (isInvitePkce) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code!);
+          if (exchangeError) {
+            if (!cancelled) setInviteState('invalid');
+            return;
+          }
+          window.history.replaceState(null, '', window.location.pathname);
+          if (!cancelled) setInviteState('ready');
+          return;
+        }
+
+        if (!cancelled) setInviteState('none');
+      } catch {
+        if (!cancelled) setInviteState('invalid');
+      }
+    };
+
+    processInvite();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Redirect if already logged in (but NOT during invite flow — they need to set a password first)
+  useEffect(() => {
+    if (inviteState === 'ready' || inviteState === 'checking') return;
     if (user && authUser) {
       const from = (location.state as { from?: Location })?.from?.pathname;
       if (from) {
@@ -48,7 +124,7 @@ export default function Auth() {
         navigate('/production', { replace: true });
       }
     }
-  }, [user, authUser, navigate, location]);
+  }, [user, authUser, navigate, location, inviteState]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,13 +185,48 @@ export default function Auth() {
     }
   };
 
-  if (loading) {
+  const handleSetInvitePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      if (newPassword.length < 8) {
+        setError('Password must be at least 8 characters');
+        setIsSubmitting(false);
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setError('Passwords do not match');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) {
+        setError(updateError.message);
+        setIsSubmitting(false);
+        return;
+      }
+
+      navigate('/dashboard', { replace: true });
+    } catch (err) {
+      setError('An unexpected error occurred');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Loading: either auth context loading OR we're still checking the invite token
+  if (loading || inviteState === 'checking') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     );
   }
+
+  const isInviteFlow = inviteState === 'ready' || inviteState === 'invalid';
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -131,7 +242,14 @@ export default function Auth() {
 
         <Card>
           <CardHeader className="pb-4">
-            {showForgotPassword ? (
+            {isInviteFlow ? (
+              <>
+                <CardTitle>Welcome to JIM</CardTitle>
+                <CardDescription>
+                  Set a password to activate your account.
+                </CardDescription>
+              </>
+            ) : showForgotPassword ? (
               <>
                 <div className="flex items-center gap-2">
                   <Button 
@@ -176,7 +294,62 @@ export default function Auth() {
               </div>
             )}
 
-            {showForgotPassword ? (
+            {inviteState === 'invalid' ? (
+              <>
+                <div className="mb-4 flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>This invite link has expired or is invalid. Please contact Home Island to be re-invited.</span>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setInviteState('none');
+                  }}
+                >
+                  Return to sign in
+                </Button>
+              </>
+            ) : inviteState === 'ready' ? (
+              <form onSubmit={handleSetInvitePassword} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="new-password">Choose a password</Label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    disabled={isSubmitting}
+                    autoComplete="new-password"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm password</Label>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    disabled={isSubmitting}
+                    autoComplete="new-password"
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Activating...
+                    </>
+                  ) : (
+                    'Activate Account'
+                  )}
+                </Button>
+              </form>
+            ) : showForgotPassword ? (
               <form onSubmit={handleForgotPassword} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="reset-email">Email</Label>
