@@ -673,7 +673,12 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-sm font-semibold">Users</h3>
-        <Button size="sm" onClick={() => { resetForm(); setShowInvite(true); }}><Plus className="h-3.5 w-3.5 mr-1" /> Invite User</Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => { setCreateError(null); setCreateForm(buildCreateForm()); setShowCreate(true); }}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Create User
+          </Button>
+          <Button size="sm" onClick={() => { resetForm(); setShowInvite(true); }}><Plus className="h-3.5 w-3.5 mr-1" /> Invite User</Button>
+        </div>
       </div>
 
       {users.length === 0 ? (
@@ -1197,7 +1202,7 @@ export default function AccountDetail() {
             </TabsContent>
           )}
           <TabsContent value="users">
-            <UsersTab accountId={account.id} />
+            <UsersTab accountId={account.id} account={account} />
           </TabsContent>
           {hasCoroasting && (
             <TabsContent value="coroasting">
