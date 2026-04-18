@@ -466,7 +466,7 @@ function LocationsTab({ accountId }: { accountId: string }) {
 }
 
 // ─── Users Tab ─────────────────────────────────────────────────
-function UsersTab({ accountId }: { accountId: string }) {
+function UsersTab({ accountId, account }: { accountId: string; account: any }) {
   const queryClient = useQueryClient();
   const { authUser } = useAuth();
   const [showInvite, setShowInvite] = useState(false);
@@ -475,6 +475,63 @@ function UsersTab({ accountId }: { accountId: string }) {
     email: '', is_owner: false, can_place_orders: true, can_book_roaster: false,
     can_manage_locations: false, can_invite_users: false, location_access: 'ALL' as string,
     assigned_locations: [] as string[],
+  });
+
+  // ─── Create User (direct, with temp password) state ───
+  const programs: string[] = account?.programs || [];
+  const hasManufacturing = programs.includes('MANUFACTURING');
+  const hasCoroasting = programs.includes('COROASTING');
+
+  const buildCreateForm = () => ({
+    full_name: '',
+    email: '',
+    password: '',
+    confirm_password: '',
+    show_password: false,
+    is_owner: false,
+    can_place_orders: hasManufacturing,
+    can_book_roaster: hasCoroasting,
+  });
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(buildCreateForm());
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const resetCreateForm = () => {
+    setShowCreate(false);
+    setCreateError(null);
+    setCreateForm(buildCreateForm());
+  };
+
+  const createUserMutation = useMutation({
+    mutationFn: async () => {
+      // Client-side validation
+      if (!createForm.full_name.trim()) throw new Error('Full name is required');
+      if (!createForm.email.trim()) throw new Error('Email is required');
+      if (createForm.password.length < 8) throw new Error('Password must be at least 8 characters');
+      if (createForm.password !== createForm.confirm_password) throw new Error('Passwords do not match');
+
+      const { data, error: fnError } = await supabase.functions.invoke('create-account-user', {
+        body: {
+          email: createForm.email.trim(),
+          password: createForm.password,
+          full_name: createForm.full_name.trim(),
+          account_id: accountId,
+          is_owner: createForm.is_owner,
+          can_place_orders: createForm.can_place_orders,
+          can_book_roaster: createForm.can_book_roaster,
+        },
+      });
+      if (fnError) throw new Error(fnError.message || 'Failed to create user');
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['account-users'] });
+      toast.success(`User created. Share the temporary password with ${data?.name || createForm.full_name} directly.`);
+      resetCreateForm();
+    },
+    onError: (err: Error) => setCreateError(err.message),
   });
 
   const { data: users = [] } = useQuery({
