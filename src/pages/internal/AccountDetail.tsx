@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ArrowLeft, Info, CalendarIcon, Plus, Pencil, CheckCircle2, ExternalLink, ShieldCheck, Lock, Eye } from 'lucide-react';
+import { ArrowLeft, Info, CalendarIcon, Plus, Pencil, CheckCircle2, ExternalLink, ShieldCheck, Lock, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
@@ -789,6 +789,106 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
             <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
               {saveMutation.isPending ? 'Saving…' : editId ? 'Update' : 'Send Invite'}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Create User modal (direct creation with temporary password) ─── */}
+      <Dialog open={showCreate} onOpenChange={(open) => { if (!open) resetCreateForm(); else setShowCreate(true); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Create User</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            {createError && (
+              <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
+                {createError}
+              </div>
+            )}
+
+            <div>
+              <Label>Full name</Label>
+              <Input
+                value={createForm.full_name}
+                onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
+                placeholder="Jane Doe"
+              />
+            </div>
+
+            <div>
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={createForm.email}
+                onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                placeholder="jane@example.com"
+              />
+            </div>
+
+            <div>
+              <Label>Temporary password</Label>
+              <div className="relative">
+                <Input
+                  type={createForm.show_password ? 'text' : 'password'}
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                  placeholder="At least 8 characters"
+                  className="pr-9"
+                />
+                <button
+                  type="button"
+                  onClick={() => setCreateForm({ ...createForm, show_password: !createForm.show_password })}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                  aria-label={createForm.show_password ? 'Hide password' : 'Show password'}
+                >
+                  {createForm.show_password ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <Label>Confirm password</Label>
+              <Input
+                type={createForm.show_password ? 'text' : 'password'}
+                value={createForm.confirm_password}
+                onChange={(e) => setCreateForm({ ...createForm, confirm_password: e.target.value })}
+                placeholder="Re-enter password"
+              />
+            </div>
+
+            <div>
+              <Label className="mb-2 block">Permissions</Label>
+              <div className="grid grid-cols-1 gap-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={createForm.can_place_orders}
+                    onCheckedChange={(v) => setCreateForm({ ...createForm, can_place_orders: !!v })}
+                  /> can_place_orders
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={createForm.can_book_roaster}
+                    onCheckedChange={(v) => setCreateForm({ ...createForm, can_book_roaster: !!v })}
+                  /> can_book_roaster
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={createForm.is_owner}
+                    onCheckedChange={(v) => setCreateForm({ ...createForm, is_owner: !!v })}
+                  /> is_owner
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              You will need to share this temporary password with the user directly. They can change it after logging in using Forgot Password.
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <Button variant="outline" onClick={resetCreateForm} disabled={createUserMutation.isPending}>Cancel</Button>
+              <Button onClick={() => { setCreateError(null); createUserMutation.mutate(); }} disabled={createUserMutation.isPending}>
+                {createUserMutation.isPending ? 'Creating…' : 'Create User'}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
