@@ -539,13 +539,51 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('account_users')
-        .select('*, profiles:user_id(name, email)')
+        .select('*, profiles:user_id(name, email, is_active)')
         .eq('account_id', accountId)
         .order('created_at');
       if (error) throw error;
       return data;
     },
   });
+
+  // ─── Password reset state (ADMIN only) ───
+  const isAdmin = authUser?.role === 'ADMIN';
+  const [resetConfirm, setResetConfirm] = useState<{ user_id: string; email: string; name: string } | null>(null);
+  const [resetLink, setResetLink] = useState<{ link: string; name: string } | null>(null);
+  const [resetCopied, setResetCopied] = useState(false);
+
+  const sendResetMutation = useMutation({
+    mutationFn: async ({ user_id, email }: { user_id: string; email: string }) => {
+      const { data, error: fnError } = await supabase.functions.invoke('send-password-reset', {
+        body: { user_id, email },
+      });
+      if (fnError) throw new Error(fnError.message || 'Failed to generate reset link');
+      if (data?.error) throw new Error(data.error);
+      return data as { reset_link: string };
+    },
+    onSuccess: (data) => {
+      const name = resetConfirm?.name || 'this user';
+      setResetConfirm(null);
+      setResetCopied(false);
+      setResetLink({ link: data.reset_link, name });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
+      setResetConfirm(null);
+    },
+  });
+
+  const copyResetLink = async () => {
+    if (!resetLink) return;
+    try {
+      await navigator.clipboard.writeText(resetLink.link);
+      setResetCopied(true);
+      setTimeout(() => setResetCopied(false), 2000);
+    } catch {
+      toast.error('Could not copy to clipboard');
+    }
+  };
 
   const { data: locations = [] } = useQuery({
     queryKey: ['account-locations', accountId],
