@@ -54,6 +54,70 @@ export default function AdminTools() {
   const [clearCoroastConfirmText, setClearCoroastConfirmText] = useState('');
   const [isClearingCoroast, setIsClearingCoroast] = useState(false);
 
+  // Orphaned account_users cleanup state
+  const [orphanEmail, setOrphanEmail] = useState('');
+  const [isRemovingOrphan, setIsRemovingOrphan] = useState(false);
+
+  const handleRemoveOrphanedAccountUsers = async () => {
+    const email = orphanEmail.trim().toLowerCase();
+    if (!email) {
+      toast.error('Enter an email address');
+      return;
+    }
+    setIsRemovingOrphan(true);
+    try {
+      // 1. Try profiles lookup
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('user_id')
+        .ilike('email', email)
+        .maybeSingle();
+
+      let userIds: string[] = [];
+      if (profile?.user_id) {
+        userIds = [profile.user_id];
+      } else {
+        // 2. Find account_users whose user_id has no profile row at all
+        const { data: allAus } = await supabase
+          .from('account_users')
+          .select('user_id');
+        const candidateIds = Array.from(new Set((allAus ?? []).map(r => r.user_id)));
+        if (candidateIds.length > 0) {
+          const { data: existingProfiles } = await supabase
+            .from('profiles')
+            .select('user_id')
+            .in('user_id', candidateIds);
+          const knownIds = new Set((existingProfiles ?? []).map(p => p.user_id));
+          userIds = candidateIds.filter(id => !knownIds.has(id));
+        }
+        if (userIds.length === 0) {
+          toast.error('No matching profile or orphaned account_users found for that email');
+          return;
+        }
+      }
+
+      // 3. Delete account_users rows for these user_ids
+      const { data: deleted, error: delError } = await supabase
+        .from('account_users')
+        .delete()
+        .in('user_id', userIds)
+        .select('id');
+      if (delError) throw delError;
+
+      const count = deleted?.length ?? 0;
+      if (count === 0) {
+        toast.error('No account_users rows found to remove');
+      } else {
+        toast.success(`Removed ${count} account_user row${count === 1 ? '' : 's'}`);
+        setOrphanEmail('');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to remove orphaned account users');
+    } finally {
+      setIsRemovingOrphan(false);
+    }
+  };
+
   // Query products missing SKUs
   const { data: productsNeedingSku = [] } = useQuery({
     queryKey: ['products-needing-sku'],
