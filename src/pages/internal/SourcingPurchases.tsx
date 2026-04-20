@@ -1139,104 +1139,126 @@ function CreatePurchaseModal({
         return { mode: 'edit' as const, newLotCount };
       } else {
         // ── CREATE MODE ──
-        // Allocate one PO for the whole purchase (atomic)
-        const po = await allocatePoNumber(selectedVendor?.abbreviation);
-
-        const { data: purchase, error: purchaseErr } = await supabase
-          .from('green_purchases')
-          .insert({
-            ...purchasePayload,
-            po_number: po.poNumber,
-            created_by: authUser!.id,
-          } as any)
-          .select('id')
-          .single();
-        if (purchaseErr) throw purchaseErr;
-        purchaseId = purchase.id;
-
-        let lotCount = 0;
-
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          if (!line.lot_identifier.trim() || line.bags <= 0 || line.bag_size_kg <= 0) continue;
-
-          const lineKg = line.bags * line.bag_size_kg;
-          const share = totalKgAll > 0 ? lineKg / totalKgAll : 0;
-          const freightAllocated = freightNum * share;
-          const carryAllocated = carryNum * share;
-          const otherAllocated = otherNum * share;
-          const dutiesAllocated = dutiesNum * share;
-          const feesAllocated = feesNum * share;
-
-          // Generate lot number under the just-allocated PO for this purchase
-          const lotNumber = await allocateSingleLotNumber(po, line.origin_country);
-          const poNumber = po.poNumber;
-
-          const priceAmt = parseFloat(line.price_amount) || 0;
-          const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
-          const invoiceAmountUsd = converted ? converted.value * lineKg * KG_PER_LB : null;
-
-          const freightCad = sharedCosts.freight.currency === 'USD' && fxRateNum ? freightAllocated * fxRateNum : freightAllocated;
-
-          const { data: lot, error: lotErr } = await supabase
-            .from('green_lots')
+        const runCreate = async (po: Awaited<ReturnType<typeof allocatePoNumber>>) => {
+          const { data: purchase, error: purchaseErr } = await supabase
+            .from('green_purchases')
             .insert({
-              lot_number: lotNumber,
-              lot_identifier: line.lot_identifier.trim(),
-              contract_id: null as any,
-              bags_released: line.bags,
-              bag_size_kg: line.bag_size_kg,
-              kg_received: lineKg,
-              kg_on_hand: line.received ? lineKg : 0,
-              status: (line.received ? 'RECEIVED' : 'EN_ROUTE') as any,
-              costing_status: confirmCosting ? 'COMPLETE' : 'INCOMPLETE',
-              expected_delivery_date: null,
-              received_date: line.received ? format(new Date(), 'yyyy-MM-dd') : null,
-              fx_rate: fxRateNum,
-              invoice_amount_usd: invoiceAmountUsd,
-              invoice_amount_cad: invoiceAmountUsd != null ? (fxRateNum ? invoiceAmountUsd * fxRateNum : invoiceAmountUsd) : null,
-              invoice_is_usd: fxRateNum ? true : false,
-              freight_cad: freightCad,
-              carry_fees_cad: sharedCosts.carry.currency === 'USD' && fxRateNum ? carryAllocated * fxRateNum : carryAllocated,
-              duties_cad: sharedCosts.duties.currency === 'USD' && fxRateNum ? dutiesAllocated * fxRateNum : dutiesAllocated,
-              transaction_fees_cad: sharedCosts.fees.currency === 'USD' && fxRateNum ? feesAllocated * fxRateNum : feesAllocated,
-              other_costs_cad: sharedCosts.other.currency === 'USD' && fxRateNum ? otherAllocated * fxRateNum : otherAllocated,
-              warehouse_location: line.warehouse_location.trim() || null,
-              notes_internal: line.notes.trim() || null,
+              ...purchasePayload,
+              po_number: po.poNumber,
               created_by: authUser!.id,
-              purchase_id: purchaseId,
-              po_number: poNumber,
-              vendor_invoice_number: invoiceNumber.trim() || null,
-              importer_payment_terms_days: line.importer_payment_terms_days || null,
             } as any)
             .select('id')
             .single();
-          if (lotErr) throw lotErr;
+          if (purchaseErr) throw purchaseErr;
+          const localPurchaseId = purchase.id;
 
-          const { error: lineErr } = await supabase
-            .from('green_purchase_lines')
-            .insert({
-              purchase_id: purchaseId,
-              lot_identifier: line.lot_identifier.trim(),
-              origin_country: line.origin_country || null,
-              region: line.region.trim() || null,
-              producer: line.producer.trim() || null,
-              variety: line.variety.trim() || null,
-              crop_year: line.crop_year.trim() || null,
-              category: line.category || null,
-              bags: line.bags,
-              bag_size_kg: line.bag_size_kg,
-              price_per_lb_usd: converted ? converted.value : null,
-              warehouse_location: line.warehouse_location.trim() || null,
-              notes: line.notes.trim() || null,
-              lot_id: lot.id,
-              display_order: i,
-            } as any);
-          if (lineErr) throw lineErr;
-          lotCount++;
+          let lotCount = 0;
+
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line.lot_identifier.trim() || line.bags <= 0 || line.bag_size_kg <= 0) continue;
+
+            const lineKg = line.bags * line.bag_size_kg;
+            const share = totalKgAll > 0 ? lineKg / totalKgAll : 0;
+            const freightAllocated = freightNum * share;
+            const carryAllocated = carryNum * share;
+            const otherAllocated = otherNum * share;
+            const dutiesAllocated = dutiesNum * share;
+            const feesAllocated = feesNum * share;
+
+            // Generate lot number under the just-allocated PO for this purchase
+            const lotNumber = await allocateSingleLotNumber(po, line.origin_country);
+            const poNumber = po.poNumber;
+
+            const priceAmt = parseFloat(line.price_amount) || 0;
+            const converted = priceAmt > 0 ? convertToUsdPerLb(priceAmt, line.price_unit, fxRateNum) : null;
+            const invoiceAmountUsd = converted ? converted.value * lineKg * KG_PER_LB : null;
+
+            const freightCad = sharedCosts.freight.currency === 'USD' && fxRateNum ? freightAllocated * fxRateNum : freightAllocated;
+
+            const { data: lot, error: lotErr } = await supabase
+              .from('green_lots')
+              .insert({
+                lot_number: lotNumber,
+                lot_identifier: line.lot_identifier.trim(),
+                contract_id: null as any,
+                bags_released: line.bags,
+                bag_size_kg: line.bag_size_kg,
+                kg_received: lineKg,
+                kg_on_hand: line.received ? lineKg : 0,
+                status: (line.received ? 'RECEIVED' : 'EN_ROUTE') as any,
+                costing_status: confirmCosting ? 'COMPLETE' : 'INCOMPLETE',
+                expected_delivery_date: null,
+                received_date: line.received ? format(new Date(), 'yyyy-MM-dd') : null,
+                fx_rate: fxRateNum,
+                invoice_amount_usd: invoiceAmountUsd,
+                invoice_amount_cad: invoiceAmountUsd != null ? (fxRateNum ? invoiceAmountUsd * fxRateNum : invoiceAmountUsd) : null,
+                invoice_is_usd: fxRateNum ? true : false,
+                freight_cad: freightCad,
+                carry_fees_cad: sharedCosts.carry.currency === 'USD' && fxRateNum ? carryAllocated * fxRateNum : carryAllocated,
+                duties_cad: sharedCosts.duties.currency === 'USD' && fxRateNum ? dutiesAllocated * fxRateNum : dutiesAllocated,
+                transaction_fees_cad: sharedCosts.fees.currency === 'USD' && fxRateNum ? feesAllocated * fxRateNum : feesAllocated,
+                other_costs_cad: sharedCosts.other.currency === 'USD' && fxRateNum ? otherAllocated * fxRateNum : otherAllocated,
+                warehouse_location: line.warehouse_location.trim() || null,
+                notes_internal: line.notes.trim() || null,
+                created_by: authUser!.id,
+                purchase_id: localPurchaseId,
+                po_number: poNumber,
+                vendor_invoice_number: invoiceNumber.trim() || null,
+                importer_payment_terms_days: line.importer_payment_terms_days || null,
+              } as any)
+              .select('id')
+              .single();
+            if (lotErr) throw lotErr;
+
+            const { error: lineErr } = await supabase
+              .from('green_purchase_lines')
+              .insert({
+                purchase_id: localPurchaseId,
+                lot_identifier: line.lot_identifier.trim(),
+                origin_country: line.origin_country || null,
+                region: line.region.trim() || null,
+                producer: line.producer.trim() || null,
+                variety: line.variety.trim() || null,
+                crop_year: line.crop_year.trim() || null,
+                category: line.category || null,
+                bags: line.bags,
+                bag_size_kg: line.bag_size_kg,
+                price_per_lb_usd: converted ? converted.value : null,
+                warehouse_location: line.warehouse_location.trim() || null,
+                notes: line.notes.trim() || null,
+                lot_id: lot.id,
+                display_order: i,
+              } as any);
+            if (lineErr) throw lineErr;
+            lotCount++;
+          }
+
+          return { localPurchaseId, lotCount };
+        };
+
+        const isPoCollision = (e: any) => {
+          const combined = `${String(e?.message || '')} ${String(e?.details || '')}`.toLowerCase();
+          return (combined.includes('duplicate key') || combined.includes('unique constraint')) && combined.includes('po_number');
+        };
+
+        let po = await allocatePoNumber(selectedVendor?.abbreviation);
+        let createResult: { localPurchaseId: string; lotCount: number };
+        try {
+          createResult = await runCreate(po);
+        } catch (e: any) {
+          if (isPoCollision(e)) {
+            console.log('[SourcingPurchases] PO number collision detected, retrying with fresh PO number', { failedPo: po.poNumber, error: e?.message });
+            toast.info('PO number collision detected, retrying with next available number…');
+            po = await allocatePoNumber(selectedVendor?.abbreviation);
+            createResult = await runCreate(po);
+          } else {
+            throw e;
+          }
         }
 
-        return { mode: 'create' as const, newLotCount: lotCount };
+        purchaseId = createResult.localPurchaseId;
+        return { mode: 'create' as const, newLotCount: createResult.lotCount };
       }
     },
     onSuccess: (result) => {
