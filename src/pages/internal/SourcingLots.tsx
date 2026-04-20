@@ -341,7 +341,7 @@ export default function SourcingLots() {
                   {filtered.map(lot => {
                     const c = contractMap[lot.contract_id];
                     const pl = purchaseLineByLotId[lot.id];
-                    const subtitle = c ? c.name : pl?.origin_country ? pl.origin_country : '—';
+                    const subtitle = c ? c.name : (lot.lot_identifier || pl?.lot_identifier) ? (lot.lot_identifier || pl?.lot_identifier) : pl?.origin_country ? pl.origin_country : '—';
                     return (
                       <TableRow key={lot.id}>
                         <TableCell className="font-medium">
