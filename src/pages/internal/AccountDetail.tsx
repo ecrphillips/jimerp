@@ -725,8 +725,9 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
         <div className="space-y-2">
           {users.map((u: any) => {
             const profile = u.profiles;
+            const profileMissing = !profile;
             const email: string = profile?.email || '';
-            const name: string = profile?.name || 'Unknown';
+            const name: string = profileMissing ? 'Unknown (no profile)' : (profile?.name || 'Unknown');
             const isPending = !!email && name === email.split('@')[0];
             const profileActive = profile?.is_active !== false;
             return (
@@ -736,7 +737,9 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
                     <span className="text-sm font-medium">{name}</span>
                     <span className="text-xs text-muted-foreground">{email}</span>
                     {u.is_owner && <Badge className="text-[10px] bg-primary"><ShieldCheck className="h-3 w-3 mr-0.5" /> Owner</Badge>}
-                    {isPending ? (
+                    {profileMissing ? (
+                      <Badge variant="destructive" className="text-[10px]">Broken</Badge>
+                    ) : isPending ? (
                       <Badge className="text-[10px] bg-amber-500 hover:bg-amber-500 text-white">Pending</Badge>
                     ) : profileActive ? (
                       <Badge className="text-[10px] bg-green-600 hover:bg-green-600 text-white">Active</Badge>
