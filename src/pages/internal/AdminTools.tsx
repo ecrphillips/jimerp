@@ -394,6 +394,35 @@ export default function AdminTools() {
               Clear All Co-Roasting Data
             </Button>
           </div>
+
+          {/* Remove Orphaned Account Users */}
+          <div className="border-t pt-4 space-y-4">
+            <div className="text-sm text-muted-foreground">
+              <p className="font-medium mb-1">Remove Orphaned Account Users</p>
+              <p>Look up an email and delete its <code>account_users</code> link rows. If no profile exists, scans for <code>account_users</code> rows whose user has no profile record.</p>
+              <p className="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400">
+                ⚠️ Use this to clean up stuck invite records before re-inviting a user.
+              </p>
+            </div>
+            <div className="flex gap-2 max-w-md">
+              <Input
+                type="email"
+                placeholder="user@example.com"
+                value={orphanEmail}
+                onChange={(e) => setOrphanEmail(e.target.value)}
+                disabled={isRemovingOrphan}
+              />
+              <Button
+                variant="destructive"
+                onClick={handleRemoveOrphanedAccountUsers}
+                disabled={isRemovingOrphan || !orphanEmail.trim()}
+                className="gap-2 shrink-0"
+              >
+                <Trash2 className="h-4 w-4" />
+                {isRemovingOrphan ? 'Removing…' : 'Remove'}
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
