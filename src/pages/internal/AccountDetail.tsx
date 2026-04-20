@@ -649,8 +649,13 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
             assigned_locations: form.location_access === 'ASSIGNED' ? form.assigned_locations : [],
           },
         });
-        if (fnError) throw new Error(fnError.message || 'Failed to invite user');
-        if (data?.error) throw new Error(data.error);
+        const errMsg = (fnError?.message || data?.error) as string | undefined;
+        if (errMsg) {
+          if (errMsg.includes('already linked to this account')) {
+            throw new Error('This email is already linked to this account. Check the Users tab — they may appear with a broken profile.');
+          }
+          throw new Error(errMsg || 'Failed to invite user');
+        }
       }
     },
     onSuccess: () => {
