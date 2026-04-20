@@ -14,10 +14,15 @@ interface LotLike {
   bags_released: number;
   status: 'EN_ROUTE' | 'RECEIVED';
   lot_identifier: string | null;
+  contract_id: string;
 }
 interface PurchaseLineLike {
   origin_country: string | null;
   lot_identifier: string | null;
+  producer: string | null;
+}
+interface ContractLike {
+  name: string;
 }
 
 interface Props {
@@ -25,9 +30,19 @@ interface Props {
   onOpenChange: (v: boolean) => void;
   lots: LotLike[];
   purchaseLineByLotId: Record<string, PurchaseLineLike>;
+  contractMap: Record<string, ContractLike>;
 }
 
-export function FloorCountModal({ open, onOpenChange, lots, purchaseLineByLotId }: Props) {
+function getFloorCountName(lot: LotLike, c: ContractLike | undefined, pl: PurchaseLineLike | undefined): string {
+  if (c?.name) return c.name;
+  if (pl?.producer) return pl.producer;
+  if (pl?.lot_identifier) return pl.lot_identifier;
+  if (lot.lot_identifier) return lot.lot_identifier;
+  if (pl?.origin_country) return pl.origin_country;
+  return '—';
+}
+
+export function FloorCountModal({ open, onOpenChange, lots, purchaseLineByLotId, contractMap }: Props) {
   const today = format(new Date(), 'MMM d, yyyy');
   const rows = useMemo(() => {
     return lots
@@ -58,10 +73,7 @@ export function FloorCountModal({ open, onOpenChange, lots, purchaseLineByLotId 
     return { expected, counted, anyInput, variance: counted - expected };
   }, [rows, counts]);
 
-  const description = (lot: LotLike) => {
-    const pl = purchaseLineByLotId[lot.id];
-    return lot.lot_identifier || pl?.lot_identifier || pl?.origin_country || '—';
-  };
+  const description = (lot: LotLike) => getFloorCountName(lot, contractMap[lot.contract_id], purchaseLineByLotId[lot.id]);
 
   const handleCopy = async () => {
     const header = ['Lot #', 'Description', 'Bag size', 'Expected bags', 'Full bags on floor', 'Opened bag weight kg'].join('\t');
