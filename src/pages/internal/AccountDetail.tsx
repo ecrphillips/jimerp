@@ -725,20 +725,46 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
         <div className="space-y-2">
           {users.map((u: any) => {
             const profile = u.profiles;
+            const email: string = profile?.email || '';
+            const name: string = profile?.name || 'Unknown';
+            const isPending = !!email && name === email.split('@')[0];
+            const profileActive = profile?.is_active !== false;
             return (
               <div key={u.id} className="flex items-center gap-3 border rounded-md p-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium">{profile?.name || 'Unknown'}</span>
-                    <span className="text-xs text-muted-foreground">{profile?.email}</span>
+                    <span className="text-sm font-medium">{name}</span>
+                    <span className="text-xs text-muted-foreground">{email}</span>
                     {u.is_owner && <Badge className="text-[10px] bg-primary"><ShieldCheck className="h-3 w-3 mr-0.5" /> Owner</Badge>}
-                    {!u.is_active && <Badge variant="destructive" className="text-[10px]">Inactive</Badge>}
+                    {isPending ? (
+                      <Badge className="text-[10px] bg-amber-500 hover:bg-amber-500 text-white">Pending</Badge>
+                    ) : profileActive ? (
+                      <Badge className="text-[10px] bg-green-600 hover:bg-green-600 text-white">Active</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-[10px]">Inactive</Badge>
+                    )}
+                    {!u.is_active && <Badge variant="destructive" className="text-[10px]">Link Inactive</Badge>}
                   </div>
                   <div className="flex gap-1 mt-1 flex-wrap">
                     {permBadges(u)}
                     <Badge variant="outline" className="text-[10px]">{u.location_access === 'ALL' ? 'All Locations' : 'Assigned Only'}</Badge>
                   </div>
                 </div>
+                {isAdmin && email && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7"
+                        onClick={() => setResetConfirm({ user_id: u.user_id, email, name })}
+                      >
+                        <Mail className="h-3 w-3 mr-1" /> Reset Password
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs">Generate a password reset link to share with this user</TooltipContent>
+                  </Tooltip>
+                )}
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(u)}><Pencil className="h-3 w-3" /></Button>
               </div>
             );
