@@ -259,7 +259,7 @@ Deno.serve(async (req) => {
         success: true,
         user_id: userId,
         account_user_id: accountUser?.id,
-        message: existingUser
+        message: existingProfile
           ? `User linked to ${account.account_name}`
           : `Invitation sent to ${email}`,
       }),
