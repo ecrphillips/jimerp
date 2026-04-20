@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
     if (!email || !account_id) {
       return new Response(
         JSON.stringify({ error: 'Email and account_id are required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
     if (accountError || !account) {
       return new Response(
         JSON.stringify({ error: 'Account not found' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
       if (existingAu) {
         return new Response(
           JSON.stringify({ error: 'This user is already linked to this account' }),
-          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
