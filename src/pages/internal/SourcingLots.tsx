@@ -253,7 +253,7 @@ export default function SourcingLots() {
         </div>
       </div>
 
-      <FloorCountModal open={floorCountOpen} onOpenChange={setFloorCountOpen} lots={lots} purchaseLineByLotId={purchaseLineByLotId} />
+      <FloorCountModal open={floorCountOpen} onOpenChange={setFloorCountOpen} lots={lots} purchaseLineByLotId={purchaseLineByLotId} contractMap={contractMap} />
       <BookValueReportModal open={bookValueOpen} onOpenChange={setBookValueOpen} lots={lots} purchaseLineByLotId={purchaseLineByLotId} />
 
       <Tabs defaultValue={initialTab}>
