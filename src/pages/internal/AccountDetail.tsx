@@ -739,7 +739,7 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
       ) : (
         <div className="space-y-2">
           {users.map((u: any) => {
-            const profile = u.profiles;
+            const profile = u.profile;
             const profileMissing = !profile;
             const email: string = profile?.email || '';
             const name: string = profileMissing ? 'Unknown (no profile)' : (profile?.name || 'Unknown');
