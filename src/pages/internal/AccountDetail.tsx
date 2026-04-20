@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ArrowLeft, Info, CalendarIcon, Plus, Pencil, CheckCircle2, ExternalLink, ShieldCheck, Lock, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Info, CalendarIcon, Plus, Pencil, CheckCircle2, ExternalLink, ShieldCheck, Lock, Eye, EyeOff, Mail, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
@@ -539,13 +539,51 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('account_users')
-        .select('*, profiles:user_id(name, email)')
+        .select('*, profiles:user_id(name, email, is_active)')
         .eq('account_id', accountId)
         .order('created_at');
       if (error) throw error;
       return data;
     },
   });
+
+  // ─── Password reset state (ADMIN only) ───
+  const isAdmin = authUser?.role === 'ADMIN';
+  const [resetConfirm, setResetConfirm] = useState<{ user_id: string; email: string; name: string } | null>(null);
+  const [resetLink, setResetLink] = useState<{ link: string; name: string } | null>(null);
+  const [resetCopied, setResetCopied] = useState(false);
+
+  const sendResetMutation = useMutation({
+    mutationFn: async ({ user_id, email }: { user_id: string; email: string }) => {
+      const { data, error: fnError } = await supabase.functions.invoke('send-password-reset', {
+        body: { user_id, email },
+      });
+      if (fnError) throw new Error(fnError.message || 'Failed to generate reset link');
+      if (data?.error) throw new Error(data.error);
+      return data as { reset_link: string };
+    },
+    onSuccess: (data) => {
+      const name = resetConfirm?.name || 'this user';
+      setResetConfirm(null);
+      setResetCopied(false);
+      setResetLink({ link: data.reset_link, name });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
+      setResetConfirm(null);
+    },
+  });
+
+  const copyResetLink = async () => {
+    if (!resetLink) return;
+    try {
+      await navigator.clipboard.writeText(resetLink.link);
+      setResetCopied(true);
+      setTimeout(() => setResetCopied(false), 2000);
+    } catch {
+      toast.error('Could not copy to clipboard');
+    }
+  };
 
   const { data: locations = [] } = useQuery({
     queryKey: ['account-locations', accountId],
@@ -687,20 +725,46 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
         <div className="space-y-2">
           {users.map((u: any) => {
             const profile = u.profiles;
+            const email: string = profile?.email || '';
+            const name: string = profile?.name || 'Unknown';
+            const isPending = !!email && name === email.split('@')[0];
+            const profileActive = profile?.is_active !== false;
             return (
               <div key={u.id} className="flex items-center gap-3 border rounded-md p-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium">{profile?.name || 'Unknown'}</span>
-                    <span className="text-xs text-muted-foreground">{profile?.email}</span>
+                    <span className="text-sm font-medium">{name}</span>
+                    <span className="text-xs text-muted-foreground">{email}</span>
                     {u.is_owner && <Badge className="text-[10px] bg-primary"><ShieldCheck className="h-3 w-3 mr-0.5" /> Owner</Badge>}
-                    {!u.is_active && <Badge variant="destructive" className="text-[10px]">Inactive</Badge>}
+                    {isPending ? (
+                      <Badge className="text-[10px] bg-amber-500 hover:bg-amber-500 text-white">Pending</Badge>
+                    ) : profileActive ? (
+                      <Badge className="text-[10px] bg-green-600 hover:bg-green-600 text-white">Active</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-[10px]">Inactive</Badge>
+                    )}
+                    {!u.is_active && <Badge variant="destructive" className="text-[10px]">Link Inactive</Badge>}
                   </div>
                   <div className="flex gap-1 mt-1 flex-wrap">
                     {permBadges(u)}
                     <Badge variant="outline" className="text-[10px]">{u.location_access === 'ALL' ? 'All Locations' : 'Assigned Only'}</Badge>
                   </div>
                 </div>
+                {isAdmin && email && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7"
+                        onClick={() => setResetConfirm({ user_id: u.user_id, email, name })}
+                      >
+                        <Mail className="h-3 w-3 mr-1" /> Reset Password
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs">Generate a password reset link to share with this user</TooltipContent>
+                  </Tooltip>
+                )}
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(u)}><Pencil className="h-3 w-3" /></Button>
               </div>
             );
@@ -888,6 +952,50 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
               <Button onClick={() => { setCreateError(null); createUserMutation.mutate(); }} disabled={createUserMutation.isPending}>
                 {createUserMutation.isPending ? 'Creating…' : 'Create User'}
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Reset Password confirm dialog (ADMIN only) ─── */}
+      <Dialog open={!!resetConfirm} onOpenChange={(open) => { if (!open) setResetConfirm(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Send password reset link</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm">Send a password reset link for <span className="font-medium">{resetConfirm?.email}</span>?</p>
+            <p className="text-xs text-muted-foreground">A link will be generated that you can share directly with the user. The link expires in 24 hours.</p>
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <Button variant="outline" onClick={() => setResetConfirm(null)} disabled={sendResetMutation.isPending}>Cancel</Button>
+              <Button
+                onClick={() => resetConfirm && sendResetMutation.mutate({ user_id: resetConfirm.user_id, email: resetConfirm.email })}
+                disabled={sendResetMutation.isPending}
+              >
+                {sendResetMutation.isPending ? 'Generating…' : 'Confirm'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Reset link display modal ─── */}
+      <Dialog open={!!resetLink} onOpenChange={(open) => { if (!open) { setResetLink(null); setResetCopied(false); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Password reset link</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="rounded-md border bg-muted/40 p-3">
+              <p className="text-xs text-muted-foreground mb-2">Reset link</p>
+              <div className="flex items-center gap-2">
+                <Input readOnly value={resetLink?.link || ''} className="text-xs font-mono" onFocus={(e) => e.currentTarget.select()} />
+                <Button size="sm" variant="outline" onClick={copyResetLink}>
+                  {resetCopied ? <><Check className="h-3.5 w-3.5 mr-1" /> Copied</> : <><Copy className="h-3.5 w-3.5 mr-1" /> Copy</>}
+                </Button>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Share this link with <span className="font-medium text-foreground">{resetLink?.name}</span>. It expires in 24 hours and can only be used once.
+            </p>
+            <div className="flex justify-end pt-2 border-t">
+              <Button onClick={() => { setResetLink(null); setResetCopied(false); }}>Done</Button>
             </div>
           </div>
         </DialogContent>
