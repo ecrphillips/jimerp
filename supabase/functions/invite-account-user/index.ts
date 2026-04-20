@@ -134,17 +134,18 @@ Deno.serve(async (req) => {
     };
 
     // Check if user already exists
-    const { data: existingUsers } = await adminClient.auth.admin.listUsers();
-    const existingUser = existingUsers?.users?.find(
-      (u) => u.email?.toLowerCase() === email.toLowerCase()
-    );
+    const { data: existingProfile } = await adminClient
+      .from('profiles')
+      .select('user_id')
+      .eq('email', email.toLowerCase())
+      .maybeSingle();
 
     let userId: string;
 
-    if (existingUser) {
-      userId = existingUser.id;
+    if (existingProfile) {
+      userId = existingProfile.user_id;
 
-      // Check if they already have an account_users record for this account
+      // Check if already linked to this specific account
       const { data: existingAu } = await adminClient
         .from('account_users')
         .select('id')
@@ -155,14 +156,14 @@ Deno.serve(async (req) => {
       if (existingAu) {
         return new Response(
           JSON.stringify({ error: 'This user is already linked to this account' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Ensure they have a CLIENT role (or add one)
+      // Ensure they have a CLIENT role
       const { data: existingRole } = await adminClient
         .from('user_roles')
-        .select('id, role')
+        .select('id')
         .eq('user_id', userId)
         .maybeSingle();
 
@@ -172,22 +173,6 @@ Deno.serve(async (req) => {
           user_id: userId,
           role: 'CLIENT',
           client_id: mirrorClientId,
-        });
-      }
-
-      // Ensure profile exists
-      const { data: existingProfile } = await adminClient
-        .from('profiles')
-        .select('id')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (!existingProfile) {
-        await adminClient.from('profiles').insert({
-          user_id: userId,
-          email: email.toLowerCase(),
-          name: email.split('@')[0],
-          is_active: true,
         });
       }
     } else {
@@ -207,7 +192,6 @@ Deno.serve(async (req) => {
 
       userId = inviteData.user.id;
 
-      // Create user_roles record (with mirror client_id to satisfy check constraint)
       const mirrorClientId = await findOrCreateClientId();
       const { error: roleInsertError } = await adminClient.from('user_roles').insert({
         user_id: userId,
@@ -224,7 +208,6 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Create profile
       await adminClient.from('profiles').insert({
         user_id: userId,
         email: email.toLowerCase(),
@@ -276,7 +259,7 @@ Deno.serve(async (req) => {
         success: true,
         user_id: userId,
         account_user_id: accountUser?.id,
-        message: existingUser
+        message: existingProfile
           ? `User linked to ${account.account_name}`
           : `Invitation sent to ${email}`,
       }),
