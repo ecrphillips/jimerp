@@ -537,13 +537,23 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
   const { data: users = [] } = useQuery({
     queryKey: ['account-users', accountId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: aus, error } = await supabase
         .from('account_users')
-        .select('*, profiles:user_id(name, email, is_active)')
+        .select('*')
         .eq('account_id', accountId)
         .order('created_at');
       if (error) throw error;
-      return data;
+      const userIds = (aus || []).map((au: any) => au.user_id).filter(Boolean);
+      let profilesById: Record<string, { name: string; email: string; is_active: boolean }> = {};
+      if (userIds.length > 0) {
+        const { data: profs, error: pErr } = await supabase
+          .from('profiles')
+          .select('user_id, name, email, is_active')
+          .in('user_id', userIds);
+        if (pErr) throw pErr;
+        profilesById = Object.fromEntries((profs || []).map((p: any) => [p.user_id, p]));
+      }
+      return (aus || []).map((au: any) => ({ ...au, profile: profilesById[au.user_id] || null }));
     },
   });
 
