@@ -1092,7 +1092,6 @@ function CreatePurchaseModal({
             if (lotErr) throw lotErr;
 
             const lotUpdateFields: any = {
-              po_number: poNumber,
               vendor_invoice_number: invoiceNumber.trim() || null,
               importer_payment_terms_days: line.importer_payment_terms_days || null,
               received_date: line.received ? format(new Date(), 'yyyy-MM-dd') : null,
@@ -1203,7 +1202,6 @@ function CreatePurchaseModal({
                 notes_internal: line.notes.trim() || null,
                 created_by: authUser!.id,
                 purchase_id: localPurchaseId,
-                po_number: poNumber,
                 vendor_invoice_number: invoiceNumber.trim() || null,
                 importer_payment_terms_days: line.importer_payment_terms_days || null,
               } as any)
@@ -1797,7 +1795,6 @@ function AddCoffeeLineModal({
         variety: variety.trim() || null,
         crop_year: cropYear.trim() || null,
         price_per_lb_usd: converted ? converted.value : null,
-        po_number: poNumber,
         vendor_invoice_number: purchase.invoice_number || null,
         importer_payment_terms_days: paymentTermsDays || null,
       } as any).eq('id', lot.id);
