@@ -94,12 +94,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Reject if email already exists
-    const { data: existingUsers } = await adminClient.auth.admin.listUsers();
-    const existingUser = existingUsers?.users?.find(
-      (u) => u.email?.toLowerCase() === email.toLowerCase()
-    );
-    if (existingUser) {
+    // Reject if email already exists (check profiles table)
+    const { data: existingProfile } = await adminClient
+      .from('profiles')
+      .select('user_id')
+      .eq('email', email.toLowerCase())
+      .maybeSingle();
+    if (existingProfile) {
       return new Response(
         JSON.stringify({ error: 'A user with this email already exists' }),
         { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
