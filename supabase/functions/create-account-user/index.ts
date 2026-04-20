@@ -69,14 +69,14 @@ Deno.serve(async (req) => {
     if (!email || !password || !full_name || !account_id) {
       return new Response(
         JSON.stringify({ error: 'Email, password, full name, and account are required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     if (password.length < 8) {
       return new Response(
         JSON.stringify({ error: 'Password must be at least 8 characters' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
     if (accountError || !account) {
       return new Response(
         JSON.stringify({ error: 'Account not found' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
     if (existingProfile) {
       return new Response(
         JSON.stringify({ error: 'A user with this email already exists' }),
-        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
