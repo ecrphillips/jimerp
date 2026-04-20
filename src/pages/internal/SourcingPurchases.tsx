@@ -1235,25 +1235,8 @@ function CreatePurchaseModal({
           return { localPurchaseId, lotCount };
         };
 
-        const isPoCollision = (e: any) => {
-          const combined = `${String(e?.message || '')} ${String(e?.details || '')}`.toLowerCase();
-          return (combined.includes('duplicate key') || combined.includes('unique constraint')) && combined.includes('po_number');
-        };
-
-        let po = await allocatePoNumber(selectedVendor?.abbreviation);
-        let createResult: { localPurchaseId: string; lotCount: number };
-        try {
-          createResult = await runCreate(po);
-        } catch (e: any) {
-          if (isPoCollision(e)) {
-            console.log('[SourcingPurchases] PO number collision detected, retrying with fresh PO number', { failedPo: po.poNumber, error: e?.message });
-            toast.info('PO number collision detected, retrying with next available number…');
-            po = await allocatePoNumber(selectedVendor?.abbreviation);
-            createResult = await runCreate(po);
-          } else {
-            throw e;
-          }
-        }
+        const po = await allocatePoNumber(selectedVendor?.abbreviation);
+        const createResult = await runCreate(po);
 
         purchaseId = createResult.localPurchaseId;
         return { mode: 'create' as const, newLotCount: createResult.lotCount };
