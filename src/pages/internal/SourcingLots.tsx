@@ -24,6 +24,8 @@ import { Search, Check, FileText, AlertTriangle, CheckCircle2, Pencil, Trash2 } 
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { CoverageCalendar } from '@/components/sourcing/CoverageCalendar';
 import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
+import { FloorCountModal } from '@/components/sourcing/FloorCountModal';
+import { BookValueReportModal } from '@/components/sourcing/BookValueReportModal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 // ─── Types ─────────────────────────────────────────────────
@@ -151,6 +153,8 @@ export default function SourcingLots() {
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
   const [pendingDeleteLot, setPendingDeleteLot] = useState<LotRow | null>(null);
   const [viewMode, setViewMode] = useViewMode('sourcing_view_lots', 'cards');
+  const [floorCountOpen, setFloorCountOpen] = useState(false);
+  const [bookValueOpen, setBookValueOpen] = useState(false);
 
   const deleteLotMutation = useMutation({
     mutationFn: async (lotId: string) => {
@@ -242,8 +246,15 @@ export default function SourcingLots() {
           <h1 className="page-title">Lots</h1>
           <p className="text-sm text-muted-foreground">Green coffee inventory</p>
         </div>
-        <ViewToggle value={viewMode} onChange={setViewMode} />
+        <div className="flex items-center gap-2">
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+          <Button variant="outline" size="sm" onClick={() => setFloorCountOpen(true)}>Floor Count</Button>
+          <Button variant="outline" size="sm" onClick={() => setBookValueOpen(true)}>Book Value Report</Button>
+        </div>
       </div>
+
+      <FloorCountModal open={floorCountOpen} onOpenChange={setFloorCountOpen} lots={lots} purchaseLineByLotId={purchaseLineByLotId} />
+      <BookValueReportModal open={bookValueOpen} onOpenChange={setBookValueOpen} lots={lots} purchaseLineByLotId={purchaseLineByLotId} />
 
       <Tabs defaultValue={initialTab}>
         <TabsList>
