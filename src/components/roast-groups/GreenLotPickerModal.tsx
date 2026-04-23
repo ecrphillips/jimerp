@@ -310,6 +310,8 @@ export function GreenLotPickerModal({
                     lot.producer && lot.variety
                       ? `${lot.producer} — ${lot.variety}`
                       : lot.producer || lot.variety || '—';
+                  const nameLabel =
+                    lot.pl_lot_identifier || lot.lot_identifier || lot.contract_name || '—';
                   const dateCell =
                     lot.status === 'RECEIVED'
                       ? (lot.received_date || '')
@@ -340,6 +342,7 @@ export function GreenLotPickerModal({
                           )}
                         </div>
                       </TableCell>
+                      <TableCell className="text-sm">{nameLabel}</TableCell>
                       <TableCell className="text-sm">{lot.origin || '—'}</TableCell>
                       <TableCell className="text-sm">{producerVariety}</TableCell>
                       <TableCell className="text-sm">
