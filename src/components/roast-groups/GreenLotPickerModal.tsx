@@ -33,12 +33,18 @@ interface CandidateLot {
   contract_id: string | null;
   purchase_id: string | null;
   release_id: string | null;
+  lot_identifier: string | null;
+  notes_internal: string | null;
   // Joined / derived
   origin: string;
   producer: string | null;
   variety: string | null;
   category: Category | null;
   vendor_label: string | null;
+  pl_lot_identifier: string | null;
+  contract_name: string | null;
+  internal_contract_number: string | null;
+  vendor_contract_number: string | null;
 }
 
 const CATEGORY_LABEL: Record<Category, string> = {
@@ -87,8 +93,8 @@ export function GreenLotPickerModal({
         .from('green_lots')
         .select(`
           id, lot_number, status, kg_on_hand, received_date, expected_delivery_date,
-          costing_status, contract_id, purchase_id, release_id,
-          green_contracts ( origin, origin_country ),
+          costing_status, contract_id, purchase_id, release_id, lot_identifier, notes_internal,
+          green_contracts ( name, origin, origin_country, internal_contract_number, vendor_contract_number ),
           green_purchases ( vendor_id, green_vendors ( abbreviation ) ),
           green_releases ( vendor_id, green_vendors ( abbreviation ) )
         `)
@@ -101,7 +107,7 @@ export function GreenLotPickerModal({
       if (lotIds.length > 0) {
         const { data: pls, error: plErr } = await supabase
           .from('green_purchase_lines')
-          .select('lot_id, producer, variety, origin_country, category, crop_year, region')
+          .select('lot_id, producer, variety, origin_country, category, crop_year, region, lot_identifier')
           .in('lot_id', lotIds);
         if (plErr) throw plErr;
         (pls ?? []).forEach((pl: any) => { if (pl.lot_id) plByLot[pl.lot_id] = pl; });
@@ -126,11 +132,17 @@ export function GreenLotPickerModal({
           contract_id: row.contract_id,
           purchase_id: row.purchase_id,
           release_id: row.release_id,
+          lot_identifier: row.lot_identifier || null,
+          notes_internal: row.notes_internal || null,
           origin,
           producer: pl?.producer || null,
           variety: pl?.variety || null,
           category: normalizeCategory(pl?.category),
           vendor_label: vendor,
+          pl_lot_identifier: pl?.lot_identifier || null,
+          contract_name: row.green_contracts?.name || null,
+          internal_contract_number: row.green_contracts?.internal_contract_number || null,
+          vendor_contract_number: row.green_contracts?.vendor_contract_number || null,
         };
       });
     },
@@ -146,7 +158,18 @@ export function GreenLotPickerModal({
     return candidates.filter(l => {
       if (categoryFilter !== 'ALL' && l.category !== categoryFilter) return false;
       if (!q) return true;
-      const hay = [l.lot_number, l.origin, l.producer || '', l.variety || ''].join(' ').toLowerCase();
+      const hay = [
+        l.lot_number,
+        l.origin,
+        l.producer || '',
+        l.variety || '',
+        l.pl_lot_identifier || '',
+        l.lot_identifier || '',
+        l.contract_name || '',
+        l.vendor_contract_number || '',
+        l.internal_contract_number || '',
+        l.notes_internal || '',
+      ].join(' ').toLowerCase();
       return hay.includes(q);
     });
   }, [candidates, search, categoryFilter]);
@@ -233,7 +256,7 @@ export function GreenLotPickerModal({
 
         <div className="space-y-3">
           <Input
-            placeholder="Search by lot number, origin, producer, or variety…"
+            placeholder="Search by lot number, name, origin, producer, variety, or contract ref…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -269,6 +292,7 @@ export function GreenLotPickerModal({
                 <TableRow>
                   <TableHead className="w-10"></TableHead>
                   <TableHead>Lot Number</TableHead>
+                  <TableHead>Name / Label</TableHead>
                   <TableHead>Origin</TableHead>
                   <TableHead>Producer / Variety</TableHead>
                   <TableHead>Category</TableHead>
@@ -286,6 +310,8 @@ export function GreenLotPickerModal({
                     lot.producer && lot.variety
                       ? `${lot.producer} — ${lot.variety}`
                       : lot.producer || lot.variety || '—';
+                  const nameLabel =
+                    lot.pl_lot_identifier || lot.lot_identifier || lot.contract_name || '—';
                   const dateCell =
                     lot.status === 'RECEIVED'
                       ? (lot.received_date || '')
@@ -316,6 +342,7 @@ export function GreenLotPickerModal({
                           )}
                         </div>
                       </TableCell>
+                      <TableCell className="text-sm">{nameLabel}</TableCell>
                       <TableCell className="text-sm">{lot.origin || '—'}</TableCell>
                       <TableCell className="text-sm">{producerVariety}</TableCell>
                       <TableCell className="text-sm">
