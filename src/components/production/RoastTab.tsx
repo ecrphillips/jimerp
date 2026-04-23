@@ -139,6 +139,16 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   const [addBatchMode, setAddBatchMode] = useState<'existing' | 'new'>('existing');
   const [addBatchSaving, setAddBatchSaving] = useState(false);
   const [addBatchNewName, setAddBatchNewName] = useState('');
+
+  // Depletion warning modal state (Add Batch flow)
+  const [depletionState, setDepletionState] = useState<{
+    roastGroupKey: string;
+    roastGroupDisplayName: string;
+    impacts: MultiRgImpact[];
+    pctByLinkId: Record<string, number | null>;
+    proceedFn: (swaps: DepletionSwap[]) => Promise<void>;
+  } | null>(null);
+  const [depletionProceeding, setDepletionProceeding] = useState(false);
   
   // Blend planning modal state
   const [blendPlanModal, setBlendPlanModal] = useState<{
