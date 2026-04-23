@@ -377,6 +377,12 @@ export default function SourcingLots() {
                         <TableCell className="text-right">{lot.costing_status === 'COMPLETE' && lot.book_value_per_kg != null ? formatPerKg(lot.book_value_per_kg) : '—'}</TableCell>
                         <TableCell className="text-right">
                           <div className="inline-flex items-center gap-1">
+                            {lot.status === 'EN_ROUTE' && (
+                              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setMarkReceivedLot(lot)}>
+                                <PackageCheck className="h-3.5 w-3.5" />
+                                Mark Received
+                              </Button>
+                            )}
                             <Button variant="outline" size="sm" onClick={() => setSelectedLotId(lot.id)}>View</Button>
                             {isAdmin && (
                               <Button
