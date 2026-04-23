@@ -89,8 +89,8 @@ export function GreenLotPickerModal({
           id, lot_number, status, kg_on_hand, received_date, expected_delivery_date,
           costing_status, contract_id, purchase_id, release_id,
           green_contracts ( origin, origin_country ),
-          green_purchases ( vendor_id, green_vendors:vendor_id ( abbreviation ) ),
-          green_releases ( vendor_id, green_vendors:vendor_id ( abbreviation ) )
+          green_purchases ( vendor_id, green_vendors ( abbreviation ) ),
+          green_releases ( vendor_id, green_vendors ( abbreviation ) )
         `)
         .neq('status', 'EXHAUSTED')
         .order('lot_number');
