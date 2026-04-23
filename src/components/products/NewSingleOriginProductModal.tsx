@@ -125,9 +125,9 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
     [roastGroups]
   );
   
-  // Filter to only single origin roast groups for selection
-  const singleOriginRoastGroups = useMemo(() => 
-    roastGroups?.filter(g => !g.is_blend) ?? [],
+  // Show all active roast groups (blends and single origins)
+  const singleOriginRoastGroups = useMemo(() =>
+    roastGroups ?? [],
     [roastGroups]
   );
   
