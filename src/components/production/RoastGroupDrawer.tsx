@@ -41,6 +41,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { OhShitModal } from './OhShitModal';
 import { UndoWorkflowModal, type UndoOperationType } from './UndoWorkflowModal';
+import { DepletionWarningModal, executeDepletionSwaps, type DepletionSwap } from './DepletionWarningModal';
+import { evaluateMultiRoastGroupImpacts, type MultiRgImpact } from '@/hooks/useGreenLotDepletion';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { type RoastGroupComponent, getComponentBreakdown, type ComponentDisplay } from '@/hooks/useRoastGroupComponents';
