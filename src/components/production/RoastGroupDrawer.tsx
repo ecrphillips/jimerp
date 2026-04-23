@@ -165,7 +165,7 @@ export function RoastGroupDrawer({
     queryFn: async () => {
       const { data, error } = await supabase
         .from('green_lot_roast_group_links')
-        .select('id, roast_group, lot_id, green_lots(id, lot_number, kg_on_hand, status, contract_id, green_contracts(name))')
+        .select('id, roast_group, lot_id, green_lots!green_lot_roast_group_links_lot_id_fkey(id, lot_number, kg_on_hand, status, contract_id, green_contracts(name))')
         .eq('roast_group', roastGroup);
       if (error) throw error;
       return data ?? [];

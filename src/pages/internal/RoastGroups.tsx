@@ -28,7 +28,7 @@ export default function RoastGroups() {
           .select('parent_roast_group, component_roast_group, pct'),
         supabase
           .from('green_lot_roast_group_links')
-          .select('id, roast_group, lot_id, green_lots (id, lot_number, status, received_date, expected_delivery_date, estimated_days_to_consume)'),
+          .select('id, roast_group, lot_id, green_lots!green_lot_roast_group_links_lot_id_fkey (id, lot_number, status, received_date, expected_delivery_date, estimated_days_to_consume)'),
       ]);
 
       if (groupsRes.error) throw groupsRes.error;

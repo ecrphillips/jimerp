@@ -19,7 +19,7 @@ export function GreenCoffeeTab({ enabled }: { enabled: boolean }) {
         .select(`
           roast_group,
           lot_id,
-          green_lots!inner(id, lot_number, status, received_date, expected_delivery_date, estimated_days_to_consume, kg_on_hand),
+          green_lots!green_lot_roast_group_links_lot_id_fkey!inner(id, lot_number, status, received_date, expected_delivery_date, estimated_days_to_consume, kg_on_hand),
           roast_groups!inner(roast_group, display_name, is_seasonal)
         `);
       if (error) throw error;
