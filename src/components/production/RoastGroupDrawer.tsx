@@ -1238,11 +1238,32 @@ export function RoastGroupDrawer({
           target={undoWorkflowTarget}
         />
       )}
+
+      {depletionState && (
+        <DepletionWarningModal
+          open={!!depletionState}
+          onOpenChange={(o) => { if (!o) setDepletionState(null); }}
+          roastGroupKey={roastGroup}
+          roastGroupDisplayName={config?.display_name ?? roastGroup}
+          impacts={depletionState.impacts}
+          pctByLinkId={depletionState.pctByLinkId}
+          isProceeding={depletionProceeding || createBatchMutation.isPending}
+          onCancel={() => setDepletionState(null)}
+          onProceed={async (swaps) => {
+            setDepletionProceeding(true);
+            try {
+              await createBatchMutation.mutateAsync(swaps);
+            } catch {
+              /* toast handled in onError */
+            } finally {
+              setDepletionProceeding(false);
+            }
+          }}
+        />
+      )}
     </>
   );
 }
-
-// Inner batch row component
 interface BatchRowProps {
   batch: RoastBatch;
   expectedYieldLossPct: number;
