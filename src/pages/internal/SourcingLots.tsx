@@ -411,7 +411,9 @@ export default function SourcingLots() {
         </TabsContent>
       </Tabs>
 
-      <LotDetailPanel lotId={selectedLotId} onClose={() => setSelectedLotId(null)} contractMap={contractMap} purchaseLineByLotId={purchaseLineByLotId} />
+      <LotDetailPanel lotId={selectedLotId} onClose={() => setSelectedLotId(null)} contractMap={contractMap} purchaseLineByLotId={purchaseLineByLotId} onMarkReceived={(l) => setMarkReceivedLot(l)} />
+
+      <MarkLotReceivedModal lot={markReceivedLot} open={!!markReceivedLot} onOpenChange={(o) => { if (!o) setMarkReceivedLot(null); }} />
 
       <AlertDialog open={!!pendingDeleteLot} onOpenChange={(o) => { if (!o) setPendingDeleteLot(null); }}>
         <AlertDialogContent>
