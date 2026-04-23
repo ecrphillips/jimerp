@@ -29,6 +29,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
 import { PlanBlendBatchesModal } from './PlanBlendBatchesModal';
 import { BlendExecuteModal } from './BlendExecuteModal';
+import { DepletionWarningModal, executeDepletionSwaps, type DepletionSwap } from './DepletionWarningModal';
+import { evaluateMultiRoastGroupImpacts, type MultiRgImpact } from '@/hooks/useGreenLotDepletion';
 import {
   DndContext,
   closestCenter,
@@ -137,6 +139,16 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   const [addBatchMode, setAddBatchMode] = useState<'existing' | 'new'>('existing');
   const [addBatchSaving, setAddBatchSaving] = useState(false);
   const [addBatchNewName, setAddBatchNewName] = useState('');
+
+  // Depletion warning modal state (Add Batch flow)
+  const [depletionState, setDepletionState] = useState<{
+    roastGroupKey: string;
+    roastGroupDisplayName: string;
+    impacts: MultiRgImpact[];
+    pctByLinkId: Record<string, number | null>;
+    proceedFn: (swaps: DepletionSwap[]) => Promise<void>;
+  } | null>(null);
+  const [depletionProceeding, setDepletionProceeding] = useState(false);
   
   // Blend planning modal state
   const [blendPlanModal, setBlendPlanModal] = useState<{
@@ -1449,6 +1461,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                 setAddBatchSaving(true);
                 try {
                   let roastGroupKey: string;
+                  let isNewlyCreated = false;
 
                   if (addBatchMode === 'existing') {
                     roastGroupKey = addBatchRgKey;
@@ -1464,33 +1477,63 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                       return;
                     }
                     roastGroupKey = result.roastGroupKey;
-                    // Invalidate roast groups so the new one appears
+                    isNewlyCreated = true;
                     queryClient.invalidateQueries({ queryKey: ['roast-groups-config'] });
                   }
 
-                  const { error } = await supabase.from('roasted_batches').insert({
-                    roast_group: roastGroupKey,
-                    target_date: addBatchDate,
-                    planned_output_kg: addBatchKg ? parseFloat(addBatchKg) : null,
-                    actual_output_kg: 0,
-                    status: 'PLANNED' as const,
-                    assigned_roaster: addBatchRoaster || null,
-                    cropster_batch_id: addBatchCropster.trim() || null,
-                    created_by: user?.id,
-                  });
+                  const plannedKg = addBatchKg ? parseFloat(addBatchKg) : 0;
 
-                  if (error) throw error;
+                  const performInsert = async (swaps: DepletionSwap[] = []) => {
+                    const { error } = await supabase.from('roasted_batches').insert({
+                      roast_group: roastGroupKey,
+                      target_date: addBatchDate,
+                      planned_output_kg: addBatchKg ? parseFloat(addBatchKg) : null,
+                      actual_output_kg: 0,
+                      status: 'PLANNED' as const,
+                      assigned_roaster: addBatchRoaster || null,
+                      cropster_batch_id: addBatchCropster.trim() || null,
+                      created_by: user?.id,
+                    });
+                    if (error) throw error;
 
-                  toast.success('Batch added');
-                  queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
-                  setShowAddBatchModal(false);
-                  setAddBatchRgKey('');
-                  setAddBatchNewName('');
-                  setAddBatchKg('');
-                  setAddBatchRoaster('');
-                  setAddBatchDate(today);
-                  setAddBatchCropster('');
-                  setAddBatchMode('existing');
+                    if (swaps.length > 0) {
+                      await executeDepletionSwaps(swaps);
+                      queryClient.invalidateQueries({ queryKey: ['roast-group-lot-links', roastGroupKey] });
+                      queryClient.invalidateQueries({ queryKey: ['depletion-links', roastGroupKey] });
+                    }
+
+                    toast.success(swaps.length > 0 ? `Batch added — ${swaps.length} successor swap(s) applied` : 'Batch added');
+                    queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+                    setShowAddBatchModal(false);
+                    setAddBatchRgKey('');
+                    setAddBatchNewName('');
+                    setAddBatchKg('');
+                    setAddBatchRoaster('');
+                    setAddBatchDate(today);
+                    setAddBatchCropster('');
+                    setAddBatchMode('existing');
+                  };
+
+                  // Skip depletion check for brand-new groups (no links yet)
+                  if (!isNewlyCreated) {
+                    const { impacts, pctByLinkId } = await evaluateMultiRoastGroupImpacts([
+                      { roastGroup: roastGroupKey, newPlannedOutputKg: plannedKg },
+                    ]);
+                    if (impacts.length > 0) {
+                      const rgDisplay = configByGroup[roastGroupKey]?.display_name ?? roastGroupKey;
+                      setDepletionState({
+                        roastGroupKey,
+                        roastGroupDisplayName: rgDisplay,
+                        impacts,
+                        pctByLinkId,
+                        proceedFn: performInsert,
+                      });
+                      setAddBatchSaving(false);
+                      return;
+                    }
+                  }
+
+                  await performInsert();
                 } catch (err: any) {
                   console.error(err);
                   toast.error('Failed to add batch');
@@ -1504,6 +1547,31 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {depletionState && (
+        <DepletionWarningModal
+          open={!!depletionState}
+          onOpenChange={(o) => { if (!o) setDepletionState(null); }}
+          roastGroupKey={depletionState.roastGroupKey}
+          roastGroupDisplayName={depletionState.roastGroupDisplayName}
+          impacts={depletionState.impacts}
+          pctByLinkId={depletionState.pctByLinkId}
+          isProceeding={depletionProceeding}
+          onCancel={() => setDepletionState(null)}
+          onProceed={async (swaps) => {
+            setDepletionProceeding(true);
+            try {
+              await depletionState.proceedFn(swaps);
+              setDepletionState(null);
+            } catch (err: any) {
+              console.error(err);
+              toast.error(err?.message || 'Failed to add batch');
+            } finally {
+              setDepletionProceeding(false);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

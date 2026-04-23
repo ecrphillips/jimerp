@@ -41,6 +41,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { OhShitModal } from './OhShitModal';
 import { UndoWorkflowModal, type UndoOperationType } from './UndoWorkflowModal';
+import { DepletionWarningModal, executeDepletionSwaps, type DepletionSwap } from './DepletionWarningModal';
+import { evaluateMultiRoastGroupImpacts, type MultiRgImpact } from '@/hooks/useGreenLotDepletion';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { type RoastGroupComponent, getComponentBreakdown, type ComponentDisplay } from '@/hooks/useRoastGroupComponents';
@@ -680,12 +682,12 @@ export function RoastGroupDrawer({
   });
 
   const createBatchMutation = useMutation({
-    mutationFn: async () => {
-      const roaster: RoasterMachine | null = 
-        defaultRoaster === 'SAMIAC' ? 'SAMIAC' : 
-        defaultRoaster === 'LORING' ? 'LORING' : 
+    mutationFn: async (swaps: DepletionSwap[] = []) => {
+      const roaster: RoasterMachine | null =
+        defaultRoaster === 'SAMIAC' ? 'SAMIAC' :
+        defaultRoaster === 'LORING' ? 'LORING' :
         null;
-      
+
       const { error } = await supabase
         .from('roasted_batches')
         .insert({
@@ -698,16 +700,46 @@ export function RoastGroupDrawer({
           created_by: user?.id,
         });
       if (error) throw error;
+
+      if (swaps.length > 0) {
+        await executeDepletionSwaps(swaps);
+        queryClient.invalidateQueries({ queryKey: ['roast-group-lot-links', roastGroup] });
+        queryClient.invalidateQueries({ queryKey: ['depletion-links', roastGroup] });
+      }
+      return swaps.length;
     },
-    onSuccess: () => {
-      toast.success('Batch added');
+    onSuccess: (swapsApplied) => {
+      toast.success(swapsApplied > 0 ? `Batch added — ${swapsApplied} successor swap(s) applied` : 'Batch added');
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+      setDepletionState(null);
     },
     onError: (err) => {
       console.error(err);
       toast.error('Failed to create batch');
     },
   });
+
+  // Depletion modal state for the Add Batch flow in this drawer
+  const [depletionState, setDepletionState] = useState<{
+    impacts: MultiRgImpact[];
+    pctByLinkId: Record<string, number | null>;
+  } | null>(null);
+  const [depletionProceeding, setDepletionProceeding] = useState(false);
+
+  const handleAddBatch = async () => {
+    try {
+      const { impacts, pctByLinkId } = await evaluateMultiRoastGroupImpacts([
+        { roastGroup, newPlannedOutputKg: Number(standardBatch) || 0 },
+      ]);
+      if (impacts.length > 0) {
+        setDepletionState({ impacts, pctByLinkId });
+        return;
+      }
+    } catch (err) {
+      console.error('Depletion check failed:', err);
+    }
+    createBatchMutation.mutate([]);
+  };
 
   const getRoasterBadgeColor = (roaster: RoasterMachine | null | DefaultRoaster) => {
     if (roaster === 'SAMIAC') return 'bg-yellow-200 text-red-700 border-yellow-400';
@@ -936,9 +968,9 @@ export function RoastGroupDrawer({
                     className="h-7 text-xs"
                     onClick={(e) => {
                       e.stopPropagation();
-                      createBatchMutation.mutate();
+                      handleAddBatch();
                     }}
-                    disabled={createBatchMutation.isPending}
+                    disabled={createBatchMutation.isPending || depletionProceeding}
                   >
                     {createBatchMutation.isPending ? (
                       <Loader2 className="h-3 w-3 mr-1 animate-spin" />
@@ -1206,11 +1238,32 @@ export function RoastGroupDrawer({
           target={undoWorkflowTarget}
         />
       )}
+
+      {depletionState && (
+        <DepletionWarningModal
+          open={!!depletionState}
+          onOpenChange={(o) => { if (!o) setDepletionState(null); }}
+          roastGroupKey={roastGroup}
+          roastGroupDisplayName={config?.display_name ?? roastGroup}
+          impacts={depletionState.impacts}
+          pctByLinkId={depletionState.pctByLinkId}
+          isProceeding={depletionProceeding || createBatchMutation.isPending}
+          onCancel={() => setDepletionState(null)}
+          onProceed={async (swaps) => {
+            setDepletionProceeding(true);
+            try {
+              await createBatchMutation.mutateAsync(swaps);
+            } catch {
+              /* toast handled in onError */
+            } finally {
+              setDepletionProceeding(false);
+            }
+          }}
+        />
+      )}
     </>
   );
 }
-
-// Inner batch row component
 interface BatchRowProps {
   batch: RoastBatch;
   expectedYieldLossPct: number;
