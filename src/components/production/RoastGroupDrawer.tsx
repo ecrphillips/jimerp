@@ -968,9 +968,9 @@ export function RoastGroupDrawer({
                     className="h-7 text-xs"
                     onClick={(e) => {
                       e.stopPropagation();
-                      createBatchMutation.mutate();
+                      handleAddBatch();
                     }}
-                    disabled={createBatchMutation.isPending}
+                    disabled={createBatchMutation.isPending || depletionProceeding}
                   >
                     {createBatchMutation.isPending ? (
                       <Loader2 className="h-3 w-3 mr-1 animate-spin" />
