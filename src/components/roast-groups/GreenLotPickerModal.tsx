@@ -256,7 +256,7 @@ export function GreenLotPickerModal({
 
         <div className="space-y-3">
           <Input
-            placeholder="Search by lot number, origin, producer, or variety…"
+            placeholder="Search by lot number, name, origin, producer, variety, or contract ref…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -292,6 +292,7 @@ export function GreenLotPickerModal({
                 <TableRow>
                   <TableHead className="w-10"></TableHead>
                   <TableHead>Lot Number</TableHead>
+                  <TableHead>Name / Label</TableHead>
                   <TableHead>Origin</TableHead>
                   <TableHead>Producer / Variety</TableHead>
                   <TableHead>Category</TableHead>
