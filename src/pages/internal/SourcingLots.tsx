@@ -541,11 +541,13 @@ function LotDetailPanel({
   onClose,
   contractMap,
   purchaseLineByLotId,
+  onMarkReceived,
 }: {
   lotId: string | null;
   onClose: () => void;
   contractMap: Record<string, ContractInfo>;
   purchaseLineByLotId: Record<string, PurchaseLine>;
+  onMarkReceived: (lot: LotRow) => void;
 }) {
   const { authUser, isInternal } = useAuth();
   const queryClient = useQueryClient();
