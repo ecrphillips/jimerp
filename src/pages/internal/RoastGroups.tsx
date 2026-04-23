@@ -16,20 +16,53 @@ export default function RoastGroups() {
   const [filter, setFilter] = useState<FilterType>('ACTIVE');
   const [modalOpen, setModalOpen] = useState(false);
 
-  // Hook 1: Fetch all roast groups with components and lot links (no product join)
+  // Hook 1: Fetch roast groups + components + lot links as 3 parallel queries
+  // (split to avoid Supabase schema cache failures on the joined query)
   const { data: rawGroups = [], isLoading } = useQuery({
     queryKey: ['roast-groups-list'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('roast_groups')
-        .select(`
-          *,
-          roast_group_components!roast_group_components_parent_roast_group_fkey (component_roast_group, pct),
-          green_lot_roast_group_links (lot_id, green_lots (id, lot_number, status, received_date, expected_delivery_date, estimated_days_to_consume))
-        `)
-        .order('display_name');
-      if (error) throw error;
-      return data ?? [];
+      const [groupsRes, componentsRes, linksRes] = await Promise.all([
+        supabase.from('roast_groups').select('*').order('display_name'),
+        supabase
+          .from('roast_group_components')
+          .select('parent_roast_group, component_roast_group, pct'),
+        supabase
+          .from('green_lot_roast_group_links')
+          .select('id, roast_group, lot_id, green_lots (id, lot_number, status, received_date, expected_delivery_date, estimated_days_to_consume)'),
+      ]);
+
+      if (groupsRes.error) throw groupsRes.error;
+      if (componentsRes.error) throw componentsRes.error;
+
+      const groups = groupsRes.data ?? [];
+      const components = componentsRes.data ?? [];
+      let links: any[] = [];
+      if (linksRes.error) {
+        // Treat as zero linked lots; keep page functional during schema cache refresh
+        console.error('green_lot_roast_group_links query failed:', linksRes.error);
+      } else {
+        links = linksRes.data ?? [];
+      }
+
+      // Bucket children by roast_group key
+      const componentsByGroup: Record<string, any[]> = {};
+      for (const c of components) {
+        const k = (c as any).parent_roast_group;
+        if (!k) continue;
+        (componentsByGroup[k] ||= []).push(c);
+      }
+      const linksByGroup: Record<string, any[]> = {};
+      for (const l of links) {
+        const k = (l as any).roast_group;
+        if (!k) continue;
+        (linksByGroup[k] ||= []).push(l);
+      }
+
+      return groups.map((rg: any) => ({
+        ...rg,
+        roast_group_components: componentsByGroup[rg.roast_group] ?? [],
+        green_lot_roast_group_links: linksByGroup[rg.roast_group] ?? [],
+      }));
     },
   });
 
