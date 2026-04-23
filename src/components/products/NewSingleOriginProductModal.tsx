@@ -130,6 +130,10 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
     roastGroups ?? [],
     [roastGroups]
   );
+
+  // Derive isBlend from selected roast group
+  const selectedRoastGroupRecord = roastGroups?.find(g => g.roast_group === selectedRoastGroup);
+  const isBlendSelected = selectedRoastGroupRecord?.is_blend === true;
   
   // Derived values
   const selectedClient = useMemo(() => 
@@ -367,7 +371,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>New Single Origin Product</DialogTitle>
+          <DialogTitle>New Product</DialogTitle>
         </DialogHeader>
         
         <div className="space-y-6">
@@ -524,7 +528,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
           <GramBasedSkuPreview
             clientCode={selectedClient?.account_code ?? ''}
             origin={originForSku}
-            isBlend={false}
+            isBlend={isBlendSelected}
             fgNameSuffix={finishedGoodName.trim()}
             variants={validVariants}
             existingSkus={existingSkus ?? new Set()}
