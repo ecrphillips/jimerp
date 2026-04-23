@@ -5,20 +5,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Unlink, Loader2, AlertTriangle } from 'lucide-react';
+import { Plus, Unlink, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { GreenLotPickerModal } from './GreenLotPickerModal';
+import { getDisplayName } from '@/lib/roastGroupUtils';
 
 interface Props {
   roastGroupKey: string;
+  roastGroupDisplayName?: string | null;
 }
 
-export function GreenLotMappingSection({ roastGroupKey }: Props) {
+export function GreenLotMappingSection({ roastGroupKey, roastGroupDisplayName }: Props) {
   const queryClient = useQueryClient();
-  const [linking, setLinking] = useState(false);
-  const [selectedLot, setSelectedLot] = useState('');
-  const [linkPct, setLinkPct] = useState<string>('');
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   // Fetch linked lots
   const { data: links = [], isLoading } = useQuery({
@@ -41,43 +41,7 @@ export function GreenLotMappingSection({ roastGroupKey }: Props) {
     },
   });
 
-  // Fetch available lots for linking
-  const { data: availableLots = [] } = useQuery({
-    queryKey: ['green-lots-for-linking', roastGroupKey],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('green_lots')
-        .select('id, lot_number, status, kg_on_hand')
-        .not('status', 'eq', 'EXHAUSTED')
-        .order('lot_number');
-      return data ?? [];
-    },
-    enabled: linking,
-  });
-
   const linkedLotIds = new Set(links.map((l: any) => l.lot_id));
-  const filteredAvailable = availableLots.filter(l => !linkedLotIds.has(l.id));
-
-  const linkMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase
-        .from('green_lot_roast_group_links')
-        .insert({
-          roast_group: roastGroupKey,
-          lot_id: selectedLot,
-          pct_of_lot: linkPct ? Number(linkPct) : null,
-        });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success('Lot linked');
-      setLinking(false);
-      setSelectedLot('');
-      setLinkPct('');
-      queryClient.invalidateQueries({ queryKey: ['roast-group-lot-links', roastGroupKey] });
-    },
-    onError: (err: any) => toast.error(err.message || 'Failed to link lot'),
-  });
 
   const unlinkMutation = useMutation({
     mutationFn: async (linkId: string) => {
@@ -113,13 +77,15 @@ export function GreenLotMappingSection({ roastGroupKey }: Props) {
     return 'border-border text-muted-foreground';
   };
 
+  const displayName = getDisplayName(roastGroupDisplayName, roastGroupKey);
+
   return (
     <Card>
       <CardHeader><CardTitle className="text-base">Green Lot Mapping</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : links.length === 0 && !linking ? (
+        ) : links.length === 0 ? (
           <p className="text-sm text-muted-foreground">No green lots linked.</p>
         ) : (
           <div className="space-y-2">
@@ -184,32 +150,17 @@ export function GreenLotMappingSection({ roastGroupKey }: Props) {
           </div>
         )}
 
-        {linking ? (
-          <div className="flex items-end gap-2 pt-2 border-t">
-            <div className="flex-1">
-              <Select value={selectedLot} onValueChange={setSelectedLot}>
-                <SelectTrigger><SelectValue placeholder="Select lot" /></SelectTrigger>
-                <SelectContent>
-                  {filteredAvailable.map(l => (
-                    <SelectItem key={l.id} value={l.id}>
-                      {l.lot_number} ({l.status}, {Number(l.kg_on_hand).toFixed(0)} kg)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Input type="number" className="w-20" value={linkPct} onChange={e => setLinkPct(e.target.value)} placeholder="%" min={0} max={100} />
-            <Button size="sm" onClick={() => linkMutation.mutate()} disabled={!selectedLot || linkMutation.isPending}>
-              {linkMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-              Link
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setLinking(false)}>Cancel</Button>
-          </div>
-        ) : (
-          <Button variant="outline" size="sm" onClick={() => setLinking(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Link Lot
-          </Button>
-        )}
+        <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
+          <Plus className="h-4 w-4 mr-1" /> Link Lot
+        </Button>
+
+        <GreenLotPickerModal
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          roastGroupKey={roastGroupKey}
+          roastGroupDisplayName={displayName}
+          alreadyLinkedLotIds={linkedLotIds}
+        />
       </CardContent>
     </Card>
   );
