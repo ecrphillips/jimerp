@@ -1547,6 +1547,31 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {depletionState && (
+        <DepletionWarningModal
+          open={!!depletionState}
+          onOpenChange={(o) => { if (!o) setDepletionState(null); }}
+          roastGroupKey={depletionState.roastGroupKey}
+          roastGroupDisplayName={depletionState.roastGroupDisplayName}
+          impacts={depletionState.impacts}
+          pctByLinkId={depletionState.pctByLinkId}
+          isProceeding={depletionProceeding}
+          onCancel={() => setDepletionState(null)}
+          onProceed={async (swaps) => {
+            setDepletionProceeding(true);
+            try {
+              await depletionState.proceedFn(swaps);
+              setDepletionState(null);
+            } catch (err: any) {
+              console.error(err);
+              toast.error(err?.message || 'Failed to add batch');
+            } finally {
+              setDepletionProceeding(false);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
