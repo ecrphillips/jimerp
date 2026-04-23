@@ -189,7 +189,7 @@ export default function CoRoastBilling() {
       else refetchPeriods();
     };
     closeUnclosed();
-  }, [billingPeriods, periodIsClosed]);
+  }, [billingPeriods, periodIsClosed, refetchPeriods]);
 
   // Query bookings directly with billable status filter for current month
   const { data: bookings = [] } = useQuery({
