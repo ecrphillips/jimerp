@@ -405,7 +405,7 @@ export function PlanBlendBatchesModal({
   
   // Create batches mutation
   const createBatchesMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (swaps: DepletionSwap[] = []) => {
       const batchInserts: Array<{
         roast_group: string;
         target_date: string;
@@ -417,18 +417,18 @@ export function PlanBlendBatchesModal({
         notes: string;
         planned_for_blend_roast_group: string;
       }> = [];
-      
+
       for (const plan of batchPlans) {
         if (plan.batchCount === 0) continue;
-        
+
         const comp = enrichedComponents.find(c => c.componentRoastGroup === plan.componentRoastGroup);
         if (!comp) continue;
-        
-        const roaster: RoasterMachine | null = 
+
+        const roaster: RoasterMachine | null =
           comp.defaultRoaster === 'SAMIAC' ? 'SAMIAC' :
           comp.defaultRoaster === 'LORING' ? 'LORING' :
           null;
-        
+
         for (let i = 0; i < plan.batchCount; i++) {
           batchInserts.push({
             roast_group: plan.componentRoastGroup,
@@ -443,17 +443,26 @@ export function PlanBlendBatchesModal({
           });
         }
       }
-      
+
       if (batchInserts.length === 0) {
         throw new Error('No batches to create');
       }
-      
+
       const { error } = await supabase
         .from('roasted_batches')
         .insert(batchInserts);
-      
+
       if (error) throw error;
-      
+
+      if (swaps.length > 0) {
+        await executeDepletionSwaps(swaps);
+        const affectedRgs = Array.from(new Set(swaps.map(s => s.roast_group)));
+        affectedRgs.forEach(rg => {
+          queryClient.invalidateQueries({ queryKey: ['roast-group-lot-links', rg] });
+          queryClient.invalidateQueries({ queryKey: ['depletion-links', rg] });
+        });
+      }
+
       // Build summary
       const summary: Array<{ name: string; count: number }> = [];
       for (const plan of batchPlans) {
@@ -464,20 +473,57 @@ export function PlanBlendBatchesModal({
           count: plan.batchCount,
         });
       }
-      
-      return summary;
+
+      return { summary, swapsApplied: swaps.length };
     },
-    onSuccess: (summary) => {
-      toast.success(`Created ${totalBatchesToCreate} planned batches for ${blendDisplayName}`);
+    onSuccess: ({ summary, swapsApplied }) => {
+      toast.success(
+        swapsApplied > 0
+          ? `Created ${totalBatchesToCreate} planned batches — ${swapsApplied} successor swap(s) applied`
+          : `Created ${totalBatchesToCreate} planned batches for ${blendDisplayName}`,
+      );
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
       setCreatedSummary(summary);
       setShowSuccess(true);
+      setDepletionState(null);
     },
     onError: (err: any) => {
       console.error('Failed to create blend batches:', err);
       toast.error(err?.message || 'Failed to create batches');
     },
   });
+
+  /**
+   * Pre-flight: check depletion impacts across all component RGs being planned.
+   * If any impact, open DepletionWarningModal; otherwise insert directly.
+   */
+  const handleCreateBatches = async () => {
+    const inputs = batchPlans
+      .filter(p => p.batchCount > 0)
+      .map(p => {
+        const comp = enrichedComponents.find(c => c.componentRoastGroup === p.componentRoastGroup);
+        const kgPerBatch = comp?.standardBatchKg ?? 0;
+        return {
+          roastGroup: p.componentRoastGroup,
+          newPlannedOutputKg: kgPerBatch * p.batchCount,
+        };
+      });
+    if (inputs.length === 0) {
+      createBatchesMutation.mutate([]);
+      return;
+    }
+    try {
+      const { impacts, pctByLinkId } = await evaluateMultiRoastGroupImpacts(inputs);
+      if (impacts.length > 0) {
+        setDepletionState({ impacts, pctByLinkId });
+        return;
+      }
+    } catch (err) {
+      console.error('Depletion check failed:', err);
+      // If the check itself fails, fall through and proceed without guard.
+    }
+    createBatchesMutation.mutate([]);
+  };
   
   const handleNavigateToComponent = (componentRoastGroup: string) => {
     onOpenChange(false);
