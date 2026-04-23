@@ -76,6 +76,11 @@ export function PlanBlendBatchesModal({
   const [showSuccess, setShowSuccess] = useState(false);
   const [createdSummary, setCreatedSummary] = useState<Array<{ name: string; count: number }>>([]);
   const [orphanCleanupDone, setOrphanCleanupDone] = useState(false);
+  const [depletionState, setDepletionState] = useState<{
+    impacts: MultiRgImpact[];
+    pctByLinkId: Record<string, number | null>;
+  } | null>(null);
+  const [depletionProceeding, setDepletionProceeding] = useState(false);
   
   // Fetch blend components
   const { data: blendComponents, isLoading: loadingComponents } = useQuery({
