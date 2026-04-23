@@ -733,10 +733,10 @@ export function PlanBlendBatchesModal({
                 Cancel
               </Button>
               <Button
-                onClick={() => createBatchesMutation.mutate()}
-                disabled={totalBatchesToCreate === 0 || createBatchesMutation.isPending}
+                onClick={handleCreateBatches}
+                disabled={totalBatchesToCreate === 0 || createBatchesMutation.isPending || depletionProceeding}
               >
-                {createBatchesMutation.isPending ? (
+                {createBatchesMutation.isPending || depletionProceeding ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Creating...
@@ -749,6 +749,29 @@ export function PlanBlendBatchesModal({
           </div>
         )}
       </DialogContent>
+
+      {depletionState && (
+        <DepletionWarningModal
+          open={!!depletionState}
+          onOpenChange={(o) => { if (!o) setDepletionState(null); }}
+          roastGroupKey={blendRoastGroup}
+          roastGroupDisplayName={blendDisplayName}
+          impacts={depletionState.impacts}
+          pctByLinkId={depletionState.pctByLinkId}
+          isProceeding={depletionProceeding}
+          onCancel={() => setDepletionState(null)}
+          onProceed={async (swaps) => {
+            setDepletionProceeding(true);
+            try {
+              await createBatchesMutation.mutateAsync(swaps);
+            } catch (err) {
+              // toast handled in onError
+            } finally {
+              setDepletionProceeding(false);
+            }
+          }}
+        />
+      )}
     </Dialog>
   );
 }
