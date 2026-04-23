@@ -316,7 +316,13 @@ export default function SourcingLots() {
                       {lot.costing_status === 'COMPLETE' && lot.book_value_per_kg != null && (
                         <p className="text-sm font-medium">{formatPerKg(lot.book_value_per_kg)}</p>
                       )}
-                      <div className="pt-1 flex items-center gap-1">
+                      <div className="pt-1 flex items-center gap-1 flex-wrap">
+                        {lot.status === 'EN_ROUTE' && (
+                          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setMarkReceivedLot(lot)}>
+                            <PackageCheck className="h-3.5 w-3.5" />
+                            Mark Received
+                          </Button>
+                        )}
                         <Button variant="outline" size="sm" onClick={() => setSelectedLotId(lot.id)}>View</Button>
                         {isAdmin && (
                           <Button
