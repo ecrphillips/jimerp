@@ -29,6 +29,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
 import { PlanBlendBatchesModal } from './PlanBlendBatchesModal';
 import { BlendExecuteModal } from './BlendExecuteModal';
+import { DepletionWarningModal, executeDepletionSwaps, type DepletionSwap } from './DepletionWarningModal';
+import { evaluateMultiRoastGroupImpacts, type MultiRgImpact } from '@/hooks/useGreenLotDepletion';
 import {
   DndContext,
   closestCenter,
