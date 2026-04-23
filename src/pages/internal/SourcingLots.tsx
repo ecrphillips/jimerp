@@ -156,6 +156,7 @@ export default function SourcingLots() {
   const [viewMode, setViewMode] = useViewMode('sourcing_view_lots', 'cards');
   const [floorCountOpen, setFloorCountOpen] = useState(false);
   const [bookValueOpen, setBookValueOpen] = useState(false);
+  const [markReceivedLot, setMarkReceivedLot] = useState<LotRow | null>(null);
 
   const deleteLotMutation = useMutation({
     mutationFn: async (lotId: string) => {
