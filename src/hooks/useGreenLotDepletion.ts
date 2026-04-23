@@ -222,3 +222,112 @@ function buildImpact(
 }
 
 export const DEPLETION_THRESHOLD = DEPLETION_THRESHOLD_KG;
+
+/**
+ * One-shot multi-roast-group impact evaluation. Used by flows that plan batches
+ * across multiple roast groups in a single action (e.g. blend planning).
+ *
+ * Pass: per-RG planned new output kg.
+ * Returns: flat list of impacts (one per affected link), with the source RG attached,
+ *          plus a pctByLinkId map suitable for the modal.
+ */
+export interface MultiRgImpactInput {
+  roastGroup: string;
+  newPlannedOutputKg: number;
+}
+
+export interface MultiRgImpact extends DepletionImpact {
+  roast_group: string;
+}
+
+export async function evaluateMultiRoastGroupImpacts(
+  inputs: MultiRgImpactInput[],
+): Promise<{ impacts: MultiRgImpact[]; pctByLinkId: Record<string, number | null> }> {
+  const rgKeys = Array.from(new Set(inputs.map(i => i.roastGroup)));
+  if (rgKeys.length === 0) return { impacts: [], pctByLinkId: {} };
+
+  const [{ data: rgConfigs, error: rgErr }, { data: linksData, error: linkErr }, { data: batches, error: bErr }] =
+    await Promise.all([
+      supabase
+        .from('roast_groups')
+        .select('roast_group, expected_yield_loss_pct')
+        .in('roast_group', rgKeys),
+      supabase
+        .from('green_lot_roast_group_links')
+        .select(`
+          id, lot_id, pct_of_lot, successor_lot_id, roast_group,
+          green_lots!green_lot_roast_group_links_lot_id_fkey ( id, lot_number, kg_on_hand ),
+          successor:green_lots!green_lot_roast_group_links_successor_lot_id_fkey ( id, lot_number, status, kg_on_hand )
+        `)
+        .in('roast_group', rgKeys),
+      supabase
+        .from('roasted_batches')
+        .select('roast_group, planned_output_kg, status')
+        .in('roast_group', rgKeys)
+        .eq('status', 'PLANNED'),
+    ]);
+  if (rgErr) throw rgErr;
+  if (linkErr) throw linkErr;
+  if (bErr) throw bErr;
+
+  const yieldByRg = new Map<string, number>();
+  (rgConfigs ?? []).forEach((r: any) => {
+    yieldByRg.set(r.roast_group, Number(r.expected_yield_loss_pct ?? 16));
+  });
+
+  const pendingByRg = new Map<string, number>();
+  (batches ?? []).forEach((b: any) => {
+    pendingByRg.set(
+      b.roast_group,
+      (pendingByRg.get(b.roast_group) ?? 0) + Number(b.planned_output_kg ?? 0),
+    );
+  });
+
+  const newByRg = new Map<string, number>();
+  inputs.forEach(i => {
+    newByRg.set(i.roastGroup, (newByRg.get(i.roastGroup) ?? 0) + i.newPlannedOutputKg);
+  });
+
+  const impacts: MultiRgImpact[] = [];
+  const pctByLinkId: Record<string, number | null> = {};
+
+  (linksData ?? []).forEach((row: any) => {
+    const rg = row.roast_group as string;
+    const yieldPct = yieldByRg.get(rg) ?? 16;
+    const greenFactor = 1 + yieldPct / 100;
+    const pct = row.pct_of_lot == null ? 100 : Number(row.pct_of_lot);
+    const onHand = Number(row.green_lots?.kg_on_hand ?? 0);
+    const pending = pendingByRg.get(rg) ?? 0;
+    const newOut = newByRg.get(rg) ?? 0;
+
+    const lotShareTotal = (pending + newOut) * greenFactor * (pct / 100);
+    const projectedAfter = onHand - lotShareTotal;
+    const alreadyDepleted = onHand <= 0;
+    const willDeplete = projectedAfter < DEPLETION_THRESHOLD_KG;
+
+    if (!willDeplete && !alreadyDepleted) return;
+
+    pctByLinkId[row.id] = row.pct_of_lot == null ? null : Number(row.pct_of_lot);
+    impacts.push({
+      link_id: row.id,
+      lot_id: row.lot_id,
+      lot_number: row.green_lots?.lot_number ?? '—',
+      current_kg_on_hand: onHand,
+      projected_remaining_after_batch: projectedAfter,
+      will_deplete: willDeplete,
+      already_depleted: alreadyDepleted,
+      successor_lot_id: row.successor_lot_id ?? null,
+      successor_lot: row.successor
+        ? {
+            id: row.successor.id,
+            lot_number: row.successor.lot_number,
+            status: row.successor.status,
+            kg_on_hand: Number(row.successor.kg_on_hand ?? 0),
+          }
+        : null,
+      roast_group: rg,
+    });
+  });
+
+  return { impacts, pctByLinkId };
+}
