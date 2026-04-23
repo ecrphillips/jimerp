@@ -93,8 +93,8 @@ export function GreenLotPickerModal({
         .from('green_lots')
         .select(`
           id, lot_number, status, kg_on_hand, received_date, expected_delivery_date,
-          costing_status, contract_id, purchase_id, release_id,
-          green_contracts ( origin, origin_country ),
+          costing_status, contract_id, purchase_id, release_id, lot_identifier, notes_internal,
+          green_contracts ( name, origin, origin_country, internal_contract_number, vendor_contract_number ),
           green_purchases ( vendor_id, green_vendors ( abbreviation ) ),
           green_releases ( vendor_id, green_vendors ( abbreviation ) )
         `)
@@ -107,7 +107,7 @@ export function GreenLotPickerModal({
       if (lotIds.length > 0) {
         const { data: pls, error: plErr } = await supabase
           .from('green_purchase_lines')
-          .select('lot_id, producer, variety, origin_country, category, crop_year, region')
+          .select('lot_id, producer, variety, origin_country, category, crop_year, region, lot_identifier')
           .in('lot_id', lotIds);
         if (plErr) throw plErr;
         (pls ?? []).forEach((pl: any) => { if (pl.lot_id) plByLot[pl.lot_id] = pl; });
@@ -132,11 +132,17 @@ export function GreenLotPickerModal({
           contract_id: row.contract_id,
           purchase_id: row.purchase_id,
           release_id: row.release_id,
+          lot_identifier: row.lot_identifier || null,
+          notes_internal: row.notes_internal || null,
           origin,
           producer: pl?.producer || null,
           variety: pl?.variety || null,
           category: normalizeCategory(pl?.category),
           vendor_label: vendor,
+          pl_lot_identifier: pl?.lot_identifier || null,
+          contract_name: row.green_contracts?.name || null,
+          internal_contract_number: row.green_contracts?.internal_contract_number || null,
+          vendor_contract_number: row.green_contracts?.vendor_contract_number || null,
         };
       });
     },
