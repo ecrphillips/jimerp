@@ -158,7 +158,18 @@ export function GreenLotPickerModal({
     return candidates.filter(l => {
       if (categoryFilter !== 'ALL' && l.category !== categoryFilter) return false;
       if (!q) return true;
-      const hay = [l.lot_number, l.origin, l.producer || '', l.variety || ''].join(' ').toLowerCase();
+      const hay = [
+        l.lot_number,
+        l.origin,
+        l.producer || '',
+        l.variety || '',
+        l.pl_lot_identifier || '',
+        l.lot_identifier || '',
+        l.contract_name || '',
+        l.vendor_contract_number || '',
+        l.internal_contract_number || '',
+        l.notes_internal || '',
+      ].join(' ').toLowerCase();
       return hay.includes(q);
     });
   }, [candidates, search, categoryFilter]);
