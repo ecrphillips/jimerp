@@ -1011,6 +1011,21 @@ function LotDetailPanel({
           </div>
         ) : lot && (
           <div className="space-y-6 pt-4">
+            {lot.status === 'EN_ROUTE' && (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center justify-between gap-3">
+                <div className="text-sm">
+                  <p className="font-medium">This lot is en route</p>
+                  <p className="text-xs text-muted-foreground">
+                    Confirm arrival to update inventory.
+                    {lot.expected_delivery_date && ` Expected ${format(new Date(lot.expected_delivery_date + 'T00:00:00'), 'MMM d, yyyy')}.`}
+                  </p>
+                </div>
+                <Button size="sm" className="gap-1.5 shrink-0" onClick={() => onMarkReceived(lot)}>
+                  <PackageCheck className="h-4 w-4" />
+                  Mark Received
+                </Button>
+              </div>
+            )}
             {/* SECTION 1 — LOT INFO */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold">Lot Info</h3>
