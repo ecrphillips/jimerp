@@ -20,12 +20,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Search, Check, FileText, AlertTriangle, CheckCircle2, Pencil, Trash2 } from 'lucide-react';
+import { Search, Check, FileText, AlertTriangle, CheckCircle2, Pencil, Trash2, PackageCheck } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { CoverageCalendar } from '@/components/sourcing/CoverageCalendar';
 import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
 import { FloorCountModal } from '@/components/sourcing/FloorCountModal';
 import { BookValueReportModal } from '@/components/sourcing/BookValueReportModal';
+import { MarkLotReceivedModal } from '@/components/sourcing/MarkLotReceivedModal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 // ─── Types ─────────────────────────────────────────────────
@@ -155,6 +156,7 @@ export default function SourcingLots() {
   const [viewMode, setViewMode] = useViewMode('sourcing_view_lots', 'cards');
   const [floorCountOpen, setFloorCountOpen] = useState(false);
   const [bookValueOpen, setBookValueOpen] = useState(false);
+  const [markReceivedLot, setMarkReceivedLot] = useState<LotRow | null>(null);
 
   const deleteLotMutation = useMutation({
     mutationFn: async (lotId: string) => {
@@ -314,7 +316,13 @@ export default function SourcingLots() {
                       {lot.costing_status === 'COMPLETE' && lot.book_value_per_kg != null && (
                         <p className="text-sm font-medium">{formatPerKg(lot.book_value_per_kg)}</p>
                       )}
-                      <div className="pt-1 flex items-center gap-1">
+                      <div className="pt-1 flex items-center gap-1 flex-wrap">
+                        {lot.status === 'EN_ROUTE' && (
+                          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setMarkReceivedLot(lot)}>
+                            <PackageCheck className="h-3.5 w-3.5" />
+                            Mark Received
+                          </Button>
+                        )}
                         <Button variant="outline" size="sm" onClick={() => setSelectedLotId(lot.id)}>View</Button>
                         {isAdmin && (
                           <Button
@@ -369,6 +377,12 @@ export default function SourcingLots() {
                         <TableCell className="text-right">{lot.costing_status === 'COMPLETE' && lot.book_value_per_kg != null ? formatPerKg(lot.book_value_per_kg) : '—'}</TableCell>
                         <TableCell className="text-right">
                           <div className="inline-flex items-center gap-1">
+                            {lot.status === 'EN_ROUTE' && (
+                              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setMarkReceivedLot(lot)}>
+                                <PackageCheck className="h-3.5 w-3.5" />
+                                Mark Received
+                              </Button>
+                            )}
                             <Button variant="outline" size="sm" onClick={() => setSelectedLotId(lot.id)}>View</Button>
                             {isAdmin && (
                               <Button
@@ -397,7 +411,9 @@ export default function SourcingLots() {
         </TabsContent>
       </Tabs>
 
-      <LotDetailPanel lotId={selectedLotId} onClose={() => setSelectedLotId(null)} contractMap={contractMap} purchaseLineByLotId={purchaseLineByLotId} />
+      <LotDetailPanel lotId={selectedLotId} onClose={() => setSelectedLotId(null)} contractMap={contractMap} purchaseLineByLotId={purchaseLineByLotId} onMarkReceived={(l) => setMarkReceivedLot(l)} />
+
+      <MarkLotReceivedModal lot={markReceivedLot} open={!!markReceivedLot} onOpenChange={(o) => { if (!o) setMarkReceivedLot(null); }} />
 
       <AlertDialog open={!!pendingDeleteLot} onOpenChange={(o) => { if (!o) setPendingDeleteLot(null); }}>
         <AlertDialogContent>
@@ -525,11 +541,13 @@ function LotDetailPanel({
   onClose,
   contractMap,
   purchaseLineByLotId,
+  onMarkReceived,
 }: {
   lotId: string | null;
   onClose: () => void;
   contractMap: Record<string, ContractInfo>;
   purchaseLineByLotId: Record<string, PurchaseLine>;
+  onMarkReceived: (lot: LotRow) => void;
 }) {
   const { authUser, isInternal } = useAuth();
   const queryClient = useQueryClient();
@@ -993,6 +1011,21 @@ function LotDetailPanel({
           </div>
         ) : lot && (
           <div className="space-y-6 pt-4">
+            {lot.status === 'EN_ROUTE' && (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center justify-between gap-3">
+                <div className="text-sm">
+                  <p className="font-medium">This lot is en route</p>
+                  <p className="text-xs text-muted-foreground">
+                    Confirm arrival to update inventory.
+                    {lot.expected_delivery_date && ` Expected ${format(new Date(lot.expected_delivery_date + 'T00:00:00'), 'MMM d, yyyy')}.`}
+                  </p>
+                </div>
+                <Button size="sm" className="gap-1.5 shrink-0" onClick={() => onMarkReceived(lot)}>
+                  <PackageCheck className="h-4 w-4" />
+                  Mark Received
+                </Button>
+              </div>
+            )}
             {/* SECTION 1 — LOT INFO */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold">Lot Info</h3>
