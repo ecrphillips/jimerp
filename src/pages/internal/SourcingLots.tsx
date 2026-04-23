@@ -20,12 +20,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Search, Check, FileText, AlertTriangle, CheckCircle2, Pencil, Trash2 } from 'lucide-react';
+import { Search, Check, FileText, AlertTriangle, CheckCircle2, Pencil, Trash2, PackageCheck } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { CoverageCalendar } from '@/components/sourcing/CoverageCalendar';
 import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
 import { FloorCountModal } from '@/components/sourcing/FloorCountModal';
 import { BookValueReportModal } from '@/components/sourcing/BookValueReportModal';
+import { MarkLotReceivedModal } from '@/components/sourcing/MarkLotReceivedModal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 // ─── Types ─────────────────────────────────────────────────
