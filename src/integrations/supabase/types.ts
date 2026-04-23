@@ -1594,6 +1594,9 @@ export type Database = {
           lot_id: string
           pct_of_lot: number | null
           roast_group: string
+          successor_lot_id: string | null
+          successor_nominated_at: string | null
+          successor_nominated_by: string | null
         }
         Insert: {
           created_at?: string
@@ -1601,6 +1604,9 @@ export type Database = {
           lot_id: string
           pct_of_lot?: number | null
           roast_group: string
+          successor_lot_id?: string | null
+          successor_nominated_at?: string | null
+          successor_nominated_by?: string | null
         }
         Update: {
           created_at?: string
@@ -1608,6 +1614,9 @@ export type Database = {
           lot_id?: string
           pct_of_lot?: number | null
           roast_group?: string
+          successor_lot_id?: string | null
+          successor_nominated_at?: string | null
+          successor_nominated_by?: string | null
         }
         Relationships: [
           {
@@ -1623,6 +1632,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "roast_groups"
             referencedColumns: ["roast_group"]
+          },
+          {
+            foreignKeyName: "green_lot_roast_group_links_successor_lot_id_fkey"
+            columns: ["successor_lot_id"]
+            isOneToOne: false
+            referencedRelation: "green_lots"
+            referencedColumns: ["id"]
           },
         ]
       }

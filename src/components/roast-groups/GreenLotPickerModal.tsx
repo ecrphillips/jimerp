@@ -12,12 +12,26 @@ import { cn } from '@/lib/utils';
 import { getCountryName } from '@/lib/coffeeOrigins';
 import { Loader2 } from 'lucide-react';
 
+type Mode =
+  | { kind: 'LINK'; roastGroupKey: string; alreadyLinkedLotIds: Set<string> }
+  | {
+      kind: 'SUCCESSOR';
+      linkId: string;
+      currentLotId: string;
+      currentLotNumber: string;
+      currentContractId: string | null;
+      currentOriginCountry: string | null;
+      currentOriginText: string | null;
+      currentSuccessorLotId: string | null;
+      excludeLotIds: Set<string>;
+      roastGroupKey: string;
+    };
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  roastGroupKey: string;
   roastGroupDisplayName: string;
-  alreadyLinkedLotIds: Set<string>;
+  mode: Mode;
 }
 
 type Category = 'BLENDER' | 'MICRO_LOT' | 'HYPER_PREMIUM';
@@ -35,8 +49,9 @@ interface CandidateLot {
   release_id: string | null;
   lot_identifier: string | null;
   notes_internal: string | null;
-  // Joined / derived
   origin: string;
+  origin_country: string | null;
+  contract_origin: string | null;
   producer: string | null;
   variety: string | null;
   category: Category | null;
@@ -68,25 +83,30 @@ interface SelState {
 export function GreenLotPickerModal({
   open,
   onOpenChange,
-  roastGroupKey,
   roastGroupDisplayName,
-  alreadyLinkedLotIds,
+  mode,
 }: Props) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | Category>('ALL');
+  // LINK mode
   const [selection, setSelection] = useState<Record<string, SelState>>({});
+  // SUCCESSOR mode
+  const [successorChoice, setSuccessorChoice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
       setSearch('');
       setCategoryFilter('ALL');
       setSelection({});
+      setSuccessorChoice(null);
+    } else if (mode.kind === 'SUCCESSOR') {
+      setSuccessorChoice(mode.currentSuccessorLotId ?? null);
     }
-  }, [open]);
+  }, [open, mode]);
 
   const { data: lots = [], isLoading } = useQuery({
-    queryKey: ['green-lots-picker', roastGroupKey],
+    queryKey: ['green-lots-picker', mode.kind, mode.kind === 'LINK' ? mode.roastGroupKey : mode.linkId],
     enabled: open,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -103,7 +123,7 @@ export function GreenLotPickerModal({
       if (error) throw error;
 
       const lotIds = (data ?? []).map((l: any) => l.id);
-      let plByLot: Record<string, any> = {};
+      const plByLot: Record<string, any> = {};
       if (lotIds.length > 0) {
         const { data: pls, error: plErr } = await supabase
           .from('green_purchase_lines')
@@ -135,6 +155,8 @@ export function GreenLotPickerModal({
           lot_identifier: row.lot_identifier || null,
           notes_internal: row.notes_internal || null,
           origin,
+          origin_country: originCode,
+          contract_origin: row.green_contracts?.origin || null,
           producer: pl?.producer || null,
           variety: pl?.variety || null,
           category: normalizeCategory(pl?.category),
@@ -148,68 +170,88 @@ export function GreenLotPickerModal({
     },
   });
 
-  const candidates = useMemo(
-    () => lots.filter(l => !alreadyLinkedLotIds.has(l.id)),
-    [lots, alreadyLinkedLotIds],
-  );
+  const candidates = useMemo(() => {
+    if (mode.kind === 'LINK') {
+      return lots.filter(l => !mode.alreadyLinkedLotIds.has(l.id));
+    }
+    // SUCCESSOR mode
+    return lots.filter(l => l.id !== mode.currentLotId && !mode.excludeLotIds.has(l.id));
+  }, [lots, mode]);
+
+  // Successor sorting / grouping
+  const successorGroups = useMemo(() => {
+    if (mode.kind !== 'SUCCESSOR') return new Map<string, 'CONTRACT' | 'ORIGIN' | null>();
+    const map = new Map<string, 'CONTRACT' | 'ORIGIN' | null>();
+    candidates.forEach(l => {
+      if (mode.currentContractId && l.contract_id === mode.currentContractId) {
+        map.set(l.id, 'CONTRACT');
+      } else if (
+        (mode.currentOriginCountry && l.origin_country && l.origin_country === mode.currentOriginCountry) ||
+        (mode.currentOriginText && l.contract_origin && l.contract_origin === mode.currentOriginText)
+      ) {
+        map.set(l.id, 'ORIGIN');
+      } else {
+        map.set(l.id, null);
+      }
+    });
+    return map;
+  }, [candidates, mode]);
+
+  const sortedCandidates = useMemo(() => {
+    if (mode.kind !== 'SUCCESSOR') return candidates;
+    const rank = (id: string) => {
+      const g = successorGroups.get(id);
+      if (g === 'CONTRACT') return 0;
+      if (g === 'ORIGIN') return 1;
+      return 2;
+    };
+    return [...candidates].sort((a, b) => {
+      const r = rank(a.id) - rank(b.id);
+      if (r !== 0) return r;
+      return a.lot_number.localeCompare(b.lot_number);
+    });
+  }, [candidates, successorGroups, mode]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return candidates.filter(l => {
+    const base = mode.kind === 'SUCCESSOR' ? sortedCandidates : candidates;
+    return base.filter(l => {
       if (categoryFilter !== 'ALL' && l.category !== categoryFilter) return false;
       if (!q) return true;
       const hay = [
-        l.lot_number,
-        l.origin,
-        l.producer || '',
-        l.variety || '',
-        l.pl_lot_identifier || '',
-        l.lot_identifier || '',
-        l.contract_name || '',
-        l.vendor_contract_number || '',
-        l.internal_contract_number || '',
-        l.notes_internal || '',
+        l.lot_number, l.origin, l.producer || '', l.variety || '',
+        l.pl_lot_identifier || '', l.lot_identifier || '', l.contract_name || '',
+        l.vendor_contract_number || '', l.internal_contract_number || '', l.notes_internal || '',
       ].join(' ').toLowerCase();
       return hay.includes(q);
     });
-  }, [candidates, search, categoryFilter]);
+  }, [candidates, sortedCandidates, search, categoryFilter, mode]);
 
+  // ---- LINK mode helpers ----
   const selectedEntries = Object.entries(selection).filter(([, s]) => s.selected);
   const selectedCount = selectedEntries.length;
-
-  const filledPcts = selectedEntries
-    .map(([, s]) => s.pct.trim())
-    .filter(v => v !== '');
+  const filledPcts = selectedEntries.map(([, s]) => s.pct.trim()).filter(v => v !== '');
   const allFilled = filledPcts.length === selectedCount && selectedCount > 0;
   const noneFilled = filledPcts.length === 0;
   const mixed = !allFilled && !noneFilled;
-
   const pctSum = filledPcts.reduce((sum, v) => sum + (Number(v) || 0), 0);
 
   let totalLabel = '';
   let totalClass = 'text-muted-foreground';
-  if (selectedCount === 0) {
-    totalLabel = 'No lots selected';
-  } else if (noneFilled) {
-    totalLabel = `${selectedCount} lot${selectedCount === 1 ? '' : 's'} selected — Percentages optional`;
-    totalClass = 'text-muted-foreground';
-  } else {
-    totalLabel = `${selectedCount} lot${selectedCount === 1 ? '' : 's'} selected — total ${pctSum.toFixed(1)}%`;
-    if (allFilled && Math.abs(pctSum - 100) < 0.01) {
-      totalClass = 'text-green-600 dark:text-green-400';
-    } else {
-      totalClass = 'text-amber-600 dark:text-amber-400';
+  if (mode.kind === 'LINK') {
+    if (selectedCount === 0) totalLabel = 'No lots selected';
+    else if (noneFilled) totalLabel = `${selectedCount} lot${selectedCount === 1 ? '' : 's'} selected — Percentages optional`;
+    else {
+      totalLabel = `${selectedCount} lot${selectedCount === 1 ? '' : 's'} selected — total ${pctSum.toFixed(1)}%`;
+      totalClass = allFilled && Math.abs(pctSum - 100) < 0.01 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400';
     }
   }
 
   function toggleRow(id: string, checked: boolean) {
     setSelection(prev => {
       const next = { ...prev };
-      if (checked) {
-        next[id] = { selected: true, pct: prev[id]?.pct ?? '' };
-      } else if (next[id]) {
-        next[id] = { ...next[id], selected: false };
-      }
+      if (checked) next[id] = { selected: true, pct: prev[id]?.pct ?? '' };
+      else if (next[id]) next[id] = { ...next[id], selected: false };
       return next;
     });
   }
@@ -218,10 +260,12 @@ export function GreenLotPickerModal({
     setSelection(prev => ({ ...prev, [id]: { selected: prev[id]?.selected ?? false, pct } }));
   }
 
+  // ---- LINK mutation ----
   const linkMutation = useMutation({
     mutationFn: async () => {
+      if (mode.kind !== 'LINK') throw new Error('Wrong mode');
       const rows = selectedEntries.map(([lot_id, s]) => ({
-        roast_group: roastGroupKey,
+        roast_group: mode.roastGroupKey,
         lot_id,
         pct_of_lot: s.pct.trim() ? Number(s.pct) : null,
       }));
@@ -231,14 +275,52 @@ export function GreenLotPickerModal({
     },
     onSuccess: (n) => {
       toast.success(`Linked ${n} lot${n === 1 ? '' : 's'}`);
-      queryClient.invalidateQueries({ queryKey: ['roast-group-lot-links', roastGroupKey] });
+      if (mode.kind === 'LINK') {
+        queryClient.invalidateQueries({ queryKey: ['roast-group-lot-links', mode.roastGroupKey] });
+      }
       setSelection({});
       onOpenChange(false);
     },
     onError: (err: any) => toast.error(err.message || 'Failed to link lots'),
   });
 
-  const saveDisabled = selectedCount === 0 || mixed || linkMutation.isPending;
+  // ---- SUCCESSOR mutations ----
+  const successorMutation = useMutation({
+    mutationFn: async (newSuccessorId: string | null) => {
+      if (mode.kind !== 'SUCCESSOR') throw new Error('Wrong mode');
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData?.user?.id ?? null;
+      const payload = newSuccessorId
+        ? { successor_lot_id: newSuccessorId, successor_nominated_at: new Date().toISOString(), successor_nominated_by: uid }
+        : { successor_lot_id: null, successor_nominated_at: null, successor_nominated_by: null };
+      const { error } = await supabase
+        .from('green_lot_roast_group_links')
+        .update(payload)
+        .eq('id', mode.linkId);
+      if (error) throw error;
+      return newSuccessorId;
+    },
+    onSuccess: (newSuccessorId) => {
+      if (mode.kind === 'SUCCESSOR') {
+        queryClient.invalidateQueries({ queryKey: ['roast-group-lot-links', mode.roastGroupKey] });
+        if (newSuccessorId) {
+          const lot = lots.find(l => l.id === newSuccessorId);
+          toast.success(`Successor nominated: ${lot?.lot_number ?? ''}`);
+        } else {
+          toast.success('Successor cleared');
+        }
+      }
+      onOpenChange(false);
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to update successor'),
+  });
+
+  const isLink = mode.kind === 'LINK';
+  const isSuccessor = mode.kind === 'SUCCESSOR';
+  const hasExistingSuccessor = isSuccessor && !!mode.currentSuccessorLotId;
+
+  const linkSaveDisabled = !isLink || selectedCount === 0 || mixed || linkMutation.isPending;
+  const successorSaveDisabled = !isSuccessor || !successorChoice || successorChoice === mode.currentSuccessorLotId || successorMutation.isPending;
 
   const categoryChips: Array<{ key: 'ALL' | Category; label: string }> = [
     { key: 'ALL', label: 'All' },
@@ -247,11 +329,15 @@ export function GreenLotPickerModal({
     { key: 'HYPER_PREMIUM', label: 'Hyper Premium' },
   ];
 
+  const title = isLink
+    ? `Link Green Lots to ${roastGroupDisplayName}`
+    : `Nominate Successor for ${(mode as any).currentLotNumber}`;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Link Green Lots to {roastGroupDisplayName}</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3">
@@ -298,39 +384,56 @@ export function GreenLotPickerModal({
                   <TableHead>Category</TableHead>
                   <TableHead className="text-right">Kg on hand</TableHead>
                   <TableHead>Received / ETA</TableHead>
-                  <TableHead className="w-24">% of lot</TableHead>
+                  {isLink && <TableHead className="w-24">% of lot</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map(lot => {
                   const sel = selection[lot.id];
-                  const isSelected = !!sel?.selected;
+                  const isSelected = isLink ? !!sel?.selected : successorChoice === lot.id;
                   const incomplete = lot.costing_status === 'COSTING_INCOMPLETE';
                   const producerVariety =
                     lot.producer && lot.variety
                       ? `${lot.producer} — ${lot.variety}`
                       : lot.producer || lot.variety || '—';
-                  const nameLabel =
-                    lot.pl_lot_identifier || lot.lot_identifier || lot.contract_name || '—';
+                  const nameLabel = lot.pl_lot_identifier || lot.lot_identifier || lot.contract_name || '—';
                   const dateCell =
                     lot.status === 'RECEIVED'
                       ? (lot.received_date || '')
                       : lot.status === 'EN_ROUTE'
                         ? (lot.expected_delivery_date ? `ETA ${lot.expected_delivery_date}` : 'ETA —')
                         : '';
+                  const successorGroup = isSuccessor ? successorGroups.get(lot.id) : null;
                   return (
                     <TableRow key={lot.id} className={cn(incomplete && 'text-muted-foreground')}>
                       <TableCell>
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={(v) => toggleRow(lot.id, !!v)}
-                        />
+                        {isLink ? (
+                          <Checkbox checked={isSelected} onCheckedChange={(v) => toggleRow(lot.id, !!v)} />
+                        ) : (
+                          <input
+                            type="radio"
+                            name="successor-pick"
+                            checked={isSelected}
+                            onChange={() => setSuccessorChoice(lot.id)}
+                            className="h-4 w-4 accent-primary cursor-pointer"
+                          />
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium">{lot.lot_number}</span>
                           {lot.vendor_label && (
                             <Badge variant="outline" className="text-[10px]">{lot.vendor_label}</Badge>
+                          )}
+                          {successorGroup === 'CONTRACT' && (
+                            <Badge variant="outline" className="text-[10px] border-green-300 text-green-700 dark:border-green-700 dark:text-green-300">
+                              Same contract
+                            </Badge>
+                          )}
+                          {successorGroup === 'ORIGIN' && (
+                            <Badge variant="outline" className="text-[10px] border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300">
+                              Same origin
+                            </Badge>
                           )}
                           {incomplete && (
                             <Badge
@@ -352,18 +455,20 @@ export function GreenLotPickerModal({
                         {lot.kg_on_hand.toFixed(1)}
                       </TableCell>
                       <TableCell className="text-sm">{dateCell || '—'}</TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={100}
-                          className="h-8 text-xs"
-                          placeholder="—"
-                          disabled={!isSelected}
-                          value={sel?.pct ?? ''}
-                          onChange={e => setPct(lot.id, e.target.value)}
-                        />
-                      </TableCell>
+                      {isLink && (
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            className="h-8 text-xs"
+                            placeholder="—"
+                            disabled={!isSelected}
+                            value={sel?.pct ?? ''}
+                            onChange={e => setPct(lot.id, e.target.value)}
+                          />
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
@@ -373,23 +478,56 @@ export function GreenLotPickerModal({
         </div>
 
         <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 border-t">
-          <div className="flex flex-col gap-1 text-sm">
-            <span className={totalClass}>{totalLabel}</span>
-            {mixed && (
-              <span className="text-xs text-destructive">
-                Fill all percentages or leave them all blank
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={linkMutation.isPending}>
-              Cancel
-            </Button>
-            <Button onClick={() => linkMutation.mutate()} disabled={saveDisabled}>
-              {linkMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-              Link {selectedCount} lot{selectedCount === 1 ? '' : 's'}
-            </Button>
-          </div>
+          {isLink ? (
+            <>
+              <div className="flex flex-col gap-1 text-sm">
+                <span className={totalClass}>{totalLabel}</span>
+                {mixed && (
+                  <span className="text-xs text-destructive">
+                    Fill all percentages or leave them all blank
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={linkMutation.isPending}>
+                  Cancel
+                </Button>
+                <Button onClick={() => linkMutation.mutate()} disabled={linkSaveDisabled}>
+                  {linkMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+                  Link {selectedCount} lot{selectedCount === 1 ? '' : 's'}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-sm text-muted-foreground">
+                {successorChoice
+                  ? `Successor: ${lots.find(l => l.id === successorChoice)?.lot_number ?? ''}`
+                  : 'Select a successor lot'}
+              </div>
+              <div className="flex items-center gap-2">
+                {hasExistingSuccessor && (
+                  <Button
+                    variant="outline"
+                    onClick={() => successorMutation.mutate(null)}
+                    disabled={successorMutation.isPending}
+                  >
+                    Clear successor
+                  </Button>
+                )}
+                <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={successorMutation.isPending}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => successorChoice && successorMutation.mutate(successorChoice)}
+                  disabled={successorSaveDisabled}
+                >
+                  {successorMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+                  {hasExistingSuccessor ? 'Update Successor' : 'Nominate Successor'}
+                </Button>
+              </div>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
