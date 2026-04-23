@@ -33,12 +33,18 @@ interface CandidateLot {
   contract_id: string | null;
   purchase_id: string | null;
   release_id: string | null;
+  lot_identifier: string | null;
+  notes_internal: string | null;
   // Joined / derived
   origin: string;
   producer: string | null;
   variety: string | null;
   category: Category | null;
   vendor_label: string | null;
+  pl_lot_identifier: string | null;
+  contract_name: string | null;
+  internal_contract_number: string | null;
+  vendor_contract_number: string | null;
 }
 
 const CATEGORY_LABEL: Record<Category, string> = {
