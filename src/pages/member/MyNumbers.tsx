@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreview } from '@/contexts/PreviewContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -30,7 +31,8 @@ import { TIER_RATES } from '@/components/bookings/bookingUtils';
 
 export default function MyNumbers() {
   const { authUser } = useAuth();
-  const accountId = authUser?.accountId ?? null;
+  const { previewAccountId } = usePreview();
+  const accountId = previewAccountId ?? authUser?.accountId ?? null;
   const [searchParams, setSearchParams] = useSearchParams();
   const qc = useQueryClient();
 

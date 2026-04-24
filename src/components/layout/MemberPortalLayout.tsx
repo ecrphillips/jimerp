@@ -25,6 +25,11 @@ export function MemberPortalLayout({ children }: MemberPortalLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = React.useState(false);
 
+  const canBookRoaster = !!authUser?.canBookRoaster;
+  const visibleNavItems = navItems.filter(
+    (item) => !item.requiresBookingPerm || canBookRoaster,
+  );
+
   const handleSignOut = async () => {
     await signOut();
     navigate('/auth');
@@ -71,7 +76,7 @@ export function MemberPortalLayout({ children }: MemberPortalLayoutProps) {
 
           <nav className="flex-1 overflow-y-auto py-4">
             <ul className="space-y-1 px-3">
-              {navItems.map((item) => (
+              {visibleNavItems.map((item) => (
                 <li key={item.to}>
                   <NavLink
                     to={item.to}
