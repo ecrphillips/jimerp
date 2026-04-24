@@ -55,6 +55,7 @@ import Account from "@/pages/client/Account";
 import MemberSchedule from "@/pages/member/MemberSchedule";
 import MemberBilling from "@/pages/member/MemberBilling";
 import MemberAccount from "@/pages/member/MemberAccount";
+import MyNumbers from "@/pages/member/MyNumbers";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -299,6 +300,11 @@ const App = () => (
             <Route path="/member-portal/account" element={
               <ProtectedRoute allowedRoles={['CLIENT']}>
                 <MemberPortalLayout><MemberAccount /></MemberPortalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/member-portal/numbers" element={
+              <ProtectedRoute allowedRoles={['CLIENT']}>
+                <MemberPortalLayout><MyNumbers /></MemberPortalLayout>
               </ProtectedRoute>
             } />
 

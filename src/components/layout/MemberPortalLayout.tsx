@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
 import { Button } from '@/components/ui/button';
 import { AccountSheet } from '@/components/account/AccountSheet';
-import { CalendarDays, BarChart3, User, LogOut, Coffee, Menu, X, Eye } from 'lucide-react';
+import { CalendarDays, BarChart3, User, LogOut, Coffee, Menu, X, Eye, Calculator } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MemberPortalLayoutProps {
@@ -12,9 +12,10 @@ interface MemberPortalLayoutProps {
 }
 
 const navItems = [
-  { to: '/member-portal', label: 'My Schedule', icon: CalendarDays, end: true },
-  { to: '/member-portal/billing', label: 'My Hours & Billing', icon: BarChart3 },
-  { to: '/member-portal/account', label: 'My Account', icon: User },
+  { to: '/member-portal', label: 'My Schedule', icon: CalendarDays, end: true, requiresBookingPerm: false },
+  { to: '/member-portal/billing', label: 'My Hours & Billing', icon: BarChart3, requiresBookingPerm: false },
+  { to: '/member-portal/numbers', label: 'My Numbers', icon: Calculator, requiresBookingPerm: true },
+  { to: '/member-portal/account', label: 'My Account', icon: User, requiresBookingPerm: false },
 ];
 
 export function MemberPortalLayout({ children }: MemberPortalLayoutProps) {

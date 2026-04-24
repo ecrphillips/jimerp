@@ -1137,6 +1137,57 @@ export type Database = {
           },
         ]
       }
+      coroast_unit_economics_scenarios: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          inputs: Json
+          is_default: boolean
+          name: string
+          prospect_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          inputs?: Json
+          is_default?: boolean
+          name: string
+          prospect_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          inputs?: Json
+          is_default?: boolean
+          name?: string
+          prospect_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_unit_economics_scenarios_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coroast_unit_economics_scenarios_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "prospects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coroast_waiver_log: {
         Row: {
           account_id: string | null
