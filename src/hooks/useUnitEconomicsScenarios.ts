@@ -61,7 +61,8 @@ export function useScenarioAutoSave(
     timer.current = setTimeout(async () => {
       const { error } = await supabase
         .from('coroast_unit_economics_scenarios')
-        .update({ inputs: inputs as unknown as Record<string, unknown> })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .update({ inputs: inputs as any })
         .eq('id', scenarioId);
       if (error) {
         setStatus('error');
