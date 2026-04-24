@@ -68,19 +68,19 @@ export function OutputsPanel({ inputs, onChannelSplitChange }: Props) {
               </tr>
               <tr className="border-b">
                 <td className="py-2">Gross margin</td>
-                <td className={cn('py-2 text-right font-medium', ws.margin >= 0 ? 'text-green-700' : 'text-red-600')}>
+                <td className={cn('py-2 text-right font-medium', ws.margin >= 0 ? 'text-success' : 'text-destructive')}>
                   {fmt(ws.margin)}
                 </td>
-                <td className={cn('py-2 text-right font-medium', rt.margin >= 0 ? 'text-green-700' : 'text-red-600')}>
+                <td className={cn('py-2 text-right font-medium', rt.margin >= 0 ? 'text-success' : 'text-destructive')}>
                   {fmt(rt.margin)}
                 </td>
               </tr>
               <tr>
                 <td className="py-2">Margin %</td>
-                <td className={cn('py-2 text-right font-medium', ws.marginPct >= 0 ? 'text-green-700' : 'text-red-600')}>
+                <td className={cn('py-2 text-right font-medium', ws.marginPct >= 0 ? 'text-success' : 'text-destructive')}>
                   {ws.marginPct.toFixed(1)}%
                 </td>
-                <td className={cn('py-2 text-right font-medium', rt.marginPct >= 0 ? 'text-green-700' : 'text-red-600')}>
+                <td className={cn('py-2 text-right font-medium', rt.marginPct >= 0 ? 'text-success' : 'text-destructive')}>
                   {rt.marginPct.toFixed(1)}%
                 </td>
               </tr>
@@ -126,7 +126,7 @@ export function OutputsPanel({ inputs, onChannelSplitChange }: Props) {
                 Set your prices, volume, and overhead to see your break-even point.
               </span>
             ) : mv.breakEvenUnits === 0 ? (
-              <span className="text-green-700 font-medium">
+              <span className="text-success font-medium">
                 Every {unitLabel(inputs.displayUnit)} sold is profit at these prices.
               </span>
             ) : (
@@ -151,8 +151,8 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: 'go
       <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className={cn(
         'text-lg font-semibold tabular-nums mt-1',
-        tone === 'good' && 'text-green-700',
-        tone === 'bad' && 'text-red-600',
+        tone === 'good' && 'text-success',
+        tone === 'bad' && 'text-destructive',
       )}>
         {value}
       </p>
