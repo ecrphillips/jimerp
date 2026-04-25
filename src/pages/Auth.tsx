@@ -221,8 +221,8 @@ export default function Auth() {
   // Loading: either auth context loading OR we're still checking the invite token
   if (loading || inviteState === 'checking') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      <div className="flex min-h-screen items-center justify-center bg-hi-cream">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-hi-steel-blue border-t-transparent" />
       </div>
     );
   }
@@ -230,23 +230,24 @@ export default function Auth() {
   const isInviteFlow = inviteState === 'ready' || inviteState === 'invalid';
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="flex min-h-screen items-center justify-center bg-hi-cream p-4 font-brand">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="mb-8 flex flex-col items-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary">
-            <Coffee className="h-8 w-8 text-primary-foreground" />
-          </div>
-          <h1 className="text-2xl font-bold">JIM</h1>
-          <p className="text-muted-foreground">by Home Island Software</p>
+          <img
+            src={homeIslandLogo}
+            alt="Home Island Coffee Partners"
+            className="mb-4 w-[200px] sm:w-[240px] h-auto"
+          />
+          <p className="text-sm font-normal text-hi-navy/70 tracking-wide">Member Portal</p>
         </div>
 
-        <Card>
-          <CardHeader className="pb-4">
+        <Card className="rounded-2xl border-hi-navy/10 bg-white shadow-[0_8px_30px_-12px_hsl(var(--hi-navy)/0.18)]">
+          <CardHeader className="pb-4 pt-7 px-7">
             {isInviteFlow ? (
               <>
-                <CardTitle>Welcome to JIM</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-hi-navy font-medium text-2xl">Welcome</CardTitle>
+                <CardDescription className="text-hi-navy/60">
                   Set a password to activate your account.
                 </CardDescription>
               </>
@@ -256,7 +257,7 @@ export default function Auth() {
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    className="h-8 w-8"
+                    className="h-8 w-8 text-hi-navy hover:bg-hi-navy/5"
                     onClick={() => {
                       setShowForgotPassword(false);
                       setError(null);
@@ -265,23 +266,23 @@ export default function Auth() {
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
-                  <CardTitle>Reset Password</CardTitle>
+                  <CardTitle className="text-hi-navy font-medium text-2xl">Reset Password</CardTitle>
                 </div>
-                <CardDescription>
+                <CardDescription className="text-hi-navy/60">
                   Enter your email to receive a password reset link.
                 </CardDescription>
               </>
             ) : (
               <>
-                <CardTitle>Welcome Back</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-hi-navy font-medium text-2xl">Welcome Back</CardTitle>
+                <CardDescription className="text-hi-navy/60">
                   Sign in to your account to continue.
                 </CardDescription>
               </>
             )}
           </CardHeader>
 
-          <CardContent>
+          <CardContent className="px-7 pb-7">
             {error && (
               <div className="mb-4 flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                 <AlertCircle className="h-4 w-4 shrink-0" />
@@ -290,7 +291,7 @@ export default function Auth() {
             )}
 
             {success && (
-              <div className="mb-4 rounded-md bg-green-50 p-3 text-sm text-green-800">
+              <div className="mb-4 rounded-md bg-hi-pacific/15 p-3 text-sm text-hi-navy">
                 {success}
               </div>
             )}
