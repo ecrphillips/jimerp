@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ArrowLeft, Info, CalendarIcon, Plus, Pencil, CheckCircle2, ExternalLink, ShieldCheck, Lock, Eye, EyeOff, Mail, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Info, CalendarIcon, Plus, Pencil, CheckCircle2, ExternalLink, ShieldCheck, Lock, Eye, EyeOff, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
@@ -557,43 +557,53 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
     },
   });
 
-  // ─── Password reset state (ADMIN only) ───
+  // ─── Password reset (ADMIN only) — sends real branded email via auth-email-hook ───
   const isAdmin = authUser?.role === 'ADMIN';
-  const [resetConfirm, setResetConfirm] = useState<{ user_id: string; email: string; name: string } | null>(null);
-  const [resetLink, setResetLink] = useState<{ link: string; name: string } | null>(null);
-  const [resetCopied, setResetCopied] = useState(false);
 
-  const sendResetMutation = useMutation({
-    mutationFn: async ({ user_id, email }: { user_id: string; email: string }) => {
-      const { data, error: fnError } = await supabase.functions.invoke('send-password-reset', {
-        body: { user_id, email },
-      });
-      if (fnError) throw new Error(fnError.message || 'Failed to generate reset link');
-      if (data?.error) throw new Error(data.error);
-      return data as { reset_link: string };
-    },
-    onSuccess: (data) => {
-      const name = resetConfirm?.name || 'this user';
-      setResetConfirm(null);
-      setResetCopied(false);
-      setResetLink({ link: data.reset_link, name });
-    },
-    onError: (err: Error) => {
-      toast.error(err.message);
-      setResetConfirm(null);
-    },
-  });
-
-  const copyResetLink = async () => {
-    if (!resetLink) return;
+  const copyManualResetLink = async (user_id: string) => {
     try {
-      await navigator.clipboard.writeText(resetLink.link);
-      setResetCopied(true);
-      setTimeout(() => setResetCopied(false), 2000);
-    } catch {
-      toast.error('Could not copy to clipboard');
+      const { data, error } = await supabase.functions.invoke('resend-invite', {
+        body: { user_id, generate_link_only: true, force_password_reset: true },
+      });
+      if (error) throw new Error(error.message);
+      const link = data?.link;
+      if (!link) throw new Error('No link returned');
+      await navigator.clipboard.writeText(link);
+      toast.success('Manual reset link copied to clipboard');
+    } catch (err: any) {
+      console.error('Manual reset link error:', err);
+      toast.error(err.message || 'Could not generate manual link');
     }
   };
+
+  const sendResetMutation = useMutation({
+    mutationFn: async ({ user_id }: { user_id: string; email: string }) => {
+      const { data, error: fnError } = await supabase.functions.invoke('resend-invite', {
+        body: { user_id, force_password_reset: true },
+      });
+      if (fnError) throw new Error(fnError.message || 'Failed to send password reset email');
+      if (data?.error) throw new Error(data.error);
+      return data as { email_sent?: boolean };
+    },
+    onSuccess: (data, vars) => {
+      if (!data?.email_sent) {
+        toast.warning('Reset attempted but email may not have been sent.');
+      } else {
+        toast.success(`Password reset email sent to ${vars.email}`);
+      }
+    },
+    onError: (err: Error, vars) => {
+      console.error('Send password reset error:', err);
+      toast.error('Could not send email — please try again or contact support.', {
+        description: err.message,
+        action: {
+          label: 'Copy manual link',
+          onClick: () => copyManualResetLink(vars.user_id),
+        },
+        duration: 10000,
+      });
+    },
+  });
 
   const { data: locations = [] } = useQuery({
     queryKey: ['account-locations', accountId],
@@ -775,12 +785,14 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
                         variant="outline"
                         size="sm"
                         className="h-7"
-                        onClick={() => setResetConfirm({ user_id: u.user_id, email, name })}
+                        disabled={sendResetMutation.isPending}
+                        onClick={() => sendResetMutation.mutate({ user_id: u.user_id, email })}
                       >
-                        <Mail className="h-3 w-3 mr-1" /> Reset Password
+                        <Mail className="h-3 w-3 mr-1" />
+                        {sendResetMutation.isPending ? 'Sending…' : 'Reset Password'}
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent className="text-xs">Generate a password reset link to share with this user</TooltipContent>
+                    <TooltipContent className="text-xs">Send a branded password reset email to this user</TooltipContent>
                   </Tooltip>
                 )}
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(u)}><Pencil className="h-3 w-3" /></Button>
@@ -975,49 +987,7 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
         </DialogContent>
       </Dialog>
 
-      {/* ─── Reset Password confirm dialog (ADMIN only) ─── */}
-      <Dialog open={!!resetConfirm} onOpenChange={(open) => { if (!open) setResetConfirm(null); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Send password reset link</DialogTitle></DialogHeader>
-          <div className="space-y-4 pt-2">
-            <p className="text-sm">Send a password reset link for <span className="font-medium">{resetConfirm?.email}</span>?</p>
-            <p className="text-xs text-muted-foreground">A link will be generated that you can share directly with the user. The link expires in 24 hours.</p>
-            <div className="flex justify-end gap-2 pt-2 border-t">
-              <Button variant="outline" onClick={() => setResetConfirm(null)} disabled={sendResetMutation.isPending}>Cancel</Button>
-              <Button
-                onClick={() => resetConfirm && sendResetMutation.mutate({ user_id: resetConfirm.user_id, email: resetConfirm.email })}
-                disabled={sendResetMutation.isPending}
-              >
-                {sendResetMutation.isPending ? 'Generating…' : 'Confirm'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
-      {/* ─── Reset link display modal ─── */}
-      <Dialog open={!!resetLink} onOpenChange={(open) => { if (!open) { setResetLink(null); setResetCopied(false); } }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Password reset link</DialogTitle></DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="rounded-md border bg-muted/40 p-3">
-              <p className="text-xs text-muted-foreground mb-2">Reset link</p>
-              <div className="flex items-center gap-2">
-                <Input readOnly value={resetLink?.link || ''} className="text-xs font-mono" onFocus={(e) => e.currentTarget.select()} />
-                <Button size="sm" variant="outline" onClick={copyResetLink}>
-                  {resetCopied ? <><Check className="h-3.5 w-3.5 mr-1" /> Copied</> : <><Copy className="h-3.5 w-3.5 mr-1" /> Copy</>}
-                </Button>
-              </div>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Share this link with <span className="font-medium text-foreground">{resetLink?.name}</span>. It expires in 24 hours and can only be used once.
-            </p>
-            <div className="flex justify-end pt-2 border-t">
-              <Button onClick={() => { setResetLink(null); setResetCopied(false); }}>Done</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
