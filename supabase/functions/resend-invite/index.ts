@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
     }
 
     const body: ResendRequest = await req.json();
-    const { user_id, role, client_id, generate_link_only = false, debug_mode = false } = body;
+    const { user_id, role, client_id, generate_link_only = false, debug_mode = false, force_password_reset = false } = body;
 
     if (!user_id) {
       return new Response(
