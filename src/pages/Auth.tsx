@@ -296,147 +296,159 @@ export default function Auth() {
               </div>
             )}
 
-            {inviteState === 'invalid' ? (
-              <>
-                <div className="mb-4 flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>This invite link has expired or is invalid. Please contact Home Island to be re-invited.</span>
-                </div>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => {
-                    setInviteState('none');
-                  }}
-                >
-                  Return to sign in
-                </Button>
-              </>
-            ) : inviteState === 'ready' ? (
-              <form onSubmit={handleSetInvitePassword} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="new-password">Choose a password</Label>
-                  <Input
-                    id="new-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    disabled={isSubmitting}
-                    autoComplete="new-password"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirm password</Label>
-                  <Input
-                    id="confirm-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    disabled={isSubmitting}
-                    autoComplete="new-password"
-                    required
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Activating...
-                    </>
-                  ) : (
-                    'Activate Account'
-                  )}
-                </Button>
-              </form>
-            ) : showForgotPassword ? (
-              <form onSubmit={handleForgotPassword} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="reset-email">Email</Label>
-                  <Input
-                    id="reset-email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={resetEmail}
-                    onChange={(e) => setResetEmail(e.target.value)}
-                    disabled={isSubmitting}
-                    required
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Sending...
-                    </>
-                  ) : (
-                    'Send Reset Link'
-                  )}
-                </Button>
-              </form>
-            ) : (
-              <>
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="login-email">Email</Label>
-                    <Input
-                      id="login-email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      disabled={isSubmitting}
-                      required
-                    />
+            {(() => {
+              const labelCls = "text-hi-navy font-medium";
+              const inputCls =
+                "border-hi-navy/20 bg-white text-hi-navy placeholder:text-hi-navy/40 focus-visible:border-hi-steel-blue focus-visible:ring-hi-steel-blue/30";
+              const submitCls =
+                "w-full rounded-md bg-hi-steel-blue text-white font-bold hover:bg-hi-navy transition-colors";
+              return inviteState === 'invalid' ? (
+                <>
+                  <div className="mb-4 flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span>This invite link has expired or is invalid. Please contact Home Island to be re-invited.</span>
                   </div>
+                  <Button
+                    variant="outline"
+                    className="w-full border-hi-navy/20 text-hi-navy hover:bg-hi-navy/5"
+                    onClick={() => {
+                      setInviteState('none');
+                    }}
+                  >
+                    Return to sign in
+                  </Button>
+                </>
+              ) : inviteState === 'ready' ? (
+                <form onSubmit={handleSetInvitePassword} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="login-password">Password</Label>
+                    <Label htmlFor="new-password" className={labelCls}>Choose a password</Label>
                     <Input
-                      id="login-password"
+                      id="new-password"
                       type="password"
                       placeholder="••••••••"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
                       disabled={isSubmitting}
+                      autoComplete="new-password"
                       required
+                      className={inputCls}
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-password" className={labelCls}>Confirm password</Label>
+                    <Input
+                      id="confirm-password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      disabled={isSubmitting}
+                      autoComplete="new-password"
+                      required
+                      className={inputCls}
+                    />
+                  </div>
+                  <Button type="submit" className={submitCls} disabled={isSubmitting}>
                     {isSubmitting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Signing in...
+                        Activating...
                       </>
                     ) : (
-                      'Sign In'
+                      'Activate Account'
                     )}
                   </Button>
                 </form>
+              ) : showForgotPassword ? (
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="reset-email" className={labelCls}>Email</Label>
+                    <Input
+                      id="reset-email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      disabled={isSubmitting}
+                      required
+                      className={inputCls}
+                    />
+                  </div>
+                  <Button type="submit" className={submitCls} disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      'Send Reset Link'
+                    )}
+                  </Button>
+                </form>
+              ) : (
+                <>
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="login-email" className={labelCls}>Email</Label>
+                      <Input
+                        id="login-email"
+                        type="email"
+                        placeholder="you@example.com"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        disabled={isSubmitting}
+                        required
+                        className={inputCls}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="login-password" className={labelCls}>Password</Label>
+                      <Input
+                        id="login-password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        disabled={isSubmitting}
+                        required
+                        className={inputCls}
+                      />
+                    </div>
+                    <Button type="submit" className={submitCls} disabled={isSubmitting}>
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Signing in...
+                        </>
+                      ) : (
+                        'Sign In'
+                      )}
+                    </Button>
+                  </form>
 
-                <div className="mt-4 text-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowForgotPassword(true);
-                      setError(null);
-                    }}
-                    className="text-sm text-muted-foreground hover:text-primary hover:underline"
-                  >
-                    Forgot your password?
-                  </button>
-                </div>
+                  <div className="mt-4 text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowForgotPassword(true);
+                        setError(null);
+                      }}
+                      className="text-sm text-hi-steel-blue hover:underline"
+                    >
+                      Forgot your password?
+                    </button>
+                  </div>
 
-                <div className="mt-6 rounded-md bg-muted p-4">
-                  <p className="text-center text-sm text-muted-foreground">
-                    <strong>Don't have an account?</strong>
-                    <br />
-                    Accounts are created by Home Island. Check your email for an invite link.
-                  </p>
-                </div>
-              </>
-            )}
+                  <div className="mt-6 rounded-md bg-hi-sand/10 border border-hi-sand/20 p-4">
+                    <p className="text-center text-sm text-hi-navy">
+                      <strong className="font-bold">Don't have an account?</strong>
+                      <br />
+                      Accounts are created by Home Island. Check your email for an invite link.
+                    </p>
+                  </div>
+                </>
+              );
+            })()}
           </CardContent>
         </Card>
       </div>
