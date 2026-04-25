@@ -571,13 +571,9 @@ export default function UsersAccess() {
                             <Mail className="h-4 w-4 mr-2" />
                             Resend Invite
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleCopyInviteLink(user)} className="text-muted-foreground">
-                            <Copy className="h-4 w-4 mr-2" />
-                            Copy Invite Link
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleCopyResetLinkDebug(user)} className="text-muted-foreground">
+                          <DropdownMenuItem onClick={() => handleSendPasswordReset(user)}>
                             <Link2 className="h-4 w-4 mr-2" />
-                            Copy Reset Link (debug)
+                            Send Password Reset
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
