@@ -143,6 +143,58 @@ Deno.serve(async (req) => {
       console.error('[resend-invite] Profile upsert error (non-fatal):', profileError.message);
     }
 
+    // If admin explicitly requested password reset, skip the invite attempt
+    if (force_password_reset) {
+      console.log('[resend-invite] Force password reset requested for:', user.email);
+
+      if (generate_link_only) {
+        const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+          type: 'recovery',
+          email: user.email,
+          options: { redirectTo }
+        });
+        if (linkError) {
+          return new Response(
+            JSON.stringify({ error: `Failed to generate link: ${linkError.message}` }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Password reset link generated (not emailed)',
+            link: linkData.properties?.action_link || '',
+            email_sent: false,
+            type: 'password_reset',
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { error: resetError } = await adminClient.auth.resetPasswordForEmail(user.email, {
+        redirectTo
+      });
+      if (resetError) {
+        console.error('[resend-invite] Password reset email FAILED:', resetError.message);
+        const status = resetError.message.includes('rate limit') ? 429 : 500;
+        return new Response(
+          JSON.stringify({ error: `Password reset email failed: ${resetError.message}`, email_sent: false }),
+          { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      console.log('[resend-invite] Password reset email SENT to:', user.email);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: `Password reset email sent to ${user.email}`,
+          email_sent: true,
+          type: 'password_reset',
+          redirect_to: redirectTo
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Try to send invitation first
     console.log('[resend-invite] Attempting to send invitation email to:', user.email);
     
