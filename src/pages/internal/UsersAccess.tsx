@@ -35,7 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { UserPlus, MoreHorizontal, Mail, Edit, Ban, CheckCircle, Loader2, Filter, Link2, Copy, ShoppingCart, Flame } from 'lucide-react';
+import { UserPlus, MoreHorizontal, Mail, Edit, Ban, CheckCircle, Loader2, Filter, Link2, ShoppingCart, Flame } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { supabase } from '@/integrations/supabase/client';
