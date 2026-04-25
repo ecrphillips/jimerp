@@ -88,6 +88,7 @@ export default {
       },
       fontFamily: {
         brand: ["Cairo", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
