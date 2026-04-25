@@ -785,12 +785,14 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
                         variant="outline"
                         size="sm"
                         className="h-7"
-                        onClick={() => setResetConfirm({ user_id: u.user_id, email, name })}
+                        disabled={sendResetMutation.isPending}
+                        onClick={() => sendResetMutation.mutate({ user_id: u.user_id, email })}
                       >
-                        <Mail className="h-3 w-3 mr-1" /> Reset Password
+                        <Mail className="h-3 w-3 mr-1" />
+                        {sendResetMutation.isPending ? 'Sending…' : 'Reset Password'}
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent className="text-xs">Generate a password reset link to share with this user</TooltipContent>
+                    <TooltipContent className="text-xs">Send a branded password reset email to this user</TooltipContent>
                   </Tooltip>
                 )}
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(u)}><Pencil className="h-3 w-3" /></Button>
