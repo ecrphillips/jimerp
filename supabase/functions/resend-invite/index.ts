@@ -13,8 +13,9 @@ interface ResendRequest {
   user_id: string;
   role?: 'ADMIN' | 'OPS' | 'CLIENT';
   client_id?: string;
-  generate_link_only?: boolean; // DEV: return link instead of sending email
+  generate_link_only?: boolean; // FALLBACK: return link instead of sending email
   debug_mode?: boolean; // DEV: return full debug info about URLs
+  force_password_reset?: boolean; // Force password reset flow (for active users)
 }
 
 Deno.serve(async (req) => {
@@ -66,7 +67,7 @@ Deno.serve(async (req) => {
     }
 
     const body: ResendRequest = await req.json();
-    const { user_id, role, client_id, generate_link_only = false, debug_mode = false } = body;
+    const { user_id, role, client_id, generate_link_only = false, debug_mode = false, force_password_reset = false } = body;
 
     if (!user_id) {
       return new Response(
@@ -140,6 +141,58 @@ Deno.serve(async (req) => {
 
     if (profileError) {
       console.error('[resend-invite] Profile upsert error (non-fatal):', profileError.message);
+    }
+
+    // If admin explicitly requested password reset, skip the invite attempt
+    if (force_password_reset) {
+      console.log('[resend-invite] Force password reset requested for:', user.email);
+
+      if (generate_link_only) {
+        const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+          type: 'recovery',
+          email: user.email,
+          options: { redirectTo }
+        });
+        if (linkError) {
+          return new Response(
+            JSON.stringify({ error: `Failed to generate link: ${linkError.message}` }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Password reset link generated (not emailed)',
+            link: linkData.properties?.action_link || '',
+            email_sent: false,
+            type: 'password_reset',
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { error: resetError } = await adminClient.auth.resetPasswordForEmail(user.email, {
+        redirectTo
+      });
+      if (resetError) {
+        console.error('[resend-invite] Password reset email FAILED:', resetError.message);
+        const status = resetError.message.includes('rate limit') ? 429 : 500;
+        return new Response(
+          JSON.stringify({ error: `Password reset email failed: ${resetError.message}`, email_sent: false }),
+          { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      console.log('[resend-invite] Password reset email SENT to:', user.email);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: `Password reset email sent to ${user.email}`,
+          email_sent: true,
+          type: 'password_reset',
+          redirect_to: redirectTo
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Try to send invitation first

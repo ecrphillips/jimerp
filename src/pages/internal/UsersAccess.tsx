@@ -35,7 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { UserPlus, MoreHorizontal, Mail, Edit, Ban, CheckCircle, Loader2, Filter, Link2, Copy, ShoppingCart, Flame } from 'lucide-react';
+import { UserPlus, MoreHorizontal, Mail, Edit, Ban, CheckCircle, Loader2, Filter, Link2, ShoppingCart, Flame } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { supabase } from '@/integrations/supabase/client';
@@ -343,10 +343,31 @@ export default function UsersAccess() {
   };
 
   const handleResendInvite = async (user: UserWithDetails) => {
-    await handleResendInviteById(user.user_id);
+    await handleResendInviteById(user.user_id, user.email);
   };
 
-  const handleResendInviteById = async (userId: string) => {
+  // Fallback: copy a manual link to clipboard if the email send fails
+  const copyManualLink = async (userId: string, type: 'invite' | 'reset') => {
+    try {
+      const response = await supabase.functions.invoke('resend-invite', {
+        body: {
+          user_id: userId,
+          generate_link_only: true,
+          force_password_reset: type === 'reset',
+        },
+      });
+      if (response.error) throw new Error(response.error.message);
+      const link = response.data?.link;
+      if (!link) throw new Error('No link returned');
+      await navigator.clipboard.writeText(link);
+      toast.success('Manual link copied to clipboard');
+    } catch (err: any) {
+      console.error('Manual link fallback error:', err);
+      toast.error(err.message || 'Could not generate manual link');
+    }
+  };
+
+  const handleResendInviteById = async (userId: string, email?: string) => {
     try {
       const response = await supabase.functions.invoke('resend-invite', {
         body: { user_id: userId },
@@ -365,93 +386,49 @@ export default function UsersAccess() {
       if (!data?.email_sent) {
         toast.warning('Resend attempted but email may not have been sent.');
       } else {
-        toast.success(data?.message || 'Invitation email sent');
+        const recipient = email ? ` to ${email}` : '';
+        const label = data?.type === 'password_reset'
+          ? `Password reset email sent${recipient}`
+          : `Invitation sent${recipient}`;
+        toast.success(label);
       }
     } catch (error: any) {
       console.error('Resend invite error:', error);
-      toast.error(error.message || 'Failed to resend invite');
+      toast.error('Could not send email — please try again or contact support.', {
+        description: error.message,
+        action: {
+          label: 'Copy manual link',
+          onClick: () => copyManualLink(userId, 'invite'),
+        },
+        duration: 10000,
+      });
     }
   };
 
-  // DEV: Copy invite link to clipboard for debugging email issues
-  const handleCopyInviteLink = async (user: UserWithDetails) => {
+  const handleSendPasswordReset = async (user: UserWithDetails) => {
     try {
       const response = await supabase.functions.invoke('resend-invite', {
-        body: { user_id: user.user_id, generate_link_only: true },
+        body: { user_id: user.user_id, force_password_reset: true },
       });
-
-      if (response.error) {
-        throw new Error(response.error.message);
-      }
-
+      if (response.error) throw new Error(response.error.message);
       const data = response.data;
+      if (data?.error) throw new Error(data.error);
 
-      if (data?.error) {
-        throw new Error(data.error);
-      }
-
-      if (data?.link) {
-        await navigator.clipboard.writeText(data.link);
-        toast.success('Invite link copied to clipboard', {
-          description: 'This link is for debugging only. Expires in 24h.',
-          duration: 5000,
-        });
+      if (!data?.email_sent) {
+        toast.warning('Reset attempted but email may not have been sent.');
       } else {
-        toast.error('No link returned from server');
+        toast.success(`Password reset email sent to ${user.email}`);
       }
     } catch (error: any) {
-      console.error('Copy link error:', error);
-      toast.error(error.message || 'Failed to generate invite link');
-    }
-  };
-
-  // DEV: Copy reset link with full debug info
-  const handleCopyResetLinkDebug = async (user: UserWithDetails) => {
-    try {
-      const response = await supabase.functions.invoke('resend-invite', {
-        body: { user_id: user.user_id, generate_link_only: true, debug_mode: true },
+      console.error('Send password reset error:', error);
+      toast.error('Could not send email — please try again or contact support.', {
+        description: error.message,
+        action: {
+          label: 'Copy manual link',
+          onClick: () => copyManualLink(user.user_id, 'reset'),
+        },
+        duration: 10000,
       });
-
-      if (response.error) {
-        throw new Error(response.error.message);
-      }
-
-      const data = response.data;
-
-      if (data?.error) {
-        throw new Error(data.error);
-      }
-
-      if (data?.link) {
-        await navigator.clipboard.writeText(data.link);
-        
-        // Show debug info in console
-        console.log('=== AUTH LINK DEBUG ===');
-        console.log('Link:', data.link);
-        if (data.debug) {
-          console.log('SITE_URL:', data.debug.site_url);
-          console.log('redirectTo requested:', data.debug.redirect_to_requested);
-          console.log('Supabase URL:', data.debug.supabase_url);
-          console.log('Link host:', data.debug.link_host);
-          console.log('Link redirect_to param:', data.debug.link_redirect_to);
-        }
-        console.log('=======================');
-        
-        // Show debug in toast
-        const debugInfo = data.debug 
-          ? `Site: ${data.debug.site_url}\nRedirectTo: ${data.debug.link_redirect_to || 'NOT SET'}`
-          : 'No debug info';
-        
-        toast.success('Reset link copied (debug mode)', {
-          description: debugInfo,
-          duration: 10000,
-        });
-      } else {
-        toast.error('No link returned from server');
-      }
-    } catch (error: any) {
-      console.error('Copy reset link debug error:', error);
-      toast.error(error.message || 'Failed to generate reset link');
     }
   };
 
@@ -594,13 +571,9 @@ export default function UsersAccess() {
                             <Mail className="h-4 w-4 mr-2" />
                             Resend Invite
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleCopyInviteLink(user)} className="text-muted-foreground">
-                            <Copy className="h-4 w-4 mr-2" />
-                            Copy Invite Link
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleCopyResetLinkDebug(user)} className="text-muted-foreground">
+                          <DropdownMenuItem onClick={() => handleSendPasswordReset(user)}>
                             <Link2 className="h-4 w-4 mr-2" />
-                            Copy Reset Link (debug)
+                            Send Password Reset
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
