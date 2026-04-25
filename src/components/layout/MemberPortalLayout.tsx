@@ -21,12 +21,14 @@ const navItems = [
 
 export function MemberPortalLayout({ children }: MemberPortalLayoutProps) {
   const { authUser, signOut } = useAuth();
-  const { isPreviewMode, previewAccountName, exitPreview } = usePreview();
+  const { isPreviewMode, previewAccountName, exitPreview, effectivePermissions } = usePreview();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = React.useState(false);
 
-  const canBookRoaster = !!authUser?.canBookRoaster;
+  const canBookRoaster = isPreviewMode
+    ? !!effectivePermissions?.canBookRoaster
+    : !!authUser?.canBookRoaster;
   const visibleNavItems = navItems.filter(
     (item) => !item.requiresBookingPerm || canBookRoaster,
   );

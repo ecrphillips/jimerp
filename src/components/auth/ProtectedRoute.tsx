@@ -13,7 +13,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { user, authUser, loading, signOut } = useAuth();
-  const { isPreviewMode } = usePreview();
+  const { isPreviewMode, effectivePermissions } = usePreview();
   const location = useLocation();
 
   // For CLIENT users with an accountId, check if the account has COROASTING in programs
@@ -31,7 +31,13 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     staleTime: 5 * 60 * 1000,
   });
 
-  const isCoroastMember = authUser?.canBookRoaster && accountPrograms?.includes('COROASTING');
+  const effectiveCanBookRoaster = isPreviewMode
+    ? !!effectivePermissions?.canBookRoaster
+    : !!authUser?.canBookRoaster;
+  const effectivePrograms = isPreviewMode
+    ? effectivePermissions?.programs ?? []
+    : accountPrograms ?? [];
+  const isCoroastMember = effectiveCanBookRoaster && effectivePrograms.includes('COROASTING');
 
   if (loading || (authUser?.role === 'CLIENT' && authUser?.accountId && programsLoading)) {
     return (
