@@ -13,8 +13,9 @@ interface ResendRequest {
   user_id: string;
   role?: 'ADMIN' | 'OPS' | 'CLIENT';
   client_id?: string;
-  generate_link_only?: boolean; // DEV: return link instead of sending email
+  generate_link_only?: boolean; // FALLBACK: return link instead of sending email
   debug_mode?: boolean; // DEV: return full debug info about URLs
+  force_password_reset?: boolean; // Force password reset flow (for active users)
 }
 
 Deno.serve(async (req) => {
