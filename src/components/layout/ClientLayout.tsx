@@ -9,11 +9,11 @@ import {
   ClipboardList,
   User,
   LogOut,
-  Coffee,
   Menu,
   X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import hiIcon from '@/assets/home-island-icon.png';
 
 interface ClientLayoutProps {
   children: React.ReactNode;
@@ -54,12 +54,12 @@ export function ClientLayout({ children }: ClientLayoutProps) {
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="flex h-full flex-col">
-          {/* Logo - matches InternalLayout branding */}
+          {/* Logo */}
           <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
-            <Coffee className="h-8 w-8 text-sidebar-primary" />
-            <div className="flex flex-col leading-tight">
-              <span className="text-lg font-bold">JIM</span>
-              <span className="text-xs italic text-sidebar-foreground/60">by Home Island Software</span>
+            <img src={hiIcon} alt="Home Island" className="h-9 w-9" />
+            <div className="flex flex-col leading-tight font-brand">
+              <span className="text-base font-bold tracking-wide text-sidebar-foreground">Home Island</span>
+              <span className="text-[10px] uppercase tracking-[0.18em] text-sidebar-foreground/60">Coffee Partners</span>
             </div>
           </div>
 
@@ -125,10 +125,10 @@ export function ClientLayout({ children }: ClientLayoutProps) {
             {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
           <div className="flex items-center gap-2">
-            <Coffee className="h-6 w-6 text-primary" />
-            <div className="flex flex-col leading-tight">
-              <span className="text-sm font-bold">JIM</span>
-              <span className="text-[10px] italic text-muted-foreground">by Home Island Software</span>
+            <img src={hiIcon} alt="Home Island" className="h-7 w-7" />
+            <div className="flex flex-col leading-tight font-brand">
+              <span className="text-sm font-bold text-hi-navy">Home Island</span>
+              <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground">Coffee Partners</span>
             </div>
           </div>
         </header>

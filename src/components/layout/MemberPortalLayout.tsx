@@ -4,8 +4,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
 import { Button } from '@/components/ui/button';
 import { AccountSheet } from '@/components/account/AccountSheet';
-import { CalendarDays, BarChart3, User, LogOut, Coffee, Menu, X, Eye, Calculator } from 'lucide-react';
+import { CalendarDays, BarChart3, User, LogOut, Menu, X, Eye, Calculator } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import hiIcon from '@/assets/home-island-icon.png';
 
 interface MemberPortalLayoutProps {
   children: React.ReactNode;
@@ -67,10 +68,10 @@ export function MemberPortalLayout({ children }: MemberPortalLayoutProps) {
       )}>
         <div className="flex h-full flex-col">
           <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
-            <Coffee className="h-8 w-8 text-sidebar-primary" />
-            <div className="flex flex-col leading-tight">
-              <span className="text-lg font-bold">Co-Roasting</span>
-              <span className="text-xs italic text-sidebar-foreground/60">Member Portal</span>
+            <img src={hiIcon} alt="Home Island" className="h-9 w-9" />
+            <div className="flex flex-col leading-tight font-brand">
+              <span className="text-base font-bold tracking-wide text-sidebar-foreground">Home Island</span>
+              <span className="text-[10px] uppercase tracking-[0.18em] text-sidebar-foreground/60">Member Portal</span>
             </div>
           </div>
 
@@ -127,10 +128,10 @@ export function MemberPortalLayout({ children }: MemberPortalLayoutProps) {
             {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
           <div className="flex items-center gap-2">
-            <Coffee className="h-6 w-6 text-primary" />
-            <div className="flex flex-col leading-tight">
-              <span className="text-sm font-bold">Co-Roasting</span>
-              <span className="text-[10px] italic text-muted-foreground">Member Portal</span>
+            <img src={hiIcon} alt="Home Island" className="h-7 w-7" />
+            <div className="flex flex-col leading-tight font-brand">
+              <span className="text-sm font-bold text-hi-navy">Home Island</span>
+              <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground">Member Portal</span>
             </div>
           </div>
         </header>
