@@ -8,13 +8,7 @@ const DEFAULT_AUTH_TTL_MINUTES = 15
 const DEFAULT_TRANSACTIONAL_TTL_MINUTES = 60
 
 type DbClient = any
-type EmailPayload = {
-  [key: string]: any
-  message_id?: string
-  label?: string
-  to?: string
-  queued_at?: string
-}
+type EmailPayload = Record<string, any>
 type QueueMessage = {
   msg_id: number
   read_ct?: number
