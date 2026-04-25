@@ -361,7 +361,7 @@ Deno.serve(async (req) => {
       }
 
       // Small delay between sends to smooth bursts
-      if (i < messages.length - 1) {
+      if (i < queueMessages.length - 1) {
         await new Promise((r) => setTimeout(r, sendDelayMs))
       }
     }
