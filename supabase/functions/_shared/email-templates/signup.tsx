@@ -8,8 +8,8 @@ import {
   Container,
   Head,
   Heading,
+  Hr,
   Html,
-  Link,
   Preview,
   Text,
 } from 'npm:@react-email/components@0.0.22'
@@ -22,36 +22,36 @@ interface SignupEmailProps {
 }
 
 export const SignupEmail = ({
-  siteName,
-  siteUrl,
   recipient,
   confirmationUrl,
 }: SignupEmailProps) => (
   <Html lang="en" dir="ltr">
     <Head />
-    <Preview>Confirm your email for {siteName}</Preview>
+    <Preview>Confirm your email for Home Island Coffee Partners</Preview>
     <Body style={main}>
       <Container style={container}>
         <Heading style={h1}>Confirm your email</Heading>
         <Text style={text}>
-          Thanks for signing up for{' '}
-          <Link href={siteUrl} style={link}>
-            <strong>{siteName}</strong>
-          </Link>
-          !
+          You're receiving this email because an account was created for{' '}
+          {recipient} at Home Island Coffee Partners.
         </Text>
         <Text style={text}>
-          Please confirm your email address (
-          <Link href={`mailto:${recipient}`} style={link}>
-            {recipient}
-          </Link>
-          ) by clicking the button below:
+          Please confirm your email address to activate your account:
         </Text>
         <Button style={button} href={confirmationUrl}>
-          Verify Email
+          Confirm email
         </Button>
+        <Text style={textSmall}>
+          If the button doesn't work, copy and paste this link into your browser:
+          <br />
+          {confirmationUrl}
+        </Text>
+        <Text style={text}>
+          If you didn't expect this email, you can safely ignore it.
+        </Text>
+        <Hr style={hr} />
         <Text style={footer}>
-          If you didn't create an account, you can safely ignore this email.
+          Home Island Coffee Partners — homeislandcoffee.com
         </Text>
       </Container>
     </Body>
@@ -60,27 +60,37 @@ export const SignupEmail = ({
 
 export default SignupEmail
 
-const main = { backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif' }
-const container = { padding: '20px 25px' }
+const main = { backgroundColor: '#ffffff', fontFamily: 'Arial, Helvetica, sans-serif' }
+const container = { padding: '24px', maxWidth: '560px', margin: '0 auto' }
 const h1 = {
-  fontSize: '22px',
+  fontSize: '20px',
   fontWeight: 'bold' as const,
-  color: '#000000',
+  color: '#0B3E5E',
   margin: '0 0 20px',
 }
 const text = {
   fontSize: '14px',
-  color: '#55575d',
-  lineHeight: '1.5',
-  margin: '0 0 25px',
+  color: '#222222',
+  lineHeight: '1.6',
+  margin: '0 0 16px',
 }
-const link = { color: 'inherit', textDecoration: 'underline' }
+const textSmall = {
+  fontSize: '12px',
+  color: '#666666',
+  lineHeight: '1.5',
+  margin: '16px 0',
+  wordBreak: 'break-all' as const,
+}
 const button = {
-  backgroundColor: '#000000',
+  backgroundColor: '#0B3E5E',
   color: '#ffffff',
   fontSize: '14px',
-  borderRadius: '8px',
+  fontWeight: 'bold' as const,
+  borderRadius: '4px',
   padding: '12px 20px',
   textDecoration: 'none',
+  display: 'inline-block',
+  margin: '8px 0 16px',
 }
-const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0' }
+const hr = { borderColor: '#e6e6e6', margin: '32px 0 16px' }
+const footer = { fontSize: '12px', color: '#999999', margin: '0' }
