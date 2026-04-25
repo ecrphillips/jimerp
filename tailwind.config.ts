@@ -78,7 +78,16 @@ export default {
           shipped: "hsl(var(--status-shipped))",
           cancelled: "hsl(var(--status-cancelled))",
         },
+        hi: {
+          "steel-blue": "hsl(var(--hi-steel-blue))",
+          navy: "hsl(var(--hi-navy))",
+          sand: "hsl(var(--hi-sand))",
+          pacific: "hsl(var(--hi-pacific))",
+          cream: "hsl(var(--hi-cream))",
+        },
       },
+      fontFamily: {
+        brand: ["Cairo", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
