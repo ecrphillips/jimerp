@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -59,6 +61,14 @@
     --ring: 25 45% 25%;
 
     --radius: 0.5rem;
+
+    /* Home Island Coffee Partners brand tokens */
+    --hi-steel-blue: 204 61% 33%;   /* #216089 */
+    --hi-navy: 203 79% 21%;          /* #0B3E5E */
+    --hi-sand: 41 59% 58%;           /* #D2AC58 */
+    --hi-pacific: 196 41% 69%;       /* #8FC0D0 */
+    --hi-cream: 41 53% 95%;          /* #FAF6EE */
+    --font-brand: 'Cairo', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
     /* Sidebar - Left navigation for internal users */
     /* Brand: Navy #0B3E5E = 203 79% 21%, Steel Blue #216089 = 204 61% 33%, Sand #D2AC58 = 41 59% 58% */

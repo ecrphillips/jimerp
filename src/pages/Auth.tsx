@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Coffee, AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
+import homeIslandLogo from '@/assets/home-island-logo.png';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -220,8 +221,8 @@ export default function Auth() {
   // Loading: either auth context loading OR we're still checking the invite token
   if (loading || inviteState === 'checking') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      <div className="flex min-h-screen items-center justify-center bg-hi-cream">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-hi-steel-blue border-t-transparent" />
       </div>
     );
   }
@@ -229,23 +230,24 @@ export default function Auth() {
   const isInviteFlow = inviteState === 'ready' || inviteState === 'invalid';
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="flex min-h-screen items-center justify-center bg-hi-cream p-4 font-brand">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="mb-8 flex flex-col items-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary">
-            <Coffee className="h-8 w-8 text-primary-foreground" />
-          </div>
-          <h1 className="text-2xl font-bold">JIM</h1>
-          <p className="text-muted-foreground">by Home Island Software</p>
+          <img
+            src={homeIslandLogo}
+            alt="Home Island Coffee Partners"
+            className="mb-4 w-[200px] sm:w-[240px] h-auto"
+          />
+          <p className="text-sm font-normal text-hi-navy/70 tracking-wide">Member Portal</p>
         </div>
 
-        <Card>
-          <CardHeader className="pb-4">
+        <Card className="rounded-2xl border-hi-navy/10 bg-white shadow-[0_8px_30px_-12px_hsl(var(--hi-navy)/0.18)]">
+          <CardHeader className="pb-4 pt-7 px-7">
             {isInviteFlow ? (
               <>
-                <CardTitle>Welcome to JIM</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-hi-navy font-medium text-2xl">Welcome</CardTitle>
+                <CardDescription className="text-hi-navy/60">
                   Set a password to activate your account.
                 </CardDescription>
               </>
@@ -255,7 +257,7 @@ export default function Auth() {
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    className="h-8 w-8"
+                    className="h-8 w-8 text-hi-navy hover:bg-hi-navy/5"
                     onClick={() => {
                       setShowForgotPassword(false);
                       setError(null);
@@ -264,23 +266,23 @@ export default function Auth() {
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
-                  <CardTitle>Reset Password</CardTitle>
+                  <CardTitle className="text-hi-navy font-medium text-2xl">Reset Password</CardTitle>
                 </div>
-                <CardDescription>
+                <CardDescription className="text-hi-navy/60">
                   Enter your email to receive a password reset link.
                 </CardDescription>
               </>
             ) : (
               <>
-                <CardTitle>Welcome Back</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-hi-navy font-medium text-2xl">Welcome Back</CardTitle>
+                <CardDescription className="text-hi-navy/60">
                   Sign in to your account to continue.
                 </CardDescription>
               </>
             )}
           </CardHeader>
 
-          <CardContent>
+          <CardContent className="px-7 pb-7">
             {error && (
               <div className="mb-4 flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                 <AlertCircle className="h-4 w-4 shrink-0" />
@@ -289,152 +291,164 @@ export default function Auth() {
             )}
 
             {success && (
-              <div className="mb-4 rounded-md bg-green-50 p-3 text-sm text-green-800">
+              <div className="mb-4 rounded-md bg-hi-pacific/15 p-3 text-sm text-hi-navy">
                 {success}
               </div>
             )}
 
-            {inviteState === 'invalid' ? (
-              <>
-                <div className="mb-4 flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>This invite link has expired or is invalid. Please contact Home Island to be re-invited.</span>
-                </div>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => {
-                    setInviteState('none');
-                  }}
-                >
-                  Return to sign in
-                </Button>
-              </>
-            ) : inviteState === 'ready' ? (
-              <form onSubmit={handleSetInvitePassword} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="new-password">Choose a password</Label>
-                  <Input
-                    id="new-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    disabled={isSubmitting}
-                    autoComplete="new-password"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirm password</Label>
-                  <Input
-                    id="confirm-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    disabled={isSubmitting}
-                    autoComplete="new-password"
-                    required
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Activating...
-                    </>
-                  ) : (
-                    'Activate Account'
-                  )}
-                </Button>
-              </form>
-            ) : showForgotPassword ? (
-              <form onSubmit={handleForgotPassword} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="reset-email">Email</Label>
-                  <Input
-                    id="reset-email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={resetEmail}
-                    onChange={(e) => setResetEmail(e.target.value)}
-                    disabled={isSubmitting}
-                    required
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Sending...
-                    </>
-                  ) : (
-                    'Send Reset Link'
-                  )}
-                </Button>
-              </form>
-            ) : (
-              <>
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="login-email">Email</Label>
-                    <Input
-                      id="login-email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      disabled={isSubmitting}
-                      required
-                    />
+            {(() => {
+              const labelCls = "text-hi-navy font-medium";
+              const inputCls =
+                "border-hi-navy/20 bg-white text-hi-navy placeholder:text-hi-navy/40 focus-visible:border-hi-steel-blue focus-visible:ring-hi-steel-blue/30";
+              const submitCls =
+                "w-full rounded-md bg-hi-steel-blue text-white font-bold hover:bg-hi-navy transition-colors";
+              return inviteState === 'invalid' ? (
+                <>
+                  <div className="mb-4 flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span>This invite link has expired or is invalid. Please contact Home Island to be re-invited.</span>
                   </div>
+                  <Button
+                    variant="outline"
+                    className="w-full border-hi-navy/20 text-hi-navy hover:bg-hi-navy/5"
+                    onClick={() => {
+                      setInviteState('none');
+                    }}
+                  >
+                    Return to sign in
+                  </Button>
+                </>
+              ) : inviteState === 'ready' ? (
+                <form onSubmit={handleSetInvitePassword} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="login-password">Password</Label>
+                    <Label htmlFor="new-password" className={labelCls}>Choose a password</Label>
                     <Input
-                      id="login-password"
+                      id="new-password"
                       type="password"
                       placeholder="••••••••"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
                       disabled={isSubmitting}
+                      autoComplete="new-password"
                       required
+                      className={inputCls}
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-password" className={labelCls}>Confirm password</Label>
+                    <Input
+                      id="confirm-password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      disabled={isSubmitting}
+                      autoComplete="new-password"
+                      required
+                      className={inputCls}
+                    />
+                  </div>
+                  <Button type="submit" className={submitCls} disabled={isSubmitting}>
                     {isSubmitting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Signing in...
+                        Activating...
                       </>
                     ) : (
-                      'Sign In'
+                      'Activate Account'
                     )}
                   </Button>
                 </form>
+              ) : showForgotPassword ? (
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="reset-email" className={labelCls}>Email</Label>
+                    <Input
+                      id="reset-email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      disabled={isSubmitting}
+                      required
+                      className={inputCls}
+                    />
+                  </div>
+                  <Button type="submit" className={submitCls} disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      'Send Reset Link'
+                    )}
+                  </Button>
+                </form>
+              ) : (
+                <>
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="login-email" className={labelCls}>Email</Label>
+                      <Input
+                        id="login-email"
+                        type="email"
+                        placeholder="you@example.com"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        disabled={isSubmitting}
+                        required
+                        className={inputCls}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="login-password" className={labelCls}>Password</Label>
+                      <Input
+                        id="login-password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        disabled={isSubmitting}
+                        required
+                        className={inputCls}
+                      />
+                    </div>
+                    <Button type="submit" className={submitCls} disabled={isSubmitting}>
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Signing in...
+                        </>
+                      ) : (
+                        'Sign In'
+                      )}
+                    </Button>
+                  </form>
 
-                <div className="mt-4 text-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowForgotPassword(true);
-                      setError(null);
-                    }}
-                    className="text-sm text-muted-foreground hover:text-primary hover:underline"
-                  >
-                    Forgot your password?
-                  </button>
-                </div>
+                  <div className="mt-4 text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowForgotPassword(true);
+                        setError(null);
+                      }}
+                      className="text-sm text-hi-steel-blue hover:underline"
+                    >
+                      Forgot your password?
+                    </button>
+                  </div>
 
-                <div className="mt-6 rounded-md bg-muted p-4">
-                  <p className="text-center text-sm text-muted-foreground">
-                    <strong>Don't have an account?</strong>
-                    <br />
-                    Accounts are created by Home Island. Check your email for an invite link.
-                  </p>
-                </div>
-              </>
-            )}
+                  <div className="mt-6 rounded-md bg-hi-sand/10 border border-hi-sand/20 p-4">
+                    <p className="text-center text-sm text-hi-navy">
+                      <strong className="font-bold">Don't have an account?</strong>
+                      <br />
+                      Accounts are created by Home Island. Check your email for an invite link.
+                    </p>
+                  </div>
+                </>
+              );
+            })()}
           </CardContent>
         </Card>
       </div>
