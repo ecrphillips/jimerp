@@ -557,43 +557,53 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
     },
   });
 
-  // ─── Password reset state (ADMIN only) ───
+  // ─── Password reset (ADMIN only) — sends real branded email via auth-email-hook ───
   const isAdmin = authUser?.role === 'ADMIN';
-  const [resetConfirm, setResetConfirm] = useState<{ user_id: string; email: string; name: string } | null>(null);
-  const [resetLink, setResetLink] = useState<{ link: string; name: string } | null>(null);
-  const [resetCopied, setResetCopied] = useState(false);
 
-  const sendResetMutation = useMutation({
-    mutationFn: async ({ user_id, email }: { user_id: string; email: string }) => {
-      const { data, error: fnError } = await supabase.functions.invoke('send-password-reset', {
-        body: { user_id, email },
-      });
-      if (fnError) throw new Error(fnError.message || 'Failed to generate reset link');
-      if (data?.error) throw new Error(data.error);
-      return data as { reset_link: string };
-    },
-    onSuccess: (data) => {
-      const name = resetConfirm?.name || 'this user';
-      setResetConfirm(null);
-      setResetCopied(false);
-      setResetLink({ link: data.reset_link, name });
-    },
-    onError: (err: Error) => {
-      toast.error(err.message);
-      setResetConfirm(null);
-    },
-  });
-
-  const copyResetLink = async () => {
-    if (!resetLink) return;
+  const copyManualResetLink = async (user_id: string) => {
     try {
-      await navigator.clipboard.writeText(resetLink.link);
-      setResetCopied(true);
-      setTimeout(() => setResetCopied(false), 2000);
-    } catch {
-      toast.error('Could not copy to clipboard');
+      const { data, error } = await supabase.functions.invoke('resend-invite', {
+        body: { user_id, generate_link_only: true, force_password_reset: true },
+      });
+      if (error) throw new Error(error.message);
+      const link = data?.link;
+      if (!link) throw new Error('No link returned');
+      await navigator.clipboard.writeText(link);
+      toast.success('Manual reset link copied to clipboard');
+    } catch (err: any) {
+      console.error('Manual reset link error:', err);
+      toast.error(err.message || 'Could not generate manual link');
     }
   };
+
+  const sendResetMutation = useMutation({
+    mutationFn: async ({ user_id }: { user_id: string; email: string }) => {
+      const { data, error: fnError } = await supabase.functions.invoke('resend-invite', {
+        body: { user_id, force_password_reset: true },
+      });
+      if (fnError) throw new Error(fnError.message || 'Failed to send password reset email');
+      if (data?.error) throw new Error(data.error);
+      return data as { email_sent?: boolean };
+    },
+    onSuccess: (data, vars) => {
+      if (!data?.email_sent) {
+        toast.warning('Reset attempted but email may not have been sent.');
+      } else {
+        toast.success(`Password reset email sent to ${vars.email}`);
+      }
+    },
+    onError: (err: Error, vars) => {
+      console.error('Send password reset error:', err);
+      toast.error('Could not send email — please try again or contact support.', {
+        description: err.message,
+        action: {
+          label: 'Copy manual link',
+          onClick: () => copyManualResetLink(vars.user_id),
+        },
+        duration: 10000,
+      });
+    },
+  });
 
   const { data: locations = [] } = useQuery({
     queryKey: ['account-locations', accountId],
