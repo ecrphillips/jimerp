@@ -987,49 +987,7 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
         </DialogContent>
       </Dialog>
 
-      {/* ─── Reset Password confirm dialog (ADMIN only) ─── */}
-      <Dialog open={!!resetConfirm} onOpenChange={(open) => { if (!open) setResetConfirm(null); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Send password reset link</DialogTitle></DialogHeader>
-          <div className="space-y-4 pt-2">
-            <p className="text-sm">Send a password reset link for <span className="font-medium">{resetConfirm?.email}</span>?</p>
-            <p className="text-xs text-muted-foreground">A link will be generated that you can share directly with the user. The link expires in 24 hours.</p>
-            <div className="flex justify-end gap-2 pt-2 border-t">
-              <Button variant="outline" onClick={() => setResetConfirm(null)} disabled={sendResetMutation.isPending}>Cancel</Button>
-              <Button
-                onClick={() => resetConfirm && sendResetMutation.mutate({ user_id: resetConfirm.user_id, email: resetConfirm.email })}
-                disabled={sendResetMutation.isPending}
-              >
-                {sendResetMutation.isPending ? 'Generating…' : 'Confirm'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
-      {/* ─── Reset link display modal ─── */}
-      <Dialog open={!!resetLink} onOpenChange={(open) => { if (!open) { setResetLink(null); setResetCopied(false); } }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Password reset link</DialogTitle></DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="rounded-md border bg-muted/40 p-3">
-              <p className="text-xs text-muted-foreground mb-2">Reset link</p>
-              <div className="flex items-center gap-2">
-                <Input readOnly value={resetLink?.link || ''} className="text-xs font-mono" onFocus={(e) => e.currentTarget.select()} />
-                <Button size="sm" variant="outline" onClick={copyResetLink}>
-                  {resetCopied ? <><Check className="h-3.5 w-3.5 mr-1" /> Copied</> : <><Copy className="h-3.5 w-3.5 mr-1" /> Copy</>}
-                </Button>
-              </div>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Share this link with <span className="font-medium text-foreground">{resetLink?.name}</span>. It expires in 24 hours and can only be used once.
-            </p>
-            <div className="flex justify-end pt-2 border-t">
-              <Button onClick={() => { setResetLink(null); setResetCopied(false); }}>Done</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
