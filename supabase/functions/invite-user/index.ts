@@ -7,7 +7,7 @@ const corsHeaders = {
 
 // Canonical app URL - use environment variable with fallback to published URL
 // IMPORTANT: Set SITE_URL environment variable in production
-const SITE_URL = Deno.env.get('SITE_URL') || 'https://jimerp.lovable.app';
+const SITE_URL = Deno.env.get('SITE_URL') || 'https://homeislandcoffeepartners.lovable.app';
 
 interface InviteRequest {
   email: string;
