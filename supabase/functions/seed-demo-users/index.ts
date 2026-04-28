@@ -293,15 +293,18 @@ serve(async (req) => {
     };
 
     return new Response(
-      JSON.stringify({ 
-        success: summary.errors === 0, 
+      JSON.stringify({
+        success: summary.errors === 0,
         summary,
         results,
         loginInfo: demoUsers.map(u => ({
           email: u.email,
-          password: u.password,
           role: u.role,
-          clientId: u.clientId || null
+          clientId: u.clientId || null,
+          // Passwords are intentionally NOT returned. New users get a random
+          // password set at create time; an admin must trigger a password
+          // reset email for the user to sign in.
+          passwordNote: 'Password not returned. Use the password reset flow to set credentials.',
         }))
       }, null, 2),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
