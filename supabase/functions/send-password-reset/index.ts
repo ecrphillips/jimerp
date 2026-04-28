@@ -73,21 +73,20 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-      type: 'recovery',
-      email,
-    });
+    // Use Supabase's built-in resetPasswordForEmail so the recovery link is
+    // emailed directly to the user and never returned through our API layer.
+    const { error: resetError } = await adminClient.auth.resetPasswordForEmail(email);
 
-    if (linkError || !linkData?.properties?.action_link) {
-      console.error('[send-password-reset] generateLink failed:', linkError?.message);
+    if (resetError) {
+      console.error('[send-password-reset] resetPasswordForEmail failed:', resetError.message);
       return new Response(
-        JSON.stringify({ error: `Failed to generate reset link: ${linkError?.message || 'Unknown error'}` }),
+        JSON.stringify({ error: `Failed to send reset email: ${resetError.message}` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     return new Response(
-      JSON.stringify({ success: true, reset_link: linkData.properties.action_link }),
+      JSON.stringify({ success: true }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
