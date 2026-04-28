@@ -28,12 +28,22 @@ interface UserResult {
   error?: string;
 }
 
+// Generate a strong random password (no hardcoded credentials in source)
+function generateRandomPassword(length = 24): string {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+  let out = '';
+  for (let i = 0; i < length; i++) out += charset[bytes[i] % charset.length];
+  return out;
+}
+
 const demoUsers: DemoUser[] = [
-  // Internal users
-  { email: 'admin@demo.liteerp.com', password: 'demo1234', name: 'Admin User', role: 'ADMIN' },
-  { email: 'ops@demo.liteerp.com', password: 'demo1234', name: 'Ops User', role: 'OPS' },
+  // Internal users — passwords generated at seed time
+  { email: 'admin@demo.liteerp.com', password: generateRandomPassword(), name: 'Admin User', role: 'ADMIN' },
+  { email: 'ops@demo.liteerp.com', password: generateRandomPassword(), name: 'Ops User', role: 'OPS' },
   // Test client user - tied to real "Mah" client
-  { email: 'mah@test.liteerp.com', password: 'testmah123', name: 'Test User (Mah)', role: 'CLIENT', clientId: 'aaaaaaaa-0001-0001-0001-000000000001' },
+  { email: 'mah@test.liteerp.com', password: generateRandomPassword(), name: 'Test User (Mah)', role: 'CLIENT', clientId: 'aaaaaaaa-0001-0001-0001-000000000001' },
 ];
 
 serve(async (req) => {
@@ -283,15 +293,18 @@ serve(async (req) => {
     };
 
     return new Response(
-      JSON.stringify({ 
-        success: summary.errors === 0, 
+      JSON.stringify({
+        success: summary.errors === 0,
         summary,
         results,
         loginInfo: demoUsers.map(u => ({
           email: u.email,
-          password: u.password,
           role: u.role,
-          clientId: u.clientId || null
+          clientId: u.clientId || null,
+          // Passwords are intentionally NOT returned. New users get a random
+          // password set at create time; an admin must trigger a password
+          // reset email for the user to sign in.
+          passwordNote: 'Password not returned. Use the password reset flow to set credentials.',
         }))
       }, null, 2),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }

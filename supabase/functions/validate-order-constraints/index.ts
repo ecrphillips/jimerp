@@ -52,10 +52,10 @@ serve(async (req) => {
       );
     }
 
-    // Get user's role
+    // Get user's role and (for CLIENTs) their bound client_id
     const { data: roleData } = await supabaseClient
       .from("user_roles")
-      .select("role")
+      .select("role, client_id")
       .eq("user_id", user.id)
       .single();
 
@@ -64,6 +64,16 @@ serve(async (req) => {
 
     const body: ValidationRequest = await req.json();
     const { client_id, line_items, bypass_constraints = false } = body;
+
+    // CLIENT users can only validate orders for their own client
+    if (!isAdminOrOps) {
+      if (userRole !== "CLIENT" || !roleData?.client_id || roleData.client_id !== client_id) {
+        return new Response(
+          JSON.stringify({ valid: false, errors: ["Forbidden: client_id does not match calling user"] }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     // Admin/Ops can bypass constraints if requested
     if (isAdminOrOps && bypass_constraints) {
