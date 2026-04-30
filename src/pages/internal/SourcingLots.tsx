@@ -28,6 +28,7 @@ import { FloorCountModal } from '@/components/sourcing/FloorCountModal';
 import { BookValueReportModal } from '@/components/sourcing/BookValueReportModal';
 import { MarkLotReceivedModal } from '@/components/sourcing/MarkLotReceivedModal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useDefaultPricingFinancing } from '@/hooks/useDefaultPricingFinancing';
 
 // ─── Types ─────────────────────────────────────────────────
 
