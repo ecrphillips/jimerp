@@ -2854,26 +2854,26 @@ export type Database = {
       }
       packaging_costs: {
         Row: {
-          bag_size_g: number
-          cost_per_bag: number
+          cost_per_unit: number
           id: string
           notes: string | null
+          packaging_variant: Database["public"]["Enums"]["packaging_variant"]
           updated_at: string
           updated_by: string | null
         }
         Insert: {
-          bag_size_g: number
-          cost_per_bag: number
+          cost_per_unit: number
           id?: string
           notes?: string | null
+          packaging_variant: Database["public"]["Enums"]["packaging_variant"]
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
-          bag_size_g?: number
-          cost_per_bag?: number
+          cost_per_unit?: number
           id?: string
           notes?: string | null
+          packaging_variant?: Database["public"]["Enums"]["packaging_variant"]
           updated_at?: string
           updated_by?: string | null
         }
