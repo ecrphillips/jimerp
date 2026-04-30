@@ -44,6 +44,8 @@ interface Rules {
   process_rate_per_kg: number;
   overhead_per_kg: number;
   target_margin_pct: number;
+  financing_days: number;
+  financing_apr_pct: number;
 }
 
 export function DefaultsTab() {
