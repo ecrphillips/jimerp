@@ -92,7 +92,19 @@ export default function Production() {
             >
               All
             </Button>
+      </div>
+
+      {dateFilterMode === 'tomorrow' && (
+        <div
+          role="alert"
+          className="mb-4 flex items-center gap-3 rounded-md border border-amber-400/60 bg-amber-100/80 dark:bg-amber-500/10 px-4 py-3 text-amber-900 dark:text-amber-200 shadow-sm"
+        >
+          <CalendarClock className="h-5 w-5 shrink-0" />
+          <div className="text-sm font-medium">
+            Viewing <span className="font-bold uppercase tracking-wide">Tomorrow's</span> run sheet — today's orders are hidden.
           </div>
+        </div>
+      )}
         </div>
       </div>
 
