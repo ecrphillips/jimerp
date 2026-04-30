@@ -829,9 +829,8 @@ function LotDetailPanel({
         updates.book_value_per_kg = bvPerKg;
         updates.costing_status = 'COMPLETE';
 
-        // TODO: Revisit financing calculation — hardcoded 60 days at 12% APR, needs proper inputs and audit trail
-        const avgDaysFinanced = 60;
-        const financingCostPerKg = bvPerKg * 0.12 * (avgDaysFinanced / 365);
+        // Financing inputs come from the default pricing profile (with fallback to 60 / 12)
+        const financingCostPerKg = bvPerKg * (financingAprPct / 100) * (financingDays / 365);
         updates.market_value_per_kg = bvPerKg + financingCostPerKg;
       }
 
