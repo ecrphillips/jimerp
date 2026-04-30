@@ -1380,7 +1380,7 @@ function LotDetailPanel({
                           <span>{formatPerKg(Math.round(liveSummary.mvPerKg * 10000) / 10000)}</span>
                         </div>
                         <p className="text-xs text-muted-foreground">{formatPerLb(Math.round((liveSummary.mvPerKg / 2.20462) * 10000) / 10000)}</p>
-                        <p className="text-xs text-muted-foreground italic">Financing estimate: 60 days @ 12% APR — placeholder, to be revisited.</p>
+                        <p className="text-xs text-muted-foreground italic">{financingFromProfile ? `Financing estimate: ${financingDays} days @ ${financingAprPct}% APR — from default pricing profile.` : 'Financing estimate: 60 days @ 12% APR — placeholder, to be revisited.'}</p>
                       </>
                     )}
                   </CardContent>
