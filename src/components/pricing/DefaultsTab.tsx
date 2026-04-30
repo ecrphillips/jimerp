@@ -64,6 +64,8 @@ export function DefaultsTab() {
   const [processRate, setProcessRate] = useState('0.00');
   const [overhead, setOverhead] = useState('0.00');
   const [targetMargin, setTargetMargin] = useState('35.0');
+  const [financingDays, setFinancingDays] = useState('60');
+  const [financingAprPct, setFinancingAprPct] = useState('12.0');
 
   // ---- queries ----
   const { data: profiles, isLoading: profilesLoading } = useQuery({
