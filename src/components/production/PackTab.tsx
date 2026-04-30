@@ -567,14 +567,41 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedProducts.map((product) => {
+                    {sortedProducts.map((product, index) => {
                       const packing = packingByProduct[product.product_id];
                       const packed = packing?.units_packed ?? 0;
                       const isExpanded = expandedProductId === product.product_id;
+                      const prevRoastGroup = index > 0 ? sortedProducts[index - 1].roast_group : undefined;
+                      const showHeader = product.roast_group !== prevRoastGroup;
+                      const headerLabel = product.roast_group
+                        ? product.roast_group.replace(/_/g, ' ')
+                        : 'Unassigned';
+                      const headerWipKg = product.roast_group
+                        ? (roastedInventory[product.roast_group] ?? 0)
+                        : 0;
                       
                       return (
+                        <React.Fragment key={product.product_id}>
+                          {showHeader && (
+                            <tr
+                              aria-hidden="true"
+                              className={`bg-muted/60 border-b border-t ${index > 0 ? '[&>td]:pt-4' : ''}`}
+                            >
+                              <td colSpan={7} className="py-2 px-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="text-sm font-bold text-foreground uppercase tracking-wide">
+                                    {headerLabel}
+                                  </span>
+                                  {product.roast_group && (
+                                    <span className="text-xs font-medium text-muted-foreground">
+                                      {headerWipKg.toFixed(1)} kg WIP available
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
                         <SortablePackRow
-                          key={product.product_id}
                           productId={product.product_id}
                           productName={product.product_name}
                           sku={product.sku}
@@ -600,6 +627,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                           )}
                           onEditingChange={(isEditing) => handleEditingChange(product.product_id, isEditing)}
                         />
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
