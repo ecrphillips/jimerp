@@ -162,7 +162,7 @@ export default function MemberSchedule() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_bookings')
-        .select('id, member_id, billing_period_id, booking_date, start_time, end_time, duration_hours, status, recurring_block_id, notes_internal, notes_member')
+        .select('id, member_id, account_id, billing_period_id, booking_date, start_time, end_time, duration_hours, status, recurring_block_id, notes_internal, notes_member')
         .in('status', ['CONFIRMED', 'COMPLETED', 'NO_SHOW']);
       if (error) throw error;
       return data as (BookingRow & { notes_member: string | null })[];
@@ -174,7 +174,7 @@ export default function MemberSchedule() {
   const hoursUsedThisMonth = useMemo(() => {
     if (!memberId) return 0;
     return allBookings
-      .filter(b => b.member_id === memberId && b.booking_date.startsWith(currentMonthStr) && ['CONFIRMED', 'COMPLETED', 'NO_SHOW'].includes(b.status))
+      .filter(b => b.account_id === memberId && b.booking_date.startsWith(currentMonthStr) && ['CONFIRMED', 'COMPLETED', 'NO_SHOW'].includes(b.status))
       .reduce((sum, b) => sum + (Number(b.duration_hours) || (timeToMinutes(b.end_time) - timeToMinutes(b.start_time)) / 60), 0);
   }, [allBookings, memberId, currentMonthStr]);
 
@@ -198,7 +198,7 @@ export default function MemberSchedule() {
     }
 
     for (const bk of allBookings) {
-      const isMine = bk.member_id === memberId;
+      const isMine = bk.account_id === memberId;
       result.push({
         id: `bk-${bk.id}`,
         bookingId: bk.id,
@@ -377,12 +377,11 @@ export default function MemberSchedule() {
           const { data: booking, error: bErr } = await supabase
             .from('coroast_bookings')
             .insert({
-              member_id: memberId,
+              account_id: memberId,
               billing_period_id: billingPeriodId,
               booking_date: ds,
               start_time: formStartTime,
               end_time: formEndTime,
-              duration_hours: dur,
               recurring_block_id: recurBlock.id,
               notes_member: formNotes.trim() || null,
               status: 'CONFIRMED',
@@ -411,12 +410,11 @@ export default function MemberSchedule() {
         const { data: booking, error } = await supabase
           .from('coroast_bookings')
           .insert({
-            member_id: memberId,
+            account_id: memberId,
             billing_period_id: billingPeriodId,
             booking_date: saveDateStr,
             start_time: formStartTime,
             end_time: formEndTime,
-            duration_hours: dur,
             notes_member: formNotes.trim() || null,
             status: 'CONFIRMED',
           })
