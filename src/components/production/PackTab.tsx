@@ -602,7 +602,6 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                             </tr>
                           )}
                         <SortablePackRow
-                          key={product.product_id}
                           productId={product.product_id}
                           productName={product.product_name}
                           sku={product.sku}
