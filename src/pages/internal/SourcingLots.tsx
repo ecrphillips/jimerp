@@ -553,6 +553,10 @@ function LotDetailPanel({
 }) {
   const { authUser, isInternal } = useAuth();
   const queryClient = useQueryClient();
+  const { data: pricingFinancing } = useDefaultPricingFinancing();
+  const financingDays = pricingFinancing?.financing_days ?? 60;
+  const financingAprPct = pricingFinancing?.financing_apr_pct ?? 12;
+  const financingFromProfile = pricingFinancing?.isFromDefaultProfile ?? false;
   const open = !!lotId;
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const isAdmin = authUser?.role === 'ADMIN';
