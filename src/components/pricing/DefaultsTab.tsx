@@ -38,6 +38,7 @@ interface Profile {
 interface Rules {
   id: string;
   profile_id: string;
+  carry_risk_premium_pct: number;
   green_markup_multiplier: number;
   yield_loss_pct: number;
   process_rate_per_kg: number;
