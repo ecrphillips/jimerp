@@ -197,6 +197,8 @@ function ProfileTab({ account, refetch }: { account: any; refetch: () => void })
           </CardContent>
         </Card>
 
+        <PricingTierCard accountId={account.id} pricingTierId={account.pricing_tier_id ?? null} />
+
         {prospect && (
           <Card>
             <CardContent className="py-3 flex items-center gap-2 text-sm">
