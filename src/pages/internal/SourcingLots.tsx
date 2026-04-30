@@ -686,8 +686,9 @@ function LotDetailPanel({
   const [txFees, setTxFees] = useState<number>(0);
   const [otherCosts, setOtherCosts] = useState<number>(0);
   const [otherCostsDesc, setOtherCostsDesc] = useState('');
-  const [paymentTerms, setPaymentTerms] = useState<number | null>(null);
+    const [paymentTerms, setPaymentTerms] = useState<number | null>(null);
   const [estDaysConsume, setEstDaysConsume] = useState<number | null>(null);
+  const [carryRiskOverride, setCarryRiskOverride] = useState<string>('');
 
   // Editable lot fields
   const [editLotIdentifier, setEditLotIdentifier] = useState('');
