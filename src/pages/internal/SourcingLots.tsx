@@ -69,6 +69,7 @@ interface LotRow {
   importer_payment_terms_days: number | null;
   estimated_days_to_consume: number | null;
   financing_apr: number | null;
+  carry_risk_premium_pct_override: number | null;
   // confirmations
   fx_rate_confirmed_by: string | null;
   fx_rate_confirmed_at: string | null;
