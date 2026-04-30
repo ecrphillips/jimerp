@@ -24,6 +24,104 @@ import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
 
+// ─── Pricing Tier Card (internal-only) ─────────────────────────
+function formatTierMarkup(t: { markup_adjustment_type: string; markup_multiplier: number | null; per_kg_fee: number | null; target_margin_pct: number | null }): string {
+  switch (t.markup_adjustment_type) {
+    case 'MULTIPLIER':
+      return `× ${(t.markup_multiplier ?? 0).toFixed(2)} (Multiplier)`;
+    case 'PER_KG_FEE': {
+      const v = t.per_kg_fee ?? 0;
+      const sign = v >= 0 ? '+' : '−';
+      return `${sign}$${Math.abs(v).toFixed(2)}/kg (Per-kg fee)`;
+    }
+    case 'MARGIN_TARGET':
+      return `Target ${(t.target_margin_pct ?? 0).toFixed(1)}% (Margin)`;
+    default:
+      return '—';
+  }
+}
+
+function PricingTierCard({ accountId, pricingTierId }: { accountId: string; pricingTierId: string | null }) {
+  const queryClient = useQueryClient();
+  const [selected, setSelected] = useState<string>(pricingTierId ?? '__DEFAULT__');
+
+  useEffect(() => {
+    setSelected(pricingTierId ?? '__DEFAULT__');
+  }, [pricingTierId]);
+
+  const { data: tiers } = useQuery({
+    queryKey: ['pricing_tiers', 'all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pricing_tiers')
+        .select('id, name, is_default, markup_adjustment_type, markup_multiplier, per_kg_fee, target_margin_pct, display_order')
+        .order('display_order');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const defaultTier = tiers?.find((t) => t.is_default) ?? null;
+  const selectedTier =
+    selected === '__DEFAULT__' ? defaultTier : tiers?.find((t) => t.id === selected) ?? null;
+
+  const saveMutation = useMutation({
+    mutationFn: async (next: string | null) => {
+      const { error } = await supabase
+        .from('accounts')
+        .update({ pricing_tier_id: next } as any)
+        .eq('id', accountId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Pricing tier updated');
+      queryClient.invalidateQueries({ queryKey: ['account', accountId] });
+    },
+    onError: (err: any) => toast.error(err?.message ?? 'Failed to save pricing tier'),
+  });
+
+  const handleChange = (v: string) => {
+    setSelected(v);
+    saveMutation.mutate(v === '__DEFAULT__' ? null : v);
+  };
+
+  return (
+    <Card>
+      <CardHeader><CardTitle className="text-sm">Pricing tier</CardTitle></CardHeader>
+      <CardContent className="space-y-2 text-sm">
+        <div className="flex items-center gap-3">
+          <Select value={selected} onValueChange={handleChange} disabled={!tiers}>
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Select tier" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__DEFAULT__">
+                — Use default tier{defaultTier ? ` (${defaultTier.name})` : ''} —
+              </SelectItem>
+              {tiers?.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name}
+                  {t.is_default ? '  •  default' : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {saveMutation.isPending && (
+            <span className="text-xs text-muted-foreground">Saving…</span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {selectedTier ? (
+            <>Markup approach: <span className="font-mono">{formatTierMarkup(selectedTier)}</span></>
+          ) : (
+            <>No tiers configured.</>
+          )}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Profile Tab ───────────────────────────────────────────────
 function ProfileTab({ account, refetch }: { account: any; refetch: () => void }) {
   const queryClient = useQueryClient();
