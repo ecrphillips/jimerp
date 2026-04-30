@@ -118,14 +118,28 @@ export async function poFromExisting(
   vendorAbbreviation: string | null | undefined,
 ): Promise<AllocatedPo> {
   const vendorAbbr = normalizeVendor(vendorAbbreviation);
-  const m = (existingPoNumber || '').match(/-P(\d{3,})$/);
-  if (m) {
+  const existing = (existingPoNumber || '').trim();
+
+  // New format: HIC-#### (digits at end, no -P prefix)
+  const mNew = existing.match(/^HIC-(\d{3,})$/i);
+  if (mNew) {
     return {
-      poNumber: existingPoNumber!,
-      poDigits: m[1].padStart(4, '0'),
+      poNumber: existing,
+      poDigits: mNew[1].padStart(4, '0'),
       vendorAbbr,
     };
   }
+
+  // Legacy format: ...-P#### (digits at end after -P)
+  const mLegacy = existing.match(/-P(\d{3,})$/);
+  if (mLegacy) {
+    return {
+      poNumber: existing,
+      poDigits: mLegacy[1].padStart(4, '0'),
+      vendorAbbr,
+    };
+  }
+
   return allocatePoNumber(vendorAbbreviation);
 }
 
