@@ -825,7 +825,7 @@ export function ProductsListTab() {
               </div>
             </div>
             <div>
-              <Label htmlFor="packagingCostOverride">Packaging cost override (optional)</Label>
+              <Label htmlFor="packagingCostOverride">Packaging cost per unit override (optional)</Label>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">$</span>
                 <Input
@@ -839,7 +839,7 @@ export function ProductsListTab() {
                 />
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Leave blank to use the default cost for this bag size from the Packaging Costs table.
+                Per-unit packaging cost override (CAD). Leave blank to use the default cost for this product's packaging variant from the Packaging Costs table.
               </p>
             </div>
             <div>
