@@ -825,6 +825,24 @@ export function ProductsListTab() {
               </div>
             </div>
             <div>
+              <Label htmlFor="packagingCostOverride">Packaging cost override (optional)</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">$</span>
+                <Input
+                  id="packagingCostOverride"
+                  type="number"
+                  step="0.0001"
+                  placeholder="—"
+                  value={packagingCostOverride}
+                  onChange={(e) => setPackagingCostOverride(e.target.value)}
+                  className="max-w-[200px]"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Leave blank to use the default cost for this bag size from the Packaging Costs table.
+              </p>
+            </div>
+            <div>
               <Label htmlFor="packaging">Packaging Variant</Label>
               <Select value={packagingVariant ?? ''} onValueChange={(v) => setPackagingVariant(v as PackagingVariant)}>
                 <SelectTrigger id="packaging"><SelectValue placeholder="Select packaging" /></SelectTrigger>
