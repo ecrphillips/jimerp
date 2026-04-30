@@ -123,6 +123,8 @@ export function DefaultsTab() {
     setProcessRate(String(rules.process_rate_per_kg));
     setOverhead(String(rules.overhead_per_kg));
     setTargetMargin(String(rules.target_margin_pct));
+    setFinancingDays(String(rules.financing_days ?? 60));
+    setFinancingAprPct(String(rules.financing_apr_pct ?? 12));
   }, [rules]);
 
   // ---- save ----
