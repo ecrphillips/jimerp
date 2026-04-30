@@ -143,6 +143,7 @@ export function DefaultsTab() {
       const { error: rErr } = await supabase
         .from('pricing_rules')
         .update({
+          carry_risk_premium_pct: Number(carryRiskPremium),
           green_markup_multiplier: Number(greenMarkup),
           yield_loss_pct: Number(yieldLoss),
           process_rate_per_kg: Number(processRate),
