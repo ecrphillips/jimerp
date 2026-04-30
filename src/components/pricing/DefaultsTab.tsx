@@ -242,7 +242,7 @@ export function DefaultsTab() {
               <RuleField
                 id="carry-risk-premium"
                 label="Carry/risk premium %"
-                helper="Percentage uplift applied to green book value (book value × (1 + this %)) to produce a de-risked green cost. Covers financing, carry, and risk that should not sit in book value. Used for every lot under this profile unless the lot has its own override."
+                helper="Percentage uplift applied to Market Value (book value + financing) to produce the de-risked green cost. Covers carry and risk that should not sit in market value. Used for every lot under this profile unless the lot has its own override."
                 value={carryRiskPremium}
                 onChange={setCarryRiskPremium}
                 step="0.1"
@@ -251,7 +251,7 @@ export function DefaultsTab() {
               <RuleField
                 id="green-markup"
                 label="Green markup multiplier"
-                helper="Multiplier applied to the de-risked green cost per kg (after the carry/risk premium has been added). 1.0 = pass through, 2.0 = 100% markup."
+                helper="Multiplier applied to the de-risked green cost per kg (Market Value × (1 + carry/risk premium)). 1.0 = pass through, 2.0 = 100% markup."
                 value={greenMarkup}
                 onChange={setGreenMarkup}
                 step="0.01"
@@ -292,6 +292,38 @@ export function DefaultsTab() {
                 step="0.1"
                 suffix="%"
               />
+
+              {/* Financing assumptions sub-section */}
+              <div className="pt-4 border-t space-y-5">
+                <div>
+                  <h3 className="text-sm font-semibold">Financing assumptions</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Drive the Financing Cost/kg added to book value to produce Market Value/kg
+                    (the floor below which we will not sell).
+                  </p>
+                </div>
+                <RuleField
+                  id="financing-days"
+                  label="Financing days held"
+                  helper="Number of days we assume green is held before being sold. Used to compute financing cost per kg."
+                  value={financingDays}
+                  onChange={setFinancingDays}
+                  step="1"
+                />
+                <RuleField
+                  id="financing-apr"
+                  label="Financing APR %"
+                  helper="Annual percentage rate applied to book value over the holding period. Together these produce the financing cost per kg, which is added to book value to get Market Value/kg — the floor below which we will not sell."
+                  value={financingAprPct}
+                  onChange={setFinancingAprPct}
+                  step="0.1"
+                  suffix="%"
+                />
+                <FinancingFactorCallout
+                  days={financingDays}
+                  aprPct={financingAprPct}
+                />
+              </div>
             </CardContent>
           </Card>
 
