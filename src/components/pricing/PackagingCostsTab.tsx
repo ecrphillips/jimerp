@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,13 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -32,24 +39,35 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Plus, Pencil, Trash2, Check, X, Info } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  PACKAGING_OPTIONS,
+  type PackagingVariant,
+} from '@/components/PackagingBadge';
 
 interface PackagingCost {
   id: string;
-  bag_size_g: number;
-  cost_per_bag: number;
+  packaging_variant: PackagingVariant;
+  cost_per_unit: number;
   notes: string | null;
   updated_at: string;
 }
 
+const VARIANT_LABEL: Record<PackagingVariant, string> = Object.fromEntries(
+  PACKAGING_OPTIONS.map((o) => [o.value, o.label]),
+) as Record<PackagingVariant, string>;
+
+const VARIANT_ORDER: Record<PackagingVariant, number> = Object.fromEntries(
+  PACKAGING_OPTIONS.map((o, i) => [o.value, i]),
+) as Record<PackagingVariant, number>;
+
 export function PackagingCostsTab() {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
-  const [addBagSize, setAddBagSize] = useState('');
+  const [addVariant, setAddVariant] = useState<PackagingVariant | ''>('');
   const [addCost, setAddCost] = useState('');
   const [addNotes, setAddNotes] = useState('');
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editBagSize, setEditBagSize] = useState('');
   const [editCost, setEditCost] = useState('');
   const [editNotes, setEditNotes] = useState('');
 
@@ -60,39 +78,55 @@ export function PackagingCostsTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('packaging_costs')
-        .select('*')
-        .order('bag_size_g', { ascending: true });
+        .select('*');
       if (error) throw error;
-      return (data ?? []) as PackagingCost[];
+      const list = (data ?? []) as unknown as PackagingCost[];
+      return list.slice().sort(
+        (a, b) =>
+          (VARIANT_ORDER[a.packaging_variant] ?? 999) -
+          (VARIANT_ORDER[b.packaging_variant] ?? 999),
+      );
     },
   });
 
+  const usedVariants = useMemo(
+    () => new Set((rows ?? []).map((r) => r.packaging_variant)),
+    [rows],
+  );
+
+  const availableVariants = useMemo(
+    () => PACKAGING_OPTIONS.filter((o) => !usedVariants.has(o.value)),
+    [usedVariants],
+  );
+
   const addMutation = useMutation({
     mutationFn: async () => {
+      if (!addVariant) throw new Error('Pick a packaging variant');
+      const cost = Number(addCost);
+      if (!Number.isFinite(cost) || cost < 0)
+        throw new Error('Cost must be a non-negative number');
       const userResp = await supabase.auth.getUser();
       const userId = userResp.data.user?.id ?? null;
-      const bagSize = parseInt(addBagSize, 10);
-      const cost = Number(addCost);
-      if (!Number.isFinite(bagSize) || bagSize <= 0) throw new Error('Bag size must be a positive integer');
-      if (!Number.isFinite(cost) || cost < 0) throw new Error('Cost must be a non-negative number');
-      const { error } = await supabase.from('packaging_costs').insert({
-        bag_size_g: bagSize,
-        cost_per_bag: cost,
+      const { error } = await (supabase.from('packaging_costs') as any).insert({
+        packaging_variant: addVariant,
+        cost_per_unit: cost,
         notes: addNotes.trim() || null,
         updated_by: userId,
       });
       if (error) {
         if ((error as any).code === '23505') {
-          throw new Error(`A row for bag size ${bagSize}g already exists`);
+          throw new Error(
+            `${VARIANT_LABEL[addVariant as PackagingVariant]} is already configured`,
+          );
         }
         throw error;
       }
     },
     onSuccess: () => {
-      toast.success('Bag size added');
+      toast.success('Packaging variant added');
       queryClient.invalidateQueries({ queryKey: ['packaging_costs'] });
       setAddOpen(false);
-      setAddBagSize('');
+      setAddVariant('');
       setAddCost('');
       setAddNotes('');
     },
@@ -102,27 +136,19 @@ export function PackagingCostsTab() {
   const editMutation = useMutation({
     mutationFn: async () => {
       if (!editingId) return;
+      const cost = Number(editCost);
+      if (!Number.isFinite(cost) || cost < 0)
+        throw new Error('Cost must be a non-negative number');
       const userResp = await supabase.auth.getUser();
       const userId = userResp.data.user?.id ?? null;
-      const bagSize = parseInt(editBagSize, 10);
-      const cost = Number(editCost);
-      if (!Number.isFinite(bagSize) || bagSize <= 0) throw new Error('Bag size must be a positive integer');
-      if (!Number.isFinite(cost) || cost < 0) throw new Error('Cost must be a non-negative number');
-      const { error } = await supabase
-        .from('packaging_costs')
+      const { error } = await (supabase.from('packaging_costs') as any)
         .update({
-          bag_size_g: bagSize,
-          cost_per_bag: cost,
+          cost_per_unit: cost,
           notes: editNotes.trim() || null,
           updated_by: userId,
         })
         .eq('id', editingId);
-      if (error) {
-        if ((error as any).code === '23505') {
-          throw new Error(`A row for bag size ${bagSize}g already exists`);
-        }
-        throw error;
-      }
+      if (error) throw error;
     },
     onSuccess: () => {
       toast.success('Updated');
@@ -151,23 +177,27 @@ export function PackagingCostsTab() {
 
   const startEdit = (row: PackagingCost) => {
     setEditingId(row.id);
-    setEditBagSize(String(row.bag_size_g));
-    setEditCost(String(row.cost_per_bag));
+    setEditCost(String(row.cost_per_unit));
     setEditNotes(row.notes ?? '');
   };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end">
-        <Button onClick={() => setAddOpen(true)}>
-          <Plus className="h-4 w-4 mr-1" /> Add bag size
+        <Button
+          onClick={() => setAddOpen(true)}
+          disabled={availableVariants.length === 0}
+        >
+          <Plus className="h-4 w-4 mr-1" /> Add packaging variant
         </Button>
       </div>
 
       <Card>
         <CardContent className="pt-6">
           {isLoading ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">Loading…</p>
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              Loading…
+            </p>
           ) : (rows?.length ?? 0) === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">
               No packaging costs configured yet.
@@ -176,8 +206,8 @@ export function PackagingCostsTab() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Bag size (g)</TableHead>
-                  <TableHead>Cost per bag (CAD)</TableHead>
+                  <TableHead>Packaging variant</TableHead>
+                  <TableHead>Cost per unit (CAD)</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead>Last updated</TableHead>
                   <TableHead className="w-[120px]"></TableHead>
@@ -189,16 +219,8 @@ export function PackagingCostsTab() {
                   return (
                     <TableRow key={row.id}>
                       <TableCell>
-                        {isEditing ? (
-                          <Input
-                            type="number"
-                            value={editBagSize}
-                            onChange={(e) => setEditBagSize(e.target.value)}
-                            className="max-w-[120px]"
-                          />
-                        ) : (
-                          row.bag_size_g
-                        )}
+                        {VARIANT_LABEL[row.packaging_variant] ??
+                          row.packaging_variant}
                       </TableCell>
                       <TableCell>
                         {isEditing ? (
@@ -210,7 +232,7 @@ export function PackagingCostsTab() {
                             className="max-w-[140px]"
                           />
                         ) : (
-                          `$${Number(row.cost_per_bag).toFixed(4)}`
+                          `$${Number(row.cost_per_unit).toFixed(4)}`
                         )}
                       </TableCell>
                       <TableCell>
@@ -276,9 +298,9 @@ export function PackagingCostsTab() {
       <div className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
         <Info className="h-4 w-4 mt-0.5 shrink-0" />
         <p>
-          These costs are used as the default for any product with that bag
-          size. To override for a specific product, edit the product directly
-          and set its packaging cost override.
+          These costs are used as the default for any product with that
+          packaging variant. To override for a specific product, edit the
+          product directly and set its packaging cost per unit override.
         </p>
       </div>
 
@@ -286,20 +308,29 @@ export function PackagingCostsTab() {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add bag size</DialogTitle>
+            <DialogTitle>Add packaging variant</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="add-bag-size">Bag size (grams)</Label>
-              <Input
-                id="add-bag-size"
-                type="number"
-                value={addBagSize}
-                onChange={(e) => setAddBagSize(e.target.value)}
-              />
+              <Label htmlFor="add-variant">Packaging variant</Label>
+              <Select
+                value={addVariant}
+                onValueChange={(v) => setAddVariant(v as PackagingVariant)}
+              >
+                <SelectTrigger id="add-variant">
+                  <SelectValue placeholder="Select packaging variant" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableVariants.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
-              <Label htmlFor="add-cost">Cost per bag (CAD)</Label>
+              <Label htmlFor="add-cost">Cost per unit (CAD)</Label>
               <Input
                 id="add-cost"
                 type="number"
@@ -323,7 +354,7 @@ export function PackagingCostsTab() {
             </Button>
             <Button
               onClick={() => addMutation.mutate()}
-              disabled={addMutation.isPending}
+              disabled={addMutation.isPending || !addVariant}
             >
               {addMutation.isPending ? 'Adding…' : 'Add'}
             </Button>
@@ -331,7 +362,6 @@ export function PackagingCostsTab() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirm */}
       <AlertDialog
         open={!!deleteId}
         onOpenChange={(open) => !open && setDeleteId(null)}
