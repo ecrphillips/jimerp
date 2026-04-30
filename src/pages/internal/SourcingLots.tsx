@@ -1268,6 +1268,32 @@ function LotDetailPanel({
                   />
                 </div>
               </div>
+
+              <div>
+                <Label className="text-xs text-muted-foreground">Carry/risk premium % override (optional)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={carryRiskOverride}
+                    onChange={(e) => setCarryRiskOverride(e.target.value)}
+                    onBlur={() => {
+                      const trimmed = carryRiskOverride.trim();
+                      const next = trimmed === '' ? null : Number(trimmed);
+                      const current = lot?.carry_risk_premium_pct_override ?? null;
+                      if (next !== current) {
+                        saveFinancingField('carry_risk_premium_pct_override', next);
+                      }
+                    }}
+                    placeholder="—"
+                    className="max-w-[200px]"
+                  />
+                  <span className="text-sm text-muted-foreground">%</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Leave blank to inherit the default carry/risk premium from the active pricing profile. Set a value here to override for this specific lot (e.g. long-held stock, premium microlots, special terms).
+                </p>
+              </div>
             </div>
 
             <Separator />
