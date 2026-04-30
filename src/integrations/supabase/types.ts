@@ -2849,6 +2849,33 @@ export type Database = {
           },
         ]
       }
+      packaging_costs: {
+        Row: {
+          bag_size_g: number
+          cost_per_bag: number
+          id: string
+          notes: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          bag_size_g: number
+          cost_per_bag: number
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          bag_size_g?: number
+          cost_per_bag?: number
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       packaging_types: {
         Row: {
           created_at: string
@@ -2951,6 +2978,77 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pricing_rule_profiles: {
+        Row: {
+          created_at: string
+          id: string
+          is_default: boolean
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      pricing_rules: {
+        Row: {
+          green_markup_multiplier: number
+          id: string
+          overhead_per_kg: number
+          process_rate_per_kg: number
+          profile_id: string
+          target_margin_pct: number
+          updated_at: string
+          updated_by: string | null
+          yield_loss_pct: number
+        }
+        Insert: {
+          green_markup_multiplier?: number
+          id?: string
+          overhead_per_kg?: number
+          process_rate_per_kg?: number
+          profile_id: string
+          target_margin_pct?: number
+          updated_at?: string
+          updated_by?: string | null
+          yield_loss_pct?: number
+        }
+        Update: {
+          green_markup_multiplier?: number
+          id?: string
+          overhead_per_kg?: number
+          process_rate_per_kg?: number
+          profile_id?: string
+          target_margin_pct?: number
+          updated_at?: string
+          updated_by?: string | null
+          yield_loss_pct?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pricing_rules_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "pricing_rule_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -3080,6 +3178,7 @@ export type Database = {
           is_active: boolean
           is_perennial: boolean
           pack_display_order: number | null
+          packaging_cost_override: number | null
           packaging_type_id: string | null
           packaging_variant:
             | Database["public"]["Enums"]["packaging_variant"]
@@ -3102,6 +3201,7 @@ export type Database = {
           is_active?: boolean
           is_perennial?: boolean
           pack_display_order?: number | null
+          packaging_cost_override?: number | null
           packaging_type_id?: string | null
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
@@ -3124,6 +3224,7 @@ export type Database = {
           is_active?: boolean
           is_perennial?: boolean
           pack_display_order?: number | null
+          packaging_cost_override?: number | null
           packaging_type_id?: string | null
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
