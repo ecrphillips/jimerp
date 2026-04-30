@@ -38,6 +38,7 @@ interface Profile {
 interface Rules {
   id: string;
   profile_id: string;
+  carry_risk_premium_pct: number;
   green_markup_multiplier: number;
   yield_loss_pct: number;
   process_rate_per_kg: number;
@@ -55,6 +56,7 @@ export function DefaultsTab() {
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
   const [isDefault, setIsDefault] = useState(false);
+  const [carryRiskPremium, setCarryRiskPremium] = useState('8.0');
   const [greenMarkup, setGreenMarkup] = useState('1.00');
   const [yieldLoss, setYieldLoss] = useState('15.0');
   const [processRate, setProcessRate] = useState('0.00');
@@ -111,6 +113,7 @@ export function DefaultsTab() {
 
   useEffect(() => {
     if (!rules) return;
+    setCarryRiskPremium(String(rules.carry_risk_premium_pct ?? '8.0'));
     setGreenMarkup(String(rules.green_markup_multiplier));
     setYieldLoss(String(rules.yield_loss_pct));
     setProcessRate(String(rules.process_rate_per_kg));
@@ -140,6 +143,7 @@ export function DefaultsTab() {
       const { error: rErr } = await supabase
         .from('pricing_rules')
         .update({
+          carry_risk_premium_pct: Number(carryRiskPremium),
           green_markup_multiplier: Number(greenMarkup),
           yield_loss_pct: Number(yieldLoss),
           process_rate_per_kg: Number(processRate),
@@ -228,9 +232,18 @@ export function DefaultsTab() {
           <Card>
             <CardContent className="pt-6 space-y-5">
               <RuleField
+                id="carry-risk-premium"
+                label="Carry/risk premium %"
+                helper="Percentage uplift applied to green book value (book value × (1 + this %)) to produce a de-risked green cost. Covers financing, carry, and risk that should not sit in book value. Used for every lot under this profile unless the lot has its own override."
+                value={carryRiskPremium}
+                onChange={setCarryRiskPremium}
+                step="0.1"
+                suffix="%"
+              />
+              <RuleField
                 id="green-markup"
                 label="Green markup multiplier"
-                helper="Multiplier applied to green coffee cost per kg. 1.0 = pass through, 2.0 = 100% markup."
+                helper="Multiplier applied to the de-risked green cost per kg (after the carry/risk premium has been added). 1.0 = pass through, 2.0 = 100% markup."
                 value={greenMarkup}
                 onChange={setGreenMarkup}
                 step="0.01"

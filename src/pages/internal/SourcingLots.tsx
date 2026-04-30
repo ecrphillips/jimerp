@@ -69,6 +69,7 @@ interface LotRow {
   importer_payment_terms_days: number | null;
   estimated_days_to_consume: number | null;
   financing_apr: number | null;
+  carry_risk_premium_pct_override: number | null;
   // confirmations
   fx_rate_confirmed_by: string | null;
   fx_rate_confirmed_at: string | null;
@@ -685,8 +686,9 @@ function LotDetailPanel({
   const [txFees, setTxFees] = useState<number>(0);
   const [otherCosts, setOtherCosts] = useState<number>(0);
   const [otherCostsDesc, setOtherCostsDesc] = useState('');
-  const [paymentTerms, setPaymentTerms] = useState<number | null>(null);
+    const [paymentTerms, setPaymentTerms] = useState<number | null>(null);
   const [estDaysConsume, setEstDaysConsume] = useState<number | null>(null);
+  const [carryRiskOverride, setCarryRiskOverride] = useState<string>('');
 
   // Editable lot fields
   const [editLotIdentifier, setEditLotIdentifier] = useState('');
@@ -721,6 +723,7 @@ function LotDetailPanel({
       setOtherCostsDesc(lot.other_costs_description || '');
       setPaymentTerms(lot.importer_payment_terms_days);
       setEstDaysConsume(lot.estimated_days_to_consume);
+      setCarryRiskOverride(lot.carry_risk_premium_pct_override == null ? '' : String(lot.carry_risk_premium_pct_override));
       setEditLotIdentifier(lot.lot_identifier || '');
       setEditVendorInvoice(lot.vendor_invoice_number || '');
       setEditLotNumber(lot.lot_number || '');
@@ -1264,6 +1267,32 @@ function LotDetailPanel({
                     placeholder="—"
                   />
                 </div>
+              </div>
+
+              <div>
+                <Label className="text-xs text-muted-foreground">Carry/risk premium % override (optional)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={carryRiskOverride}
+                    onChange={(e) => setCarryRiskOverride(e.target.value)}
+                    onBlur={() => {
+                      const trimmed = carryRiskOverride.trim();
+                      const next = trimmed === '' ? null : Number(trimmed);
+                      const current = lot?.carry_risk_premium_pct_override ?? null;
+                      if (next !== current) {
+                        saveFinancingField('carry_risk_premium_pct_override', next);
+                      }
+                    }}
+                    placeholder="—"
+                    className="max-w-[200px]"
+                  />
+                  <span className="text-sm text-muted-foreground">%</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Leave blank to inherit the default carry/risk premium from the active pricing profile. Set a value here to override for this specific lot (e.g. long-held stock, premium microlots, special terms).
+                </p>
               </div>
             </div>
 

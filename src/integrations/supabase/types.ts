@@ -1795,6 +1795,7 @@ export type Database = {
           carry_fees_usd: number | null
           carry_fees_usd_confirmed_at: string | null
           carry_fees_usd_confirmed_by: string | null
+          carry_risk_premium_pct_override: number | null
           contract_id: string | null
           costing_complete: boolean
           costing_completed_at: string | null
@@ -1877,6 +1878,7 @@ export type Database = {
           carry_fees_usd?: number | null
           carry_fees_usd_confirmed_at?: string | null
           carry_fees_usd_confirmed_by?: string | null
+          carry_risk_premium_pct_override?: number | null
           contract_id?: string | null
           costing_complete?: boolean
           costing_completed_at?: string | null
@@ -1959,6 +1961,7 @@ export type Database = {
           carry_fees_usd?: number | null
           carry_fees_usd_confirmed_at?: string | null
           carry_fees_usd_confirmed_by?: string | null
+          carry_risk_premium_pct_override?: number | null
           contract_id?: string | null
           costing_complete?: boolean
           costing_completed_at?: string | null
@@ -3011,6 +3014,7 @@ export type Database = {
       }
       pricing_rules: {
         Row: {
+          carry_risk_premium_pct: number
           green_markup_multiplier: number
           id: string
           overhead_per_kg: number
@@ -3022,6 +3026,7 @@ export type Database = {
           yield_loss_pct: number
         }
         Insert: {
+          carry_risk_premium_pct?: number
           green_markup_multiplier?: number
           id?: string
           overhead_per_kg?: number
@@ -3033,6 +3038,7 @@ export type Database = {
           yield_loss_pct?: number
         }
         Update: {
+          carry_risk_premium_pct?: number
           green_markup_multiplier?: number
           id?: string
           overhead_per_kg?: number
