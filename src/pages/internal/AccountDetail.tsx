@@ -1315,6 +1315,7 @@ export default function AccountDetail() {
   const navigate = useNavigate();
   const { authUser } = useAuth();
   const { enterPreview } = usePreview();
+  const [activeTab, setActiveTab] = useState('profile');
 
   const { data: account, isLoading, refetch } = useQuery({
     queryKey: ['account-detail', id],
