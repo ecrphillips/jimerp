@@ -56,6 +56,7 @@ export function DefaultsTab() {
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
   const [isDefault, setIsDefault] = useState(false);
+  const [carryRiskPremium, setCarryRiskPremium] = useState('8.0');
   const [greenMarkup, setGreenMarkup] = useState('1.00');
   const [yieldLoss, setYieldLoss] = useState('15.0');
   const [processRate, setProcessRate] = useState('0.00');
