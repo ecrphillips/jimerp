@@ -628,6 +628,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                           )}
                           onEditingChange={(isEditing) => handleEditingChange(product.product_id, isEditing)}
                         />
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
