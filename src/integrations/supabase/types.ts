@@ -3015,6 +3015,8 @@ export type Database = {
       pricing_rules: {
         Row: {
           carry_risk_premium_pct: number
+          financing_apr_pct: number
+          financing_days: number
           green_markup_multiplier: number
           id: string
           overhead_per_kg: number
@@ -3027,6 +3029,8 @@ export type Database = {
         }
         Insert: {
           carry_risk_premium_pct?: number
+          financing_apr_pct?: number
+          financing_days?: number
           green_markup_multiplier?: number
           id?: string
           overhead_per_kg?: number
@@ -3039,6 +3043,8 @@ export type Database = {
         }
         Update: {
           carry_risk_premium_pct?: number
+          financing_apr_pct?: number
+          financing_days?: number
           green_markup_multiplier?: number
           id?: string
           overhead_per_kg?: number

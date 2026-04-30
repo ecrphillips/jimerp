@@ -28,6 +28,7 @@ import { FloorCountModal } from '@/components/sourcing/FloorCountModal';
 import { BookValueReportModal } from '@/components/sourcing/BookValueReportModal';
 import { MarkLotReceivedModal } from '@/components/sourcing/MarkLotReceivedModal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useDefaultPricingFinancing } from '@/hooks/useDefaultPricingFinancing';
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -552,6 +553,10 @@ function LotDetailPanel({
 }) {
   const { authUser, isInternal } = useAuth();
   const queryClient = useQueryClient();
+  const { data: pricingFinancing } = useDefaultPricingFinancing();
+  const financingDays = pricingFinancing?.financing_days ?? 60;
+  const financingAprPct = pricingFinancing?.financing_apr_pct ?? 12;
+  const financingFromProfile = pricingFinancing?.isFromDefaultProfile ?? false;
   const open = !!lotId;
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const isAdmin = authUser?.role === 'ADMIN';
@@ -824,9 +829,8 @@ function LotDetailPanel({
         updates.book_value_per_kg = bvPerKg;
         updates.costing_status = 'COMPLETE';
 
-        // TODO: Revisit financing calculation — hardcoded 60 days at 12% APR, needs proper inputs and audit trail
-        const avgDaysFinanced = 60;
-        const financingCostPerKg = bvPerKg * 0.12 * (avgDaysFinanced / 365);
+        // Financing inputs come from the default pricing profile (with fallback to 60 / 12)
+        const financingCostPerKg = bvPerKg * (financingAprPct / 100) * (financingDays / 365);
         updates.market_value_per_kg = bvPerKg + financingCostPerKg;
       }
 
@@ -861,17 +865,16 @@ function LotDetailPanel({
     const totalCosts = fields.reduce((sum, f) => sum + (f.cad ?? 0), 0);
     const bvPerKg = kgReceived > 0 ? totalCosts / kgReceived : null;
 
-    // TODO: Revisit financing calculation — hardcoded 60 days at 12% APR, needs proper inputs and audit trail
+    // Financing inputs come from the default pricing profile (with fallback to 60 / 12)
     let financingCostPerKg: number | null = null;
     let mvPerKg: number | null = null;
     if (bvPerKg != null) {
-      const avgDaysFinanced = 60;
-      financingCostPerKg = bvPerKg * 0.12 * (avgDaysFinanced / 365);
+      financingCostPerKg = bvPerKg * (financingAprPct / 100) * (financingDays / 365);
       mvPerKg = bvPerKg + financingCostPerKg;
     }
 
     return { fields, totalCosts, bvPerKg, financingCostPerKg, mvPerKg };
-  }, [lot, invoiceAmt, invoiceIsUsd, carryFees, carryFeesIsUsd, freight, freightIsUsd, duties, txFees, otherCosts, fxRate, kgReceived, toCad]);
+  }, [lot, invoiceAmt, invoiceIsUsd, carryFees, carryFeesIsUsd, freight, freightIsUsd, duties, txFees, otherCosts, fxRate, kgReceived, toCad, financingDays, financingAprPct]);
 
   const hasUnconfirmedWithValue = lot ? (
     (fxRate != null && !lot.fx_rate_confirmed_at) ||
@@ -1377,7 +1380,7 @@ function LotDetailPanel({
                           <span>{formatPerKg(Math.round(liveSummary.mvPerKg * 10000) / 10000)}</span>
                         </div>
                         <p className="text-xs text-muted-foreground">{formatPerLb(Math.round((liveSummary.mvPerKg / 2.20462) * 10000) / 10000)}</p>
-                        <p className="text-xs text-muted-foreground italic">Financing estimate: 60 days @ 12% APR — placeholder, to be revisited.</p>
+                        <p className="text-xs text-muted-foreground italic">{financingFromProfile ? `Financing estimate: ${financingDays} days @ ${financingAprPct}% APR — from default pricing profile.` : 'Financing estimate: 60 days @ 12% APR — placeholder, to be revisited.'}</p>
                       </>
                     )}
                   </CardContent>
