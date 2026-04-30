@@ -458,3 +458,20 @@ function RuleField({
     </div>
   );
 }
+
+function FinancingFactorCallout({ days, aprPct }: { days: string; aprPct: string }) {
+  const d = Number(days);
+  const a = Number(aprPct);
+  const valid = Number.isFinite(d) && Number.isFinite(a) && d >= 0 && a >= 0;
+  const factor = valid ? (a / 100) * (d / 365) : 0;
+  return (
+    <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+      {valid ? (
+        <>Effective uplift: {factor.toFixed(4)} × book value (= APR × days/365)</>
+      ) : (
+        <>Enter valid financing days and APR to see the effective uplift.</>
+      )}
+    </div>
+  );
+}
+
