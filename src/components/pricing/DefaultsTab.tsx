@@ -155,6 +155,8 @@ export function DefaultsTab() {
           process_rate_per_kg: Number(processRate),
           overhead_per_kg: Number(overhead),
           target_margin_pct: Number(targetMargin),
+          financing_days: Math.round(Number(financingDays)),
+          financing_apr_pct: Number(financingAprPct),
           updated_by: userId,
         })
         .eq('profile_id', selectedId);
