@@ -121,6 +121,8 @@ export default function Auth() {
         navigate(from, { replace: true });
       } else if (authUser.role === 'CLIENT') {
         navigate('/portal', { replace: true });
+      } else if (authUser.role === 'ADMIN') {
+        navigate('/dashboard', { replace: true });
       } else {
         navigate('/production', { replace: true });
       }
