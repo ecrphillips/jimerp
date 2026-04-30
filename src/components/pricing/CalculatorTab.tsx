@@ -50,7 +50,7 @@ export function CalculatorTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('green_lots')
-        .select('id, lot_number, origin, book_value_per_kg, status')
+        .select('id, lot_number, book_value_per_kg, status')
         .order('lot_number', { ascending: false });
       if (error) throw error;
       return data ?? [];
@@ -62,8 +62,8 @@ export function CalculatorTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('accounts')
-        .select('id, name, pricing_tier_id')
-        .order('name');
+        .select('id, account_name, pricing_tier_id')
+        .order('account_name');
       if (error) throw error;
       return data ?? [];
     },
@@ -201,7 +201,7 @@ export function CalculatorTab() {
   };
 
   const accountName =
-    tierMode === 'account' ? accounts?.find((a) => a.id === accountId)?.name : null;
+    tierMode === 'account' ? accounts?.find((a) => a.id === accountId)?.account_name : null;
 
   // ---- Render ---------------------------------------------------------------
   return (
@@ -242,7 +242,7 @@ export function CalculatorTab() {
                 <SelectContent>
                   {lots?.map((l) => (
                     <SelectItem key={l.id} value={l.id}>
-                      {l.lot_number} — {l.origin ?? '—'} — book{' '}
+                      {l.lot_number} — book{' '}
                       {l.book_value_per_kg != null
                         ? formatPerKg(Number(l.book_value_per_kg))
                         : 'n/a'}
@@ -265,7 +265,7 @@ export function CalculatorTab() {
                         <SelectContent>
                           {lots?.map((l) => (
                             <SelectItem key={l.id} value={l.id}>
-                              {l.lot_number} — {l.origin ?? '—'}
+                              {l.lot_number}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -374,7 +374,7 @@ export function CalculatorTab() {
                     <SelectContent>
                       {accounts?.map((a) => (
                         <SelectItem key={a.id} value={a.id}>
-                          {a.name}
+                          {a.account_name}
                         </SelectItem>
                       ))}
                     </SelectContent>
