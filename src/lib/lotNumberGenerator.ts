@@ -3,14 +3,17 @@ import { supabase } from '@/integrations/supabase/client';
 /**
  * Two-tier lot identification for Purchases & Releases.
  *
- *   PO number  : {VENDOR_ABBR}-P{####}                     e.g. ROY-P0001
+ *   PO number  : HIC-{####}                                e.g. HIC-0001
  *   Lot number : {VENDOR_ABBR}-P{####}-{ISO3}-L{####}      e.g. ROY-P0001-COL-L0001
  *
  * Sequences are stored in `public.sourcing_sequences` (keys: 'po_sequence', 'lot_sequence')
  * and allocated atomically through the SECURITY DEFINER RPC `allocate_sourcing_sequence`.
  *
- * Existing lots with malformed numbers are NOT auto-corrected — only newly created
+ * Existing PO/lot numbers with the old format are NOT auto-corrected — only newly created
  * Purchases / Releases use this generator.
+ *
+ * Note: Lot numbers still embed the legacy {VENDOR_ABBR}-P{####} segment derived from the
+ * vendor + PO sequence digits, independent of the PO display format.
  */
 
 const VENDOR_FALLBACK = '???';
@@ -56,13 +59,19 @@ export interface AllocatedLot {
   lotNumber: string;       // e.g. ROY-P0001-COL-L0001
 }
 
-/** Allocate the next PO number for a vendor. */
+/**
+ * Allocate the next PO number.
+ *
+ * New format: `HIC-{####}` (e.g. HIC-0001). The counter never resets and is shared
+ * across all vendors. Vendor abbreviation is still captured on the returned object
+ * so lot numbers can continue to embed the legacy {VENDOR_ABBR}-P{####} segment.
+ */
 export async function allocatePoNumber(vendorAbbreviation: string | null | undefined): Promise<AllocatedPo> {
   const vendorAbbr = normalizeVendor(vendorAbbreviation);
   const seq = await allocateSequence('po_sequence', 1);
   const poDigits = pad(seq, 4);
   return {
-    poNumber: `${vendorAbbr}-P${poDigits}`,
+    poNumber: `HIC-${poDigits}`,
     poDigits,
     vendorAbbr,
   };
