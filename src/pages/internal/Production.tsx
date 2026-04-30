@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Flame, Package, Truck } from 'lucide-react';
+import { Flame, Package, Truck, CalendarClock } from 'lucide-react';
 import { RoastTab } from '@/components/production/RoastTab';
 import { PackTab } from '@/components/production/PackTab';
 import { ShipTab } from '@/components/production/ShipTab';
