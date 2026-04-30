@@ -113,6 +113,7 @@ export function DefaultsTab() {
 
   useEffect(() => {
     if (!rules) return;
+    setCarryRiskPremium(String(rules.carry_risk_premium_pct ?? '8.0'));
     setGreenMarkup(String(rules.green_markup_multiplier));
     setYieldLoss(String(rules.yield_loss_pct));
     setProcessRate(String(rules.process_rate_per_kg));
