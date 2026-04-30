@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Flame, Package, Truck } from 'lucide-react';
+import { Flame, Package, Truck, CalendarClock } from 'lucide-react';
 import { RoastTab } from '@/components/production/RoastTab';
 import { PackTab } from '@/components/production/PackTab';
 import { ShipTab } from '@/components/production/ShipTab';
@@ -92,7 +92,19 @@ export default function Production() {
             >
               All
             </Button>
+      </div>
+
+      {dateFilterMode === 'tomorrow' && (
+        <div
+          role="alert"
+          className="mb-4 flex items-center gap-3 rounded-md border border-amber-400/60 bg-amber-100/80 dark:bg-amber-500/10 px-4 py-3 text-amber-900 dark:text-amber-200 shadow-sm"
+        >
+          <CalendarClock className="h-5 w-5 shrink-0" />
+          <div className="text-sm font-medium">
+            Viewing <span className="font-bold uppercase tracking-wide">Tomorrow's</span> run sheet — today's orders are hidden.
           </div>
+        </div>
+      )}
         </div>
       </div>
 
