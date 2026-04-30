@@ -865,17 +865,16 @@ function LotDetailPanel({
     const totalCosts = fields.reduce((sum, f) => sum + (f.cad ?? 0), 0);
     const bvPerKg = kgReceived > 0 ? totalCosts / kgReceived : null;
 
-    // TODO: Revisit financing calculation — hardcoded 60 days at 12% APR, needs proper inputs and audit trail
+    // Financing inputs come from the default pricing profile (with fallback to 60 / 12)
     let financingCostPerKg: number | null = null;
     let mvPerKg: number | null = null;
     if (bvPerKg != null) {
-      const avgDaysFinanced = 60;
-      financingCostPerKg = bvPerKg * 0.12 * (avgDaysFinanced / 365);
+      financingCostPerKg = bvPerKg * (financingAprPct / 100) * (financingDays / 365);
       mvPerKg = bvPerKg + financingCostPerKg;
     }
 
     return { fields, totalCosts, bvPerKg, financingCostPerKg, mvPerKg };
-  }, [lot, invoiceAmt, invoiceIsUsd, carryFees, carryFeesIsUsd, freight, freightIsUsd, duties, txFees, otherCosts, fxRate, kgReceived, toCad]);
+  }, [lot, invoiceAmt, invoiceIsUsd, carryFees, carryFeesIsUsd, freight, freightIsUsd, duties, txFees, otherCosts, fxRate, kgReceived, toCad, financingDays, financingAprPct]);
 
   const hasUnconfirmedWithValue = lot ? (
     (fxRate != null && !lot.fx_rate_confirmed_at) ||
