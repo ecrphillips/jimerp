@@ -723,6 +723,7 @@ function LotDetailPanel({
       setOtherCostsDesc(lot.other_costs_description || '');
       setPaymentTerms(lot.importer_payment_terms_days);
       setEstDaysConsume(lot.estimated_days_to_consume);
+      setCarryRiskOverride(lot.carry_risk_premium_pct_override == null ? '' : String(lot.carry_risk_premium_pct_override));
       setEditLotIdentifier(lot.lot_identifier || '');
       setEditVendorInvoice(lot.vendor_invoice_number || '');
       setEditLotNumber(lot.lot_number || '');
