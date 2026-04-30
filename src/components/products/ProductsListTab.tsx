@@ -34,6 +34,7 @@ interface Product {
   account_id: string | null;
   packaging_variant: PackagingVariant | null;
   roast_group: string | null;
+  packaging_cost_override: number | null;
   client: { name: string } | null;
   account: { account_name: string } | null;
   
@@ -155,6 +156,7 @@ export function ProductsListTab() {
   const [priceInput, setPriceInput] = useState<string>('');
   const [isPerennial, setIsPerennial] = useState(false);
   const [roastGroup, setRoastGroup] = useState<string>('');
+  const [packagingCostOverride, setPackagingCostOverride] = useState<string>('');
 
   // Filter state
   const [searchText, setSearchText] = useState('');
@@ -174,7 +176,7 @@ export function ProductsListTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, client_id, account_id, packaging_variant, roast_group, client:clients(name), account:accounts(account_name)')
+        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, client_id, account_id, packaging_variant, roast_group, packaging_cost_override, client:clients(name), account:accounts(account_name)')
         .order('product_name');
 
       if (error) throw error;
@@ -473,11 +475,15 @@ export function ProductsListTab() {
   });
 
   const handleSave = useCallback(() => {
+    const trimmedOverride = packagingCostOverride.trim();
+    const overrideValue =
+      trimmedOverride === '' ? null : Number(trimmedOverride);
     const payload = {
       product_name: productName, sku: sku || null, format: formatState, bag_size_g: bagSize,
       grind_options: grindOptions, client_id: editingProduct?.client_id ?? null,
       account_id: clientId || null, is_active: isActive, is_perennial: isPerennial,
       packaging_variant: packagingVariant, roast_group: roastGroup || null,
+      packaging_cost_override: overrideValue,
     };
     if (editingProduct) {
       const currentRG = editingProduct.roast_group || null;
@@ -489,7 +495,7 @@ export function ProductsListTab() {
       }
     }
     executeSaveMutation.mutate(payload);
-  }, [editingProduct, productName, sku, formatState, bagSize, grindOptions, clientId, isActive, isPerennial, packagingVariant, roastGroup, executeSaveMutation]);
+  }, [editingProduct, productName, sku, formatState, bagSize, grindOptions, clientId, isActive, isPerennial, packagingVariant, roastGroup, packagingCostOverride, executeSaveMutation]);
 
   const handleConfirmReroute = useCallback(() => {
     if (pendingRerouteData) executeSaveMutation.mutate(pendingRerouteData.fullPayload);
@@ -583,7 +589,13 @@ export function ProductsListTab() {
     setFormatState(p.format); setBagSize(p.bag_size_g); setGrindOptions(p.grind_options ?? []);
     setClientId(p.account_id ?? p.client_id ?? ''); setIsActive(p.is_active);
     setIsPerennial(p.is_perennial); setPackagingVariant(p.packaging_variant);
-    setPriceInput(''); setRoastGroup(p.roast_group ?? ''); setDialogOpen(true);
+    setPriceInput(''); setRoastGroup(p.roast_group ?? '');
+    setPackagingCostOverride(
+      p.packaging_cost_override === null || p.packaging_cost_override === undefined
+        ? ''
+        : String(p.packaging_cost_override),
+    );
+    setDialogOpen(true);
   };
 
   const openAddVariant = (p: Product) => {
@@ -811,6 +823,24 @@ export function ProductsListTab() {
                 <Label htmlFor="bagSize">Bag Size (g)</Label>
                 <Input id="bagSize" type="number" value={bagSize} onChange={(e) => setBagSize(parseInt(e.target.value) || 0)} />
               </div>
+            </div>
+            <div>
+              <Label htmlFor="packagingCostOverride">Packaging cost override (optional)</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">$</span>
+                <Input
+                  id="packagingCostOverride"
+                  type="number"
+                  step="0.0001"
+                  placeholder="—"
+                  value={packagingCostOverride}
+                  onChange={(e) => setPackagingCostOverride(e.target.value)}
+                  className="max-w-[200px]"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Leave blank to use the default cost for this bag size from the Packaging Costs table.
+              </p>
             </div>
             <div>
               <Label htmlFor="packaging">Packaging Variant</Label>
