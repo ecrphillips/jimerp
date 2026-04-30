@@ -2,6 +2,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DefaultsTab } from '@/components/pricing/DefaultsTab';
 import { PackagingCostsTab } from '@/components/pricing/PackagingCostsTab';
 import { TiersTab } from '@/components/pricing/TiersTab';
+import { CalculatorTab } from '@/components/pricing/CalculatorTab';
 
 export default function PricingAdmin() {
   return (
@@ -18,6 +19,7 @@ export default function PricingAdmin() {
           <TabsTrigger value="defaults">Defaults</TabsTrigger>
           <TabsTrigger value="packaging">Packaging Costs</TabsTrigger>
           <TabsTrigger value="tiers">Tiers</TabsTrigger>
+          <TabsTrigger value="calculator">Calculator</TabsTrigger>
         </TabsList>
 
         <TabsContent value="defaults">
@@ -30,6 +32,10 @@ export default function PricingAdmin() {
 
         <TabsContent value="tiers">
           <TiersTab />
+        </TabsContent>
+
+        <TabsContent value="calculator">
+          <CalculatorTab />
         </TabsContent>
       </Tabs>
     </div>
