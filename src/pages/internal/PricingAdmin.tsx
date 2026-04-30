@@ -1,7 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DefaultsTab } from '@/components/pricing/DefaultsTab';
 import { PackagingCostsTab } from '@/components/pricing/PackagingCostsTab';
-import { TiersTabPlaceholder } from '@/components/pricing/TiersTabPlaceholder';
+import { TiersTab } from '@/components/pricing/TiersTab';
 
 export default function PricingAdmin() {
   return (
@@ -9,7 +9,7 @@ export default function PricingAdmin() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Pricing</h1>
         <p className="text-sm text-muted-foreground">
-          Pricing rule profiles, packaging costs, and (soon) tiers.
+          Pricing rule profiles, packaging costs, and tiers.
         </p>
       </div>
 
@@ -29,7 +29,7 @@ export default function PricingAdmin() {
         </TabsContent>
 
         <TabsContent value="tiers">
-          <TiersTabPlaceholder />
+          <TiersTab />
         </TabsContent>
       </Tabs>
     </div>
