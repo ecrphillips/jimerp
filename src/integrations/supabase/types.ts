@@ -169,6 +169,7 @@ export type Database = {
           id: string
           is_active: boolean
           notes_internal: string | null
+          pricing_tier_id: string | null
           programs: string[]
           relationship_id: string | null
           updated_at: string
@@ -194,6 +195,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           notes_internal?: string | null
+          pricing_tier_id?: string | null
           programs?: string[]
           relationship_id?: string | null
           updated_at?: string
@@ -219,11 +221,19 @@ export type Database = {
           id?: string
           is_active?: boolean
           notes_internal?: string | null
+          pricing_tier_id?: string | null
           programs?: string[]
           relationship_id?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "accounts_pricing_tier_id_fkey"
+            columns: ["pricing_tier_id"]
+            isOneToOne: false
+            referencedRelation: "pricing_tiers"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "accounts_relationship_id_fkey"
             columns: ["relationship_id"]
@@ -3060,6 +3070,59 @@ export type Database = {
             foreignKeyName: "pricing_rules_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: true
+            referencedRelation: "pricing_rule_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pricing_tiers: {
+        Row: {
+          created_at: string
+          display_order: number
+          id: string
+          is_default: boolean
+          markup_adjustment_type: string
+          markup_multiplier: number | null
+          name: string
+          notes: string | null
+          per_kg_fee: number | null
+          profile_id: string
+          target_margin_pct: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_default?: boolean
+          markup_adjustment_type?: string
+          markup_multiplier?: number | null
+          name: string
+          notes?: string | null
+          per_kg_fee?: number | null
+          profile_id: string
+          target_margin_pct?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_default?: boolean
+          markup_adjustment_type?: string
+          markup_multiplier?: number | null
+          name?: string
+          notes?: string | null
+          per_kg_fee?: number | null
+          profile_id?: string
+          target_margin_pct?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pricing_tiers_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
             referencedRelation: "pricing_rule_profiles"
             referencedColumns: ["id"]
           },
