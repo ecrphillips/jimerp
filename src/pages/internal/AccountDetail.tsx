@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ArrowLeft, Info, CalendarIcon, Plus, Pencil, CheckCircle2, ExternalLink, ShieldCheck, Lock, Eye, EyeOff, Mail } from 'lucide-react';
+import { ArrowLeft, Info, CalendarIcon, Plus, Pencil, CheckCircle2, ExternalLink, ShieldCheck, Lock, Eye, EyeOff, Mail, Package, Calendar as CalendarIconLucide, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
