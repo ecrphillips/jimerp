@@ -232,9 +232,18 @@ export function DefaultsTab() {
           <Card>
             <CardContent className="pt-6 space-y-5">
               <RuleField
+                id="carry-risk-premium"
+                label="Carry/risk premium %"
+                helper="Percentage uplift applied to green book value (book value × (1 + this %)) to produce a de-risked green cost. Covers financing, carry, and risk that should not sit in book value. Used for every lot under this profile unless the lot has its own override."
+                value={carryRiskPremium}
+                onChange={setCarryRiskPremium}
+                step="0.1"
+                suffix="%"
+              />
+              <RuleField
                 id="green-markup"
                 label="Green markup multiplier"
-                helper="Multiplier applied to green coffee cost per kg. 1.0 = pass through, 2.0 = 100% markup."
+                helper="Multiplier applied to the de-risked green cost per kg (after the carry/risk premium has been added). 1.0 = pass through, 2.0 = 100% markup."
                 value={greenMarkup}
                 onChange={setGreenMarkup}
                 step="0.01"
