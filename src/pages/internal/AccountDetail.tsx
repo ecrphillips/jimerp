@@ -1379,7 +1379,7 @@ export default function AccountDetail() {
         )}
       </div>
 
-      <Tabs defaultValue="profile">
+      <Tabs defaultValue="profile" value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
           {hasManufacturing && <TabsTrigger value="locations">Locations</TabsTrigger>}
@@ -1406,14 +1406,231 @@ export default function AccountDetail() {
             </TabsContent>
           )}
           <TabsContent value="activity">
-            <Card>
-              <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                Full activity log coming soon.
-              </CardContent>
-            </Card>
+            <ActivityTab
+              account={account}
+              hasCoroasting={!!hasCoroasting}
+              enabled={activeTab === 'activity'}
+            />
           </TabsContent>
         </div>
       </Tabs>
+    </div>
+  );
+}
+
+// ─── Activity Tab ──────────────────────────────────────────────
+function ActivityTab({
+  account,
+  hasCoroasting,
+  enabled,
+}: {
+  account: any;
+  hasCoroasting: boolean;
+  enabled: boolean;
+}) {
+  const accountId = account.id;
+
+  const { data: orders, isLoading: ordersLoading } = useQuery({
+    queryKey: ['activity-orders', accountId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('id, order_number, created_at')
+        .eq('account_id', accountId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled,
+  });
+
+  const { data: bookings, isLoading: bookingsLoading } = useQuery({
+    queryKey: ['activity-bookings', accountId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('coroast_bookings')
+        .select('id, booking_date, start_time, end_time, status')
+        .eq('account_id', accountId)
+        .order('booking_date', { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: enabled && hasCoroasting,
+  });
+
+  const { data: ledger, isLoading: ledgerLoading } = useQuery({
+    queryKey: ['activity-ledger', accountId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('coroast_hour_ledger')
+        .select('id, entry_type, hours_delta, notes, created_at')
+        .eq('account_id', accountId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: enabled && hasCoroasting,
+  });
+
+  const fmtDate = (d: string | null | undefined) => {
+    if (!d) return '';
+    try {
+      return format(new Date(d), 'MMM d, yyyy');
+    } catch {
+      return d;
+    }
+  };
+
+  const fmtTime = (t: string | null | undefined) => {
+    if (!t) return '';
+    return t.length >= 5 ? t.slice(0, 5) : t;
+  };
+
+  const Row = ({
+    icon,
+    date,
+    children,
+  }: {
+    icon: React.ReactNode;
+    date: string;
+    children: React.ReactNode;
+  }) => (
+    <div className="flex items-start gap-3 py-2 text-sm border-b border-border/40 last:border-b-0">
+      <div className="text-muted-foreground mt-0.5">{icon}</div>
+      <div className="text-muted-foreground w-28 shrink-0 tabular-nums">{date}</div>
+      <div className="flex-1">{children}</div>
+    </div>
+  );
+
+  const Empty = () => (
+    <div className="py-3 text-sm text-muted-foreground">No recent activity</div>
+  );
+
+  return (
+    <div className="space-y-4 max-w-3xl">
+      {/* Recent Orders */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Recent Orders</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {ordersLoading ? (
+            <Skeleton className="h-20 w-full" />
+          ) : !orders || orders.length === 0 ? (
+            <Empty />
+          ) : (
+            orders.map((o: any) => {
+              const label = o.order_number || String(o.id).slice(0, 8);
+              return (
+                <Row
+                  key={o.id}
+                  icon={<Package className="h-4 w-4" />}
+                  date={fmtDate(o.created_at)}
+                >
+                  Order <span className="font-medium">{label}</span> created
+                </Row>
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recent Bookings */}
+      {hasCoroasting && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Recent Bookings</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {bookingsLoading ? (
+              <Skeleton className="h-20 w-full" />
+            ) : !bookings || bookings.length === 0 ? (
+              <Empty />
+            ) : (
+              bookings.map((b: any) => (
+                <Row
+                  key={b.id}
+                  icon={<CalendarIconLucide className="h-4 w-4" />}
+                  date={fmtDate(b.booking_date)}
+                >
+                  Booking on {fmtDate(b.booking_date)} ·{' '}
+                  {fmtTime(b.start_time)}–{fmtTime(b.end_time)} ·{' '}
+                  <span className="text-muted-foreground">{b.status}</span>
+                </Row>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recent Hour Ledger */}
+      {hasCoroasting && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Recent Hour Ledger</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {ledgerLoading ? (
+              <Skeleton className="h-20 w-full" />
+            ) : !ledger || ledger.length === 0 ? (
+              <Empty />
+            ) : (
+              ledger.map((l: any) => {
+                const delta = Number(l.hours_delta) || 0;
+                const sign = delta > 0 ? '+' : delta < 0 ? '−' : '';
+                const abs = Math.abs(delta);
+                return (
+                  <Row
+                    key={l.id}
+                    icon={<Clock className="h-4 w-4" />}
+                    date={fmtDate(l.created_at)}
+                  >
+                    <span className="font-medium">{l.entry_type}</span>:{' '}
+                    <span
+                      className={cn(
+                        delta > 0 && 'text-emerald-600',
+                        delta < 0 && 'text-red-600'
+                      )}
+                    >
+                      {sign}
+                      {abs}h
+                    </span>
+                    {l.notes && (
+                      <span className="text-muted-foreground"> · {l.notes}</span>
+                    )}
+                  </Row>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Account Changes */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Account Changes</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {account.updated_at && account.updated_at !== account.created_at && (
+            <Row
+              icon={<Pencil className="h-4 w-4" />}
+              date={fmtDate(account.updated_at)}
+            >
+              Account last updated
+            </Row>
+          )}
+          <Row
+            icon={<Pencil className="h-4 w-4" />}
+            date={fmtDate(account.created_at)}
+          >
+            Account created
+          </Row>
+        </CardContent>
+      </Card>
     </div>
   );
 }
