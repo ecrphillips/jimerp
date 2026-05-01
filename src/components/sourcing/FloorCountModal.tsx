@@ -211,38 +211,83 @@ export function FloorCountModal({ open, onOpenChange, lots, purchaseLineByLotId,
           <style>{`
             @media print {
               @page { margin: 12mm; }
-              body, html {
+
+              /* Hide all top-level page chrome — anything that isn't the modal portal */
+              body > *:not([data-radix-portal]) { display: none !important; }
+
+              /* Inside the Radix portal stack, hide overlay layers and any siblings that aren't our modal */
+              [data-radix-portal] [data-radix-dialog-overlay] { display: none !important; }
+
+              /* Reset html/body so the modal flows from the top of the printed page */
+              html, body {
                 height: auto !important;
                 overflow: visible !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white !important;
               }
-              body * { visibility: hidden !important; }
-              .print-modal-content, .print-modal-content * { visibility: visible !important; }
-              [data-radix-dialog-overlay], [data-radix-popper-content-wrapper] {
+
+              /* Belt-and-braces: neutralize Radix portal/wrapper layout */
+              body > div[data-radix-portal],
+              body > div[id^="radix-"] {
                 position: static !important;
-                background: transparent !important;
+                display: block !important;
               }
+              [data-radix-popper-content-wrapper] {
+                position: static !important;
+                transform: none !important;
+              }
+
+              /* The modal content prints as a normal block element */
               .print-modal-content {
                 position: static !important;
                 inset: auto !important;
+                transform: none !important;
                 max-width: 100% !important;
+                width: 100% !important;
                 max-height: none !important;
                 overflow: visible !important;
                 box-shadow: none !important;
                 border: none !important;
-                transform: none !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 display: block !important;
               }
-              .print-modal-content table { page-break-inside: auto; }
+
+              /* Hide the Radix close X and any UI we explicitly tagged */
+              .print-hide,
+              [data-radix-dialog-close],
+              button[aria-label="Close"] { display: none !important; }
+
+              /* Table — repeat headers, never split rows */
+              .print-modal-content table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                page-break-inside: auto !important;
+              }
+              .print-modal-content thead { display: table-header-group !important; }
+              .print-modal-content tbody { display: table-row-group !important; }
               .print-modal-content tr {
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
               }
-              .print-modal-content thead { display: table-header-group; }
-              .print-modal-content tbody { display: table-row-group; }
-              .print-hide, [data-radix-dialog-close] { display: none !important; }
-              .print-as-text input { border: none !important; background: transparent !important; padding: 0 !important; height: auto !important; box-shadow: none !important; }
+
+              /* Keep Count summary together on its own block */
+              .print-summary {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                page-break-before: auto !important;
+                margin-top: 12mm !important;
+              }
+
+              /* Inputs render as plain text */
+              .print-as-text input {
+                border: none !important;
+                background: transparent !important;
+                padding: 0 !important;
+                height: auto !important;
+                box-shadow: none !important;
+              }
             }
           `}</style>
           <div className="flex items-start justify-between gap-4">
@@ -310,7 +355,7 @@ export function FloorCountModal({ open, onOpenChange, lots, purchaseLineByLotId,
             </Table>
           </div>
 
-          <div className="border rounded-lg p-4 space-y-1 text-sm">
+          <div className="border rounded-lg p-4 space-y-1 text-sm print-summary">
             <p className="font-semibold mb-2">Count summary</p>
             <div className="flex justify-between"><span>Total expected kg</span><span className="font-mono">{totals.expected.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg</span></div>
             <div className="flex justify-between"><span>Total counted kg</span><span className="font-mono">{totals.anyInput ? `${totals.counted.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg` : '—'}</span></div>
