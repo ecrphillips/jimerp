@@ -20,6 +20,30 @@ import { toast } from 'sonner';
 import { PACKAGING_OPTIONS, type PackagingVariant } from '@/components/PackagingBadge';
 import { calculatePrice, type PricingInputs, type PricingResult } from '@/lib/pricing';
 import { formatMoney, formatPerKg } from '@/lib/formatMoney';
+import { getCountryName } from '@/lib/coffeeOrigins';
+
+type LotForLabel = {
+  id: string;
+  lot_number: string;
+  book_value_per_kg: number | null;
+  origin_country: string | null;
+  producer: string | null;
+};
+
+/**
+ * Lead label: "Origin — Producer", falling back to origin only,
+ * then to lot_number if origin is also missing. Mirrors the labelling
+ * approach used in GreenLotPickerModal.
+ */
+function lotLeadLabel(lot: LotForLabel): string {
+  const originName = lot.origin_country
+    ? getCountryName(lot.origin_country) || lot.origin_country
+    : '';
+  const producer = lot.producer?.trim() || '';
+  if (originName && producer) return `${originName} — ${producer}`;
+  if (originName) return originName;
+  return lot.lot_number;
+}
 
 type GreenSourceMode = 'single' | 'blend';
 type TierMode = 'account' | 'tier' | 'default';
@@ -50,10 +74,39 @@ export function CalculatorTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('green_lots')
-        .select('id, lot_number, book_value_per_kg, status')
+        .select(`
+          id, lot_number, book_value_per_kg, status,
+          green_contracts ( origin_country )
+        `)
         .order('lot_number', { ascending: false });
       if (error) throw error;
-      return data ?? [];
+
+      const rows = data ?? [];
+      const lotIds = rows.map((r: any) => r.id);
+      const producerByLot: Record<string, string | null> = {};
+      const originByLot: Record<string, string | null> = {};
+      if (lotIds.length > 0) {
+        const { data: pls, error: plErr } = await supabase
+          .from('green_purchase_lines')
+          .select('lot_id, producer, origin_country')
+          .in('lot_id', lotIds);
+        if (plErr) throw plErr;
+        (pls ?? []).forEach((pl: any) => {
+          if (!pl.lot_id) return;
+          if (pl.producer && !producerByLot[pl.lot_id]) producerByLot[pl.lot_id] = pl.producer;
+          if (pl.origin_country && !originByLot[pl.lot_id]) originByLot[pl.lot_id] = pl.origin_country;
+        });
+      }
+
+      return rows.map((r: any): LotForLabel & { status: string } => ({
+        id: r.id,
+        lot_number: r.lot_number,
+        book_value_per_kg: r.book_value_per_kg,
+        status: r.status,
+        origin_country:
+          originByLot[r.id] || r.green_contracts?.origin_country || null,
+        producer: producerByLot[r.id] || null,
+      }));
     },
   });
 
@@ -242,10 +295,16 @@ export function CalculatorTab() {
                 <SelectContent>
                   {lots?.map((l) => (
                     <SelectItem key={l.id} value={l.id}>
-                      {l.lot_number} — book{' '}
-                      {l.book_value_per_kg != null
-                        ? formatPerKg(Number(l.book_value_per_kg))
-                        : 'n/a'}
+                      <span className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium">{lotLeadLabel(l)}</span>
+                        <span className="text-muted-foreground text-xs">· {l.lot_number}</span>
+                        <span className="text-muted-foreground text-xs">
+                          · book{' '}
+                          {l.book_value_per_kg != null
+                            ? formatPerKg(Number(l.book_value_per_kg))
+                            : 'n/a'}
+                        </span>
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -265,7 +324,10 @@ export function CalculatorTab() {
                         <SelectContent>
                           {lots?.map((l) => (
                             <SelectItem key={l.id} value={l.id}>
-                              {l.lot_number}
+                              <span className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium">{lotLeadLabel(l)}</span>
+                                <span className="text-muted-foreground text-xs">· {l.lot_number}</span>
+                              </span>
                             </SelectItem>
                           ))}
                         </SelectContent>
