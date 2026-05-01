@@ -324,7 +324,10 @@ export function CalculatorTab() {
                         <SelectContent>
                           {lots?.map((l) => (
                             <SelectItem key={l.id} value={l.id}>
-                              {l.lot_number}
+                              <span className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium">{lotLeadLabel(l)}</span>
+                                <span className="text-muted-foreground text-xs">· {l.lot_number}</span>
+                              </span>
                             </SelectItem>
                           ))}
                         </SelectContent>
