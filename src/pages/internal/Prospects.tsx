@@ -32,6 +32,7 @@ interface Prospect {
   business_name: string;
   contact_name: string | null;
   contact_info: string | null;
+  pronouns: string | null;
   stage: ProspectStage;
   stream: ProspectStream;
   converted: boolean;
@@ -137,7 +138,9 @@ export default function Prospects() {
                     <div className="min-w-0">
                       <span className="font-medium">{p.business_name}</span>
                       {p.contact_name && (
-                        <span className="ml-2 text-sm text-muted-foreground">{p.contact_name}</span>
+                        <span className="ml-2 text-sm text-muted-foreground">
+                          {p.contact_name}{p.pronouns ? ` (${p.pronouns})` : ''}
+                        </span>
                       )}
                     </div>
                   </div>

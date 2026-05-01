@@ -171,6 +171,7 @@ export type Database = {
           notes_internal: string | null
           pricing_tier_id: string | null
           programs: string[]
+          pronouns: string | null
           relationship_id: string | null
           updated_at: string
         }
@@ -197,6 +198,7 @@ export type Database = {
           notes_internal?: string | null
           pricing_tier_id?: string | null
           programs?: string[]
+          pronouns?: string | null
           relationship_id?: string | null
           updated_at?: string
         }
@@ -223,6 +225,7 @@ export type Database = {
           notes_internal?: string | null
           pricing_tier_id?: string | null
           programs?: string[]
+          pronouns?: string | null
           relationship_id?: string | null
           updated_at?: string
         }
@@ -3426,6 +3429,7 @@ export type Database = {
           created_at: string
           created_by: string
           id: string
+          pronouns: string | null
           stage: Database["public"]["Enums"]["prospect_stage"]
           stream: Database["public"]["Enums"]["prospect_stream"]
           updated_at: string
@@ -3441,6 +3445,7 @@ export type Database = {
           created_at?: string
           created_by: string
           id?: string
+          pronouns?: string | null
           stage?: Database["public"]["Enums"]["prospect_stage"]
           stream?: Database["public"]["Enums"]["prospect_stream"]
           updated_at?: string
@@ -3456,6 +3461,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           id?: string
+          pronouns?: string | null
           stage?: Database["public"]["Enums"]["prospect_stage"]
           stream?: Database["public"]["Enums"]["prospect_stream"]
           updated_at?: string

@@ -23,6 +23,8 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
+import { PronounsField } from '@/components/contacts/PronounsField';
+import { formatPronounsSuffix } from '@/lib/pronounOptions';
 
 // ─── Pricing Tier Card (internal-only) ─────────────────────────
 function formatTierMarkup(t: { markup_adjustment_type: string; markup_multiplier: number | null; per_kg_fee: number | null; target_margin_pct: number | null }): string {
@@ -159,6 +161,7 @@ function ProfileTab({ account, refetch }: { account: any; refetch: () => void })
         billing_phone: form.billing_phone || null,
         billing_address: form.billing_address || null,
         notes_internal: form.notes_internal || null,
+        pronouns: form.pronouns ? form.pronouns.trim() || null : null,
         is_active: form.is_active,
         programs,
       };
@@ -259,7 +262,7 @@ function ProfileTab({ account, refetch }: { account: any; refetch: () => void })
                 </div>
               )}
             </div>
-            <div><span className="text-muted-foreground">Billing Contact</span><p>{account.billing_contact_name || '—'}</p></div>
+            <div><span className="text-muted-foreground">Billing Contact</span><p>{account.billing_contact_name ? <>{account.billing_contact_name}{account.pronouns ? <span className="text-muted-foreground"> ({account.pronouns})</span> : null}</> : '—'}</p></div>
             <div><span className="text-muted-foreground">Billing Email</span><p>{account.billing_email || '—'}</p></div>
             <div><span className="text-muted-foreground">Billing Phone</span><p>{account.billing_phone || '—'}</p></div>
             <div><span className="text-muted-foreground">Billing Address</span><p className="whitespace-pre-wrap">{account.billing_address || '—'}</p></div>
@@ -329,6 +332,10 @@ function ProfileTab({ account, refetch }: { account: any; refetch: () => void })
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div><Label>Billing contact</Label><Input value={form.billing_contact_name || ''} onChange={e => setForm({ ...form, billing_contact_name: e.target.value })} /></div>
+            <PronounsField
+              value={form.pronouns ?? null}
+              onChange={(next) => setForm({ ...form, pronouns: next })}
+            />
             <div><Label>Billing email</Label><Input value={form.billing_email || ''} onChange={e => setForm({ ...form, billing_email: e.target.value })} /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
