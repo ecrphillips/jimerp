@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils';
 import {
   format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval,
   startOfToday, differenceInHours, parseISO, addDays, getDay,
-  startOfMonth, endOfMonth, isBefore, startOfDay, isAfter,
+  isBefore, startOfDay, isAfter,
 } from 'date-fns';
 import {
   checkOverlap, timeToMinutes, formatTime12, TIER_RATES,
