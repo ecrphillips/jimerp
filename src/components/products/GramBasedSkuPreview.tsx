@@ -95,16 +95,23 @@ export function GramBasedSkuPreview({
   clientCode,
   origin,
   isBlend = false,
+  isPerennial = false,
   fgNameSuffix,
   variants,
   existingSkus,
 }: GramBasedSkuPreviewProps) {
-  const resolvedSkus = useMemo(() => {
-    if (!clientCode || !fgNameSuffix || variants.length === 0) return [];
+  const { resolvedSkus, originError } = useMemo(() => {
+    if (!clientCode || !fgNameSuffix || variants.length === 0) {
+      return { resolvedSkus: [] as SkuPreviewItem[], originError: null as string | null };
+    }
 
-    // Determine origin code: ISO alpha-3 for single origin, 'BLD' for blends
-    const originCode = isBlend ? 'BLD' : (origin ? getOriginCode(origin) : 'XXX');
-    
+    let originCode: string;
+    try {
+      originCode = resolveOriginSegment(isPerennial, isBlend, origin);
+    } catch (err: any) {
+      return { resolvedSkus: [] as SkuPreviewItem[], originError: err?.message ?? 'Origin not determinable' };
+    }
+
     // Generate 5-char FG name code
     const { code: fgNameCode } = generateFgNameCode(fgNameSuffix);
 
