@@ -34,7 +34,8 @@ interface Product {
   account_id: string | null;
   packaging_variant: PackagingVariant | null;
   roast_group: string | null;
-  packaging_cost_override: number | null;
+  packaging_material_override: number | null;
+  packaging_labour_override: number | null;
   client: { name: string } | null;
   account: { account_name: string } | null;
   
