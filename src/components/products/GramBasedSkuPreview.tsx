@@ -147,10 +147,21 @@ export function GramBasedSkuPreview({
       });
     }
 
-    return results;
-  }, [clientCode, origin, isBlend, fgNameSuffix, variants, existingSkus]);
+    return { resolvedSkus: results, originError: null as string | null };
+  }, [clientCode, origin, isBlend, isPerennial, fgNameSuffix, variants, existingSkus]);
 
   const hasAdjustments = resolvedSkus.some((s) => s.wasAdjusted);
+
+  if (originError) {
+    return (
+      <div className="mt-4 p-4 border border-destructive/40 rounded-lg bg-destructive/5">
+        <p className="text-sm text-destructive flex items-center gap-2">
+          <AlertCircle className="h-4 w-4" />
+          {originError}
+        </p>
+      </div>
+    );
+  }
 
   if (variants.length === 0 || variants.every((v) => v.grams <= 0)) {
     return (
