@@ -58,7 +58,13 @@ export type PricingResult = {
   total_roasted_cost_per_kg: number;
   bag_size_kg: number;
   roasted_cost_per_bag: number;
+  packaging_material_per_bag: number;
+  packaging_labour_per_bag: number;
+  packaging_material_source: PackagingCostSource;
+  packaging_labour_source: PackagingCostSource;
+  /** Sum of material + labour per bag. Kept for backward compatibility. */
   packaging_cost_per_bag: number;
+  /** Worst of material/labour sources (OVERRIDE > LOOKUP > MISSING precedence kept simple as material's source for back-compat). */
   packaging_cost_source: PackagingCostSource;
   total_cost_per_bag: number;
 
