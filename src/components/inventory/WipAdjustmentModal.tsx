@@ -6,18 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { saveWipAdjustment, WIP_ADJUSTMENT_QUERY_KEYS, type WipAdjustmentReason } from '@/lib/wipAdjustments';
 
-export type WipAdjustmentReason =
-  | 'OPENING_BALANCE'
-  | 'RECOUNT'
-  | 'COUNT_ADJUSTMENT'
-  | 'LOSS'
-  | 'CONTAMINATION'
-  | 'OTHER';
+export type { WipAdjustmentReason };
 
 const REASON_OPTIONS: { value: WipAdjustmentReason; label: string; helper: string }[] = [
   {
