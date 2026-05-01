@@ -20,6 +20,30 @@ import { toast } from 'sonner';
 import { PACKAGING_OPTIONS, type PackagingVariant } from '@/components/PackagingBadge';
 import { calculatePrice, type PricingInputs, type PricingResult } from '@/lib/pricing';
 import { formatMoney, formatPerKg } from '@/lib/formatMoney';
+import { getCountryName } from '@/lib/coffeeOrigins';
+
+type LotForLabel = {
+  id: string;
+  lot_number: string;
+  book_value_per_kg: number | null;
+  origin_country: string | null;
+  producer: string | null;
+};
+
+/**
+ * Lead label: "Origin — Producer", falling back to origin only,
+ * then to lot_number if origin is also missing. Mirrors the labelling
+ * approach used in GreenLotPickerModal.
+ */
+function lotLeadLabel(lot: LotForLabel): string {
+  const originName = lot.origin_country
+    ? getCountryName(lot.origin_country) || lot.origin_country
+    : '';
+  const producer = lot.producer?.trim() || '';
+  if (originName && producer) return `${originName} — ${producer}`;
+  if (originName) return originName;
+  return lot.lot_number;
+}
 
 type GreenSourceMode = 'single' | 'blend';
 type TierMode = 'account' | 'tier' | 'default';
