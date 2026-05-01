@@ -28,19 +28,22 @@ type LotForLabel = {
   book_value_per_kg: number | null;
   origin_country: string | null;
   producer: string | null;
+  lot_identifier: string | null;
 };
 
 /**
- * Lead label: "Origin — Producer", falling back to origin only,
- * then to lot_number if origin is also missing. Mirrors the labelling
- * approach used in GreenLotPickerModal.
+ * Lead label prefers the disambiguating Lot Identifier (e.g. "FT La Indonesia SN").
+ * Fallback chain: "Origin — Producer" → producer → origin → lot_number.
  */
 function lotLeadLabel(lot: LotForLabel): string {
+  const ident = lot.lot_identifier?.trim() || '';
+  if (ident) return ident;
   const originName = lot.origin_country
     ? getCountryName(lot.origin_country) || lot.origin_country
     : '';
   const producer = lot.producer?.trim() || '';
   if (originName && producer) return `${originName} — ${producer}`;
+  if (producer) return producer;
   if (originName) return originName;
   return lot.lot_number;
 }
@@ -75,7 +78,7 @@ export function CalculatorTab() {
       const { data, error } = await supabase
         .from('green_lots')
         .select(`
-          id, lot_number, book_value_per_kg, status,
+          id, lot_number, lot_identifier, book_value_per_kg, status,
           green_contracts ( origin_country )
         `)
         .order('lot_number', { ascending: false });
@@ -101,6 +104,7 @@ export function CalculatorTab() {
       return rows.map((r: any): LotForLabel & { status: string } => ({
         id: r.id,
         lot_number: r.lot_number,
+        lot_identifier: r.lot_identifier ?? null,
         book_value_per_kg: r.book_value_per_kg,
         status: r.status,
         origin_country:
