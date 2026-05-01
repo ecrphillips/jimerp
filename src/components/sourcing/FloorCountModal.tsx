@@ -210,10 +210,38 @@ export function FloorCountModal({ open, onOpenChange, lots, purchaseLineByLotId,
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto print-modal-content">
           <style>{`
             @media print {
+              @page { margin: 12mm; }
+              body, html {
+                height: auto !important;
+                overflow: visible !important;
+              }
               body * { visibility: hidden !important; }
               .print-modal-content, .print-modal-content * { visibility: visible !important; }
-              .print-modal-content { position: fixed !important; inset: 0 !important; max-width: 100% !important; max-height: none !important; overflow: visible !important; box-shadow: none !important; border: none !important; transform: none !important; top: 0 !important; left: 0 !important; }
-              .print-hide { display: none !important; }
+              [data-radix-dialog-overlay], [data-radix-popper-content-wrapper] {
+                position: static !important;
+                background: transparent !important;
+              }
+              .print-modal-content {
+                position: static !important;
+                inset: auto !important;
+                max-width: 100% !important;
+                max-height: none !important;
+                overflow: visible !important;
+                box-shadow: none !important;
+                border: none !important;
+                transform: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                display: block !important;
+              }
+              .print-modal-content table { page-break-inside: auto; }
+              .print-modal-content tr {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+              }
+              .print-modal-content thead { display: table-header-group; }
+              .print-modal-content tbody { display: table-row-group; }
+              .print-hide, [data-radix-dialog-close] { display: none !important; }
               .print-as-text input { border: none !important; background: transparent !important; padding: 0 !important; height: auto !important; box-shadow: none !important; }
             }
           `}</style>
