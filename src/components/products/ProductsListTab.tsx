@@ -833,23 +833,41 @@ export function ProductsListTab() {
                 <Input id="bagSize" type="number" value={bagSize} onChange={(e) => setBagSize(parseInt(e.target.value) || 0)} />
               </div>
             </div>
-            <div>
-              <Label htmlFor="packagingCostOverride">Packaging cost per unit override (optional)</Label>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">$</span>
-                <Input
-                  id="packagingCostOverride"
-                  type="number"
-                  step="0.0001"
-                  placeholder="—"
-                  value={packagingCostOverride}
-                  onChange={(e) => setPackagingCostOverride(e.target.value)}
-                  className="max-w-[200px]"
-                />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="packagingMaterialOverride">Packaging material override (optional)</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">$</span>
+                  <Input
+                    id="packagingMaterialOverride"
+                    type="number"
+                    step="0.0001"
+                    placeholder="—"
+                    value={packagingMaterialOverride}
+                    onChange={(e) => setPackagingMaterialOverride(e.target.value)}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Per-bag cost of what we supply (bag, label, sticker, etc.). Leave blank to use the default material cost for this packaging variant. Enter 0 if the client supplies their own packaging.
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Per-unit packaging cost override (CAD). Leave blank to use the default cost for this product's packaging variant from the Packaging Costs table.
-              </p>
+              <div>
+                <Label htmlFor="packagingLabourOverride">Packaging labour override (optional)</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">$</span>
+                  <Input
+                    id="packagingLabourOverride"
+                    type="number"
+                    step="0.0001"
+                    placeholder="—"
+                    value={packagingLabourOverride}
+                    onChange={(e) => setPackagingLabourOverride(e.target.value)}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Per-bag labour cost. Leave blank to use the default labour cost for this packaging variant.
+                </p>
+              </div>
             </div>
             <div>
               <Label htmlFor="packaging">Packaging Variant</Label>
