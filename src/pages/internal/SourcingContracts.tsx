@@ -143,7 +143,16 @@ function formatPrice(value: number | null, currency: string | null) {
 
 export default function SourcingContracts() {
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ContractStatus | 'ALL'>('ALL');
+  const FILTER_STORAGE_KEY = 'sourcing_contracts_filter';
+  const [statusFilter, setStatusFilter] = useState<ContractStatus | 'ALL'>(() => {
+    if (typeof window === 'undefined') return 'ACTIVE';
+    const saved = window.localStorage.getItem(FILTER_STORAGE_KEY);
+    if (saved === 'ALL' || saved === 'ACTIVE' || saved === 'DEPLETED' || saved === 'CANCELLED') return saved;
+    return 'ACTIVE';
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem(FILTER_STORAGE_KEY, statusFilter); } catch {}
+  }, [statusFilter]);
   const [categoryFilter, setCategoryFilter] = useState<GreenCategory | 'ALL'>('ALL');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -218,7 +227,16 @@ export default function SourcingContracts() {
 
   const filtered = useMemo(() => {
     return contracts.filter(c => {
-      if (statusFilter !== 'ALL' && c.status !== statusFilter) return false;
+      const remaining = c.num_bags != null ? c.num_bags - (requestedByContract[c.id] || 0) : null;
+      if (statusFilter === 'ACTIVE') {
+        if (c.status !== 'ACTIVE') return false;
+        if (remaining != null && remaining <= 0) return false;
+      } else if (statusFilter === 'DEPLETED') {
+        const isDepleted = c.status === 'DEPLETED' || (c.status === 'ACTIVE' && remaining != null && remaining <= 0);
+        if (!isDepleted) return false;
+      } else if (statusFilter !== 'ALL' && c.status !== statusFilter) {
+        return false;
+      }
       if (categoryFilter !== 'ALL' && c.category !== categoryFilter) return false;
       if (search) {
         const s = search.toLowerCase();
@@ -228,7 +246,7 @@ export default function SourcingContracts() {
       }
       return true;
     });
-  }, [contracts, statusFilter, categoryFilter, search, vendorMap]);
+  }, [contracts, statusFilter, categoryFilter, search, vendorMap, requestedByContract]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
