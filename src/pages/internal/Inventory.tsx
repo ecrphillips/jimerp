@@ -19,6 +19,7 @@ import { Package, Scale, Plus, Minus, History, AlertTriangle, ArrowLeft } from '
 import { PackagingBadge } from '@/components/PackagingBadge';
 import { format } from 'date-fns';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
+import { WipAdjustmentModal } from '@/components/inventory/WipAdjustmentModal';
 
 type WipAdjustmentReason = 'LOSS' | 'COUNT_ADJUSTMENT' | 'CONTAMINATION' | 'OTHER';
 
@@ -69,6 +70,15 @@ export default function Inventory() {
   // WIP delete confirmation state
   const [confirmClearWip, setConfirmClearWip] = useState<string | null>(null);
   const isAdmin = authUser?.role === 'ADMIN';
+  const isAdminOrOps = authUser?.role === 'ADMIN' || authUser?.role === 'OPS';
+
+  // New "set absolute balance" modal state
+  const [absoluteAdjustOpen, setAbsoluteAdjustOpen] = useState(false);
+  const [absoluteAdjustGroup, setAbsoluteAdjustGroup] = useState<{ key: string; name: string; balance: number } | null>(null);
+
+  // Roast-group picker for empty-state opening-balance flow
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerGroup, setPickerGroup] = useState<string>('');
 
   // ===== WIP Tab Queries =====
   
@@ -78,7 +88,7 @@ export default function Inventory() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roast_groups')
-        .select('roast_group, is_blend, is_active')
+        .select('roast_group, display_name, is_blend, is_active')
         .eq('is_active', true);
       if (error) throw error;
       return data ?? [];
@@ -407,6 +417,16 @@ export default function Inventory() {
     setShowWipAdjust(true);
   };
 
+  const displayNameFor = (rgKey: string): string => {
+    const info = roastGroupsInfo?.find((r) => r.roast_group === rgKey);
+    return info?.display_name || rgKey;
+  };
+
+  const openAbsoluteAdjust = (rgKey: string, currentBalance: number) => {
+    setAbsoluteAdjustGroup({ key: rgKey, name: displayNameFor(rgKey), balance: currentBalance });
+    setAbsoluteAdjustOpen(true);
+  };
+
   return (
     <div className="p-6 space-y-6">
       <GreenCoffeeAlerts />
@@ -456,7 +476,21 @@ export default function Inventory() {
             </CardHeader>
             <CardContent>
               {wipByRoastGroup.length === 0 ? (
-                <p className="text-muted-foreground py-4">No WIP data available.</p>
+                <div className="py-6 space-y-3">
+                  <p className="text-muted-foreground">No WIP data available.</p>
+                  {isAdminOrOps && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setPickerGroup('');
+                        setPickerOpen(true);
+                      }}
+                    >
+                      Adjust opening balance
+                    </Button>
+                  )}
+                </div>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
@@ -491,14 +525,17 @@ export default function Inventory() {
                         </td>
                         <td className="py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs"
-                              onClick={() => openAdjustDialog(row.roast_group)}
-                            >
-                              Adjust
-                            </Button>
+                            {isAdminOrOps && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs"
+                                title="Adjust WIP balance"
+                                onClick={() => openAbsoluteAdjust(row.roast_group, row.net_wip_kg)}
+                              >
+                                Adjust
+                              </Button>
+                            )}
                             {authUser?.role === 'ADMIN' && (
                               <Button
                                 size="icon"
@@ -679,6 +716,57 @@ export default function Inventory() {
               onClick={() => confirmClearWip && deleteWipHistory.mutate(confirmClearWip)}
             >
               {deleteWipHistory.isPending ? 'Clearing...' : 'Confirm'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New absolute-balance WIP Adjustment Modal */}
+      {absoluteAdjustGroup && (
+        <WipAdjustmentModal
+          open={absoluteAdjustOpen}
+          onOpenChange={(o) => {
+            setAbsoluteAdjustOpen(o);
+            if (!o) setAbsoluteAdjustGroup(null);
+          }}
+          roastGroup={absoluteAdjustGroup.key}
+          roastGroupDisplayName={absoluteAdjustGroup.name}
+          currentBalanceKg={absoluteAdjustGroup.balance}
+        />
+      )}
+
+      {/* Roast group picker for empty-state opening balance */}
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Pick a roast group</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Choose the roast group to set an opening WIP balance for.
+            </p>
+            <Select value={pickerGroup} onValueChange={setPickerGroup}>
+              <SelectTrigger><SelectValue placeholder="Select roast group" /></SelectTrigger>
+              <SelectContent>
+                {(roastGroupsInfo ?? []).map((rg) => (
+                  <SelectItem key={rg.roast_group} value={rg.roast_group}>
+                    {rg.display_name || rg.roast_group}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPickerOpen(false)}>Cancel</Button>
+            <Button
+              disabled={!pickerGroup}
+              onClick={() => {
+                const existing = wipByRoastGroup.find((r) => r.roast_group === pickerGroup);
+                openAbsoluteAdjust(pickerGroup, existing?.net_wip_kg ?? 0);
+                setPickerOpen(false);
+              }}
+            >
+              Continue
             </Button>
           </DialogFooter>
         </DialogContent>

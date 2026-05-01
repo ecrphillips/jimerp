@@ -8,6 +8,7 @@ import { ArrowLeft, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import { getDisplayName } from '@/lib/roastGroupUtils';
 import { cn } from '@/lib/utils';
 import { RoastGroupDetailsSection } from '@/components/roast-groups/RoastGroupDetailsSection';
+import { RoastGroupWipSection } from '@/components/roast-groups/RoastGroupWipSection';
 import { BlendCompositionSection } from '@/components/roast-groups/BlendCompositionSection';
 import { GreenLotMappingSection } from '@/components/roast-groups/GreenLotMappingSection';
 import { ProductsFamilyTreeSection } from '@/components/roast-groups/ProductsFamilyTreeSection';
@@ -159,6 +160,9 @@ export default function RoastGroupDetail() {
           </Button>
         )}
       </div>
+
+      {/* WIP summary + adjust */}
+      <RoastGroupWipSection roastGroupKey={rg.roast_group} displayName={displayName} />
 
       {/* Section 1: Details */}
       <RoastGroupDetailsSection roastGroupKey={rg.roast_group} initialData={rg} />
