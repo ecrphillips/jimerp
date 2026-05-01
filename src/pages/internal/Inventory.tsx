@@ -77,9 +77,12 @@ export default function Inventory() {
   const [absoluteAdjustOpen, setAbsoluteAdjustOpen] = useState(false);
   const [absoluteAdjustGroup, setAbsoluteAdjustGroup] = useState<{ key: string; name: string; balance: number } | null>(null);
 
-  // Roast-group picker for empty-state opening-balance flow
+  // Roast-group picker for opening-balance / new-group flow (always available)
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerGroup, setPickerGroup] = useState<string>('');
+
+  // WIP Floor Count modal
+  const [floorCountOpen, setFloorCountOpen] = useState(false);
 
   // ===== WIP Tab Queries =====
   
