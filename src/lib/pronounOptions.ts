@@ -10,8 +10,8 @@ export const PRONOUN_OPTIONS = [
   { value: 'other', label: 'Other (specify)' },
 ] as const;
 
-const PRESET_VALUES = new Set(
-  PRONOUN_OPTIONS.filter((o) => o.value !== 'other').map((o) => o.value),
+const PRESET_VALUES: ReadonlySet<string> = new Set(
+  PRONOUN_OPTIONS.filter((o) => o.value !== 'other').map((o) => o.value as string),
 );
 
 /** Returns true when the stored pronouns string is one of the preset options. */
