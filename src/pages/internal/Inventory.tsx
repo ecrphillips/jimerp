@@ -720,6 +720,57 @@ export default function Inventory() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* New absolute-balance WIP Adjustment Modal */}
+      {absoluteAdjustGroup && (
+        <WipAdjustmentModal
+          open={absoluteAdjustOpen}
+          onOpenChange={(o) => {
+            setAbsoluteAdjustOpen(o);
+            if (!o) setAbsoluteAdjustGroup(null);
+          }}
+          roastGroup={absoluteAdjustGroup.key}
+          roastGroupDisplayName={absoluteAdjustGroup.name}
+          currentBalanceKg={absoluteAdjustGroup.balance}
+        />
+      )}
+
+      {/* Roast group picker for empty-state opening balance */}
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Pick a roast group</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Choose the roast group to set an opening WIP balance for.
+            </p>
+            <Select value={pickerGroup} onValueChange={setPickerGroup}>
+              <SelectTrigger><SelectValue placeholder="Select roast group" /></SelectTrigger>
+              <SelectContent>
+                {(roastGroupsInfo ?? []).map((rg) => (
+                  <SelectItem key={rg.roast_group} value={rg.roast_group}>
+                    {rg.display_name || rg.roast_group}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPickerOpen(false)}>Cancel</Button>
+            <Button
+              disabled={!pickerGroup}
+              onClick={() => {
+                const existing = wipByRoastGroup.find((r) => r.roast_group === pickerGroup);
+                openAbsoluteAdjust(pickerGroup, existing?.net_wip_kg ?? 0);
+                setPickerOpen(false);
+              }}
+            >
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
