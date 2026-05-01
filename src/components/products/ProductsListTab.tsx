@@ -796,11 +796,11 @@ export function ProductsListTab() {
 
       {/* Edit Product Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="max-h-[90vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b">
             <DialogTitle>{editingProduct ? 'Edit Product' : 'New Product'}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             <div>
               <Label htmlFor="client">Account</Label>
               <Select value={clientId} onValueChange={setClientId}>
@@ -923,16 +923,16 @@ export function ProductsListTab() {
                 <Label htmlFor="perennial">Perennial</Label>
               </div>
             </div>
-            <div className="flex justify-between pt-4">
-              {editingProduct ? (
-                <Button variant="secondary" onClick={() => openAddVariant(editingProduct)}>Add Variant</Button>
-              ) : <div />}
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={closeDialog}>Cancel</Button>
-                <Button onClick={handleSave} disabled={executeSaveMutation.isPending || !productName || !clientId}>
-                  {executeSaveMutation.isPending ? 'Saving…' : 'Save'}
-                </Button>
-              </div>
+          </div>
+          <div className="flex-shrink-0 flex justify-between items-center px-6 py-4 border-t bg-background">
+            {editingProduct ? (
+              <Button variant="secondary" onClick={() => openAddVariant(editingProduct)}>Add Variant</Button>
+            ) : <div />}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+              <Button onClick={handleSave} disabled={executeSaveMutation.isPending || !productName || !clientId}>
+                {executeSaveMutation.isPending ? 'Saving…' : 'Save'}
+              </Button>
             </div>
           </div>
         </DialogContent>
