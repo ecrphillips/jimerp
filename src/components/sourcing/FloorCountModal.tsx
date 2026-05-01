@@ -355,7 +355,7 @@ export function FloorCountModal({ open, onOpenChange, lots, purchaseLineByLotId,
             </Table>
           </div>
 
-          <div className="border rounded-lg p-4 space-y-1 text-sm">
+          <div className="border rounded-lg p-4 space-y-1 text-sm print-summary">
             <p className="font-semibold mb-2">Count summary</p>
             <div className="flex justify-between"><span>Total expected kg</span><span className="font-mono">{totals.expected.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg</span></div>
             <div className="flex justify-between"><span>Total counted kg</span><span className="font-mono">{totals.anyInput ? `${totals.counted.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg` : '—'}</span></div>
