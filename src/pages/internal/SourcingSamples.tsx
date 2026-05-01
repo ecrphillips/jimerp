@@ -15,10 +15,12 @@ import { Switch } from '@/components/ui/switch';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Plus, Check, FileText, X, Trash2 } from 'lucide-react';
+import { Search, Plus, Check, FileText, X, Trash2, CheckCircle2, XCircle } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useUpdateSampleStatus } from '@/hooks/useUpdateSampleStatus';
 
 type SampleStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 // NOTE: Existing SINGLE_ORIGIN records remain in the DB but display as "Blender" via fallback. No automated migration needed.
@@ -884,23 +886,27 @@ function SampleDetailPanel({
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
 
-  const statusMutation = useMutation({
-    mutationFn: async ({ status, rejected_reason }: { status: SampleStatus; rejected_reason?: string }) => {
-      const update: any = { status };
-      if (status === 'REJECTED') update.rejected_reason = rejected_reason || null;
-      if (status !== 'REJECTED') update.rejected_reason = null;
-      const { error } = await supabase.from('green_samples').update(update).eq('id', sampleId!);
-      if (error) throw error;
+  const updateStatus = useUpdateSampleStatus();
+  const statusMutation = {
+    isPending: updateStatus.isPending,
+    mutate: (args: { status: SampleStatus; rejected_reason?: string }) => {
+      if (!sampleId) return;
+      updateStatus.mutate(
+        {
+          sampleId,
+          status: args.status,
+          rejected_reason: args.rejected_reason,
+          toastLabel: sample?.name,
+        },
+        {
+          onSuccess: () => {
+            setShowRejectInput(false);
+            setRejectReason('');
+          },
+        },
+      );
     },
-    onSuccess: () => {
-      toast.success('Status updated');
-      setShowRejectInput(false);
-      setRejectReason('');
-      queryClient.invalidateQueries({ queryKey: ['green-sample', sampleId] });
-      queryClient.invalidateQueries({ queryKey: ['green-samples'] });
-    },
-    onError: () => toast.error('Failed to update status'),
-  });
+  };
 
   // Roast group link/unlink
   const addLinkMutation = useMutation({
