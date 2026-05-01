@@ -157,7 +157,8 @@ export function ProductsListTab() {
   const [priceInput, setPriceInput] = useState<string>('');
   const [isPerennial, setIsPerennial] = useState(false);
   const [roastGroup, setRoastGroup] = useState<string>('');
-  const [packagingCostOverride, setPackagingCostOverride] = useState<string>('');
+  const [packagingMaterialOverride, setPackagingMaterialOverride] = useState<string>('');
+  const [packagingLabourOverride, setPackagingLabourOverride] = useState<string>('');
 
   // Filter state
   const [searchText, setSearchText] = useState('');
