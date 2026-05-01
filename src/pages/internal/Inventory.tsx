@@ -20,6 +20,7 @@ import { PackagingBadge } from '@/components/PackagingBadge';
 import { format } from 'date-fns';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { WipAdjustmentModal } from '@/components/inventory/WipAdjustmentModal';
+import { WipFloorCountModal, type WipFloorRow } from '@/components/inventory/WipFloorCountModal';
 
 type WipAdjustmentReason = 'LOSS' | 'COUNT_ADJUSTMENT' | 'CONTAMINATION' | 'OTHER';
 
