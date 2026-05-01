@@ -15,6 +15,7 @@ import { OrderNotificationSettings } from '@/components/admin/OrderNotificationS
 import { BuildInfoPanel } from '@/components/admin/BuildInfoPanel';
 import { PackagingTypesManager } from '@/components/admin/PackagingTypesManager';
 import { buildSku, getOriginCode, generateFgNameCode, formatGramsSuffix } from '@/lib/skuGenerator';
+import { PerennialSkuAudit } from '@/components/admin/PerennialSkuAudit';
 
 // Check if we're in development mode
 const isDev = import.meta.env.DEV;
@@ -610,6 +611,8 @@ export default function AdminTools() {
           </Card>
         </>
       )}
+
+      <PerennialSkuAudit />
 
       {/* Reset Confirmation Modal */}
       <Dialog open={showResetModal} onOpenChange={setShowResetModal}>

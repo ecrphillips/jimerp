@@ -20,11 +20,38 @@ interface GramBasedSkuPreviewProps {
    */
   isBlend?: boolean;
   /**
+   * Whether this is a perennial product. If true, origin segment is forced to "BLD".
+   */
+  isPerennial?: boolean;
+  /**
    * The user-entered finished good name (just the suffix, e.g., "Hermanos")
    */
   fgNameSuffix: string;
   variants: PackagingVariantEntry[];
   existingSkus: Set<string>;
+}
+
+/**
+ * Resolve the origin segment for a SKU according to the canonical rule:
+ * - Perennial → "BLD" always
+ * - Blend → "BLD"
+ * - Single origin → ISO3 code; throws if not determinable
+ */
+export function resolveOriginSegment(
+  isPerennial: boolean,
+  isBlend: boolean,
+  origin: string | undefined | null
+): string {
+  if (isPerennial) return 'BLD';
+  if (isBlend) return 'BLD';
+  if (!origin || !origin.trim()) {
+    throw new Error('Origin not determinable from roast group; pick a different roast group or set the product as a blend.');
+  }
+  const code = getOriginCode(origin);
+  if (!code || code === 'XXX') {
+    throw new Error('Origin not determinable from roast group; pick a different roast group or set the product as a blend.');
+  }
+  return code;
 }
 
 interface SkuPreviewItem {
@@ -68,16 +95,23 @@ export function GramBasedSkuPreview({
   clientCode,
   origin,
   isBlend = false,
+  isPerennial = false,
   fgNameSuffix,
   variants,
   existingSkus,
 }: GramBasedSkuPreviewProps) {
-  const resolvedSkus = useMemo(() => {
-    if (!clientCode || !fgNameSuffix || variants.length === 0) return [];
+  const { resolvedSkus, originError } = useMemo(() => {
+    if (!clientCode || !fgNameSuffix || variants.length === 0) {
+      return { resolvedSkus: [] as SkuPreviewItem[], originError: null as string | null };
+    }
 
-    // Determine origin code: ISO alpha-3 for single origin, 'BLD' for blends
-    const originCode = isBlend ? 'BLD' : (origin ? getOriginCode(origin) : 'XXX');
-    
+    let originCode: string;
+    try {
+      originCode = resolveOriginSegment(isPerennial, isBlend, origin);
+    } catch (err: any) {
+      return { resolvedSkus: [] as SkuPreviewItem[], originError: err?.message ?? 'Origin not determinable' };
+    }
+
     // Generate 5-char FG name code
     const { code: fgNameCode } = generateFgNameCode(fgNameSuffix);
 
@@ -113,10 +147,21 @@ export function GramBasedSkuPreview({
       });
     }
 
-    return results;
-  }, [clientCode, origin, isBlend, fgNameSuffix, variants, existingSkus]);
+    return { resolvedSkus: results, originError: null as string | null };
+  }, [clientCode, origin, isBlend, isPerennial, fgNameSuffix, variants, existingSkus]);
 
   const hasAdjustments = resolvedSkus.some((s) => s.wasAdjusted);
+
+  if (originError) {
+    return (
+      <div className="mt-4 p-4 border border-destructive/40 rounded-lg bg-destructive/5">
+        <p className="text-sm text-destructive flex items-center gap-2">
+          <AlertCircle className="h-4 w-4" />
+          {originError}
+        </p>
+      </div>
+    );
+  }
 
   if (variants.length === 0 || variants.every((v) => v.grams <= 0)) {
     return (
@@ -191,7 +236,10 @@ export function GramBasedSkuPreview({
 }
 
 /**
- * Get the final resolved SKUs for saving
+ * Get the final resolved SKUs for saving.
+ *
+ * Throws if origin segment cannot be determined for a non-perennial, non-blend product.
+ * Never produces "XXX" — always BLD, a real ISO3, or throws.
  */
 export function getResolvedSkus(
   clientCode: string,
@@ -199,7 +247,8 @@ export function getResolvedSkus(
   isBlend: boolean,
   fgNameSuffix: string,
   variants: PackagingVariantEntry[],
-  existingSkus: Set<string>
+  existingSkus: Set<string>,
+  isPerennial: boolean = false
 ): Array<{
   packagingTypeId: string;
   packagingTypeName: string;
@@ -209,8 +258,8 @@ export function getResolvedSkus(
 }> {
   if (!clientCode || !fgNameSuffix || variants.length === 0) return [];
 
-  // Determine origin code
-  const originCode = isBlend ? 'BLD' : (origin ? getOriginCode(origin) : 'XXX');
+  // Determine origin code (throws if non-perennial single-origin can't resolve)
+  const originCode = resolveOriginSegment(isPerennial, isBlend, origin);
   
   // Generate 5-char FG name code
   const { code: fgNameCode } = generateFgNameCode(fgNameSuffix);

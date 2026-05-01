@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -614,6 +615,22 @@ export function ProductsListTab() {
   };
 
   const closeDialog = () => { setDialogOpen(false); setEditingProduct(null); };
+
+  // Auto-open product edit when ?edit=<id> is present in the URL (e.g. from admin audit)
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (!editId || !products) return;
+    const target = products.find((p) => p.id === editId);
+    if (target) {
+      openEdit(target);
+      // Clear the param so re-renders don't keep reopening
+      const next = new URLSearchParams(searchParams);
+      next.delete('edit');
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, searchParams]);
 
   const toggleGrind = (g: GrindOption) => {
     setGrindOptions((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]);
