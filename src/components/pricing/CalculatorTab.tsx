@@ -295,10 +295,16 @@ export function CalculatorTab() {
                 <SelectContent>
                   {lots?.map((l) => (
                     <SelectItem key={l.id} value={l.id}>
-                      {l.lot_number} — book{' '}
-                      {l.book_value_per_kg != null
-                        ? formatPerKg(Number(l.book_value_per_kg))
-                        : 'n/a'}
+                      <span className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium">{lotLeadLabel(l)}</span>
+                        <span className="text-muted-foreground text-xs">· {l.lot_number}</span>
+                        <span className="text-muted-foreground text-xs">
+                          · book{' '}
+                          {l.book_value_per_kg != null
+                            ? formatPerKg(Number(l.book_value_per_kg))
+                            : 'n/a'}
+                        </span>
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
