@@ -611,6 +611,8 @@ export default function AdminTools() {
         </>
       )}
 
+      <PerennialSkuAudit />
+
       {/* Reset Confirmation Modal */}
       <Dialog open={showResetModal} onOpenChange={setShowResetModal}>
         <DialogContent className="max-w-md">
