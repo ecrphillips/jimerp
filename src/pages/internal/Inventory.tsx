@@ -417,6 +417,16 @@ export default function Inventory() {
     setShowWipAdjust(true);
   };
 
+  const displayNameFor = (rgKey: string): string => {
+    const info = roastGroupsInfo?.find((r) => r.roast_group === rgKey);
+    return info?.display_name || rgKey;
+  };
+
+  const openAbsoluteAdjust = (rgKey: string, currentBalance: number) => {
+    setAbsoluteAdjustGroup({ key: rgKey, name: displayNameFor(rgKey), balance: currentBalance });
+    setAbsoluteAdjustOpen(true);
+  };
+
   return (
     <div className="p-6 space-y-6">
       <GreenCoffeeAlerts />
