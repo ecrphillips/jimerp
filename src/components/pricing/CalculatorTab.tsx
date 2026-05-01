@@ -620,9 +620,20 @@ function ResultsView({
           <BreakdownRow n={11} label="Bag size" value={`${result.bag_size_kg.toFixed(4)} kg`} />
           <BreakdownRow n={12} label="Roasted cost / bag" value={formatMoney(result.roasted_cost_per_bag)} />
           <BreakdownRow
+            n="13a"
+            label={`Material / bag (${packagingSourceLabel(result.packaging_material_source)})`}
+            value={formatMoney(result.packaging_material_per_bag)}
+          />
+          <BreakdownRow
+            n="13b"
+            label={`Labour / bag (${packagingSourceLabel(result.packaging_labour_source)})`}
+            value={formatMoney(result.packaging_labour_per_bag)}
+          />
+          <BreakdownRow
             n={13}
-            label={`Packaging cost / bag (${packagingSourceLabel(result.packaging_cost_source)})`}
+            label="Packaging total / bag"
             value={formatMoney(result.packaging_cost_per_bag)}
+            bold
           />
           <BreakdownRow n={14} label="Total cost / bag" value={formatMoney(result.total_cost_per_bag)} bold />
         </div>
