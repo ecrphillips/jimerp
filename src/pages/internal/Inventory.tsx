@@ -470,19 +470,18 @@ export default function Inventory() {
         <TabsContent value="wip" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Work-in-Progress by Roast Group</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Net WIP = Roasted/Blended Output − Packing Consumed + Adjustments
-              </p>
-              <p className="text-xs text-muted-foreground">
-                For post-roast blends, WIP is created when components are blended, not when components are roasted.
-              </p>
-            </CardHeader>
-            <CardContent>
-              {wipByRoastGroup.length === 0 ? (
-                <div className="py-6 space-y-3">
-                  <p className="text-muted-foreground">No WIP data available.</p>
-                  {isAdminOrOps && (
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="text-lg">Work-in-Progress by Roast Group</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Net WIP = Roasted/Blended Output − Packing Consumed + Adjustments
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    For post-roast blends, WIP is created when components are blended, not when components are roasted.
+                  </p>
+                </div>
+                {isAdminOrOps && (
+                  <div className="flex gap-2 shrink-0">
                     <Button
                       variant="outline"
                       size="sm"
@@ -491,9 +490,27 @@ export default function Inventory() {
                         setPickerOpen(true);
                       }}
                     >
-                      Adjust opening balance
+                      <Plus className="h-4 w-4" />
+                      Add WIP for roast group
                     </Button>
-                  )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFloorCountOpen(true)}
+                    >
+                      <Scale className="h-4 w-4" />
+                      Floor Count
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {wipByRoastGroup.length === 0 ? (
+                <div className="py-6">
+                  <p className="text-muted-foreground">
+                    No WIP data available. Use “Add WIP for roast group” above to enter an opening balance.
+                  </p>
                 </div>
               ) : (
                 <table className="w-full text-sm">
