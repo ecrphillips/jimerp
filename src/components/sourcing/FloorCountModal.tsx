@@ -272,13 +272,37 @@ export function FloorCountModal({ open, onOpenChange, lots, purchaseLineByLotId,
                 break-inside: avoid !important;
               }
 
-              /* Keep Count summary together on its own block */
+              /* Force Count summary onto its own page after all table rows */
               .print-summary {
+                page-break-before: always !important;
+                break-before: page !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
-                page-break-before: auto !important;
-                margin-top: 12mm !important;
+                margin-top: 0 !important;
               }
+
+              /* Tighten table typography for print */
+              .print-modal-content,
+              .print-modal-content table,
+              .print-modal-content th,
+              .print-modal-content td { font-size: 10pt !important; }
+              .print-modal-content th,
+              .print-modal-content td { padding: 4px 6px !important; }
+
+              /* Fixed column widths so Lot # doesn't wrap and number columns don't bloat */
+              .print-modal-content table { table-layout: fixed !important; }
+              .print-modal-content th:nth-child(1),
+              .print-modal-content td:nth-child(1) { width: 22% !important; white-space: nowrap !important; }
+              .print-modal-content th:nth-child(2),
+              .print-modal-content td:nth-child(2) { width: 28% !important; }
+              .print-modal-content th:nth-child(3),
+              .print-modal-content td:nth-child(3) { width: 10% !important; }
+              .print-modal-content th:nth-child(4),
+              .print-modal-content td:nth-child(4) { width: 8% !important; text-align: right !important; }
+              .print-modal-content th:nth-child(5),
+              .print-modal-content td:nth-child(5) { width: 12% !important; text-align: right !important; }
+              .print-modal-content th:nth-child(6),
+              .print-modal-content td:nth-child(6) { width: 20% !important; text-align: right !important; }
 
               /* Inputs render as plain text */
               .print-as-text input {
