@@ -74,10 +74,39 @@ export function CalculatorTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('green_lots')
-        .select('id, lot_number, book_value_per_kg, status')
+        .select(`
+          id, lot_number, book_value_per_kg, status,
+          green_contracts ( origin_country )
+        `)
         .order('lot_number', { ascending: false });
       if (error) throw error;
-      return data ?? [];
+
+      const rows = data ?? [];
+      const lotIds = rows.map((r: any) => r.id);
+      const producerByLot: Record<string, string | null> = {};
+      const originByLot: Record<string, string | null> = {};
+      if (lotIds.length > 0) {
+        const { data: pls, error: plErr } = await supabase
+          .from('green_purchase_lines')
+          .select('lot_id, producer, origin_country')
+          .in('lot_id', lotIds);
+        if (plErr) throw plErr;
+        (pls ?? []).forEach((pl: any) => {
+          if (!pl.lot_id) return;
+          if (pl.producer && !producerByLot[pl.lot_id]) producerByLot[pl.lot_id] = pl.producer;
+          if (pl.origin_country && !originByLot[pl.lot_id]) originByLot[pl.lot_id] = pl.origin_country;
+        });
+      }
+
+      return rows.map((r: any): LotForLabel & { status: string } => ({
+        id: r.id,
+        lot_number: r.lot_number,
+        book_value_per_kg: r.book_value_per_kg,
+        status: r.status,
+        origin_country:
+          originByLot[r.id] || r.green_contracts?.origin_country || null,
+        producer: producerByLot[r.id] || null,
+      }));
     },
   });
 
