@@ -73,6 +73,9 @@ describe('pricing pure helpers — calibration', () => {
       35,
       0.34,
     );
+    expect(close(final, 14.2857, 1e-4)).toBe(true);
+  });
+
   it('packaging split: material $0.50 + labour $1.50 on $14.72 roasted → $16.72/bag total', () => {
     const material = 0.5;
     const labour = 1.5;
