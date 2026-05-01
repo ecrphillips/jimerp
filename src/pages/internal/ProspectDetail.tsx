@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ArrowLeft, Copy, Check, FileText, Plus, CheckCircle2, ExternalLink } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
+import { PronounsField } from '@/components/contacts/PronounsField';
 
 type ProspectStream = Database['public']['Enums']['prospect_stream'];
 type ProspectStage = Database['public']['Enums']['prospect_stage'];
@@ -55,6 +56,7 @@ export default function ProspectDetail() {
   const [formBusinessName, setFormBusinessName] = useState('');
   const [formContactName, setFormContactName] = useState('');
   const [formContactInfo, setFormContactInfo] = useState('');
+  const [formPronouns, setFormPronouns] = useState<string | null>(null);
   const [formStream, setFormStream] = useState<ProspectStream>('CO_ROAST');
   const [formStage, setFormStage] = useState<ProspectStage>('AWARE');
   const [formDirty, setFormDirty] = useState(false);
@@ -178,6 +180,7 @@ export default function ProspectDetail() {
       setFormBusinessName(prospect.business_name);
       setFormContactName(prospect.contact_name || '');
       setFormContactInfo(prospect.contact_info || '');
+      setFormPronouns((prospect as any).pronouns ?? null);
       setFormStream(prospect.stream as ProspectStream);
       setFormStage(prospect.stage as ProspectStage);
     }
@@ -191,9 +194,10 @@ export default function ProspectDetail() {
           business_name: formBusinessName.trim(),
           contact_name: formContactName.trim() || null,
           contact_info: formContactInfo.trim() || null,
+          pronouns: formPronouns ? formPronouns.trim() || null : null,
           stream: formStream,
           stage: formStage,
-        })
+        } as any)
         .eq('id', id!);
       if (error) throw error;
     },
@@ -284,7 +288,10 @@ export default function ProspectDetail() {
       if (!prospect) return '';
       const lines: string[] = [];
       lines.push(`Prospect: ${prospect.business_name}`);
-      if (prospect.contact_name) lines.push(`Contact: ${prospect.contact_name}`);
+      if (prospect.contact_name) {
+        const pronouns = (prospect as any).pronouns as string | null | undefined;
+        lines.push(`Contact: ${prospect.contact_name}${pronouns ? ` (${pronouns})` : ''}`);
+      }
       if (prospect.contact_info) lines.push(`Contact Info: ${prospect.contact_info}`);
       lines.push(`Stream: ${streamLabel(prospect.stream as ProspectStream)}`);
       lines.push(`Stage: ${STAGE_OPTIONS.find(s => s.value === prospect.stage)?.label || prospect.stage}`);
@@ -372,6 +379,10 @@ export default function ProspectDetail() {
                 onChange={(e) => { setFormContactName(e.target.value); setFormDirty(true); }}
               />
             </div>
+            <PronounsField
+              value={formPronouns}
+              onChange={(next) => { setFormPronouns(next); setFormDirty(true); }}
+            />
             <div>
               <Label>Email / Phone</Label>
               <Input
