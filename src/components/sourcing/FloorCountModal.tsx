@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Printer, Copy } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { lotLeadLabel } from '@/components/quotes/lotLabel';
 
 interface LotLike {
   id: string;
@@ -33,13 +34,15 @@ interface Props {
   contractMap: Record<string, ContractLike>;
 }
 
-function getFloorCountName(lot: LotLike, c: ContractLike | undefined, pl: PurchaseLineLike | undefined): string {
-  if (c?.name) return c.name;
-  if (pl?.producer) return pl.producer;
-  if (pl?.lot_identifier) return pl.lot_identifier;
-  if (lot.lot_identifier) return lot.lot_identifier;
-  if (pl?.origin_country) return pl.origin_country;
-  return '—';
+function getFloorCountName(lot: LotLike, _c: ContractLike | undefined, pl: PurchaseLineLike | undefined): string {
+  return lotLeadLabel({
+    id: lot.id,
+    lot_number: lot.lot_number,
+    book_value_per_kg: null,
+    lot_identifier: lot.lot_identifier ?? pl?.lot_identifier ?? null,
+    origin_country: pl?.origin_country ?? null,
+    producer: pl?.producer ?? null,
+  });
 }
 
 export function FloorCountModal({ open, onOpenChange, lots, purchaseLineByLotId, contractMap }: Props) {
