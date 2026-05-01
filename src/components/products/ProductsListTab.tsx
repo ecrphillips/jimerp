@@ -477,15 +477,17 @@ export function ProductsListTab() {
   });
 
   const handleSave = useCallback(() => {
-    const trimmedOverride = packagingCostOverride.trim();
-    const overrideValue =
-      trimmedOverride === '' ? null : Number(trimmedOverride);
+    const trimmedMat = packagingMaterialOverride.trim();
+    const matValue = trimmedMat === '' ? null : Number(trimmedMat);
+    const trimmedLab = packagingLabourOverride.trim();
+    const labValue = trimmedLab === '' ? null : Number(trimmedLab);
     const payload = {
       product_name: productName, sku: sku || null, format: formatState, bag_size_g: bagSize,
       grind_options: grindOptions, client_id: editingProduct?.client_id ?? null,
       account_id: clientId || null, is_active: isActive, is_perennial: isPerennial,
       packaging_variant: packagingVariant, roast_group: roastGroup || null,
-      packaging_cost_override: overrideValue,
+      packaging_material_override: matValue,
+      packaging_labour_override: labValue,
     };
     if (editingProduct) {
       const currentRG = editingProduct.roast_group || null;
@@ -497,7 +499,7 @@ export function ProductsListTab() {
       }
     }
     executeSaveMutation.mutate(payload);
-  }, [editingProduct, productName, sku, formatState, bagSize, grindOptions, clientId, isActive, isPerennial, packagingVariant, roastGroup, packagingCostOverride, executeSaveMutation]);
+  }, [editingProduct, productName, sku, formatState, bagSize, grindOptions, clientId, isActive, isPerennial, packagingVariant, roastGroup, packagingMaterialOverride, packagingLabourOverride, executeSaveMutation]);
 
   const handleConfirmReroute = useCallback(() => {
     if (pendingRerouteData) executeSaveMutation.mutate(pendingRerouteData.fullPayload);
