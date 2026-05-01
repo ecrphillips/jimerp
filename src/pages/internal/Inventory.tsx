@@ -88,7 +88,7 @@ export default function Inventory() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roast_groups')
-        .select('roast_group, is_blend, is_active')
+        .select('roast_group, display_name, is_blend, is_active')
         .eq('is_active', true);
       if (error) throw error;
       return data ?? [];
