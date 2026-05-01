@@ -4388,6 +4388,8 @@ export type Database = {
         | "COUNT_ADJUSTMENT"
         | "CONTAMINATION"
         | "OTHER"
+        | "OPENING_BALANCE"
+        | "RECOUNT"
       wip_entry_type:
         | "ROAST_OUTPUT"
         | "PACK_CONSUME"
@@ -4622,6 +4624,8 @@ export const Constants = {
         "COUNT_ADJUSTMENT",
         "CONTAMINATION",
         "OTHER",
+        "OPENING_BALANCE",
+        "RECOUNT",
       ],
       wip_entry_type: [
         "ROAST_OUTPUT",
