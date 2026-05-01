@@ -161,6 +161,9 @@ export default function RoastGroupDetail() {
         )}
       </div>
 
+      {/* WIP summary + adjust */}
+      <RoastGroupWipSection roastGroupKey={rg.roast_group} displayName={displayName} />
+
       {/* Section 1: Details */}
       <RoastGroupDetailsSection roastGroupKey={rg.roast_group} initialData={rg} />
 
