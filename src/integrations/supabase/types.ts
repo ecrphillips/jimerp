@@ -3474,6 +3474,183 @@ export type Database = {
           },
         ]
       }
+      quote_line_items: {
+        Row: {
+          bag_size_g: number
+          blend_components: Json | null
+          calc_at: string | null
+          calc_final_price_per_bag: number | null
+          calc_list_price_per_bag: number | null
+          calc_margin_pct: number | null
+          calc_payload: Json | null
+          calc_total_cost_per_bag: number | null
+          calc_warnings: Json | null
+          created_at: string
+          display_order: number
+          final_price_per_bag_override: number | null
+          green_lot_id: string | null
+          id: string
+          line_notes: string | null
+          override_reason: string | null
+          packaging_variant: string
+          product_id: string | null
+          profile_id_override: string | null
+          quantity_bags: number
+          quote_id: string
+          tier_id_override: string | null
+          updated_at: string
+        }
+        Insert: {
+          bag_size_g: number
+          blend_components?: Json | null
+          calc_at?: string | null
+          calc_final_price_per_bag?: number | null
+          calc_list_price_per_bag?: number | null
+          calc_margin_pct?: number | null
+          calc_payload?: Json | null
+          calc_total_cost_per_bag?: number | null
+          calc_warnings?: Json | null
+          created_at?: string
+          display_order?: number
+          final_price_per_bag_override?: number | null
+          green_lot_id?: string | null
+          id?: string
+          line_notes?: string | null
+          override_reason?: string | null
+          packaging_variant: string
+          product_id?: string | null
+          profile_id_override?: string | null
+          quantity_bags?: number
+          quote_id: string
+          tier_id_override?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bag_size_g?: number
+          blend_components?: Json | null
+          calc_at?: string | null
+          calc_final_price_per_bag?: number | null
+          calc_list_price_per_bag?: number | null
+          calc_margin_pct?: number | null
+          calc_payload?: Json | null
+          calc_total_cost_per_bag?: number | null
+          calc_warnings?: Json | null
+          created_at?: string
+          display_order?: number
+          final_price_per_bag_override?: number | null
+          green_lot_id?: string | null
+          id?: string
+          line_notes?: string | null
+          override_reason?: string | null
+          packaging_variant?: string
+          product_id?: string | null
+          profile_id_override?: string | null
+          quantity_bags?: number
+          quote_id?: string
+          tier_id_override?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_line_items_green_lot_id_fkey"
+            columns: ["green_lot_id"]
+            isOneToOne: false
+            referencedRelation: "green_lots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_line_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_line_items_profile_id_override_fkey"
+            columns: ["profile_id_override"]
+            isOneToOne: false
+            referencedRelation: "pricing_rule_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_line_items_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_line_items_tier_id_override_fkey"
+            columns: ["tier_id_override"]
+            isOneToOne: false
+            referencedRelation: "pricing_tiers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quotes: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          created_by: string | null
+          customer_notes: string | null
+          id: string
+          internal_notes: string | null
+          prospect_id: string | null
+          quote_number: string
+          status: string
+          title: string | null
+          updated_at: string
+          updated_by: string | null
+          valid_until: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_notes?: string | null
+          id?: string
+          internal_notes?: string | null
+          prospect_id?: string | null
+          quote_number: string
+          status?: string
+          title?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          valid_until?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_notes?: string | null
+          id?: string
+          internal_notes?: string | null
+          prospect_id?: string | null
+          quote_number?: string
+          status?: string
+          title?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotes_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "prospects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       roast_exception_events: {
         Row: {
           batch_id: string | null
