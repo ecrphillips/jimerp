@@ -272,13 +272,13 @@ export function FloorCountModal({ open, onOpenChange, lots, purchaseLineByLotId,
                 break-inside: avoid !important;
               }
 
-              /* Force Count summary onto its own page after all table rows */
+              /* Count summary flows with the table; only breaks to next page if it can't fit intact */
               .print-summary {
-                page-break-before: always !important;
-                break-before: page !important;
+                page-break-before: auto !important;
+                break-before: auto !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
-                margin-top: 0 !important;
+                margin-top: 8mm !important;
               }
 
               /* Tighten table typography for print */
