@@ -93,26 +93,23 @@ export function WipAdjustmentModal({
 
       const prevStr = currentBalanceKg.toFixed(2);
       const newStr = newBalance.toFixed(2);
-      const txNotes = `WIP adjustment (${reason}): ${prevStr} kg → ${newStr} kg${notes.trim() ? ` — ${notes.trim()}` : ''}`;
+      const txNotes = notes.trim()
+        ? `WIP adjustment (${reason}): ${prevStr} kg → ${newStr} kg — ${notes.trim()}`
+        : `WIP adjustment (${reason}): ${prevStr} kg → ${newStr} kg`;
 
-      // Source of truth: wip_adjustments (read by Inventory page WIP math)
-      const { error: adjErr } = await supabase
-        .from('wip_adjustments')
-        .insert({
-          roast_group: roastGroup,
-          kg_delta: delta,
-          reason,
-          notes: notes.trim() || null,
-          created_by: authUser?.id ?? null,
-        });
-      if (adjErr) throw adjErr;
+      await saveWipAdjustment({
+        roastGroup,
+        kgDelta: delta,
+        reason,
+        notes: txNotes,
+        createdBy: authUser?.id ?? null,
+      });
     },
     onSuccess: () => {
       toast.success(`WIP balance updated to ${newBalance.toFixed(1)} kg.`);
-      queryClient.invalidateQueries({ queryKey: ['wip-adjustments'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-transactions-wip'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
-      queryClient.invalidateQueries({ queryKey: ['roast-group-wip'] });
+      for (const key of WIP_ADJUSTMENT_QUERY_KEYS) {
+        queryClient.invalidateQueries({ queryKey: key });
+      }
       queryClient.invalidateQueries({ queryKey: ['roast-group-detail'] });
       queryClient.invalidateQueries({ queryKey: ['roast-group-inventory-levels'] });
       onOpenChange(false);
