@@ -476,7 +476,21 @@ export default function Inventory() {
             </CardHeader>
             <CardContent>
               {wipByRoastGroup.length === 0 ? (
-                <p className="text-muted-foreground py-4">No WIP data available.</p>
+                <div className="py-6 space-y-3">
+                  <p className="text-muted-foreground">No WIP data available.</p>
+                  {isAdminOrOps && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setPickerGroup('');
+                        setPickerOpen(true);
+                      }}
+                    >
+                      Adjust opening balance
+                    </Button>
+                  )}
+                </div>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
@@ -511,14 +525,17 @@ export default function Inventory() {
                         </td>
                         <td className="py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs"
-                              onClick={() => openAdjustDialog(row.roast_group)}
-                            >
-                              Adjust
-                            </Button>
+                            {isAdminOrOps && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs"
+                                title="Adjust WIP balance"
+                                onClick={() => openAbsoluteAdjust(row.roast_group, row.net_wip_kg)}
+                              >
+                                Adjust
+                              </Button>
+                            )}
                             {authUser?.role === 'ADMIN' && (
                               <Button
                                 size="icon"
