@@ -15,10 +15,12 @@ import { Switch } from '@/components/ui/switch';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Plus, Check, FileText, X, Trash2 } from 'lucide-react';
+import { Search, Plus, Check, FileText, X, Trash2, CheckCircle2, XCircle } from 'lucide-react';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useUpdateSampleStatus } from '@/hooks/useUpdateSampleStatus';
 
 type SampleStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 // NOTE: Existing SINGLE_ORIGIN records remain in the DB but display as "Blender" via fallback. No automated migration needed.
@@ -308,6 +310,7 @@ export default function SourcingSamples() {
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [viewMode, setViewMode] = useViewMode('sourcing_view_samples', 'cards');
+  const updateSampleStatus = useUpdateSampleStatus();
 
   const { data: vendors = [] } = useQuery({
     queryKey: ['green-vendors-active'],
@@ -484,7 +487,57 @@ export default function SourcingSamples() {
                   <TableCell>{STATUS_LABELS[sample.status]}</TableCell>
                   <TableCell className="text-right">{sample.score ?? '—'}</TableCell>
                   <TableCell>
-                    <Button variant="outline" size="sm" onClick={() => setSelectedSampleId(sample.id)}>View</Button>
+                    <div className="flex items-center justify-end gap-1">
+                      {sample.status === 'PENDING' && (
+                        <>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+                                disabled={updateSampleStatus.isPending}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateSampleStatus.mutate({
+                                    sampleId: sample.id,
+                                    status: 'APPROVED',
+                                    toastLabel: sample.name,
+                                  });
+                                }}
+                                aria-label={`Approve ${sample.name}`}
+                              >
+                                <CheckCircle2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Approve</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                disabled={updateSampleStatus.isPending}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateSampleStatus.mutate({
+                                    sampleId: sample.id,
+                                    status: 'REJECTED',
+                                    toastLabel: sample.name,
+                                  });
+                                }}
+                                aria-label={`Decline ${sample.name}`}
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Decline</TooltipContent>
+                          </Tooltip>
+                        </>
+                      )}
+                      <Button variant="outline" size="sm" onClick={() => setSelectedSampleId(sample.id)}>View</Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -884,23 +937,27 @@ function SampleDetailPanel({
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
 
-  const statusMutation = useMutation({
-    mutationFn: async ({ status, rejected_reason }: { status: SampleStatus; rejected_reason?: string }) => {
-      const update: any = { status };
-      if (status === 'REJECTED') update.rejected_reason = rejected_reason || null;
-      if (status !== 'REJECTED') update.rejected_reason = null;
-      const { error } = await supabase.from('green_samples').update(update).eq('id', sampleId!);
-      if (error) throw error;
+  const updateStatus = useUpdateSampleStatus();
+  const statusMutation = {
+    isPending: updateStatus.isPending,
+    mutate: (args: { status: SampleStatus; rejected_reason?: string }) => {
+      if (!sampleId) return;
+      updateStatus.mutate(
+        {
+          sampleId,
+          status: args.status,
+          rejected_reason: args.rejected_reason,
+          toastLabel: sample?.name,
+        },
+        {
+          onSuccess: () => {
+            setShowRejectInput(false);
+            setRejectReason('');
+          },
+        },
+      );
     },
-    onSuccess: () => {
-      toast.success('Status updated');
-      setShowRejectInput(false);
-      setRejectReason('');
-      queryClient.invalidateQueries({ queryKey: ['green-sample', sampleId] });
-      queryClient.invalidateQueries({ queryKey: ['green-samples'] });
-    },
-    onError: () => toast.error('Failed to update status'),
-  });
+  };
 
   // Roast group link/unlink
   const addLinkMutation = useMutation({
