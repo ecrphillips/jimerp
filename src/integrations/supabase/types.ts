@@ -4204,6 +4204,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _assert_active_coroast_member: {
+        Args: { _account_id: string }
+        Returns: undefined
+      }
+      _get_or_create_billing_period: {
+        Args: { _account_id: string; _booking_date: string }
+        Returns: string
+      }
       allocate_sourcing_sequence: {
         Args: { _count?: number; _key: string }
         Returns: number
@@ -4211,6 +4219,33 @@ export type Database = {
       can_access_client: {
         Args: { _client_id: string; _user_id: string }
         Returns: boolean
+      }
+      cancel_member_booking: {
+        Args: { p_booking_id: string }
+        Returns: undefined
+      }
+      create_member_booking: {
+        Args: {
+          p_account_id: string
+          p_booking_date: string
+          p_end_time: string
+          p_notes?: string
+          p_recurring_block_id?: string
+          p_start_time: string
+        }
+        Returns: string
+      }
+      create_member_recurring_bookings: {
+        Args: {
+          p_account_id: string
+          p_day_of_week: number
+          p_end_time: string
+          p_notes?: string
+          p_pattern_end_date: string
+          p_pattern_start_date: string
+          p_start_time: string
+        }
+        Returns: Json
       }
       decrement_lot_kg: {
         Args: { p_kg: number; p_lot_id: string }
