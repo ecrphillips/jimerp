@@ -236,7 +236,10 @@ export function GramBasedSkuPreview({
 }
 
 /**
- * Get the final resolved SKUs for saving
+ * Get the final resolved SKUs for saving.
+ *
+ * Throws if origin segment cannot be determined for a non-perennial, non-blend product.
+ * Never produces "XXX" — always BLD, a real ISO3, or throws.
  */
 export function getResolvedSkus(
   clientCode: string,
@@ -244,7 +247,8 @@ export function getResolvedSkus(
   isBlend: boolean,
   fgNameSuffix: string,
   variants: PackagingVariantEntry[],
-  existingSkus: Set<string>
+  existingSkus: Set<string>,
+  isPerennial: boolean = false
 ): Array<{
   packagingTypeId: string;
   packagingTypeName: string;
@@ -254,8 +258,8 @@ export function getResolvedSkus(
 }> {
   if (!clientCode || !fgNameSuffix || variants.length === 0) return [];
 
-  // Determine origin code
-  const originCode = isBlend ? 'BLD' : (origin ? getOriginCode(origin) : 'XXX');
+  // Determine origin code (throws if non-perennial single-origin can't resolve)
+  const originCode = resolveOriginSegment(isPerennial, isBlend, origin);
   
   // Generate 5-char FG name code
   const { code: fgNameCode } = generateFgNameCode(fgNameSuffix);
