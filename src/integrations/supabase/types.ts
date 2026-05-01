@@ -2864,24 +2864,27 @@ export type Database = {
       }
       packaging_costs: {
         Row: {
-          cost_per_unit: number
           id: string
+          labour_cost_per_unit: number
+          material_cost_per_unit: number
           notes: string | null
           packaging_variant: Database["public"]["Enums"]["packaging_variant"]
           updated_at: string
           updated_by: string | null
         }
         Insert: {
-          cost_per_unit: number
           id?: string
+          labour_cost_per_unit?: number
+          material_cost_per_unit?: number
           notes?: string | null
           packaging_variant: Database["public"]["Enums"]["packaging_variant"]
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
-          cost_per_unit?: number
           id?: string
+          labour_cost_per_unit?: number
+          material_cost_per_unit?: number
           notes?: string | null
           packaging_variant?: Database["public"]["Enums"]["packaging_variant"]
           updated_at?: string
@@ -3253,7 +3256,8 @@ export type Database = {
           is_active: boolean
           is_perennial: boolean
           pack_display_order: number | null
-          packaging_cost_override: number | null
+          packaging_labour_override: number | null
+          packaging_material_override: number | null
           packaging_type_id: string | null
           packaging_variant:
             | Database["public"]["Enums"]["packaging_variant"]
@@ -3276,7 +3280,8 @@ export type Database = {
           is_active?: boolean
           is_perennial?: boolean
           pack_display_order?: number | null
-          packaging_cost_override?: number | null
+          packaging_labour_override?: number | null
+          packaging_material_override?: number | null
           packaging_type_id?: string | null
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
@@ -3299,7 +3304,8 @@ export type Database = {
           is_active?: boolean
           is_perennial?: boolean
           pack_display_order?: number | null
-          packaging_cost_override?: number | null
+          packaging_labour_override?: number | null
+          packaging_material_override?: number | null
           packaging_type_id?: string | null
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
