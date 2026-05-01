@@ -301,41 +301,10 @@ export default function MemberSchedule() {
     }
   };
 
-  // Booking mutation
-  async function getOrCreateBillingPeriod(bookingDate: string): Promise<string> {
-    if (!memberId) throw new Error('No member');
-    const monthStart = format(startOfMonth(new Date(bookingDate + 'T00:00:00')), 'yyyy-MM-dd');
-    const monthEnd = format(endOfMonth(new Date(bookingDate + 'T00:00:00')), 'yyyy-MM-dd');
-
-    const { data: existing } = await supabase
-      .from('coroast_billing_periods')
-      .select('id')
-      .eq('member_id', memberId)
-      .lte('period_start', monthEnd)
-      .gte('period_end', monthStart)
-      .limit(1);
-
-    if (existing && existing.length > 0) return existing[0].id;
-
-    const { data: created, error } = await supabase
-      .from('coroast_billing_periods')
-      .insert({
-        member_id: memberId!,
-        account_id: memberId,
-        period_start: monthStart,
-        period_end: monthEnd,
-        tier_snapshot: tier as any,
-        included_hours: rates.includedHours,
-        overage_rate_per_hr: rates.overageRate,
-        base_fee: rates.base,
-      })
-      .select('id')
-      .single();
-
-    if (error) throw new Error('Failed to create billing period');
-    return created.id;
-  }
-
+  // Booking mutation — calls server-side SECURITY DEFINER RPCs that
+  // verify membership, compute hours, and write atomically. Members do not
+  // (and must not) have direct write access to coroast_bookings,
+  // coroast_hour_ledger, coroast_recurring_blocks, or coroast_billing_periods.
   const createBookingMutation = useMutation({
     mutationFn: async () => {
       if (!memberId || !formDate || !formStartTime || !formEndTime) throw new Error('Missing fields');
@@ -348,88 +317,53 @@ export default function MemberSchedule() {
         const dates = generateRecurringDates(formDate, recurringDay, recurringEndDate ?? null);
         if (dates.length === 0) throw new Error('No dates generated');
 
+        // Client-side overlap pre-check for clearer per-date errors before hitting RPC
         for (const d of dates) {
           const ds = format(d, 'yyyy-MM-dd');
           const overlap = checkOverlap(ds, formStartTime, formEndTime, blocks, allBookings as BookingRow[]);
           if (overlap) throw new Error(`${format(d, 'MMM d')}: ${overlap}`);
         }
 
-        const { data: recurBlock, error: rbErr } = await supabase
-          .from('coroast_recurring_blocks')
-          .insert({
-            member_id: memberId,
-            day_of_week: recurringDay as any,
-            start_time: formStartTime,
-            end_time: formEndTime,
-            effective_from: format(dates[0], 'yyyy-MM-dd'),
-            effective_until: recurringEndDate ? format(recurringEndDate, 'yyyy-MM-dd') : null,
-            notes: formNotes.trim() || null,
-          })
-          .select('id')
-          .single();
-        if (rbErr) throw rbErr;
+        // JS Date.getDay() returns 0=Sun..6=Sat which matches the RPC contract.
+        const jsDow = getDay(dates[0]);
+        const patternStart = format(dates[0], 'yyyy-MM-dd');
+        const patternEnd = format(dates[dates.length - 1], 'yyyy-MM-dd');
 
-        for (const d of dates) {
-          const ds = format(d, 'yyyy-MM-dd');
-          const billingPeriodId = await getOrCreateBillingPeriod(ds);
-          const dur = (timeToMinutes(formEndTime) - timeToMinutes(formStartTime)) / 60;
+        const { data, error } = await supabase.rpc('create_member_recurring_bookings', {
+          p_account_id: memberId,
+          p_pattern_start_date: patternStart,
+          p_pattern_end_date: patternEnd,
+          p_day_of_week: jsDow,
+          p_start_time: formStartTime,
+          p_end_time: formEndTime,
+          p_notes: formNotes.trim() || null,
+        });
+        if (error) throw new Error(error.message);
 
-          const { data: booking, error: bErr } = await supabase
-            .from('coroast_bookings')
-            .insert({
-              account_id: memberId,
-              billing_period_id: billingPeriodId,
-              booking_date: ds,
-              start_time: formStartTime,
-              end_time: formEndTime,
-              recurring_block_id: recurBlock.id,
-              notes_member: formNotes.trim() || null,
-              status: 'CONFIRMED',
-            })
-            .select('id')
-            .single();
-          if (bErr) throw bErr;
-
-          await supabase.from('coroast_hour_ledger').insert({
-            member_id: memberId,
-            billing_period_id: billingPeriodId,
-            booking_id: booking.id,
-            entry_type: 'BOOKING_CONFIRMED' as any,
-            hours_delta: dur,
-            notes: `Self-serve booking on ${ds}`,
-          });
+        const result = data as { bookings_created: number; bookings_skipped: Array<{ date: string; reason: string }> } | null;
+        const created = result?.bookings_created ?? 0;
+        const skipped = result?.bookings_skipped ?? [];
+        if (created === 0) {
+          throw new Error(skipped[0]?.reason ?? 'No bookings could be created');
         }
-        toast.success(`Created ${dates.length} recurring bookings`);
+        if (skipped.length > 0) {
+          toast.success(`Created ${created} bookings — skipped ${skipped.length} (${skipped[0].reason})`);
+        } else {
+          toast.success(`Created ${created} recurring bookings`);
+        }
       } else {
         const overlap = checkOverlap(saveDateStr, formStartTime, formEndTime, blocks, allBookings as BookingRow[]);
         if (overlap) throw new Error(overlap);
 
-        const billingPeriodId = await getOrCreateBillingPeriod(saveDateStr);
-        const dur = (timeToMinutes(formEndTime) - timeToMinutes(formStartTime)) / 60;
-
-        const { data: booking, error } = await supabase
-          .from('coroast_bookings')
-          .insert({
-            account_id: memberId,
-            billing_period_id: billingPeriodId,
-            booking_date: saveDateStr,
-            start_time: formStartTime,
-            end_time: formEndTime,
-            notes_member: formNotes.trim() || null,
-            status: 'CONFIRMED',
-          })
-          .select('id')
-          .single();
-        if (error) throw error;
-
-        await supabase.from('coroast_hour_ledger').insert({
-          member_id: memberId,
-          billing_period_id: billingPeriodId,
-          booking_id: booking.id,
-          entry_type: 'BOOKING_CONFIRMED' as any,
-          hours_delta: dur,
-          notes: `Self-serve booking on ${saveDateStr}`,
+        const { error } = await supabase.rpc('create_member_booking', {
+          p_account_id: memberId,
+          p_booking_date: saveDateStr,
+          p_start_time: formStartTime,
+          p_end_time: formEndTime,
+          p_notes: formNotes.trim() || null,
+          p_recurring_block_id: null,
         });
+        if (error) throw new Error(error.message);
 
         toast.success('Booking confirmed!');
       }
@@ -442,21 +376,18 @@ export default function MemberSchedule() {
     onError: (err: Error) => setValidationError(err.message),
   });
 
-  // Cancel booking mutation
+  // Cancel booking mutation — server-side RPC handles soft-cancel + hours refund
   const cancelMutation = useMutation({
     mutationFn: async (bookingId: string) => {
-      const { error } = await supabase
-        .from('coroast_bookings')
-        .update({ status: 'CANCELLED_FREE' as any, cancelled_at: new Date().toISOString(), cancelled_by: authUser?.id })
-        .eq('id', bookingId);
-      if (error) throw error;
+      const { error } = await supabase.rpc('cancel_member_booking', { p_booking_id: bookingId });
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
       toast.success('Booking cancelled');
       setSelectedBooking(null);
       queryClient.invalidateQueries({ queryKey: ['member-portal-bookings'] });
     },
-    onError: () => toast.error('Failed to cancel booking'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to cancel booking'),
   });
 
   const scheduleScrollRef = useRef<HTMLDivElement>(null);
