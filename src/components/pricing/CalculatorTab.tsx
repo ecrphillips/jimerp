@@ -678,11 +678,12 @@ function BreakdownRow({
   value,
   bold,
 }: {
-  n: number;
+  n: number | string;
   label: string;
   value: string;
   bold?: boolean;
 }) {
+  const display = typeof n === 'number' ? n.toString().padStart(2, '0') : n;
   return (
     <div
       className={`flex justify-between items-center px-3 py-2 border-b last:border-b-0 ${
@@ -690,7 +691,7 @@ function BreakdownRow({
       }`}
     >
       <span className="text-sm">
-        <span className="text-xs text-muted-foreground font-mono mr-2">{n.toString().padStart(2, '0')}</span>
+        <span className="text-xs text-muted-foreground font-mono mr-2">{display}</span>
         {label}
       </span>
       <span className="text-sm font-mono">{value}</span>
