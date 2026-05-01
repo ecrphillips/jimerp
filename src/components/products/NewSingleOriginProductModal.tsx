@@ -248,14 +248,21 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
       
       // Get resolved SKUs with collision handling
       // Use the user-entered suffix (finishedGoodName) for the FG name code
-      const resolvedSkus = getResolvedSkus(
-        selectedClient.account_code!,
-        skuOrigin,
-        false,
-        finishedGoodName.trim(),
-        validVariants,
-        existingSkus ?? new Set()
-      );
+      let resolvedSkus;
+      try {
+        resolvedSkus = getResolvedSkus(
+          selectedClient.account_code!,
+          skuOrigin,
+          false,
+          finishedGoodName.trim(),
+          validVariants,
+          existingSkus ?? new Set(),
+          lifecycle === 'perennial'
+        );
+      } catch (err: any) {
+        toast.error(err?.message ?? 'Could not generate SKU');
+        return;
+      }
       
       // Create products
       const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
