@@ -529,6 +529,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
             clientCode={selectedClient?.account_code ?? ''}
             origin={originForSku}
             isBlend={isBlendSelected}
+            isPerennial={lifecycle === 'perennial'}
             fgNameSuffix={finishedGoodName.trim()}
             variants={validVariants}
             existingSkus={existingSkus ?? new Set()}
