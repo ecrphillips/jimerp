@@ -78,7 +78,7 @@ export function CalculatorTab() {
       const { data, error } = await supabase
         .from('green_lots')
         .select(`
-          id, lot_number, book_value_per_kg, status,
+          id, lot_number, lot_identifier, book_value_per_kg, status,
           green_contracts ( origin_country )
         `)
         .order('lot_number', { ascending: false });
@@ -104,6 +104,7 @@ export function CalculatorTab() {
       return rows.map((r: any): LotForLabel & { status: string } => ({
         id: r.id,
         lot_number: r.lot_number,
+        lot_identifier: r.lot_identifier ?? null,
         book_value_per_kg: r.book_value_per_kg,
         status: r.status,
         origin_country:
