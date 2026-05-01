@@ -594,10 +594,15 @@ export function ProductsListTab() {
     setClientId(p.account_id ?? p.client_id ?? ''); setIsActive(p.is_active);
     setIsPerennial(p.is_perennial); setPackagingVariant(p.packaging_variant);
     setPriceInput(''); setRoastGroup(p.roast_group ?? '');
-    setPackagingCostOverride(
-      p.packaging_cost_override === null || p.packaging_cost_override === undefined
+    setPackagingMaterialOverride(
+      p.packaging_material_override === null || p.packaging_material_override === undefined
         ? ''
-        : String(p.packaging_cost_override),
+        : String(p.packaging_material_override),
+    );
+    setPackagingLabourOverride(
+      p.packaging_labour_override === null || p.packaging_labour_override === undefined
+        ? ''
+        : String(p.packaging_labour_override),
     );
     setDialogOpen(true);
   };
