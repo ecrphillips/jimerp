@@ -310,6 +310,7 @@ export default function SourcingSamples() {
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [viewMode, setViewMode] = useViewMode('sourcing_view_samples', 'cards');
+  const updateSampleStatus = useUpdateSampleStatus();
 
   const { data: vendors = [] } = useQuery({
     queryKey: ['green-vendors-active'],
@@ -486,7 +487,57 @@ export default function SourcingSamples() {
                   <TableCell>{STATUS_LABELS[sample.status]}</TableCell>
                   <TableCell className="text-right">{sample.score ?? '—'}</TableCell>
                   <TableCell>
-                    <Button variant="outline" size="sm" onClick={() => setSelectedSampleId(sample.id)}>View</Button>
+                    <div className="flex items-center justify-end gap-1">
+                      {sample.status === 'PENDING' && (
+                        <>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+                                disabled={updateSampleStatus.isPending}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateSampleStatus.mutate({
+                                    sampleId: sample.id,
+                                    status: 'APPROVED',
+                                    toastLabel: sample.name,
+                                  });
+                                }}
+                                aria-label={`Approve ${sample.name}`}
+                              >
+                                <CheckCircle2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Approve</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                disabled={updateSampleStatus.isPending}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateSampleStatus.mutate({
+                                    sampleId: sample.id,
+                                    status: 'REJECTED',
+                                    toastLabel: sample.name,
+                                  });
+                                }}
+                                aria-label={`Decline ${sample.name}`}
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Decline</TooltipContent>
+                          </Tooltip>
+                        </>
+                      )}
+                      <Button variant="outline" size="sm" onClick={() => setSelectedSampleId(sample.id)}>View</Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
