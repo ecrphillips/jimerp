@@ -20,11 +20,38 @@ interface GramBasedSkuPreviewProps {
    */
   isBlend?: boolean;
   /**
+   * Whether this is a perennial product. If true, origin segment is forced to "BLD".
+   */
+  isPerennial?: boolean;
+  /**
    * The user-entered finished good name (just the suffix, e.g., "Hermanos")
    */
   fgNameSuffix: string;
   variants: PackagingVariantEntry[];
   existingSkus: Set<string>;
+}
+
+/**
+ * Resolve the origin segment for a SKU according to the canonical rule:
+ * - Perennial → "BLD" always
+ * - Blend → "BLD"
+ * - Single origin → ISO3 code; throws if not determinable
+ */
+export function resolveOriginSegment(
+  isPerennial: boolean,
+  isBlend: boolean,
+  origin: string | undefined | null
+): string {
+  if (isPerennial) return 'BLD';
+  if (isBlend) return 'BLD';
+  if (!origin || !origin.trim()) {
+    throw new Error('Origin not determinable from roast group; pick a different roast group or set the product as a blend.');
+  }
+  const code = getOriginCode(origin);
+  if (!code || code === 'XXX') {
+    throw new Error('Origin not determinable from roast group; pick a different roast group or set the product as a blend.');
+  }
+  return code;
 }
 
 interface SkuPreviewItem {
