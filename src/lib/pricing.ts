@@ -285,13 +285,13 @@ export async function calculatePrice(
       : Promise.resolve({ data: null, error: null }),
     supabase
       .from('packaging_costs')
-      .select('packaging_variant, cost_per_unit')
+      .select('packaging_variant, material_cost_per_unit, labour_cost_per_unit')
       .eq('packaging_variant', inputs.packaging_variant)
       .maybeSingle(),
     inputs.product_id
       ? supabase
           .from('products')
-          .select('id, packaging_cost_override')
+          .select('id, packaging_material_override, packaging_labour_override')
           .eq('id', inputs.product_id)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
