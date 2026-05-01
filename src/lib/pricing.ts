@@ -436,29 +436,64 @@ export async function calculatePrice(
   }
   const roasted_cost_per_bag = total_roasted_cost_per_kg * bag_size_kg;
 
-  // Packaging
-  let packaging_cost_per_bag = 0;
-  let packaging_cost_source: PackagingCostSource = 'MISSING';
+  // Packaging — material + labour resolved independently
+  let packaging_material_per_bag = 0;
+  let packaging_labour_per_bag = 0;
+  let packaging_material_source: PackagingCostSource = 'MISSING';
+  let packaging_labour_source: PackagingCostSource = 'MISSING';
 
   if (productRes.error) {
     warnings.push(`Product lookup failed — ${productRes.error.message}`);
   }
-  const productOverride = (productRes.data as { packaging_cost_override: number | null } | null)
-    ?.packaging_cost_override;
-  if (productOverride != null) {
-    packaging_cost_per_bag = num(productOverride);
-    packaging_cost_source = 'OVERRIDE';
-  } else if (packagingRes.error) {
+  if (packagingRes.error) {
     warnings.push(`Packaging cost lookup failed — ${packagingRes.error.message}`);
-  } else if (packagingRes.data) {
-    packaging_cost_per_bag = num((packagingRes.data as { cost_per_unit: number }).cost_per_unit);
-    packaging_cost_source = 'LOOKUP';
+  }
+
+  const productData = (productRes.data as {
+    packaging_material_override: number | null;
+    packaging_labour_override: number | null;
+  } | null) ?? null;
+  const packagingDefaults = (packagingRes.data as {
+    material_cost_per_unit: number | null;
+    labour_cost_per_unit: number | null;
+  } | null) ?? null;
+
+  // Material
+  if (productData?.packaging_material_override != null) {
+    packaging_material_per_bag = num(productData.packaging_material_override);
+    packaging_material_source = 'OVERRIDE';
+  } else if (packagingDefaults && packagingDefaults.material_cost_per_unit != null) {
+    packaging_material_per_bag = num(packagingDefaults.material_cost_per_unit);
+    packaging_material_source = 'LOOKUP';
   } else {
     warnings.push(
-      `No packaging cost configured for ${inputs.packaging_variant} — using $0.`,
+      `No packaging material cost configured for ${inputs.packaging_variant} — using $0.`,
     );
-    packaging_cost_source = 'MISSING';
+    packaging_material_source = 'MISSING';
   }
+
+  // Labour
+  if (productData?.packaging_labour_override != null) {
+    packaging_labour_per_bag = num(productData.packaging_labour_override);
+    packaging_labour_source = 'OVERRIDE';
+  } else if (packagingDefaults && packagingDefaults.labour_cost_per_unit != null) {
+    packaging_labour_per_bag = num(packagingDefaults.labour_cost_per_unit);
+    packaging_labour_source = 'LOOKUP';
+  } else {
+    warnings.push(
+      `No packaging labour cost configured for ${inputs.packaging_variant} — using $0.`,
+    );
+    packaging_labour_source = 'MISSING';
+  }
+
+  const packaging_cost_per_bag = packaging_material_per_bag + packaging_labour_per_bag;
+  // Back-compat aggregate source: OVERRIDE if either is overridden, else LOOKUP if either lookup, else MISSING.
+  const packaging_cost_source: PackagingCostSource =
+    packaging_material_source === 'OVERRIDE' || packaging_labour_source === 'OVERRIDE'
+      ? 'OVERRIDE'
+      : packaging_material_source === 'LOOKUP' || packaging_labour_source === 'LOOKUP'
+        ? 'LOOKUP'
+        : 'MISSING';
 
   const total_cost_per_bag = roasted_cost_per_bag + packaging_cost_per_bag;
 
