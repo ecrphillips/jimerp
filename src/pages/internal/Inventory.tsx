@@ -70,6 +70,15 @@ export default function Inventory() {
   // WIP delete confirmation state
   const [confirmClearWip, setConfirmClearWip] = useState<string | null>(null);
   const isAdmin = authUser?.role === 'ADMIN';
+  const isAdminOrOps = authUser?.role === 'ADMIN' || authUser?.role === 'OPS';
+
+  // New "set absolute balance" modal state
+  const [absoluteAdjustOpen, setAbsoluteAdjustOpen] = useState(false);
+  const [absoluteAdjustGroup, setAbsoluteAdjustGroup] = useState<{ key: string; name: string; balance: number } | null>(null);
+
+  // Roast-group picker for empty-state opening-balance flow
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerGroup, setPickerGroup] = useState<string>('');
 
   // ===== WIP Tab Queries =====
   
