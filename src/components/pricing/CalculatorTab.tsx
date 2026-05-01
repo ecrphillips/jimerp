@@ -620,9 +620,20 @@ function ResultsView({
           <BreakdownRow n={11} label="Bag size" value={`${result.bag_size_kg.toFixed(4)} kg`} />
           <BreakdownRow n={12} label="Roasted cost / bag" value={formatMoney(result.roasted_cost_per_bag)} />
           <BreakdownRow
+            n="13a"
+            label={`Material / bag (${packagingSourceLabel(result.packaging_material_source)})`}
+            value={formatMoney(result.packaging_material_per_bag)}
+          />
+          <BreakdownRow
+            n="13b"
+            label={`Labour / bag (${packagingSourceLabel(result.packaging_labour_source)})`}
+            value={formatMoney(result.packaging_labour_per_bag)}
+          />
+          <BreakdownRow
             n={13}
-            label={`Packaging cost / bag (${packagingSourceLabel(result.packaging_cost_source)})`}
+            label="Packaging total / bag"
             value={formatMoney(result.packaging_cost_per_bag)}
+            bold
           />
           <BreakdownRow n={14} label="Total cost / bag" value={formatMoney(result.total_cost_per_bag)} bold />
         </div>
@@ -667,11 +678,12 @@ function BreakdownRow({
   value,
   bold,
 }: {
-  n: number;
+  n: number | string;
   label: string;
   value: string;
   bold?: boolean;
 }) {
+  const display = typeof n === 'number' ? n.toString().padStart(2, '0') : n;
   return (
     <div
       className={`flex justify-between items-center px-3 py-2 border-b last:border-b-0 ${
@@ -679,7 +691,7 @@ function BreakdownRow({
       }`}
     >
       <span className="text-sm">
-        <span className="text-xs text-muted-foreground font-mono mr-2">{n.toString().padStart(2, '0')}</span>
+        <span className="text-xs text-muted-foreground font-mono mr-2">{display}</span>
         {label}
       </span>
       <span className="text-sm font-mono">{value}</span>
@@ -709,7 +721,9 @@ function breakdownAsText(r: PricingResult): string {
     `10  Total roasted cost / kg           ${formatPerKg(r.total_roasted_cost_per_kg)}`,
     `11  Bag size                          ${r.bag_size_kg.toFixed(4)} kg`,
     `12  Roasted cost / bag                ${formatMoney(r.roasted_cost_per_bag)}`,
-    `13  Packaging / bag                   ${formatMoney(r.packaging_cost_per_bag)}  (${packagingSourceLabel(r.packaging_cost_source)})`,
+    `13a Material / bag                    ${formatMoney(r.packaging_material_per_bag)}  (${packagingSourceLabel(r.packaging_material_source)})`,
+    `13b Labour / bag                      ${formatMoney(r.packaging_labour_per_bag)}  (${packagingSourceLabel(r.packaging_labour_source)})`,
+    `13  Packaging total / bag             ${formatMoney(r.packaging_cost_per_bag)}`,
     `14  Total cost / bag                  ${formatMoney(r.total_cost_per_bag)}`,
     '',
     `List price / bag:   ${formatMoney(r.list_price_per_bag)}`,

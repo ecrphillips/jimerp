@@ -34,7 +34,8 @@ interface Product {
   account_id: string | null;
   packaging_variant: PackagingVariant | null;
   roast_group: string | null;
-  packaging_cost_override: number | null;
+  packaging_material_override: number | null;
+  packaging_labour_override: number | null;
   client: { name: string } | null;
   account: { account_name: string } | null;
   
@@ -156,7 +157,8 @@ export function ProductsListTab() {
   const [priceInput, setPriceInput] = useState<string>('');
   const [isPerennial, setIsPerennial] = useState(false);
   const [roastGroup, setRoastGroup] = useState<string>('');
-  const [packagingCostOverride, setPackagingCostOverride] = useState<string>('');
+  const [packagingMaterialOverride, setPackagingMaterialOverride] = useState<string>('');
+  const [packagingLabourOverride, setPackagingLabourOverride] = useState<string>('');
 
   // Filter state
   const [searchText, setSearchText] = useState('');
@@ -176,7 +178,7 @@ export function ProductsListTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, client_id, account_id, packaging_variant, roast_group, packaging_cost_override, client:clients(name), account:accounts(account_name)')
+        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, client_id, account_id, packaging_variant, roast_group, packaging_material_override, packaging_labour_override, client:clients(name), account:accounts(account_name)')
         .order('product_name');
 
       if (error) throw error;
@@ -475,15 +477,17 @@ export function ProductsListTab() {
   });
 
   const handleSave = useCallback(() => {
-    const trimmedOverride = packagingCostOverride.trim();
-    const overrideValue =
-      trimmedOverride === '' ? null : Number(trimmedOverride);
+    const trimmedMat = packagingMaterialOverride.trim();
+    const matValue = trimmedMat === '' ? null : Number(trimmedMat);
+    const trimmedLab = packagingLabourOverride.trim();
+    const labValue = trimmedLab === '' ? null : Number(trimmedLab);
     const payload = {
       product_name: productName, sku: sku || null, format: formatState, bag_size_g: bagSize,
       grind_options: grindOptions, client_id: editingProduct?.client_id ?? null,
       account_id: clientId || null, is_active: isActive, is_perennial: isPerennial,
       packaging_variant: packagingVariant, roast_group: roastGroup || null,
-      packaging_cost_override: overrideValue,
+      packaging_material_override: matValue,
+      packaging_labour_override: labValue,
     };
     if (editingProduct) {
       const currentRG = editingProduct.roast_group || null;
@@ -495,7 +499,7 @@ export function ProductsListTab() {
       }
     }
     executeSaveMutation.mutate(payload);
-  }, [editingProduct, productName, sku, formatState, bagSize, grindOptions, clientId, isActive, isPerennial, packagingVariant, roastGroup, packagingCostOverride, executeSaveMutation]);
+  }, [editingProduct, productName, sku, formatState, bagSize, grindOptions, clientId, isActive, isPerennial, packagingVariant, roastGroup, packagingMaterialOverride, packagingLabourOverride, executeSaveMutation]);
 
   const handleConfirmReroute = useCallback(() => {
     if (pendingRerouteData) executeSaveMutation.mutate(pendingRerouteData.fullPayload);
@@ -590,10 +594,15 @@ export function ProductsListTab() {
     setClientId(p.account_id ?? p.client_id ?? ''); setIsActive(p.is_active);
     setIsPerennial(p.is_perennial); setPackagingVariant(p.packaging_variant);
     setPriceInput(''); setRoastGroup(p.roast_group ?? '');
-    setPackagingCostOverride(
-      p.packaging_cost_override === null || p.packaging_cost_override === undefined
+    setPackagingMaterialOverride(
+      p.packaging_material_override === null || p.packaging_material_override === undefined
         ? ''
-        : String(p.packaging_cost_override),
+        : String(p.packaging_material_override),
+    );
+    setPackagingLabourOverride(
+      p.packaging_labour_override === null || p.packaging_labour_override === undefined
+        ? ''
+        : String(p.packaging_labour_override),
     );
     setDialogOpen(true);
   };
@@ -824,23 +833,41 @@ export function ProductsListTab() {
                 <Input id="bagSize" type="number" value={bagSize} onChange={(e) => setBagSize(parseInt(e.target.value) || 0)} />
               </div>
             </div>
-            <div>
-              <Label htmlFor="packagingCostOverride">Packaging cost per unit override (optional)</Label>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">$</span>
-                <Input
-                  id="packagingCostOverride"
-                  type="number"
-                  step="0.0001"
-                  placeholder="—"
-                  value={packagingCostOverride}
-                  onChange={(e) => setPackagingCostOverride(e.target.value)}
-                  className="max-w-[200px]"
-                />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="packagingMaterialOverride">Packaging material override (optional)</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">$</span>
+                  <Input
+                    id="packagingMaterialOverride"
+                    type="number"
+                    step="0.0001"
+                    placeholder="—"
+                    value={packagingMaterialOverride}
+                    onChange={(e) => setPackagingMaterialOverride(e.target.value)}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Per-bag cost of what we supply (bag, label, sticker, etc.). Leave blank to use the default material cost for this packaging variant. Enter 0 if the client supplies their own packaging.
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Per-unit packaging cost override (CAD). Leave blank to use the default cost for this product's packaging variant from the Packaging Costs table.
-              </p>
+              <div>
+                <Label htmlFor="packagingLabourOverride">Packaging labour override (optional)</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">$</span>
+                  <Input
+                    id="packagingLabourOverride"
+                    type="number"
+                    step="0.0001"
+                    placeholder="—"
+                    value={packagingLabourOverride}
+                    onChange={(e) => setPackagingLabourOverride(e.target.value)}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Per-bag labour cost. Leave blank to use the default labour cost for this packaging variant.
+                </p>
+              </div>
             </div>
             <div>
               <Label htmlFor="packaging">Packaging Variant</Label>

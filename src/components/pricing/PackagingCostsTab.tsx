@@ -47,7 +47,8 @@ import {
 interface PackagingCost {
   id: string;
   packaging_variant: PackagingVariant;
-  cost_per_unit: number;
+  material_cost_per_unit: number;
+  labour_cost_per_unit: number;
   notes: string | null;
   updated_at: string;
 }
@@ -60,15 +61,21 @@ const VARIANT_ORDER: Record<PackagingVariant, number> = Object.fromEntries(
   PACKAGING_OPTIONS.map((o, i) => [o.value, i]),
 ) as Record<PackagingVariant, number>;
 
+function fmt4(n: number): string {
+  return `$${Number(n).toFixed(4)}`;
+}
+
 export function PackagingCostsTab() {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [addVariant, setAddVariant] = useState<PackagingVariant | ''>('');
-  const [addCost, setAddCost] = useState('');
+  const [addMaterial, setAddMaterial] = useState('');
+  const [addLabour, setAddLabour] = useState('');
   const [addNotes, setAddNotes] = useState('');
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editCost, setEditCost] = useState('');
+  const [editMaterial, setEditMaterial] = useState('');
+  const [editLabour, setEditLabour] = useState('');
   const [editNotes, setEditNotes] = useState('');
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -102,14 +109,18 @@ export function PackagingCostsTab() {
   const addMutation = useMutation({
     mutationFn: async () => {
       if (!addVariant) throw new Error('Pick a packaging variant');
-      const cost = Number(addCost);
-      if (!Number.isFinite(cost) || cost < 0)
-        throw new Error('Cost must be a non-negative number');
+      const material = Number(addMaterial);
+      const labour = Number(addLabour);
+      if (!Number.isFinite(material) || material < 0)
+        throw new Error('Material cost must be a non-negative number');
+      if (!Number.isFinite(labour) || labour < 0)
+        throw new Error('Labour cost must be a non-negative number');
       const userResp = await supabase.auth.getUser();
       const userId = userResp.data.user?.id ?? null;
       const { error } = await (supabase.from('packaging_costs') as any).insert({
         packaging_variant: addVariant,
-        cost_per_unit: cost,
+        material_cost_per_unit: material,
+        labour_cost_per_unit: labour,
         notes: addNotes.trim() || null,
         updated_by: userId,
       });
@@ -127,7 +138,8 @@ export function PackagingCostsTab() {
       queryClient.invalidateQueries({ queryKey: ['packaging_costs'] });
       setAddOpen(false);
       setAddVariant('');
-      setAddCost('');
+      setAddMaterial('');
+      setAddLabour('');
       setAddNotes('');
     },
     onError: (err: any) => toast.error(err?.message ?? 'Failed to add'),
@@ -136,14 +148,18 @@ export function PackagingCostsTab() {
   const editMutation = useMutation({
     mutationFn: async () => {
       if (!editingId) return;
-      const cost = Number(editCost);
-      if (!Number.isFinite(cost) || cost < 0)
-        throw new Error('Cost must be a non-negative number');
+      const material = Number(editMaterial);
+      const labour = Number(editLabour);
+      if (!Number.isFinite(material) || material < 0)
+        throw new Error('Material cost must be a non-negative number');
+      if (!Number.isFinite(labour) || labour < 0)
+        throw new Error('Labour cost must be a non-negative number');
       const userResp = await supabase.auth.getUser();
       const userId = userResp.data.user?.id ?? null;
       const { error } = await (supabase.from('packaging_costs') as any)
         .update({
-          cost_per_unit: cost,
+          material_cost_per_unit: material,
+          labour_cost_per_unit: labour,
           notes: editNotes.trim() || null,
           updated_by: userId,
         })
@@ -177,9 +193,17 @@ export function PackagingCostsTab() {
 
   const startEdit = (row: PackagingCost) => {
     setEditingId(row.id);
-    setEditCost(String(row.cost_per_unit));
+    setEditMaterial(String(row.material_cost_per_unit));
+    setEditLabour(String(row.labour_cost_per_unit));
     setEditNotes(row.notes ?? '');
   };
+
+  // live total in edit mode
+  const editTotalLive = useMemo(() => {
+    const m = Number(editMaterial);
+    const l = Number(editLabour);
+    return (Number.isFinite(m) ? m : 0) + (Number.isFinite(l) ? l : 0);
+  }, [editMaterial, editLabour]);
 
   return (
     <div className="space-y-4">
@@ -207,7 +231,9 @@ export function PackagingCostsTab() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Packaging variant</TableHead>
-                  <TableHead>Cost per unit (CAD)</TableHead>
+                  <TableHead>Material / unit (CAD)</TableHead>
+                  <TableHead>Labour / unit (CAD)</TableHead>
+                  <TableHead>Total / unit (CAD)</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead>Last updated</TableHead>
                   <TableHead className="w-[120px]"></TableHead>
@@ -216,6 +242,9 @@ export function PackagingCostsTab() {
               <TableBody>
                 {rows!.map((row) => {
                   const isEditing = editingId === row.id;
+                  const total = isEditing
+                    ? editTotalLive
+                    : Number(row.material_cost_per_unit) + Number(row.labour_cost_per_unit);
                   return (
                     <TableRow key={row.id}>
                       <TableCell>
@@ -227,13 +256,29 @@ export function PackagingCostsTab() {
                           <Input
                             type="number"
                             step="0.0001"
-                            value={editCost}
-                            onChange={(e) => setEditCost(e.target.value)}
+                            value={editMaterial}
+                            onChange={(e) => setEditMaterial(e.target.value)}
                             className="max-w-[140px]"
                           />
                         ) : (
-                          `$${Number(row.cost_per_unit).toFixed(4)}`
+                          fmt4(row.material_cost_per_unit)
                         )}
+                      </TableCell>
+                      <TableCell>
+                        {isEditing ? (
+                          <Input
+                            type="number"
+                            step="0.0001"
+                            value={editLabour}
+                            onChange={(e) => setEditLabour(e.target.value)}
+                            className="max-w-[140px]"
+                          />
+                        ) : (
+                          fmt4(row.labour_cost_per_unit)
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {fmt4(total)}
                       </TableCell>
                       <TableCell>
                         {isEditing ? (
@@ -298,9 +343,11 @@ export function PackagingCostsTab() {
       <div className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
         <Info className="h-4 w-4 mt-0.5 shrink-0" />
         <p>
-          These costs are used as the default for any product with that
-          packaging variant. To override for a specific product, edit the
-          product directly and set its packaging cost per unit override.
+          These are the defaults for each packaging variant. Material covers
+          what we supply (bag, labels, etc.); labour covers the cost to pack.
+          Either can be overridden per product — set the material override to
+          reflect what we contribute (a label only, no bag, etc.) and the
+          labour override to reflect non-standard pack effort.
         </p>
       </div>
 
@@ -330,14 +377,38 @@ export function PackagingCostsTab() {
               </Select>
             </div>
             <div>
-              <Label htmlFor="add-cost">Cost per unit (CAD)</Label>
-              <Input
-                id="add-cost"
-                type="number"
-                step="0.0001"
-                value={addCost}
-                onChange={(e) => setAddCost(e.target.value)}
-              />
+              <Label htmlFor="add-material">Material cost / unit (CAD)</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">$</span>
+                <Input
+                  id="add-material"
+                  type="number"
+                  step="0.0001"
+                  value={addMaterial}
+                  onChange={(e) => setAddMaterial(e.target.value)}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Cost of bag, labels, and any other materials we supply.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="add-labour">Labour cost / unit (CAD)</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">$</span>
+                <Input
+                  id="add-labour"
+                  type="number"
+                  step="0.0001"
+                  value={addLabour}
+                  onChange={(e) => setAddLabour(e.target.value)}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Cost of the labour to fill, seal, and label this packaging.
+                Reflects pack complexity — small bags cost more labour per
+                unit than bulk.
+              </p>
             </div>
             <div>
               <Label htmlFor="add-notes">Notes (optional)</Label>
