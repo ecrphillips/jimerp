@@ -246,7 +246,7 @@ export default function SourcingContracts() {
       }
       return true;
     });
-  }, [contracts, statusFilter, categoryFilter, search, vendorMap]);
+  }, [contracts, statusFilter, categoryFilter, search, vendorMap, requestedByContract]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
