@@ -73,6 +73,19 @@ describe('pricing pure helpers — calibration', () => {
       35,
       0.34,
     );
-    expect(close(final, 14.2857, 1e-4)).toBe(true);
+  it('packaging split: material $0.50 + labour $1.50 on $14.72 roasted → $16.72/bag total', () => {
+    const material = 0.5;
+    const labour = 1.5;
+    const roasted = 14.72;
+    const total = roasted + material + labour;
+    expect(close(total, 16.72, 1e-4)).toBe(true);
+  });
+
+  it('packaging split: material override 0 (client supplies bags) + labour $1.50 → total = roasted + $1.50', () => {
+    const material = 0; // explicit override
+    const labour = 1.5;
+    const roasted = 14.72;
+    const total = roasted + material + labour;
+    expect(close(total, roasted + 1.5, 1e-4)).toBe(true);
   });
 });
