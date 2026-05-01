@@ -20,6 +20,7 @@ import { PackagingBadge } from '@/components/PackagingBadge';
 import { format } from 'date-fns';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { WipAdjustmentModal } from '@/components/inventory/WipAdjustmentModal';
+import { WipFloorCountModal, type WipFloorRow } from '@/components/inventory/WipFloorCountModal';
 
 type WipAdjustmentReason = 'LOSS' | 'COUNT_ADJUSTMENT' | 'CONTAMINATION' | 'OTHER';
 
@@ -76,9 +77,12 @@ export default function Inventory() {
   const [absoluteAdjustOpen, setAbsoluteAdjustOpen] = useState(false);
   const [absoluteAdjustGroup, setAbsoluteAdjustGroup] = useState<{ key: string; name: string; balance: number } | null>(null);
 
-  // Roast-group picker for empty-state opening-balance flow
+  // Roast-group picker for opening-balance / new-group flow (always available)
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerGroup, setPickerGroup] = useState<string>('');
+
+  // WIP Floor Count modal
+  const [floorCountOpen, setFloorCountOpen] = useState(false);
 
   // ===== WIP Tab Queries =====
   
@@ -466,19 +470,18 @@ export default function Inventory() {
         <TabsContent value="wip" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Work-in-Progress by Roast Group</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Net WIP = Roasted/Blended Output − Packing Consumed + Adjustments
-              </p>
-              <p className="text-xs text-muted-foreground">
-                For post-roast blends, WIP is created when components are blended, not when components are roasted.
-              </p>
-            </CardHeader>
-            <CardContent>
-              {wipByRoastGroup.length === 0 ? (
-                <div className="py-6 space-y-3">
-                  <p className="text-muted-foreground">No WIP data available.</p>
-                  {isAdminOrOps && (
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="text-lg">Work-in-Progress by Roast Group</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Net WIP = Roasted/Blended Output − Packing Consumed + Adjustments
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    For post-roast blends, WIP is created when components are blended, not when components are roasted.
+                  </p>
+                </div>
+                {isAdminOrOps && (
+                  <div className="flex gap-2 shrink-0">
                     <Button
                       variant="outline"
                       size="sm"
@@ -487,9 +490,27 @@ export default function Inventory() {
                         setPickerOpen(true);
                       }}
                     >
-                      Adjust opening balance
+                      <Plus className="h-4 w-4" />
+                      Add WIP for roast group
                     </Button>
-                  )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFloorCountOpen(true)}
+                    >
+                      <Scale className="h-4 w-4" />
+                      Floor Count
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {wipByRoastGroup.length === 0 ? (
+                <div className="py-6">
+                  <p className="text-muted-foreground">
+                    No WIP data available. Use “Add WIP for roast group” above to enter an opening balance.
+                  </p>
                 </div>
               ) : (
                 <table className="w-full text-sm">
@@ -735,7 +756,7 @@ export default function Inventory() {
         />
       )}
 
-      {/* Roast group picker for empty-state opening balance */}
+      {/* Roast group picker — always available from the WIP tab header */}
       <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -743,16 +764,32 @@ export default function Inventory() {
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Choose the roast group to set an opening WIP balance for.
+              Choose a roast group to adjust its WIP balance.
             </p>
             <Select value={pickerGroup} onValueChange={setPickerGroup}>
               <SelectTrigger><SelectValue placeholder="Select roast group" /></SelectTrigger>
               <SelectContent>
-                {(roastGroupsInfo ?? []).map((rg) => (
-                  <SelectItem key={rg.roast_group} value={rg.roast_group}>
-                    {rg.display_name || rg.roast_group}
-                  </SelectItem>
-                ))}
+                {(roastGroupsInfo ?? [])
+                  .slice()
+                  .sort((a, b) =>
+                    (a.display_name || a.roast_group).localeCompare(b.display_name || b.roast_group),
+                  )
+                  .map((rg) => {
+                    const existing = wipByRoastGroup.find((r) => r.roast_group === rg.roast_group);
+                    const balanceLabel = existing
+                      ? `${existing.net_wip_kg.toFixed(1)} kg`
+                      : '—';
+                    return (
+                      <SelectItem key={rg.roast_group} value={rg.roast_group}>
+                        <div className="flex flex-col">
+                          <span>{rg.display_name || rg.roast_group}</span>
+                          <span className="text-xs text-muted-foreground">
+                            Current WIP: {balanceLabel}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
               </SelectContent>
             </Select>
           </div>
@@ -771,6 +808,20 @@ export default function Inventory() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* WIP Floor Count modal */}
+      <WipFloorCountModal
+        open={floorCountOpen}
+        onOpenChange={setFloorCountOpen}
+        rows={(roastGroupsInfo ?? []).map<WipFloorRow>((rg) => {
+          const existing = wipByRoastGroup.find((r) => r.roast_group === rg.roast_group);
+          return {
+            roast_group: rg.roast_group,
+            display_name: rg.display_name || rg.roast_group,
+            current_kg: existing?.net_wip_kg ?? 0,
+          };
+        })}
+      />
     </div>
   );
 }
