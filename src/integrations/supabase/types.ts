@@ -2568,6 +2568,7 @@ export type Database = {
           created_by: string | null
           id: string
           is_system_generated: boolean
+          lot_id: string | null
           notes: string | null
           order_id: string | null
           product_id: string | null
@@ -2581,6 +2582,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           is_system_generated?: boolean
+          lot_id?: string | null
           notes?: string | null
           order_id?: string | null
           product_id?: string | null
@@ -2594,6 +2596,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           is_system_generated?: boolean
+          lot_id?: string | null
           notes?: string | null
           order_id?: string | null
           product_id?: string | null
@@ -2603,6 +2606,13 @@ export type Database = {
           transaction_type?: Database["public"]["Enums"]["inventory_transaction_type"]
         }
         Relationships: [
+          {
+            foreignKeyName: "inventory_transactions_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "green_lots"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "inventory_transactions_order_id_fkey"
             columns: ["order_id"]
@@ -4323,6 +4333,7 @@ export type Database = {
         | "SHIP_CONSUME_FG"
         | "ADJUSTMENT"
         | "LOSS"
+        | "GREEN_FLOOR_COUNT_ADJUSTMENT"
       lot_status:
         | "EN_ROUTE"
         | "RECEIVED"
@@ -4556,6 +4567,7 @@ export const Constants = {
         "SHIP_CONSUME_FG",
         "ADJUSTMENT",
         "LOSS",
+        "GREEN_FLOOR_COUNT_ADJUSTMENT",
       ],
       lot_status: [
         "EN_ROUTE",
