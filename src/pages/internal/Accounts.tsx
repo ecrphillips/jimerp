@@ -27,6 +27,7 @@ interface AccountRow {
   account_name: string;
   account_code: string | null;
   billing_contact_name: string | null;
+  pronouns: string | null;
   billing_email: string | null;
   billing_phone: string | null;
   billing_address: string | null;
@@ -256,7 +257,12 @@ export default function Accounts() {
                 </div>
                 {(account.billing_contact_name || account.billing_email) && (
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {[account.billing_contact_name, account.billing_email].filter(Boolean).join(' · ')}
+                    {[
+                      account.billing_contact_name
+                        ? `${account.billing_contact_name}${account.pronouns ? ` (${account.pronouns})` : ''}`
+                        : null,
+                      account.billing_email,
+                    ].filter(Boolean).join(' · ')}
                   </p>
                 )}
               </div>
