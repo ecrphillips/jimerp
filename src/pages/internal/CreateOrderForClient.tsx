@@ -228,7 +228,7 @@ export default function CreateOrderForClient() {
       quantity: qty,
       grind: grindOpts.length > 0 ? grindOpts[0] : null,
       grindOptions: grindOpts,
-      price: prices?.[product.id] ?? null,
+      price: effectivePrice(product.id).price,
       packagingTypeName,
       gramsPerUnit,
     };
