@@ -25,6 +25,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
 import { PronounsField } from '@/components/contacts/PronounsField';
 import { formatPronounsSuffix } from '@/lib/pronounOptions';
+import { LockedPricesTab } from '@/components/pricing/LockedPricesTab';
 
 // ─── Pricing Tier Card (internal-only) ─────────────────────────
 function formatTierMarkup(t: { markup_adjustment_type: string; markup_multiplier: number | null; per_kg_fee: number | null; target_margin_pct: number | null }): string {
