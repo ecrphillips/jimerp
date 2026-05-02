@@ -33,8 +33,13 @@ import {
   Edit,
   DollarSign,
   AlertTriangle,
+  Send,
+  CheckCircle2,
+  Undo2,
+  Lock,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 import { calculatePrice, type PricingInputs } from '@/lib/pricing';
 import { formatMoney } from '@/lib/formatMoney';
 import { marginColour, marginClass } from '@/lib/quoteConstants';
@@ -82,6 +87,8 @@ type Quote = {
   account_id: string | null;
   prospect_id: string | null;
   status: string;
+  sent_at: string | null;
+  accepted_at: string | null;
   title: string | null;
   internal_notes: string | null;
   customer_notes: string | null;
@@ -96,6 +103,7 @@ export default function QuoteDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { isAdmin } = useAuth();
 
   const { data: lots } = useGreenLotsForPicker();
   const lotById = useMemo(() => {
@@ -110,8 +118,8 @@ export default function QuoteDetail() {
       const { data, error } = await sb
         .from('quotes')
         .select(`
-          id, quote_number, account_id, prospect_id, status, title, internal_notes,
-          customer_notes, valid_until,
+          id, quote_number, account_id, prospect_id, status, sent_at, accepted_at,
+          title, internal_notes, customer_notes, valid_until,
           accounts ( account_name ),
           prospects ( business_name )
         `)
@@ -253,6 +261,11 @@ export default function QuoteDetail() {
       }
       const { error } = await sb.from('quote_line_items').update(updates).eq('id', lineId);
       if (error) throw error;
+      // If quote is ACCEPTED, propagate price to linked locked_prices row.
+      if (quote?.status === 'ACCEPTED') {
+        const { error: syncErr } = await sb.rpc('sync_locked_price_for_quote_line', { p_line_id: lineId });
+        if (syncErr) console.warn('sync_locked_price_for_quote_line failed', syncErr);
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['quote-lines', id] });
@@ -377,6 +390,56 @@ export default function QuoteDetail() {
     onError: (e: any) => toast.error(`Recalculate all failed: ${e.message}`),
   });
 
+  // ---- Lifecycle ----
+  const [lifecycleAction, setLifecycleAction] = useState<null | 'send' | 'accept' | 'reverse'>(null);
+
+  const markSent = useMutation({
+    mutationFn: async () => {
+      const { error } = await sb.rpc('mark_quote_sent', { p_quote_id: id });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Quote marked as sent');
+      qc.invalidateQueries({ queryKey: ['quote', id] });
+      setLifecycleAction(null);
+    },
+    onError: (e: any) => toast.error(`Failed: ${e.message}`),
+  });
+
+  const markAccepted = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await sb.rpc('mark_quote_accepted', { p_quote_id: id });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data: any) => {
+      const created = data?.locks_created ?? 0;
+      if (data?.skipped_reason === 'PROSPECT') {
+        toast.success('Quote accepted (no locked prices created — prospect)');
+      } else {
+        toast.success(`Quote accepted — ${created} locked price${created === 1 ? '' : 's'} created`);
+      }
+      qc.invalidateQueries({ queryKey: ['quote', id] });
+      qc.invalidateQueries({ queryKey: ['locked-prices'] });
+      setLifecycleAction(null);
+    },
+    onError: (e: any) => toast.error(`Failed: ${e.message}`),
+  });
+
+  const reverseToSent = useMutation({
+    mutationFn: async () => {
+      const { error } = await sb.rpc('reverse_quote_to_sent', { p_quote_id: id });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Reverted to sent — locked prices archived');
+      qc.invalidateQueries({ queryKey: ['quote', id] });
+      qc.invalidateQueries({ queryKey: ['locked-prices'] });
+      setLifecycleAction(null);
+    },
+    onError: (e: any) => toast.error(`Failed: ${e.message}`),
+  });
+
   // ---- Totals ----
   const totals = useMemo(() => {
     const list = lines ?? [];
@@ -449,17 +512,40 @@ export default function QuoteDetail() {
                 <div className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
                   {recipientName}
                   {isProspect && <Badge variant="outline" className="text-xs">Prospect</Badge>}
-                  <Badge variant="secondary">{quote.status}</Badge>
+                  <StatusBadge status={quote.status} />
                 </div>
               </div>
-              {headerDirty && (
-                <Button onClick={() => saveHeader.mutate()} disabled={saveHeader.isPending}>
-                  Save changes
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {quote.status === 'DRAFT' && (
+                  <Button size="sm" variant="default" onClick={() => setLifecycleAction('send')}>
+                    <Send className="h-4 w-4 mr-1" /> Mark as Sent
+                  </Button>
+                )}
+                {quote.status === 'SENT' && (
+                  <Button size="sm" variant="default" onClick={() => setLifecycleAction('accept')}>
+                    <CheckCircle2 className="h-4 w-4 mr-1" /> Mark as Accepted
+                  </Button>
+                )}
+                {quote.status === 'ACCEPTED' && isAdmin && (
+                  <Button size="sm" variant="outline" onClick={() => setLifecycleAction('reverse')}>
+                    <Undo2 className="h-4 w-4 mr-1" /> Reverse to Sent
+                  </Button>
+                )}
+                {headerDirty && (
+                  <Button onClick={() => saveHeader.mutate()} disabled={saveHeader.isPending}>
+                    Save changes
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {quote.status === 'ACCEPTED' && (
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm flex items-center gap-2">
+                <Lock className="h-4 w-4 text-primary" />
+                Editing this quote updates linked locked prices.
+              </div>
+            )}
             {isProspect && (
               <div className="rounded-md bg-muted p-3 text-sm">
                 Prospect quotes use the default tier unless you override per line. Set per-line
@@ -819,6 +905,43 @@ export default function QuoteDetail() {
             onCancel={() => setDeleteLineId(null)}
           />
         )}
+
+        {/* Lifecycle confirms */}
+        {lifecycleAction === 'send' && (
+          <LifecycleDialog
+            title="Mark this quote as sent?"
+            description="This records that you've sent the quote to the customer."
+            confirmLabel="Mark as Sent"
+            onConfirm={() => markSent.mutate()}
+            onCancel={() => setLifecycleAction(null)}
+            pending={markSent.isPending}
+          />
+        )}
+        {lifecycleAction === 'accept' && (
+          <LifecycleDialog
+            title="Mark this quote as accepted?"
+            description={
+              isProspect
+                ? "This quote is for a prospect. Convert to account first to enable locked pricing. You can still mark accepted, but no locks will be created."
+                : `This will lock in these prices for ${recipientName} for future orders. Any existing locked prices for the same product+bag size+green source will be archived.`
+            }
+            confirmLabel="Mark as Accepted"
+            onConfirm={() => markAccepted.mutate()}
+            onCancel={() => setLifecycleAction(null)}
+            pending={markAccepted.isPending}
+          />
+        )}
+        {lifecycleAction === 'reverse' && (
+          <LifecycleDialog
+            title="Reverse to Sent?"
+            description="This will archive the locked prices created from this quote. Are you sure?"
+            confirmLabel="Reverse"
+            destructive
+            onConfirm={() => reverseToSent.mutate()}
+            onCancel={() => setLifecycleAction(null)}
+            pending={reverseToSent.isPending}
+          />
+        )}
       </div>
     </TooltipProvider>
   );
@@ -856,6 +979,59 @@ function DeleteLineDialog({ onConfirm, onCancel }: { onConfirm: () => void; onCa
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction className="bg-destructive text-destructive-foreground" onClick={onConfirm}>
             Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const cls =
+    status === 'ACCEPTED'
+      ? 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30 dark:text-emerald-400'
+      : status === 'SENT'
+      ? 'bg-blue-500/15 text-blue-700 border-blue-500/30 dark:text-blue-400'
+      : 'bg-muted text-muted-foreground border-muted-foreground/20';
+  return (
+    <Badge variant="outline" className={cls}>
+      {status}
+    </Badge>
+  );
+}
+
+function LifecycleDialog({
+  title,
+  description,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+  pending,
+  destructive,
+}: {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  pending?: boolean;
+  destructive?: boolean;
+}) {
+  return (
+    <AlertDialog open onOpenChange={(o) => !o && onCancel()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className={destructive ? 'bg-destructive text-destructive-foreground' : ''}
+            onClick={onConfirm}
+            disabled={pending}
+          >
+            {pending ? 'Working…' : confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
