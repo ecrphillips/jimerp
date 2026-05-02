@@ -3,6 +3,7 @@ import { DefaultsTab } from '@/components/pricing/DefaultsTab';
 import { PackagingCostsTab } from '@/components/pricing/PackagingCostsTab';
 import { TiersTab } from '@/components/pricing/TiersTab';
 import { CalculatorTab } from '@/components/pricing/CalculatorTab';
+import { LockedPricesTab } from '@/components/pricing/LockedPricesTab';
 
 export default function PricingAdmin() {
   return (
@@ -20,6 +21,7 @@ export default function PricingAdmin() {
           <TabsTrigger value="packaging">Packaging Costs</TabsTrigger>
           <TabsTrigger value="tiers">Tiers</TabsTrigger>
           <TabsTrigger value="calculator">Calculator</TabsTrigger>
+          <TabsTrigger value="locked">Locked Prices</TabsTrigger>
         </TabsList>
 
         <TabsContent value="defaults">
@@ -36,6 +38,10 @@ export default function PricingAdmin() {
 
         <TabsContent value="calculator">
           <CalculatorTab />
+        </TabsContent>
+
+        <TabsContent value="locked">
+          <LockedPricesTab />
         </TabsContent>
       </Tabs>
     </div>
