@@ -261,6 +261,11 @@ export default function QuoteDetail() {
       }
       const { error } = await sb.from('quote_line_items').update(updates).eq('id', lineId);
       if (error) throw error;
+      // If quote is ACCEPTED, propagate price to linked locked_prices row.
+      if (quote?.status === 'ACCEPTED') {
+        const { error: syncErr } = await sb.rpc('sync_locked_price_for_quote_line', { p_line_id: lineId });
+        if (syncErr) console.warn('sync_locked_price_for_quote_line failed', syncErr);
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['quote-lines', id] });
