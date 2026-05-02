@@ -87,6 +87,8 @@ type Quote = {
   account_id: string | null;
   prospect_id: string | null;
   status: string;
+  sent_at: string | null;
+  accepted_at: string | null;
   title: string | null;
   internal_notes: string | null;
   customer_notes: string | null;
