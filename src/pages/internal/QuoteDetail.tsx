@@ -33,8 +33,13 @@ import {
   Edit,
   DollarSign,
   AlertTriangle,
+  Send,
+  CheckCircle2,
+  Undo2,
+  Lock,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 import { calculatePrice, type PricingInputs } from '@/lib/pricing';
 import { formatMoney } from '@/lib/formatMoney';
 import { marginColour, marginClass } from '@/lib/quoteConstants';
