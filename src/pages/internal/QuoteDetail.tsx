@@ -103,6 +103,7 @@ export default function QuoteDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { isAdmin } = useAuth();
 
   const { data: lots } = useGreenLotsForPicker();
   const lotById = useMemo(() => {
@@ -117,8 +118,8 @@ export default function QuoteDetail() {
       const { data, error } = await sb
         .from('quotes')
         .select(`
-          id, quote_number, account_id, prospect_id, status, title, internal_notes,
-          customer_notes, valid_until,
+          id, quote_number, account_id, prospect_id, status, sent_at, accepted_at,
+          title, internal_notes, customer_notes, valid_until,
           accounts ( account_name ),
           prospects ( business_name )
         `)
