@@ -1494,6 +1494,9 @@ export default function AccountDetail() {
           {hasManufacturing && <TabsTrigger value="locations">Locations</TabsTrigger>}
           <TabsTrigger value="users">Users</TabsTrigger>
           {hasCoroasting && <TabsTrigger value="coroasting">Co-Roasting</TabsTrigger>}
+          {(authUser?.role === 'ADMIN' || authUser?.role === 'OPS') && (
+            <TabsTrigger value="pricing">Pricing</TabsTrigger>
+          )}
           <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
 
@@ -1512,6 +1515,22 @@ export default function AccountDetail() {
           {hasCoroasting && (
             <TabsContent value="coroasting">
               <CoRoastingTab account={account} refetch={refetch} />
+            </TabsContent>
+          )}
+          {(authUser?.role === 'ADMIN' || authUser?.role === 'OPS') && (
+            <TabsContent value="pricing">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Locked Prices</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Locked prices override calculated list prices on orders. They're created when
+                    quotes are accepted and can be edited or archived here.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <LockedPricesTab accountIdFilter={account.id} bare />
+                </CardContent>
+              </Card>
             </TabsContent>
           )}
           <TabsContent value="activity">
