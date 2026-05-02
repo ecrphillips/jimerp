@@ -2632,6 +2632,98 @@ export type Database = {
           },
         ]
       }
+      locked_prices: {
+        Row: {
+          account_id: string
+          archived_at: string | null
+          archived_reason: string | null
+          bag_size_g: number
+          created_at: string
+          effective_from: string
+          expires_at: string | null
+          green_source_id: string | null
+          green_source_type: string
+          id: string
+          is_archived: boolean
+          locked_price: number
+          notes: string | null
+          product_id: string
+          source_quote_id: string
+          source_quote_line_id: string
+          theoretical_blend_ratios: Json | null
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          archived_at?: string | null
+          archived_reason?: string | null
+          bag_size_g: number
+          created_at?: string
+          effective_from?: string
+          expires_at?: string | null
+          green_source_id?: string | null
+          green_source_type: string
+          id?: string
+          is_archived?: boolean
+          locked_price: number
+          notes?: string | null
+          product_id: string
+          source_quote_id: string
+          source_quote_line_id: string
+          theoretical_blend_ratios?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          archived_at?: string | null
+          archived_reason?: string | null
+          bag_size_g?: number
+          created_at?: string
+          effective_from?: string
+          expires_at?: string | null
+          green_source_id?: string | null
+          green_source_type?: string
+          id?: string
+          is_archived?: boolean
+          locked_price?: number
+          notes?: string | null
+          product_id?: string
+          source_quote_id?: string
+          source_quote_line_id?: string
+          theoretical_blend_ratios?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "locked_prices_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "locked_prices_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "locked_prices_source_quote_id_fkey"
+            columns: ["source_quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "locked_prices_source_quote_line_id_fkey"
+            columns: ["source_quote_line_id"]
+            isOneToOne: false
+            referencedRelation: "quote_line_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_date_audit_log: {
         Row: {
           changed_at: string
@@ -3606,6 +3698,7 @@ export type Database = {
       }
       quotes: {
         Row: {
+          accepted_at: string | null
           account_id: string | null
           created_at: string
           created_by: string | null
@@ -3614,6 +3707,7 @@ export type Database = {
           internal_notes: string | null
           prospect_id: string | null
           quote_number: string
+          sent_at: string | null
           status: string
           title: string | null
           updated_at: string
@@ -3621,6 +3715,7 @@ export type Database = {
           valid_until: string | null
         }
         Insert: {
+          accepted_at?: string | null
           account_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -3629,6 +3724,7 @@ export type Database = {
           internal_notes?: string | null
           prospect_id?: string | null
           quote_number: string
+          sent_at?: string | null
           status?: string
           title?: string | null
           updated_at?: string
@@ -3636,6 +3732,7 @@ export type Database = {
           valid_until?: string | null
         }
         Update: {
+          accepted_at?: string | null
           account_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -3644,6 +3741,7 @@ export type Database = {
           internal_notes?: string | null
           prospect_id?: string | null
           quote_number?: string
+          sent_at?: string | null
           status?: string
           title?: string | null
           updated_at?: string
@@ -4208,6 +4306,14 @@ export type Database = {
         Args: { _account_id: string }
         Returns: undefined
       }
+      _derive_green_source: {
+        Args: { _line_id: string }
+        Returns: {
+          green_source_id: string
+          green_source_type: string
+          theoretical_blend_ratios: Json
+        }[]
+      }
       _get_or_create_billing_period: {
         Args: { _account_id: string; _booking_date: string }
         Returns: string
@@ -4303,6 +4409,8 @@ export type Database = {
         }
         Returns: boolean
       }
+      mark_quote_accepted: { Args: { p_quote_id: string }; Returns: Json }
+      mark_quote_sent: { Args: { p_quote_id: string }; Returns: undefined }
       move_to_dlq: {
         Args: {
           dlq_name: string
@@ -4320,6 +4428,11 @@ export type Database = {
           msg_id: number
           read_ct: number
         }[]
+      }
+      reverse_quote_to_sent: { Args: { p_quote_id: string }; Returns: Json }
+      sync_locked_price_for_quote_line: {
+        Args: { p_line_id: string }
+        Returns: undefined
       }
     }
     Enums: {
