@@ -905,6 +905,43 @@ export default function QuoteDetail() {
             onCancel={() => setDeleteLineId(null)}
           />
         )}
+
+        {/* Lifecycle confirms */}
+        {lifecycleAction === 'send' && (
+          <LifecycleDialog
+            title="Mark this quote as sent?"
+            description="This records that you've sent the quote to the customer."
+            confirmLabel="Mark as Sent"
+            onConfirm={() => markSent.mutate()}
+            onCancel={() => setLifecycleAction(null)}
+            pending={markSent.isPending}
+          />
+        )}
+        {lifecycleAction === 'accept' && (
+          <LifecycleDialog
+            title="Mark this quote as accepted?"
+            description={
+              isProspect
+                ? "This quote is for a prospect. Convert to account first to enable locked pricing. You can still mark accepted, but no locks will be created."
+                : `This will lock in these prices for ${recipientName} for future orders. Any existing locked prices for the same product+bag size+green source will be archived.`
+            }
+            confirmLabel="Mark as Accepted"
+            onConfirm={() => markAccepted.mutate()}
+            onCancel={() => setLifecycleAction(null)}
+            pending={markAccepted.isPending}
+          />
+        )}
+        {lifecycleAction === 'reverse' && (
+          <LifecycleDialog
+            title="Reverse to Sent?"
+            description="This will archive the locked prices created from this quote. Are you sure?"
+            confirmLabel="Reverse"
+            destructive
+            onConfirm={() => reverseToSent.mutate()}
+            onCancel={() => setLifecycleAction(null)}
+            pending={reverseToSent.isPending}
+          />
+        )}
       </div>
     </TooltipProvider>
   );
