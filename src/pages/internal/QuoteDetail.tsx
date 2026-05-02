@@ -512,17 +512,40 @@ export default function QuoteDetail() {
                 <div className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
                   {recipientName}
                   {isProspect && <Badge variant="outline" className="text-xs">Prospect</Badge>}
-                  <Badge variant="secondary">{quote.status}</Badge>
+                  <StatusBadge status={quote.status} />
                 </div>
               </div>
-              {headerDirty && (
-                <Button onClick={() => saveHeader.mutate()} disabled={saveHeader.isPending}>
-                  Save changes
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {quote.status === 'DRAFT' && (
+                  <Button size="sm" variant="default" onClick={() => setLifecycleAction('send')}>
+                    <Send className="h-4 w-4 mr-1" /> Mark as Sent
+                  </Button>
+                )}
+                {quote.status === 'SENT' && (
+                  <Button size="sm" variant="default" onClick={() => setLifecycleAction('accept')}>
+                    <CheckCircle2 className="h-4 w-4 mr-1" /> Mark as Accepted
+                  </Button>
+                )}
+                {quote.status === 'ACCEPTED' && isAdmin && (
+                  <Button size="sm" variant="outline" onClick={() => setLifecycleAction('reverse')}>
+                    <Undo2 className="h-4 w-4 mr-1" /> Reverse to Sent
+                  </Button>
+                )}
+                {headerDirty && (
+                  <Button onClick={() => saveHeader.mutate()} disabled={saveHeader.isPending}>
+                    Save changes
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {quote.status === 'ACCEPTED' && (
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm flex items-center gap-2">
+                <Lock className="h-4 w-4 text-primary" />
+                Editing this quote updates linked locked prices.
+              </div>
+            )}
             {isProspect && (
               <div className="rounded-md bg-muted p-3 text-sm">
                 Prospect quotes use the default tier unless you override per line. Set per-line
