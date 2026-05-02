@@ -985,3 +985,56 @@ function DeleteLineDialog({ onConfirm, onCancel }: { onConfirm: () => void; onCa
     </AlertDialog>
   );
 }
+
+function StatusBadge({ status }: { status: string }) {
+  const cls =
+    status === 'ACCEPTED'
+      ? 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30 dark:text-emerald-400'
+      : status === 'SENT'
+      ? 'bg-blue-500/15 text-blue-700 border-blue-500/30 dark:text-blue-400'
+      : 'bg-muted text-muted-foreground border-muted-foreground/20';
+  return (
+    <Badge variant="outline" className={cls}>
+      {status}
+    </Badge>
+  );
+}
+
+function LifecycleDialog({
+  title,
+  description,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+  pending,
+  destructive,
+}: {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  pending?: boolean;
+  destructive?: boolean;
+}) {
+  return (
+    <AlertDialog open onOpenChange={(o) => !o && onCancel()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className={destructive ? 'bg-destructive text-destructive-foreground' : ''}
+            onClick={onConfirm}
+            disabled={pending}
+          >
+            {pending ? 'Working…' : confirmLabel}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
