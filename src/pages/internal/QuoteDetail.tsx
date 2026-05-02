@@ -390,6 +390,56 @@ export default function QuoteDetail() {
     onError: (e: any) => toast.error(`Recalculate all failed: ${e.message}`),
   });
 
+  // ---- Lifecycle ----
+  const [lifecycleAction, setLifecycleAction] = useState<null | 'send' | 'accept' | 'reverse'>(null);
+
+  const markSent = useMutation({
+    mutationFn: async () => {
+      const { error } = await sb.rpc('mark_quote_sent', { p_quote_id: id });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Quote marked as sent');
+      qc.invalidateQueries({ queryKey: ['quote', id] });
+      setLifecycleAction(null);
+    },
+    onError: (e: any) => toast.error(`Failed: ${e.message}`),
+  });
+
+  const markAccepted = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await sb.rpc('mark_quote_accepted', { p_quote_id: id });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data: any) => {
+      const created = data?.locks_created ?? 0;
+      if (data?.skipped_reason === 'PROSPECT') {
+        toast.success('Quote accepted (no locked prices created — prospect)');
+      } else {
+        toast.success(`Quote accepted — ${created} locked price${created === 1 ? '' : 's'} created`);
+      }
+      qc.invalidateQueries({ queryKey: ['quote', id] });
+      qc.invalidateQueries({ queryKey: ['locked-prices'] });
+      setLifecycleAction(null);
+    },
+    onError: (e: any) => toast.error(`Failed: ${e.message}`),
+  });
+
+  const reverseToSent = useMutation({
+    mutationFn: async () => {
+      const { error } = await sb.rpc('reverse_quote_to_sent', { p_quote_id: id });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Reverted to sent — locked prices archived');
+      qc.invalidateQueries({ queryKey: ['quote', id] });
+      qc.invalidateQueries({ queryKey: ['locked-prices'] });
+      setLifecycleAction(null);
+    },
+    onError: (e: any) => toast.error(`Failed: ${e.message}`),
+  });
+
   // ---- Totals ----
   const totals = useMemo(() => {
     const list = lines ?? [];
