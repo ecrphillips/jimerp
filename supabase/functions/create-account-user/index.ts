@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
     // Verify account exists
     const { data: account, error: accountError } = await adminClient
       .from('accounts')
-      .select('id, account_name')
+      .select('id, account_name, programs')
       .eq('id', account_id)
       .single();
 
