@@ -132,6 +132,9 @@ async function buildClientBrief(clientId: string): Promise<string> {
   const { data: orders } = await supabase
     .from('orders')
     .select('id, order_number, status, requested_ship_date, created_at')
+    // clientId here is legacy clients.id (passed from Clients.tsx admin surface, not an account UUID).
+    // Admin/OPS sessions bypass RLS so this still resolves correctly. Do not migrate to account_id
+    // until this surface is repointed to accounts.
     .eq('client_id', clientId)
     .order('created_at', { ascending: false })
     .limit(50);
@@ -185,6 +188,7 @@ async function buildClientBrief(clientId: string): Promise<string> {
   const { data: notes } = await supabase
     .from('client_notes')
     .select('note_text, follow_up_by, created_by, created_at')
+    // Same as above: clientId is legacy clients.id on admin-only surface.
     .eq('client_id', clientId)
     .order('created_at', { ascending: true });
 
