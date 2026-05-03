@@ -129,6 +129,8 @@ async function buildClientBrief(clientId: string): Promise<string> {
   }
 
   // 2. Order history summary
+  // Admin-only surface: clientId is legacy clients.id UUID (not accounts.id).
+  // ADMIN RLS policy allows all reads regardless of column value; do not change to account_id.
   const { data: orders } = await supabase
     .from('orders')
     .select('id, order_number, status, requested_ship_date, created_at')
@@ -182,6 +184,7 @@ async function buildClientBrief(clientId: string): Promise<string> {
   }
 
   // 3. Account notes
+  // Admin-only surface: clientId is legacy clients.id UUID — see comment above.
   const { data: notes } = await supabase
     .from('client_notes')
     .select('note_text, follow_up_by, created_by, created_at')

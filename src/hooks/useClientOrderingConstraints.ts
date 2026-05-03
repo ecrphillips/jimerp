@@ -13,19 +13,21 @@ export interface ClientOrderingConstraints {
  * @returns Constraints object with loading/error states
  */
 export function useClientOrderingConstraints(clientId: string | null | undefined) {
-  // Fetch client-level constraints (case_only, case_size)
+  // Fetch client-level constraints (case_only, case_size).
+  // TODO: case_only/case_size are on clients table (legacy). CLIENT RLS on clients is denied
+  // after Step 4 migration; this query returns null and defaults to no constraints.
+  // Migrate case_only/case_size to the accounts table to fully fix.
   const { data: clientData, isLoading: clientLoading } = useQuery({
     queryKey: ['client-ordering-constraints', clientId],
     queryFn: async () => {
       if (!clientId) return null;
-      
-      const { data, error } = await supabase
+
+      const { data } = await supabase
         .from('clients')
         .select('case_only, case_size')
         .eq('id', clientId)
-        .single();
-        
-      if (error) throw error;
+        .maybeSingle();
+
       return data;
     },
     enabled: !!clientId,
@@ -40,8 +42,8 @@ export function useClientOrderingConstraints(clientId: string | null | undefined
       const { data, error } = await supabase
         .from('client_allowed_products')
         .select('product_id')
-        .eq('client_id', clientId);
-        
+        .eq('account_id', clientId);
+
       if (error) throw error;
       
       // If no rows, client can order all products (null means unrestricted)

@@ -63,7 +63,7 @@ export default function OrderDetail() {
           shipped_or_ready,
           invoiced,
           created_by_admin,
-          client_id,
+          account_id,
           location_id,
           updated_at,
            client:clients(name),
@@ -864,7 +864,7 @@ export default function OrderDetail() {
             requested_ship_date: order.requested_ship_date,
             delivery_method: order.delivery_method,
             status: order.status,
-            client_id: (order as any).client_id,
+            client_id: (order as any).account_id,
             created_by_admin: order.created_by_admin,
           }}
           lineItems={lineItemsWithPackedStatus.map(li => ({
@@ -875,7 +875,7 @@ export default function OrderDetail() {
             grind: li.grind,
             unit_price_locked: li.unit_price_locked,
           }))}
-          clientId={(order as any).client_id}
+          clientId={(order as any).account_id}
         />
       )}
 
