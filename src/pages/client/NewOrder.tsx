@@ -218,7 +218,7 @@ export default function NewOrder() {
       const { data: lastOrder } = await supabase
         .from('orders')
         .select('id, order_line_items(product_id, quantity_units)')
-        .eq('client_id', authUser.accountId)
+        .eq('account_id', authUser.accountId)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'])
         .order('created_at', { ascending: false })
         .limit(1)
@@ -227,7 +227,7 @@ export default function NewOrder() {
       const { data: recentOrders } = await supabase
         .from('orders')
         .select('id')
-        .eq('client_id', authUser.accountId)
+        .eq('account_id', authUser.accountId)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'])
         .order('created_at', { ascending: false })
         .limit(5);
@@ -377,7 +377,7 @@ export default function NewOrder() {
         'validate-order-constraints',
         {
           body: {
-            client_id: authUser.accountId,
+            account_id: authUser.accountId,
             line_items: lineItems.map((li) => ({
               product_id: li.productId,
               quantity_units: li.quantity,
@@ -404,7 +404,7 @@ export default function NewOrder() {
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
-          client_id: authUser.accountId,
+          account_id: authUser.accountId,
           location_id: selectedLocationId || null,
           order_number: '',
           status: 'SUBMITTED',

@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 interface ValidationRequest {
-  client_id: string;
+  account_id: string;
   line_items: Array<{
     product_id: string;
     quantity_units: number;
@@ -29,8 +29,7 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    
-    // Get auth header to check user role
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(
@@ -40,11 +39,10 @@ serve(async (req) => {
     }
 
     const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
-    
-    // Verify the user's token and get their role
+
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
-    
+
     if (authError || !user) {
       return new Response(
         JSON.stringify({ valid: false, errors: ["Invalid authentication"] }),
@@ -52,24 +50,32 @@ serve(async (req) => {
       );
     }
 
-    // Get user's role and (for CLIENTs) their bound client_id
+    // Get user's role and legacy client_id (for case constraints bridge)
     const { data: roleData } = await supabaseClient
       .from("user_roles")
       .select("role, client_id")
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
     const userRole = roleData?.role;
     const isAdminOrOps = userRole === "ADMIN" || userRole === "OPS";
 
     const body: ValidationRequest = await req.json();
-    const { client_id, line_items, bypass_constraints = false } = body;
+    const { account_id, line_items, bypass_constraints = false } = body;
 
-    // CLIENT users can only validate orders for their own client
+    // CLIENT users: verify caller belongs to the account they are ordering for
     if (!isAdminOrOps) {
-      if (userRole !== "CLIENT" || !roleData?.client_id || roleData.client_id !== client_id) {
+      const { data: accountUser } = await supabaseClient
+        .from("account_users")
+        .select("account_id")
+        .eq("user_id", user.id)
+        .eq("account_id", account_id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (!accountUser) {
         return new Response(
-          JSON.stringify({ valid: false, errors: ["Forbidden: client_id does not match calling user"] }),
+          JSON.stringify({ valid: false, errors: ["Forbidden: account_id does not match calling user"] }),
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -85,27 +91,27 @@ serve(async (req) => {
 
     const errors: string[] = [];
 
-    // Fetch client constraints
-    const { data: clientData, error: clientError } = await supabaseClient
-      .from("clients")
-      .select("case_only, case_size")
-      .eq("id", client_id)
-      .single();
+    // Fetch case constraints via legacy client record (bridge: user_roles.client_id → clients).
+    // case_only/case_size are not yet on the accounts table; this bridge remains until they are.
+    let case_only = false;
+    let case_size: number | null = null;
 
-    if (clientError) {
-      return new Response(
-        JSON.stringify({ valid: false, errors: ["Client not found"] }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (roleData?.client_id) {
+      const { data: clientData } = await supabaseClient
+        .from("clients")
+        .select("case_only, case_size")
+        .eq("id", roleData.client_id)
+        .maybeSingle();
+
+      if (clientData) {
+        case_only = clientData.case_only;
+        case_size = clientData.case_size;
+      }
     }
 
-    const { case_only, case_size } = clientData;
-
-    // Validate case quantities (only for non-admin/ops users or when not bypassing)
     if (case_only && case_size && !isAdminOrOps) {
       for (const item of line_items) {
         if (item.quantity_units % case_size !== 0) {
-          // Get product name for error message
           const { data: product } = await supabaseClient
             .from("products")
             .select("product_name")
@@ -120,13 +126,12 @@ serve(async (req) => {
       }
     }
 
-    // Validate allowed products
+    // Validate allowed products via account_id (column added in Step 3 migration)
     const { data: allowedProducts } = await supabaseClient
       .from("client_allowed_products")
       .select("product_id")
-      .eq("client_id", client_id);
+      .eq("account_id", account_id);
 
-    // Only enforce if there are restrictions set
     if (allowedProducts && allowedProducts.length > 0 && !isAdminOrOps) {
       const allowedIds = new Set(allowedProducts.map((p) => p.product_id));
 

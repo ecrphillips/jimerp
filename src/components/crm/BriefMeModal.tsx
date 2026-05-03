@@ -129,6 +129,9 @@ async function buildClientBrief(clientId: string): Promise<string> {
   }
 
   // 2. Order history summary
+  // clientId here is the legacy clients.id UUID (passed from Clients.tsx as c.id).
+  // This is an admin-only surface; CLIENT users do not reach this path.
+  // Intentionally left as client_id filter on the orders table (admin sessions bypass RLS).
   const { data: orders } = await supabase
     .from('orders')
     .select('id, order_number, status, requested_ship_date, created_at')
@@ -182,6 +185,7 @@ async function buildClientBrief(clientId: string): Promise<string> {
   }
 
   // 3. Account notes
+  // Same note as above: clientId is legacy clients.id, admin-only surface.
   const { data: notes } = await supabase
     .from('client_notes')
     .select('note_text, follow_up_by, created_by, created_at')

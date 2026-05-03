@@ -13,34 +13,22 @@ export interface ClientOrderingConstraints {
  * @returns Constraints object with loading/error states
  */
 export function useClientOrderingConstraints(clientId: string | null | undefined) {
-  // Fetch client-level constraints (case_only, case_size)
-  const { data: clientData, isLoading: clientLoading } = useQuery({
-    queryKey: ['client-ordering-constraints', clientId],
-    queryFn: async () => {
-      if (!clientId) return null;
-      
-      const { data, error } = await supabase
-        .from('clients')
-        .select('case_only, case_size')
-        .eq('id', clientId)
-        .single();
-        
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!clientId,
-  });
+  // CLIENT role no longer has access to the clients table (Step 4 RLS migration).
+  // case_only/case_size enforcement is now handled exclusively by the validate-order-constraints
+  // edge function, which resolves the legacy client record via user_roles.client_id.
+  const clientData = null;
+  const clientLoading = false;
 
-  // Fetch allowed products for this client (if any)
+  // Fetch allowed products for this account (if any)
   const { data: allowedProducts, isLoading: productsLoading } = useQuery({
     queryKey: ['client-allowed-products', clientId],
     queryFn: async () => {
       if (!clientId) return null;
-      
+
       const { data, error } = await supabase
         .from('client_allowed_products')
         .select('product_id')
-        .eq('client_id', clientId);
+        .eq('account_id', clientId);
         
       if (error) throw error;
       
