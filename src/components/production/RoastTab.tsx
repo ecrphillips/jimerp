@@ -1005,6 +1005,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                             onEditingChange={(isEditing) => handleEditingChange(group.roast_group, isEditing)}
                             onAdjustWipFg={(rg) => setWipFgModalGroup(rg)}
                             isBlend={config?.is_blend ?? false}
+                            isPreRoastBlend={config?.is_blend === true && config?.blend_type === 'PRE_ROAST'}
                             isCompleted={group.isCompleted}
                             onPlanBlendBatches={() => setBlendPlanModal({
                               roastGroup: group.roast_group,
@@ -1012,6 +1013,10 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                               demandKg: group.total_kg,
                               netDemandKg: group.net_demand_kg,
                             })}
+                            onPlanDirectBatch={() => {
+                              setAddBatchRgKey(group.roast_group);
+                              setShowAddBatchModal(true);
+                            }}
                             onBlendBatches={() => setBlendExecuteModal({
                               roastGroup: group.roast_group,
                               displayName: config?.display_name?.trim() || group.roast_group.replace(/_/g, ' '),
