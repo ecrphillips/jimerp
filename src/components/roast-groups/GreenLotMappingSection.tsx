@@ -152,6 +152,24 @@ export function GreenLotMappingSection({ roastGroupKey, roastGroupDisplayName }:
                           )}
                         </div>
                       )}
+                      {Number(lot.kg_on_hand) === 0 && successor && successor.status === 'RECEIVED' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-1.5 h-7 text-xs border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setSwapTarget({
+                            linkId: link.id,
+                            lotId: lot.id,
+                            lotNumber: lot.lot_number,
+                            successorLotId: successor.id,
+                            successorLotNumber: successor.lot_number,
+                            pctOfLot: link.pct_of_lot ?? null,
+                          })}
+                        >
+                          <ArrowRightLeft className="h-3 w-3 mr-1" />
+                          Swap to successor now
+                        </Button>
+                      )}
                       {(() => {
                         if (!lot.estimated_days_to_consume) {
                           return <p className="text-xs text-muted-foreground/60 mt-0.5">No estimate set</p>;
