@@ -50,7 +50,11 @@ import type { DateFilterConfig } from './types';
 import { useAuthoritativeWip, useAuthoritativeRoastDemand } from '@/hooks/useAuthoritativeInventory';
 import { useRoastGroupComponents, getComponentBreakdown, type ComponentDisplay } from '@/hooks/useRoastGroupComponents';
 import { AuthoritativeSummaryPanel } from './AuthoritativeTotals';
-import { filterOrderByWorkStart } from '@/lib/productionScheduling';
+import { filterOrderByWorkStart, getVancouverNow, getVancouverDateString, TIMEZONE } from '@/lib/productionScheduling';
+import { startOfWeek, endOfWeek, subWeeks, format, parseISO, startOfDay, endOfDay } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
+
+type CompletedDateFilter = 'today' | 'this_week' | 'last_week' | 'all';
 
 interface RoastTabProps {
   dateFilterConfig: DateFilterConfig;
