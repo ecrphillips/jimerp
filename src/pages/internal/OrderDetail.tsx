@@ -12,7 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock, FileText, Clock, Trash2 } from 'lucide-react';
 import { LocationBadge } from '@/components/orders/LocationSelect';
-import { PackagingBadge } from '@/components/PackagingBadge';
+import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { toast } from 'sonner';
 import { HistoricalEditWarningModal } from '@/components/internal/HistoricalEditWarningModal';
 import { IncompleteFulfillmentModal } from '@/components/internal/IncompleteFulfillmentModal';
