@@ -6,11 +6,22 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { Plus, Unlink, AlertTriangle, GitCompare } from 'lucide-react';
+import { Plus, Unlink, AlertTriangle, GitCompare, ArrowRightLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GreenLotPickerModal } from './GreenLotPickerModal';
 import { getDisplayName } from '@/lib/roastGroupUtils';
+import { executeDepletionSwaps } from '@/components/production/DepletionWarningModal';
 
 interface Props {
   roastGroupKey: string;
