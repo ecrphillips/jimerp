@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
+type AllowedProductRow = { product_id: string };
+
 export interface ClientOrderingConstraints {
   caseOnly: boolean;
   caseSize: number | null;
@@ -23,7 +25,7 @@ export function useClientOrderingConstraints(clientId: string | null | undefined
     queryFn: async () => {
       if (!clientId) return null;
 
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('client_allowed_products')
         .select('product_id')
         .eq('account_id', clientId);
@@ -33,7 +35,7 @@ export function useClientOrderingConstraints(clientId: string | null | undefined
       // If no rows, client can order all products (null means unrestricted)
       if (!data || data.length === 0) return null;
 
-      return data.map(row => row.product_id);
+      return (data as AllowedProductRow[]).map(row => row.product_id);
     },
     enabled: !!clientId,
   });
