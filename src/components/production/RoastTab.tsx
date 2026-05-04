@@ -859,11 +859,37 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                 <Checkbox 
                   id="show-completed" 
                   checked={showCompleted} 
-                  onCheckedChange={(checked) => setShowCompleted(checked === true)}
+                  onCheckedChange={(checked) => {
+                    const next = checked === true;
+                    setShowCompleted(next);
+                    // Reset date filter to 'today' whenever toggled back on
+                    if (next) setCompletedDateFilter('today');
+                  }}
                 />
                 <Label htmlFor="show-completed" className="text-sm text-muted-foreground cursor-pointer">
                   Show completed
                 </Label>
+                {showCompleted && (
+                  <ToggleGroup
+                    type="single"
+                    value={completedDateFilter}
+                    onValueChange={(val) => val && setCompletedDateFilter(val as CompletedDateFilter)}
+                    className="border rounded-md ml-1"
+                  >
+                    <ToggleGroupItem value="today" aria-label="Today" className="text-xs px-3">
+                      Today
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="this_week" aria-label="This week" className="text-xs px-3">
+                      This week
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="last_week" aria-label="Last week" className="text-xs px-3">
+                      Last week
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="all" aria-label="All" className="text-xs px-3">
+                      All
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                )}
               </div>
               
               <div className="flex items-center gap-2">
