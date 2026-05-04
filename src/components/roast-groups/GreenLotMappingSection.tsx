@@ -6,11 +6,22 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { Plus, Unlink, AlertTriangle, GitCompare } from 'lucide-react';
+import { Plus, Unlink, AlertTriangle, GitCompare, ArrowRightLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GreenLotPickerModal } from './GreenLotPickerModal';
 import { getDisplayName } from '@/lib/roastGroupUtils';
+import { executeDepletionSwaps } from '@/components/production/DepletionWarningModal';
 
 interface Props {
   roastGroupKey: string;
@@ -31,6 +42,8 @@ export function GreenLotMappingSection({ roastGroupKey, roastGroupDisplayName }:
   const queryClient = useQueryClient();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [successorTarget, setSuccessorTarget] = useState<SuccessorTarget | null>(null);
+  const [swapTarget, setSwapTarget] = useState<{ linkId: string; lotId: string; lotNumber: string; successorLotId: string; successorLotNumber: string; pctOfLot: number | null } | null>(null);
+  const [swapping, setSwapping] = useState(false);
 
   const { data: links = [], isLoading } = useQuery({
     queryKey: ['roast-group-lot-links', roastGroupKey],
@@ -139,6 +152,24 @@ export function GreenLotMappingSection({ roastGroupKey, roastGroupDisplayName }:
                           )}
                         </div>
                       )}
+                      {Number(lot.kg_on_hand) === 0 && successor && successor.status === 'RECEIVED' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-1.5 h-7 text-xs border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setSwapTarget({
+                            linkId: link.id,
+                            lotId: lot.id,
+                            lotNumber: lot.lot_number,
+                            successorLotId: successor.id,
+                            successorLotNumber: successor.lot_number,
+                            pctOfLot: link.pct_of_lot ?? null,
+                          })}
+                        >
+                          <ArrowRightLeft className="h-3 w-3 mr-1" />
+                          Swap to successor now
+                        </Button>
+                      )}
                       {(() => {
                         if (!lot.estimated_days_to_consume) {
                           return <p className="text-xs text-muted-foreground/60 mt-0.5">No estimate set</p>;
@@ -239,6 +270,55 @@ export function GreenLotMappingSection({ roastGroupKey, roastGroupDisplayName }:
             }}
           />
         )}
+
+        <AlertDialog open={!!swapTarget} onOpenChange={(o) => { if (!o && !swapping) setSwapTarget(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Swap to successor lot</AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-2">
+                  <p>
+                    Replace <span className="font-medium text-foreground">{swapTarget?.lotNumber}</span> with{' '}
+                    <span className="font-medium text-foreground">{swapTarget?.successorLotNumber}</span> as the green source for this roast group?
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    The depleted lot will be removed from this roast group's lot mapping. This cannot be undone.
+                  </p>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={swapping}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={swapping}
+                onClick={async (e) => {
+                  e.preventDefault();
+                  if (!swapTarget) return;
+                  setSwapping(true);
+                  try {
+                    await executeDepletionSwaps([{
+                      link_id: swapTarget.linkId,
+                      lot_id: swapTarget.lotId,
+                      successor_lot_id: swapTarget.successorLotId,
+                      pct_of_lot: swapTarget.pctOfLot,
+                      roast_group: roastGroupKey,
+                    } as any]);
+                    toast.success(`Lot swapped — ${swapTarget.successorLotNumber} is now the active green source.`);
+                    queryClient.invalidateQueries({ queryKey: ['roast-group-lot-links', roastGroupKey] });
+                    queryClient.invalidateQueries({ queryKey: ['depletion-links', roastGroupKey] });
+                    setSwapTarget(null);
+                  } catch (err: any) {
+                    toast.error(err?.message || 'Failed to swap lot');
+                  } finally {
+                    setSwapping(false);
+                  }
+                }}
+              >
+                {swapping ? 'Swapping…' : 'Confirm Swap'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );
