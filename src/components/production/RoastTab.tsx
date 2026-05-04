@@ -86,6 +86,7 @@ interface RoastGroupConfig {
   expected_yield_loss_pct: number;
   is_active: boolean;
   is_blend: boolean;
+  blend_type: string | null;
   notes: string | null;
   display_order: number | null;
   display_name: string | null;
