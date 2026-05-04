@@ -93,8 +93,10 @@ interface RoastGroupDrawerProps {
   onAdjustWipFg: (roastGroup: string) => void;
   isDragging?: boolean;
   isBlend?: boolean;
+  isPreRoastBlend?: boolean;
   isCompleted?: boolean; // true if no remaining demand but has activity (batches/WIP)
   onPlanBlendBatches?: () => void;
+  onPlanDirectBatch?: () => void;
   onBlendBatches?: () => void;
   components: RoastGroupComponent[];
   roastGroupsLookupMap: Map<string, { display_name: string | null; origin: string | null }>;
