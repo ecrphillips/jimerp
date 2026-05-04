@@ -956,18 +956,20 @@ export function RoastGroupDrawer({
                       <Plus className="h-3 w-3 mr-1" />
                       Plan batches
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="default"
-                      className="h-7 text-xs"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onBlendBatches?.();
-                      }}
-                    >
-                      <Layers className="h-3 w-3 mr-1" />
-                      Blend batches
-                    </Button>
+                    {!isPreRoastBlend && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onBlendBatches?.();
+                        }}
+                      >
+                        <Layers className="h-3 w-3 mr-1" />
+                        Blend batches
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <Button

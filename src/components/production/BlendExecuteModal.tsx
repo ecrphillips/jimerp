@@ -243,7 +243,7 @@ export function BlendExecuteModal({
     enrichedComponents.reduce((sum, c) => sum + c.pct, 0),
     [enrichedComponents]
   );
-  const recipeValid = recipeTotalPct === 100;
+  const recipeValid = Math.abs(recipeTotalPct - 100) <= 1;
   
   // Calculate totals by component
   const componentTotals = useMemo(() => {
