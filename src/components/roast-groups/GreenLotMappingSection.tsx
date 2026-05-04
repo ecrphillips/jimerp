@@ -42,6 +42,8 @@ export function GreenLotMappingSection({ roastGroupKey, roastGroupDisplayName }:
   const queryClient = useQueryClient();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [successorTarget, setSuccessorTarget] = useState<SuccessorTarget | null>(null);
+  const [swapTarget, setSwapTarget] = useState<{ linkId: string; lotId: string; lotNumber: string; successorLotId: string; successorLotNumber: string; pctOfLot: number | null } | null>(null);
+  const [swapping, setSwapping] = useState(false);
 
   const { data: links = [], isLoading } = useQuery({
     queryKey: ['roast-group-lot-links', roastGroupKey],
