@@ -50,7 +50,11 @@ import type { DateFilterConfig } from './types';
 import { useAuthoritativeWip, useAuthoritativeRoastDemand } from '@/hooks/useAuthoritativeInventory';
 import { useRoastGroupComponents, getComponentBreakdown, type ComponentDisplay } from '@/hooks/useRoastGroupComponents';
 import { AuthoritativeSummaryPanel } from './AuthoritativeTotals';
-import { filterOrderByWorkStart } from '@/lib/productionScheduling';
+import { filterOrderByWorkStart, getVancouverNow, getVancouverDateString, TIMEZONE } from '@/lib/productionScheduling';
+import { startOfWeek, endOfWeek, subWeeks, format, parseISO, startOfDay, endOfDay } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
+
+type CompletedDateFilter = 'today' | 'this_week' | 'last_week' | 'all';
 
 interface RoastTabProps {
   dateFilterConfig: DateFilterConfig;
@@ -107,8 +111,9 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   // Roaster filter
   const [roasterFilter, setRoasterFilter] = useState<RoasterFilter>('ALL');
   
-  // Show completed toggle - default ON so completed groups remain visible
-  const [showCompleted, setShowCompleted] = useState(true);
+  // Show completed toggle - default OFF; reveal completed groups on demand
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [completedDateFilter, setCompletedDateFilter] = useState<CompletedDateFilter>('today');
   
   // Roast group config dialog
   const [showConfigDialog, setShowConfigDialog] = useState(false);
@@ -488,6 +493,41 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     return groupBatches.some(b => b.assigned_roaster === roasterFilter);
   };
 
+  // Compute date range (in Vancouver time) for completed-group filter
+  const completedDateRange = useMemo(() => {
+    if (completedDateFilter === 'all') return null;
+    const now = getVancouverNow();
+    if (completedDateFilter === 'today') {
+      return { start: startOfDay(now), end: endOfDay(now) };
+    }
+    // weekStartsOn: 1 = Monday
+    if (completedDateFilter === 'this_week') {
+      return { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) };
+    }
+    // last_week
+    const lastWeekRef = subWeeks(now, 1);
+    return { start: startOfWeek(lastWeekRef, { weekStartsOn: 1 }), end: endOfWeek(lastWeekRef, { weekStartsOn: 1 }) };
+  }, [completedDateFilter]);
+
+  // Helper: does a completed group have any batch within the selected date range?
+  const completedGroupMatchesDateFilter = useCallback((roastGroup: string): boolean => {
+    if (!completedDateRange) return true; // 'all'
+    const groupBatches = (batches ?? []).filter(b => b.roast_group === roastGroup);
+    // Pass-through: if no batch timestamps, behave as 'all'
+    const stamped = groupBatches
+      .map(b => b.updated_at ?? b.created_at ?? null)
+      .filter((t): t is string => !!t);
+    if (stamped.length === 0) return true;
+    return stamped.some(ts => {
+      try {
+        const local = toZonedTime(parseISO(ts), TIMEZONE);
+        return local >= completedDateRange.start && local <= completedDateRange.end;
+      } catch {
+        return false;
+      }
+    });
+  }, [completedDateRange, batches]);
+
   // Computed sorted groups - use display_order from config (manual ordering only)
   // NO automatic reprioritization - order is strictly user-controlled
   // Apply showCompleted filter: if OFF, hide groups with isCompleted=true
@@ -497,6 +537,12 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     // Apply "show completed" filter
     if (!showCompleted) {
       filtered = filtered.filter(group => !group.isCompleted);
+    } else {
+      // When showing completed, apply the date filter to completed groups only
+      filtered = filtered.filter(group => {
+        if (!group.isCompleted) return true;
+        return completedGroupMatchesDateFilter(group.roast_group);
+      });
     }
     
     // Sort: active groups (with demand) first, then completed groups
@@ -515,7 +561,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       if (orderA !== orderB) return orderA - orderB;
       return a.roast_group.localeCompare(b.roast_group);
     });
-  }, [demandByRoastGroup, roasterFilter, configByGroup, showCompleted]);
+  }, [demandByRoastGroup, roasterFilter, configByGroup, showCompleted, completedGroupMatchesDateFilter]);
 
   // Handle editing state changes from drawer - freeze order by roast_group names
   const handleEditingChange = useCallback((groupId: string, isEditing: boolean) => {
@@ -813,11 +859,37 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                 <Checkbox 
                   id="show-completed" 
                   checked={showCompleted} 
-                  onCheckedChange={(checked) => setShowCompleted(checked === true)}
+                  onCheckedChange={(checked) => {
+                    const next = checked === true;
+                    setShowCompleted(next);
+                    // Reset date filter to 'today' whenever toggled back on
+                    if (next) setCompletedDateFilter('today');
+                  }}
                 />
                 <Label htmlFor="show-completed" className="text-sm text-muted-foreground cursor-pointer">
                   Show completed
                 </Label>
+                {showCompleted && (
+                  <ToggleGroup
+                    type="single"
+                    value={completedDateFilter}
+                    onValueChange={(val) => val && setCompletedDateFilter(val as CompletedDateFilter)}
+                    className="border rounded-md ml-1"
+                  >
+                    <ToggleGroupItem value="today" aria-label="Today" className="text-xs px-3">
+                      Today
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="this_week" aria-label="This week" className="text-xs px-3">
+                      This week
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="last_week" aria-label="Last week" className="text-xs px-3">
+                      Last week
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="all" aria-label="All" className="text-xs px-3">
+                      All
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                )}
               </div>
               
               <div className="flex items-center gap-2">
