@@ -1019,7 +1019,7 @@ export function RoastGroupDrawer({
               )}
 
               {/* Batch Queue - different display for blends vs single origins */}
-              {isBlend ? (
+              {isBlend && !isPreRoastBlend ? (
                 // For blends: show component batches grouped by component roast group
                 <div className="space-y-4">
                   {/* Blend Demand Header */}
