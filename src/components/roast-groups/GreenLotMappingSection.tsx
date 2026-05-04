@@ -270,6 +270,55 @@ export function GreenLotMappingSection({ roastGroupKey, roastGroupDisplayName }:
             }}
           />
         )}
+
+        <AlertDialog open={!!swapTarget} onOpenChange={(o) => { if (!o && !swapping) setSwapTarget(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Swap to successor lot</AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-2">
+                  <p>
+                    Replace <span className="font-medium text-foreground">{swapTarget?.lotNumber}</span> with{' '}
+                    <span className="font-medium text-foreground">{swapTarget?.successorLotNumber}</span> as the green source for this roast group?
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    The depleted lot will be removed from this roast group's lot mapping. This cannot be undone.
+                  </p>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={swapping}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={swapping}
+                onClick={async (e) => {
+                  e.preventDefault();
+                  if (!swapTarget) return;
+                  setSwapping(true);
+                  try {
+                    await executeDepletionSwaps([{
+                      link_id: swapTarget.linkId,
+                      lot_id: swapTarget.lotId,
+                      successor_lot_id: swapTarget.successorLotId,
+                      pct_of_lot: swapTarget.pctOfLot,
+                      roast_group: roastGroupKey,
+                    } as any]);
+                    toast.success(`Lot swapped — ${swapTarget.successorLotNumber} is now the active green source.`);
+                    queryClient.invalidateQueries({ queryKey: ['roast-group-lot-links', roastGroupKey] });
+                    queryClient.invalidateQueries({ queryKey: ['depletion-links', roastGroupKey] });
+                    setSwapTarget(null);
+                  } catch (err: any) {
+                    toast.error(err?.message || 'Failed to swap lot');
+                  } finally {
+                    setSwapping(false);
+                  }
+                }}
+              >
+                {swapping ? 'Swapping…' : 'Confirm Swap'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );
