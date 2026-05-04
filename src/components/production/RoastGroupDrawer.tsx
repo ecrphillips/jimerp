@@ -946,7 +946,11 @@ export function RoastGroupDrawer({
                       className="h-7 text-xs"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onPlanBlendBatches?.();
+                        if (isPreRoastBlend) {
+                          onPlanDirectBatch?.();
+                        } else {
+                          onPlanBlendBatches?.();
+                        }
                       }}
                     >
                       <Plus className="h-3 w-3 mr-1" />
