@@ -111,8 +111,9 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   // Roaster filter
   const [roasterFilter, setRoasterFilter] = useState<RoasterFilter>('ALL');
   
-  // Show completed toggle - default ON so completed groups remain visible
-  const [showCompleted, setShowCompleted] = useState(true);
+  // Show completed toggle - default OFF; reveal completed groups on demand
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [completedDateFilter, setCompletedDateFilter] = useState<CompletedDateFilter>('today');
   
   // Roast group config dialog
   const [showConfigDialog, setShowConfigDialog] = useState(false);
