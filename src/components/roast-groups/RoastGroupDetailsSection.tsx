@@ -70,6 +70,8 @@ export function RoastGroupDetailsSection({ roastGroupKey, initialData }: Props) 
       toast.success('Roast group updated');
       queryClient.invalidateQueries({ queryKey: ['roast-group-detail', roastGroupKey] });
       queryClient.invalidateQueries({ queryKey: ['roast-groups-list'] });
+      queryClient.invalidateQueries({ queryKey: ['roast-groups-config'] });
+      queryClient.invalidateQueries({ queryKey: ['active-roast-groups-with-code'] });
     },
     onError: (err: any) => toast.error(err.message || 'Failed to update'),
   });
