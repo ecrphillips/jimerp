@@ -10,8 +10,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { AlertCircle, Plus, Trash2, ExternalLink, Info, Loader2 } from 'lucide-react';
-import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
+import { AlertCircle, ExternalLink, Info, Loader2 } from 'lucide-react';
+
 import { RoastGroupPreview } from './RoastGroupPreview';
 import { PackagingVariantsSection, type PackagingVariantEntry } from './PackagingVariantsSection';
 import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
@@ -29,12 +29,7 @@ interface RoastGroup {
   origin: string | null;
   blend_name: string | null;
   display_name: string | null;
-}
-
-interface BlendComponent {
-  id: string;
-  roastGroup: string;
-  percentage: number;
+  blend_type: string | null;
 }
 
 interface NewBlendProductModalProps {
@@ -43,8 +38,6 @@ interface NewBlendProductModalProps {
 }
 
 type LifecycleType = 'perennial' | 'seasonal';
-
-let componentIdCounter = 0;
 
 export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModalProps) {
   const queryClient = useQueryClient();
@@ -56,11 +49,8 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   // Step 2: Finished Good Name
   const [finishedGoodName, setFinishedGoodName] = useState('');
   
-  // Blend components
-  const [components, setComponents] = useState<BlendComponent[]>([
-    { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
-    { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
-  ]);
+  // Selected blend roast group (post-roast blends are pre-defined)
+  const [selectedBlendRoastGroup, setSelectedBlendRoastGroup] = useState<string>('');
   
   // Optional Cropster ref
   const [cropsterProfileRef, setCropsterProfileRef] = useState('');
@@ -93,7 +83,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roast_groups')
-        .select('roast_group, roast_group_code, is_blend, origin, blend_name, display_name')
+        .select('roast_group, roast_group_code, is_blend, origin, blend_name, display_name, blend_type')
         .eq('is_active', true)
         .order('roast_group');
       if (error) throw error;
@@ -101,9 +91,10 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     },
   });
   
-  // Filter to only single origin roast groups for component selection
-  const componentRoastGroups = useMemo(() => 
-    roastGroups?.filter(g => !g.is_blend) ?? [],
+  
+  // Post-roast blend roast groups (already created with their components defined)
+  const postRoastBlendRoastGroups = useMemo(() =>
+    (roastGroups ?? []).filter(g => g.is_blend && g.blend_type === 'POST_ROAST'),
     [roastGroups]
   );
   
@@ -135,68 +126,31 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     [clients, clientId]
   );
   
-  // Component percentage total
-  const totalPercentage = useMemo(() => 
-    components.reduce((sum, c) => sum + (c.percentage || 0), 0),
-    [components]
-  );
-  
-  const percentageValid = totalPercentage === 100;
-  
-  // Check if all components have roast groups selected
-  const allComponentsSelected = useMemo(() => 
-    components.every(c => c.roastGroup),
-    [components]
-  );
-  
   // Valid variants (with grams > 0)
   const validVariants = useMemo(() => 
     packagingVariants.filter(v => v.grams > 0),
     [packagingVariants]
   );
   
-  const hasNoComponents = componentRoastGroups.length === 0;
-  
   const canSave = useMemo(() => {
     if (!clientId) return false;
     if (!selectedClient?.account_code) return false;
     if (!finishedGoodName.trim()) return false;
-    if (hasNoComponents) return false;
-    if (!allComponentsSelected) return false;
-    if (!percentageValid) return false;
+    if (!selectedBlendRoastGroup) return false;
     if (validVariants.length === 0) return false;
     if (!lifecycle) return false;
     return true;
-  }, [clientId, selectedClient, finishedGoodName, hasNoComponents, allComponentsSelected, percentageValid, validVariants, lifecycle]);
+  }, [clientId, selectedClient, finishedGoodName, selectedBlendRoastGroup, validVariants, lifecycle]);
   
   // Reset form
   const resetForm = () => {
     setClientId('');
     setFinishedGoodName('');
     setCropsterProfileRef('');
-    setComponents([
-      { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
-      { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
-    ]);
+    setSelectedBlendRoastGroup('');
     setPackagingVariants([]);
     setPriceInput('');
     setLifecycle(null);
-  };
-  
-  // Component management
-  const addComponent = () => {
-    setComponents(prev => [...prev, { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 0 }]);
-  };
-  
-  const removeComponent = (id: string) => {
-    if (components.length <= 2) return;
-    setComponents(prev => prev.filter(c => c.id !== id));
-  };
-  
-  const updateComponent = (id: string, field: 'roastGroup' | 'percentage', value: string | number) => {
-    setComponents(prev => prev.map(c => 
-      c.id === id ? { ...c, [field]: value } : c
-    ));
   };
   
   // Navigate to roast groups tab
@@ -211,50 +165,8 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
       const trimmedName = finishedGoodName.trim();
       if (!selectedClient) throw new Error('Client is required');
       
-      // Build blend notes from components
-      const blendNotes = `Blend components: ${components.map(c => {
-        const rg = componentRoastGroups.find(g => g.roast_group === c.roastGroup);
-        return `${rg?.display_name || c.roastGroup} (${c.percentage}%)`;
-      }).join(', ')}`;
-      
-      // Create or reuse blend roast group (single attempt, no retries)
-      const result = await createOrReuseRoastGroup({
-        displayName: trimmedName,
-        isBlend: true,
-        blendName: trimmedName,
-        cropsterProfileRef: cropsterProfileRef.trim() || null,
-        notes: blendNotes,
-      });
-      
-      if (result.error) {
-        throw new Error(result.error);
-      }
-      
-      const finalRoastGroupKey = result.roastGroupKey;
-      
-      if (!result.created) {
-        console.log(`[Blend] Reusing existing roast group: ${finalRoastGroupKey}`);
-      }
-      
-      // Save blend components
-      const componentInserts = components
-        .filter(c => c.roastGroup)
-        .map((c, idx) => ({
-          parent_roast_group: finalRoastGroupKey,
-          component_roast_group: c.roastGroup,
-          pct: c.percentage,
-          display_order: idx,
-        }));
-      
-      if (componentInserts.length > 0) {
-        const { error: componentsError } = await supabase
-          .from('roast_group_components')
-          .insert(componentInserts);
-        
-        if (componentsError) {
-          console.error('Failed to save blend components:', componentsError);
-        }
-      }
+      const finalRoastGroupKey = selectedBlendRoastGroup;
+      if (!finalRoastGroupKey) throw new Error('Please select a blend roast group');
       
       // Get resolved SKUs - for blends, use 'BLD' as origin
       const resolvedSkus = getResolvedSkus(
@@ -390,8 +302,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              Post-roast blends require roast groups for each component coffee. 
-              {hasNoComponents && ' Create component roast groups first, then return here to build the blend.'}
+              Post-roast blends link to a pre-defined blend roast group. Set up the blend's component recipe in Products → Roast Groups first.
             </AlertDescription>
           </Alert>
           
@@ -429,88 +340,38 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
             </p>
           </div>
           
-          {/* Step 3: Blend Components */}
+          {/* Step 3: Blend Roast Group */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label>3. Blend Components</Label>
-              <div className={`text-xs font-medium ${percentageValid ? 'text-primary' : 'text-destructive'}`}>
-                Total: {totalPercentage}%
-              </div>
-            </div>
+            <Label htmlFor="blendRg">3. Blend Roast Group</Label>
             
-            {hasNoComponents ? (
-              <div className="border rounded-lg p-6 text-center space-y-3 bg-muted/20">
-                <p className="text-sm text-muted-foreground">
-                  No single origin roast groups available.
-                </p>
-                <Button variant="outline" size="sm" onClick={goToRoastGroups}>
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Go to Roast Groups
-                </Button>
-              </div>
+            {postRoastBlendRoastGroups.length === 0 ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="space-y-3">
+                  <div>No post-roast blend roast groups found. Create one in Products → Roast Groups first.</div>
+                  <Button variant="outline" size="sm" onClick={goToRoastGroups}>
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Go to Roast Groups
+                  </Button>
+                </AlertDescription>
+              </Alert>
             ) : (
               <>
-                <div className="space-y-2">
-                  {components.map((comp) => (
-                    <div key={comp.id} className="flex items-center gap-2">
-                      <Select 
-                        value={comp.roastGroup || 'NONE'} 
-                        onValueChange={(v) => updateComponent(comp.id, 'roastGroup', v === 'NONE' ? '' : v)}
-                      >
-                        <SelectTrigger className="flex-1">
-                          <SelectValue placeholder="Select component..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="NONE">Select component...</SelectItem>
-                          {componentRoastGroups.map(g => (
-                            <SelectItem key={g.roast_group} value={g.roast_group}>
-                              {getDisplayName(g)} ({g.roast_group_code})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <div className="flex items-center gap-1 w-24">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={comp.percentage}
-                          onChange={(e) => updateComponent(comp.id, 'percentage', parseInt(e.target.value) || 0)}
-                          className="w-16 text-center"
-                        />
-                        <span className="text-sm text-muted-foreground">%</span>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeComponent(comp.id)}
-                        disabled={components.length <= 2}
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-                
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addComponent}
-                  className="w-full"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Component
-                </Button>
-                
-                {!percentageValid && (
-                  <p className="text-xs text-destructive flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" />
-                    Percentages must total exactly 100%
-                  </p>
-                )}
+                <Select value={selectedBlendRoastGroup} onValueChange={setSelectedBlendRoastGroup}>
+                  <SelectTrigger id="blendRg">
+                    <SelectValue placeholder="Select blend roast group..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {postRoastBlendRoastGroups.map(g => (
+                      <SelectItem key={g.roast_group} value={g.roast_group}>
+                        {getDisplayName(g)} ({g.roast_group_code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Set up blend components in Products → Roast Groups before creating products.
+                </p>
               </>
             )}
           </div>
