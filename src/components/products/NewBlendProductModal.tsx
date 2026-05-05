@@ -91,9 +91,15 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     },
   });
   
-  // Filter to only single origin roast groups for component selection
+  // Filter to only single origin roast groups (kept for blend notes lookup if needed)
   const componentRoastGroups = useMemo(() => 
     roastGroups?.filter(g => !g.is_blend) ?? [],
+    [roastGroups]
+  );
+  
+  // Post-roast blend roast groups (already created with their components defined)
+  const postRoastBlendRoastGroups = useMemo(() =>
+    (roastGroups ?? []).filter(g => g.is_blend && g.blend_type === 'POST_ROAST'),
     [roastGroups]
   );
   
@@ -125,68 +131,31 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     [clients, clientId]
   );
   
-  // Component percentage total
-  const totalPercentage = useMemo(() => 
-    components.reduce((sum, c) => sum + (c.percentage || 0), 0),
-    [components]
-  );
-  
-  const percentageValid = totalPercentage === 100;
-  
-  // Check if all components have roast groups selected
-  const allComponentsSelected = useMemo(() => 
-    components.every(c => c.roastGroup),
-    [components]
-  );
-  
   // Valid variants (with grams > 0)
   const validVariants = useMemo(() => 
     packagingVariants.filter(v => v.grams > 0),
     [packagingVariants]
   );
   
-  const hasNoComponents = componentRoastGroups.length === 0;
-  
   const canSave = useMemo(() => {
     if (!clientId) return false;
     if (!selectedClient?.account_code) return false;
     if (!finishedGoodName.trim()) return false;
-    if (hasNoComponents) return false;
-    if (!allComponentsSelected) return false;
-    if (!percentageValid) return false;
+    if (!selectedBlendRoastGroup) return false;
     if (validVariants.length === 0) return false;
     if (!lifecycle) return false;
     return true;
-  }, [clientId, selectedClient, finishedGoodName, hasNoComponents, allComponentsSelected, percentageValid, validVariants, lifecycle]);
+  }, [clientId, selectedClient, finishedGoodName, selectedBlendRoastGroup, validVariants, lifecycle]);
   
   // Reset form
   const resetForm = () => {
     setClientId('');
     setFinishedGoodName('');
     setCropsterProfileRef('');
-    setComponents([
-      { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
-      { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
-    ]);
+    setSelectedBlendRoastGroup('');
     setPackagingVariants([]);
     setPriceInput('');
     setLifecycle(null);
-  };
-  
-  // Component management
-  const addComponent = () => {
-    setComponents(prev => [...prev, { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 0 }]);
-  };
-  
-  const removeComponent = (id: string) => {
-    if (components.length <= 2) return;
-    setComponents(prev => prev.filter(c => c.id !== id));
-  };
-  
-  const updateComponent = (id: string, field: 'roastGroup' | 'percentage', value: string | number) => {
-    setComponents(prev => prev.map(c => 
-      c.id === id ? { ...c, [field]: value } : c
-    ));
   };
   
   // Navigate to roast groups tab
