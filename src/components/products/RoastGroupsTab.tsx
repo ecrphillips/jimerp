@@ -290,6 +290,7 @@ export function RoastGroupsTab() {
         is_active: isActive,
         notes: notes || null,
         cropster_profile_ref: cropsterProfileRef.trim() || null,
+        ...(editingGroup ? { blend_type: editingGroup.blend_type ?? null } : {}),
       };
 
       if (editingGroup) {
