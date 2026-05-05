@@ -91,11 +91,6 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     },
   });
   
-  // Filter to only single origin roast groups (kept for blend notes lookup if needed)
-  const componentRoastGroups = useMemo(() => 
-    roastGroups?.filter(g => !g.is_blend) ?? [],
-    [roastGroups]
-  );
   
   // Post-roast blend roast groups (already created with their components defined)
   const postRoastBlendRoastGroups = useMemo(() =>
