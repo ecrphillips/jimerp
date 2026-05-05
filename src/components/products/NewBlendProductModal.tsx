@@ -49,11 +49,8 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   // Step 2: Finished Good Name
   const [finishedGoodName, setFinishedGoodName] = useState('');
   
-  // Blend components
-  const [components, setComponents] = useState<BlendComponent[]>([
-    { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
-    { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
-  ]);
+  // Selected blend roast group (post-roast blends are pre-defined)
+  const [selectedBlendRoastGroup, setSelectedBlendRoastGroup] = useState<string>('');
   
   // Optional Cropster ref
   const [cropsterProfileRef, setCropsterProfileRef] = useState('');
