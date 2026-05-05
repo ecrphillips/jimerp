@@ -83,7 +83,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roast_groups')
-        .select('roast_group, roast_group_code, is_blend, origin, blend_name, display_name')
+        .select('roast_group, roast_group_code, is_blend, origin, blend_name, display_name, blend_type')
         .eq('is_active', true)
         .order('roast_group');
       if (error) throw error;
