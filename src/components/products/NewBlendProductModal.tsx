@@ -345,88 +345,38 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
             </p>
           </div>
           
-          {/* Step 3: Blend Components */}
+          {/* Step 3: Blend Roast Group */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label>3. Blend Components</Label>
-              <div className={`text-xs font-medium ${percentageValid ? 'text-primary' : 'text-destructive'}`}>
-                Total: {totalPercentage}%
-              </div>
-            </div>
+            <Label htmlFor="blendRg">3. Blend Roast Group</Label>
             
-            {hasNoComponents ? (
-              <div className="border rounded-lg p-6 text-center space-y-3 bg-muted/20">
-                <p className="text-sm text-muted-foreground">
-                  No single origin roast groups available.
-                </p>
-                <Button variant="outline" size="sm" onClick={goToRoastGroups}>
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Go to Roast Groups
-                </Button>
-              </div>
+            {postRoastBlendRoastGroups.length === 0 ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="space-y-3">
+                  <div>No post-roast blend roast groups found. Create one in Products → Roast Groups first.</div>
+                  <Button variant="outline" size="sm" onClick={goToRoastGroups}>
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Go to Roast Groups
+                  </Button>
+                </AlertDescription>
+              </Alert>
             ) : (
               <>
-                <div className="space-y-2">
-                  {components.map((comp) => (
-                    <div key={comp.id} className="flex items-center gap-2">
-                      <Select 
-                        value={comp.roastGroup || 'NONE'} 
-                        onValueChange={(v) => updateComponent(comp.id, 'roastGroup', v === 'NONE' ? '' : v)}
-                      >
-                        <SelectTrigger className="flex-1">
-                          <SelectValue placeholder="Select component..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="NONE">Select component...</SelectItem>
-                          {componentRoastGroups.map(g => (
-                            <SelectItem key={g.roast_group} value={g.roast_group}>
-                              {getDisplayName(g)} ({g.roast_group_code})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <div className="flex items-center gap-1 w-24">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={comp.percentage}
-                          onChange={(e) => updateComponent(comp.id, 'percentage', parseInt(e.target.value) || 0)}
-                          className="w-16 text-center"
-                        />
-                        <span className="text-sm text-muted-foreground">%</span>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeComponent(comp.id)}
-                        disabled={components.length <= 2}
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-                
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addComponent}
-                  className="w-full"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Component
-                </Button>
-                
-                {!percentageValid && (
-                  <p className="text-xs text-destructive flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" />
-                    Percentages must total exactly 100%
-                  </p>
-                )}
+                <Select value={selectedBlendRoastGroup} onValueChange={setSelectedBlendRoastGroup}>
+                  <SelectTrigger id="blendRg">
+                    <SelectValue placeholder="Select blend roast group..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {postRoastBlendRoastGroups.map(g => (
+                      <SelectItem key={g.roast_group} value={g.roast_group}>
+                        {getDisplayName(g)} ({g.roast_group_code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Set up blend components in Products → Roast Groups before creating products.
+                </p>
               </>
             )}
           </div>
