@@ -170,50 +170,8 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
       const trimmedName = finishedGoodName.trim();
       if (!selectedClient) throw new Error('Client is required');
       
-      // Build blend notes from components
-      const blendNotes = `Blend components: ${components.map(c => {
-        const rg = componentRoastGroups.find(g => g.roast_group === c.roastGroup);
-        return `${rg?.display_name || c.roastGroup} (${c.percentage}%)`;
-      }).join(', ')}`;
-      
-      // Create or reuse blend roast group (single attempt, no retries)
-      const result = await createOrReuseRoastGroup({
-        displayName: trimmedName,
-        isBlend: true,
-        blendName: trimmedName,
-        cropsterProfileRef: cropsterProfileRef.trim() || null,
-        notes: blendNotes,
-      });
-      
-      if (result.error) {
-        throw new Error(result.error);
-      }
-      
-      const finalRoastGroupKey = result.roastGroupKey;
-      
-      if (!result.created) {
-        console.log(`[Blend] Reusing existing roast group: ${finalRoastGroupKey}`);
-      }
-      
-      // Save blend components
-      const componentInserts = components
-        .filter(c => c.roastGroup)
-        .map((c, idx) => ({
-          parent_roast_group: finalRoastGroupKey,
-          component_roast_group: c.roastGroup,
-          pct: c.percentage,
-          display_order: idx,
-        }));
-      
-      if (componentInserts.length > 0) {
-        const { error: componentsError } = await supabase
-          .from('roast_group_components')
-          .insert(componentInserts);
-        
-        if (componentsError) {
-          console.error('Failed to save blend components:', componentsError);
-        }
-      }
+      const finalRoastGroupKey = selectedBlendRoastGroup;
+      if (!finalRoastGroupKey) throw new Error('Please select a blend roast group');
       
       // Get resolved SKUs - for blends, use 'BLD' as origin
       const resolvedSkus = getResolvedSkus(
