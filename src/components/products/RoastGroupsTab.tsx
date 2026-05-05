@@ -28,6 +28,7 @@ interface RoastGroup {
   default_roaster: DefaultRoaster;
   is_active: boolean;
   is_blend: boolean;
+  blend_type: string | null;
   origin: string | null;
   blend_name: string | null;
   notes: string | null;
