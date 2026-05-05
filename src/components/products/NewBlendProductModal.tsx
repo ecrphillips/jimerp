@@ -307,8 +307,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              Post-roast blends require roast groups for each component coffee. 
-              {hasNoComponents && ' Create component roast groups first, then return here to build the blend.'}
+              Post-roast blends link to a pre-defined blend roast group. Set up the blend's component recipe in Products → Roast Groups first.
             </AlertDescription>
           </Alert>
           
