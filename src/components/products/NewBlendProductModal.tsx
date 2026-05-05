@@ -29,12 +29,7 @@ interface RoastGroup {
   origin: string | null;
   blend_name: string | null;
   display_name: string | null;
-}
-
-interface BlendComponent {
-  id: string;
-  roastGroup: string;
-  percentage: number;
+  blend_type: string | null;
 }
 
 interface NewBlendProductModalProps {
@@ -43,8 +38,6 @@ interface NewBlendProductModalProps {
 }
 
 type LifecycleType = 'perennial' | 'seasonal';
-
-let componentIdCounter = 0;
 
 export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModalProps) {
   const queryClient = useQueryClient();
