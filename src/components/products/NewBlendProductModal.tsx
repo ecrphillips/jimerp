@@ -91,16 +91,11 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     },
   });
   
-  
-  // DIAGNOSTIC: log raw fetched roast groups
-  console.log('[DIAG] roastGroups fetched:', roastGroups);
-
   // Post-roast blend roast groups (already created with their components defined)
-  const postRoastBlendRoastGroups = useMemo(() => {
-    const filtered = (roastGroups ?? []).filter(g => g.is_blend && g.blend_type === 'POST_ROAST');
-    console.log('[DIAG] postRoastBlendRoastGroups length:', filtered.length, filtered);
-    return filtered;
-  }, [roastGroups]);
+  const postRoastBlendRoastGroups = useMemo(
+    () => (roastGroups ?? []).filter(g => g.is_blend && g.blend_type === 'POST_ROAST'),
+    [roastGroups]
+  );
   
   // Existing roast group keys/codes for collision detection
   const existingRoastGroupKeys = useMemo(() => 
