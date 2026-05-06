@@ -134,8 +134,12 @@ export default function RoastGroups() {
     });
   };
 
+  const isPostRoastBlend = (rg: any) => rg.is_blend === true && rg.blend_type === 'POST_ROAST';
+
   const needsAttention = (rg: any) => {
     if (rg.is_seasonal || !rg.is_active) return false;
+    // Post-roast blends compose from finished WIP, not green lots, so the green-lot warning doesn't apply.
+    if (isPostRoastBlend(rg)) return false;
     const activeLots = (rg.green_lot_roast_group_links ?? []).filter(
       (link: any) => link.green_lots && link.green_lots.status !== 'EXHAUSTED'
     );
