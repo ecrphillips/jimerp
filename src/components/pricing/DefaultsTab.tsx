@@ -67,7 +67,46 @@ export function DefaultsTab() {
   const [financingDays, setFinancingDays] = useState('60');
   const [financingAprPct, setFinancingAprPct] = useState('12.0');
 
+  // Global FX rate setting
+  const [placeholderFxRate, setPlaceholderFxRate] = useState('1.38');
+
   // ---- queries ----
+  const { data: fxRateSetting } = useQuery({
+    queryKey: ['app_settings', 'placeholder_fx_rate_usd_to_cad'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value_json')
+        .eq('key', 'placeholder_fx_rate_usd_to_cad')
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  useEffect(() => {
+    if (fxRateSetting?.value_json) {
+      const rate = (fxRateSetting.value_json as any)?.rate;
+      if (rate != null) setPlaceholderFxRate(String(rate));
+    }
+  }, [fxRateSetting]);
+
+  const saveFxRateMutation = useMutation({
+    mutationFn: async () => {
+      const rate = Number(placeholderFxRate);
+      if (!Number.isFinite(rate) || rate <= 0) throw new Error('Rate must be a positive number');
+      const { error } = await supabase
+        .from('app_settings')
+        .upsert({ key: 'placeholder_fx_rate_usd_to_cad', value_json: { rate } as any });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('FX rate saved');
+      queryClient.invalidateQueries({ queryKey: ['app_settings', 'placeholder_fx_rate_usd_to_cad'] });
+    },
+    onError: (err: any) => toast.error(err?.message ?? 'Failed to save FX rate'),
+  });
+
   const { data: profiles, isLoading: profilesLoading } = useQuery({
     queryKey: ['pricing_rule_profiles'],
     queryFn: async () => {
@@ -204,6 +243,36 @@ export function DefaultsTab() {
 
   return (
     <div className="space-y-6">
+      {/* Global FX Rate */}
+      <Card>
+        <CardContent className="pt-6 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold">Placeholder FX Rate (USD → CAD)</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Manually-maintained estimate applied to green lot costs during the Release → Lot handoff,
+              whenever any cost is in USD. Replaced by the actual confirmed rate at the Confirm Costs step.
+            </p>
+          </div>
+          <RuleField
+            id="placeholder-fx-rate"
+            label="Placeholder rate"
+            helper="Applied to USD-denominated costs (coffee price, freight, carry fees) when a release is saved. Must be > 0. Update this whenever the rate drifts materially from spot."
+            value={placeholderFxRate}
+            onChange={setPlaceholderFxRate}
+            step="0.0001"
+          />
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              onClick={() => saveFxRateMutation.mutate()}
+              disabled={saveFxRateMutation.isPending || Number(placeholderFxRate) <= 0}
+            >
+              {saveFxRateMutation.isPending ? 'Saving…' : 'Save FX Rate'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Profile selector */}
       <Card>
         <CardContent className="pt-6">
