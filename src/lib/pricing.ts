@@ -420,7 +420,47 @@ export async function calculatePrice(
   }
 
   const carry_risk_premium_pct_used = weighted_carry_risk_pct;
-  const yield_loss_pct_used = num(rules.yield_loss_pct);
+
+  // Product overrides (if a product_id was supplied)
+  const productOverridesData = (productRes.data as {
+    packaging_material_override: number | null;
+    packaging_labour_override: number | null;
+    green_markup_multiplier_override: number | null;
+    yield_loss_pct_override: number | null;
+    process_rate_per_kg_override: number | null;
+    overhead_per_kg_override: number | null;
+    wiggle_room_per_bag: number | null;
+    wiggle_room_note: string | null;
+  } | null) ?? null;
+
+  // Lever inheritance: product override → tier-linked profile → default profile.
+  // The resolved `profile` is already either the tier-linked profile or the default;
+  // tag source accordingly.
+  const profileLeverSource: LeverSource = resolvedTier ? 'tier' : 'default';
+
+  const resolveLever = (override: number | null | undefined, profileValue: number): ResolvedLever =>
+    override != null
+      ? { value: num(override), source: 'product' }
+      : { value: profileValue, source: profileLeverSource };
+
+  const green_markup_multiplier_resolved = resolveLever(
+    productOverridesData?.green_markup_multiplier_override ?? null,
+    num(rules.green_markup_multiplier, 1),
+  );
+  const yield_loss_pct_resolved = resolveLever(
+    productOverridesData?.yield_loss_pct_override ?? null,
+    num(rules.yield_loss_pct),
+  );
+  const process_rate_per_kg_resolved = resolveLever(
+    productOverridesData?.process_rate_per_kg_override ?? null,
+    num(rules.process_rate_per_kg),
+  );
+  const overhead_per_kg_resolved = resolveLever(
+    productOverridesData?.overhead_per_kg_override ?? null,
+    num(rules.overhead_per_kg),
+  );
+
+  const yield_loss_pct_used = yield_loss_pct_resolved.value;
 
   // 5) Cost stack
   const financing_cost_per_kg_green = computeFinancingCostPerKg(
@@ -435,14 +475,14 @@ export async function calculatePrice(
   );
   const marked_up_cost_per_kg_green = computeMarkedUpCostPerKg(
     derisked_cost_per_kg_green,
-    num(rules.green_markup_multiplier, 1),
+    green_markup_multiplier_resolved.value,
   );
   const roasted_cost_per_kg_from_green = computeRoastedCostFromGreen(
     marked_up_cost_per_kg_green,
     yield_loss_pct_used,
   );
-  const process_cost_per_kg_roasted = num(rules.process_rate_per_kg);
-  const overhead_per_kg_roasted = num(rules.overhead_per_kg);
+  const process_cost_per_kg_roasted = process_rate_per_kg_resolved.value;
+  const overhead_per_kg_roasted = overhead_per_kg_resolved.value;
   const total_roasted_cost_per_kg = computeTotalRoastedCostPerKg(
     roasted_cost_per_kg_from_green,
     process_cost_per_kg_roasted,
