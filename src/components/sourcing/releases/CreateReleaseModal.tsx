@@ -514,7 +514,7 @@ ${userName}`;
 
             <DialogFooter>
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button onClick={() => setStep(2)} disabled={!step1Valid()}>Next</Button>
+              <Button onClick={() => setStep(2)} disabled={!step1Valid()}>Advance to Details &amp; Pricing</Button>
             </DialogFooter>
           </div>
         )}
