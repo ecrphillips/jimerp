@@ -125,8 +125,143 @@ function PricingTierCard({ accountId, pricingTierId }: { accountId: string; pric
   );
 }
 
+// ─── Service Fee Card (ADMIN/OPS only) ─────────────────────────
+function ServiceFeeCard({ account }: { account: any }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [fee, setFee] = useState<string>(account.monthly_service_fee != null ? String(account.monthly_service_fee) : '');
+  const [skuCount, setSkuCount] = useState<string>(account.managed_sku_count != null ? String(account.managed_sku_count) : '');
+  const [notes, setNotes] = useState<string>(account.service_fee_notes ?? '');
+
+  useEffect(() => {
+    setFee(account.monthly_service_fee != null ? String(account.monthly_service_fee) : '');
+    setSkuCount(account.managed_sku_count != null ? String(account.managed_sku_count) : '');
+    setNotes(account.service_fee_notes ?? '');
+  }, [account.monthly_service_fee, account.managed_sku_count, account.service_fee_notes]);
+
+  const { data: updatedByProfile } = useQuery({
+    queryKey: ['profile-name', account.service_fee_updated_by],
+    queryFn: async () => {
+      if (!account.service_fee_updated_by) return null;
+      const { data } = await supabase
+        .from('profiles')
+        .select('name, email')
+        .eq('user_id', account.service_fee_updated_by)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!account.service_fee_updated_by,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const feeNum = fee.trim() === '' ? null : Number(fee);
+      const skuNum = skuCount.trim() === '' ? null : Number(skuCount);
+      if (feeNum != null && (isNaN(feeNum) || feeNum < 0)) throw new Error('Monthly service fee must be ≥ 0');
+      if (skuNum != null && (isNaN(skuNum) || skuNum < 0 || !Number.isInteger(skuNum))) throw new Error('Managed SKU count must be a non-negative integer');
+      const { error } = await supabase
+        .from('accounts')
+        .update({
+          monthly_service_fee: feeNum,
+          managed_sku_count: skuNum,
+          service_fee_notes: notes.trim() === '' ? null : notes.trim(),
+        } as any)
+        .eq('id', account.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Service fee updated');
+      queryClient.invalidateQueries({ queryKey: ['account-detail'] });
+      setEditing(false);
+    },
+    onError: (err: any) => toast.error(err?.message ?? 'Failed to save service fee'),
+  });
+
+  const updatedLine = account.service_fee_updated_at
+    ? `Last updated by ${updatedByProfile?.name || updatedByProfile?.email || '—'} on ${format(new Date(account.service_fee_updated_at), 'PPP')}`
+    : 'Not yet set.';
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-sm">Monthly Service Fee</CardTitle>
+        {!editing && (
+          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+            <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        {editing ? (
+          <>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Monthly Service Fee ($)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={fee}
+                  onChange={(e) => setFee(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Managed SKU Count</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={skuCount}
+                  onChange={(e) => setSkuCount(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Notes</Label>
+              <Textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="e.g., covers green sourcing, menu curation, Shopify order fetch"
+                rows={3}
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={saveMutation.isPending}>Cancel</Button>
+              <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+              <div>
+                <span className="text-muted-foreground">Monthly Fee</span>
+                <p className="font-medium">{account.monthly_service_fee != null ? `$${Number(account.monthly_service_fee).toFixed(2)}` : '—'}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Managed SKUs</span>
+                <p className="font-medium">{account.managed_sku_count ?? '—'}</p>
+              </div>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Notes</span>
+              <p className="whitespace-pre-wrap">{account.service_fee_notes || '—'}</p>
+            </div>
+          </>
+        )}
+        <p className="text-xs text-muted-foreground pt-1 border-t">{updatedLine}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Profile Tab ───────────────────────────────────────────────
 function ProfileTab({ account, refetch }: { account: any; refetch: () => void }) {
+  const { authUser } = useAuth();
+  const isInternal = authUser?.role === 'ADMIN' || authUser?.role === 'OPS';
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ ...account });
@@ -300,6 +435,8 @@ function ProfileTab({ account, refetch }: { account: any; refetch: () => void })
         </Card>
 
         <PricingTierCard accountId={account.id} pricingTierId={account.pricing_tier_id ?? null} />
+
+        {isInternal && <ServiceFeeCard account={account} />}
 
         {prospect && (
           <Card>
