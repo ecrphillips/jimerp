@@ -246,6 +246,29 @@ export function AccountsTab({ enabled }: { enabled: boolean }) {
         </CardContent>
       </Card>
 
+      {/* Products needing pricing */}
+      {!loadingPricingIncomplete && (pricingIncompleteProducts?.length ?? 0) > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Products needing pricing</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1">
+              {(pricingIncompleteProducts ?? []).map(p => (
+                <div key={p.id} className="flex items-center justify-between text-sm border-b last:border-0 pb-1 last:pb-0">
+                  <div className="flex items-center gap-3">
+                    <span className="font-medium">{p.product_name}</span>
+                    <span className="text-muted-foreground text-xs">{p.sku}</span>
+                    <span className="text-muted-foreground text-xs">{p.accounts?.account_name ?? '—'}</span>
+                  </div>
+                  <Link to={`/products?productId=${p.id}`} className="text-primary hover:underline text-xs">View</Link>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Section B — Prospects pipeline */}
       <Card>
         <CardHeader>
