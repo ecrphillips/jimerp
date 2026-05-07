@@ -508,18 +508,14 @@ export async function calculatePrice(
     warnings.push(`Packaging cost lookup failed — ${packagingRes.error.message}`);
   }
 
-  const productData = (productRes.data as {
-    packaging_material_override: number | null;
-    packaging_labour_override: number | null;
-  } | null) ?? null;
   const packagingDefaults = (packagingRes.data as {
     material_cost_per_unit: number | null;
     labour_cost_per_unit: number | null;
   } | null) ?? null;
 
   // Material
-  if (productData?.packaging_material_override != null) {
-    packaging_material_per_bag = num(productData.packaging_material_override);
+  if (productOverridesData?.packaging_material_override != null) {
+    packaging_material_per_bag = num(productOverridesData.packaging_material_override);
     packaging_material_source = 'OVERRIDE';
   } else if (packagingDefaults && packagingDefaults.material_cost_per_unit != null) {
     packaging_material_per_bag = num(packagingDefaults.material_cost_per_unit);
@@ -532,8 +528,8 @@ export async function calculatePrice(
   }
 
   // Labour
-  if (productData?.packaging_labour_override != null) {
-    packaging_labour_per_bag = num(productData.packaging_labour_override);
+  if (productOverridesData?.packaging_labour_override != null) {
+    packaging_labour_per_bag = num(productOverridesData.packaging_labour_override);
     packaging_labour_source = 'OVERRIDE';
   } else if (packagingDefaults && packagingDefaults.labour_cost_per_unit != null) {
     packaging_labour_per_bag = num(packagingDefaults.labour_cost_per_unit);
