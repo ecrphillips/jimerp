@@ -26,6 +26,7 @@ import { usePreview } from '@/contexts/PreviewContext';
 import { PronounsField } from '@/components/contacts/PronounsField';
 import { formatPronounsSuffix } from '@/lib/pronounOptions';
 import { LockedPricesTab } from '@/components/pricing/LockedPricesTab';
+import PricingAnalysisTab from '@/components/account/PricingAnalysisTab';
 
 // ─── Pricing Tier Card (internal-only) ─────────────────────────
 function formatTierMarkup(t: { markup_adjustment_type: string; markup_multiplier: number | null; per_kg_fee: number | null; target_margin_pct: number | null }): string {
@@ -1634,6 +1635,9 @@ export default function AccountDetail() {
           {(authUser?.role === 'ADMIN' || authUser?.role === 'OPS') && (
             <TabsTrigger value="pricing">Pricing</TabsTrigger>
           )}
+          {(authUser?.role === 'ADMIN' || authUser?.role === 'OPS') && (
+            <TabsTrigger value="pricing-analysis">Pricing Analysis</TabsTrigger>
+          )}
           <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
 
@@ -1668,6 +1672,11 @@ export default function AccountDetail() {
                   <LockedPricesTab accountIdFilter={account.id} bare />
                 </CardContent>
               </Card>
+            </TabsContent>
+          )}
+          {(authUser?.role === 'ADMIN' || authUser?.role === 'OPS') && (
+            <TabsContent value="pricing-analysis">
+              <PricingAnalysisTab account={account} />
             </TabsContent>
           )}
           <TabsContent value="activity">
