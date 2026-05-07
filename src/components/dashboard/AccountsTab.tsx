@@ -100,6 +100,21 @@ export function AccountsTab({ enabled }: { enabled: boolean }) {
     },
   });
 
+  // Products needing pricing (pricing_incomplete = true)
+  const { data: pricingIncompleteProducts, isLoading: loadingPricingIncomplete } = useQuery({
+    queryKey: ['dashboard-products-pricing-incomplete'],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, product_name, sku, account_id, accounts:accounts!products_account_id_fkey(account_name)')
+        .eq('is_active', true)
+        .eq('pricing_incomplete', true)
+        .order('product_name');
+      if (error) throw error;
+      return (data ?? []) as Array<{ id: string; product_name: string; sku: string; account_id: string; accounts: { account_name: string } | null }>;
+    },
+  });
   // Prospects pipeline
   const { data: prospects, isLoading: loadingProspects } = useQuery({
     queryKey: ['dashboard-prospects-pipeline'],
