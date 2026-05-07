@@ -228,6 +228,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
     setPriceInput('');
     setLifecycle(initialLifecycle ?? null);
     setLifecycleOverridden(false);
+    setOverrides({});
   };
   
   // Save mutation
