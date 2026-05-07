@@ -70,6 +70,10 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   
   // Step 5: Lifecycle
   const [lifecycle, setLifecycle] = useState<LifecycleType | null>(null);
+
+  // Step 7: Pricing overrides per variant
+  const [overrides, setOverrides] = useState<MixingConsoleValue>({});
+
   
   // Queries
   const { data: clients } = useQuery({
