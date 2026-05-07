@@ -73,7 +73,9 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
   
   // Step 6: Lifecycle
   const [lifecycle, setLifecycle] = useState<LifecycleType | null>(initialLifecycle ?? null);
-  const [lifecycleOverridden, setLifecycleOverridden] = useState(false);
+  // Step 7: Pricing overrides per variant (mixing console)
+  const [overrides, setOverrides] = useState<MixingConsoleValue>({});
+
 
   // Sync lifecycle when modal opens with a new initialLifecycle
   useEffect(() => {
