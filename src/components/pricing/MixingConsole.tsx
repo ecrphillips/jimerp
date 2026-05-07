@@ -7,15 +7,20 @@ export interface MixingConsoleVariant {
   key: string;
   label: string;
   bagSizeG: number;
+  // Allow callers to attach additional metadata (e.g. packagingVariant)
+  // without breaking the public contract.
+  [extra: string]: any;
 }
 
 export interface MixingConsoleVariantValue {
-  yield_loss_pct_override: number | null;
-  process_per_kg_green_override: number | null;
-  pkg_material_per_unit_override: number | null;
-  pkg_labour_per_unit_override: number | null;
-  adjustment_per_unit: number | null;
-  adjustment_note: string | null;
+  yield_loss_pct_override?: number | null;
+  process_per_kg_green_override?: number | null;
+  pkg_material_per_unit_override?: number | null;
+  pkg_labour_per_unit_override?: number | null;
+  adjustment_per_unit?: number | null;
+  adjustment_note?: string | null;
+  // Tolerate legacy override field names from older parent code.
+  [extra: string]: any;
 }
 
 export interface MixingConsoleValue {
@@ -29,13 +34,15 @@ export interface PricingProfilePreset {
 }
 
 export interface MixingConsoleProps {
-  roastGroupLabel: string | null;
-  greenMarketPerKg: number | null;
+  roastGroupLabel?: string | null;
+  greenMarketPerKg?: number | null;
   variants: MixingConsoleVariant[];
   value: MixingConsoleValue;
   onChange: (next: MixingConsoleValue) => void;
-  preset: PricingProfilePreset;
-  pkgDefaults: Record<number, { material: number; labour: number }>;
+  preset?: PricingProfilePreset | null;
+  pkgDefaults?: Record<number, { material: number; labour: number }>;
+  // Tolerate extra props passed by older parent code (e.g. accountId).
+  [extra: string]: any;
 }
 
 export function buildEmptyMixingConsoleValue(
