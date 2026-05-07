@@ -299,10 +299,12 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
       const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
       const hasPrice = !isNaN(priceValue);
 
-      // Strip override values that equal the preset → null (keeps inheritance clean)
-      const cleanedOverrides = presetQuery.data
-        ? stripRedundantOverrides(overrides, presetQuery.data, {}, consoleVariants)
-        : overrides;
+      // If user chose "Complete pricing later", do not write any overrides
+      const cleanedOverrides = opts.pricingIncomplete
+        ? {}
+        : presetQuery.data
+          ? stripRedundantOverrides(overrides, presetQuery.data, {}, consoleVariants)
+          : overrides;
 
       const overrideFor = (skuData: typeof resolvedSkus[number]) => {
         const ov = cleanedOverrides[`${skuData.packagingTypeId}-${skuData.grams}`];
