@@ -1660,22 +1660,6 @@ export default function AccountDetail() {
             </TabsContent>
           )}
           {(authUser?.role === 'ADMIN' || authUser?.role === 'OPS') && (
-            <TabsContent value="pricing">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Locked Prices</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Locked prices override calculated list prices on orders. They're created when
-                    quotes are accepted and can be edited or archived here.
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  <LockedPricesTab accountIdFilter={account.id} bare />
-                </CardContent>
-              </Card>
-            </TabsContent>
-          )}
-          {(authUser?.role === 'ADMIN' || authUser?.role === 'OPS') && (
             <TabsContent value="pricing-analysis">
               <PricingAnalysisTab account={account} />
             </TabsContent>
