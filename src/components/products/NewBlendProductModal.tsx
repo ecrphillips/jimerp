@@ -488,7 +488,23 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
               <p className="text-xs text-destructive mt-1">Please select a lifecycle</p>
             )}
           </div>
-          
+
+          {/* Step 7: Pricing overrides (mixing console) */}
+          {validVariants.length > 0 && clientId && (
+            <div>
+              <Label>7. Pricing Overrides (optional)</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Adjust per-variant cost levers. Leave at preset to inherit from the account's tier or default profile.
+              </p>
+              <MixingConsole
+                accountId={clientId}
+                variants={consoleVariants}
+                value={overrides}
+                onChange={setOverrides}
+              />
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button variant="outline" onClick={() => { resetForm(); onOpenChange(false); }}>
