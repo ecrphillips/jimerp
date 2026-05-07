@@ -63,8 +63,12 @@ export interface MixingConsoleProps {
   variants: MixingConsoleVariant[];
   value: MixingConsoleValue;
   onChange: (next: MixingConsoleValue) => void;
-  /** Placeholder book value for preview ($/kg green). Defaults to $12. */
+  /** Book value used for preview ($/kg green). Defaults to $12. */
   previewBookValuePerKg?: number;
+  /** Source of the preview green value — controls "est." badge. */
+  greenValueSource?: 'lots' | 'placeholder';
+  /** Optional roast group label shown in the read-only Roast Group column. */
+  roastGroupLabel?: string | null;
 }
 
 type PresetValues = {
