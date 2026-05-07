@@ -163,7 +163,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     })),
     [validVariants]
   );
-  const presetQuery = useAccountPricingPreset(clientId || null);
+  
 
   // Resolve real green value for the selected post-roast blend roast group
   const greenValueQuery = useRoastGroupGreenValue(selectedBlendRoastGroup || null);
