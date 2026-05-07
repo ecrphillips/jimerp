@@ -449,7 +449,15 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
 
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button variant="outline" onClick={() => { resetForm(); onOpenChange(false); }}>Cancel</Button>
-            <Button onClick={() => setWizardStep(2)} disabled={!canSave}>Advance to Pricing</Button>
+            <Button
+              onClick={() => {
+                setOverrides(buildEmptyMixingConsoleValue(consoleVariants));
+                setWizardStep(2);
+              }}
+              disabled={!canSave}
+            >
+              Advance to Pricing
+            </Button>
           </div>
         </div>
         )}
@@ -458,18 +466,18 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
         <div className="space-y-6">
           <div>
             <Label>Pricing Overrides</Label>
-            <p className="text-xs text-muted-foreground mb-2">Adjust per-variant cost levers. Leave at preset to inherit from the account's tier or default profile.</p>
+            <p className="text-xs text-muted-foreground mb-2">Adjust per-variant cost levers. Leave at preset to inherit defaults.</p>
             {greenValueSource === 'placeholder' && (
               <p className="text-xs text-amber-600 mb-2">Pricing preview is using a placeholder green value (no confirmed-cost lot linked to this roast group yet).</p>
             )}
             <MixingConsole
-              accountId={clientId}
               variants={consoleVariants}
               value={overrides}
               onChange={setOverrides}
-              previewBookValuePerKg={previewGreenValuePerKg}
-              greenValueSource={greenValueSource}
+              greenMarketPerKg={previewGreenValuePerKg}
               roastGroupLabel={selectedRoastGroupLabel}
+              preset={FALLBACK_PRESET}
+              pkgDefaults={PKG_DEFAULTS}
             />
           </div>
 
@@ -479,7 +487,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
               <Button variant="secondary" onClick={() => saveMutation.mutate({ pricingIncomplete: true })} disabled={!canSave || saveMutation.isPending}>
                 Complete pricing later
               </Button>
-              <Button onClick={() => saveMutation.mutate({ pricingIncomplete: false })} disabled={!canSave || saveMutation.isPending}>
+              <Button onClick={() => saveMutation.mutate({ pricingIncomplete: false })} disabled={!canSave || saveMutation.isPending || hasMixingConsoleErrors(overrides)}>
                 {saveMutation.isPending ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating…</>) : (`Create ${validVariants.length} Product${validVariants.length !== 1 ? 's' : ''}`)}
               </Button>
             </div>
