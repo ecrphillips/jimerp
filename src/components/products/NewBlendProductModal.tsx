@@ -202,7 +202,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   
   // Save mutation
   const saveMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts: { pricingIncomplete: boolean }) => {
       const trimmedName = finishedGoodName.trim();
       if (!selectedClient) throw new Error('Client is required');
       
