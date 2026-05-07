@@ -331,25 +331,20 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
       const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
       const hasPrice = !isNaN(priceValue);
 
-      // If user chose "Complete pricing later", do not write any overrides
       const cleanedOverrides = opts.pricingIncomplete
         ? {}
-        : presetQuery.data
-          ? stripRedundantOverrides(overrides, presetQuery.data, {}, consoleVariants)
-          : overrides;
+        : stripRedundantOverrides(overrides, consoleVariants, FALLBACK_PRESET, PKG_DEFAULTS);
 
       const overrideFor = (skuData: typeof resolvedSkus[number]) => {
         const ov = cleanedOverrides[`${skuData.packagingTypeId}-${skuData.grams}`];
         if (!ov) return {};
         return {
-          green_markup_multiplier_override: ov.green_markup_multiplier_override,
           yield_loss_pct_override: ov.yield_loss_pct_override,
-          process_rate_per_kg_override: ov.process_rate_per_kg_override,
-          overhead_per_kg_override: ov.overhead_per_kg_override,
-          packaging_material_override: ov.packaging_material_override,
-          packaging_labour_override: ov.packaging_labour_override,
-          wiggle_room_per_bag: ov.wiggle_room_per_bag,
-          wiggle_room_note: ov.wiggle_room_note,
+          process_per_kg_green_override: ov.process_per_kg_green_override,
+          pkg_material_per_unit_override: ov.pkg_material_per_unit_override,
+          pkg_labour_per_unit_override: ov.pkg_labour_per_unit_override,
+          adjustment_per_unit: ov.adjustment_per_unit,
+          adjustment_note: ov.adjustment_note,
         };
       };
 
