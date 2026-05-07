@@ -27,6 +27,7 @@ import RoastGroups from "@/pages/internal/RoastGroups";
 import RoastGroupDetail from "@/pages/internal/RoastGroupDetail";
 import Pricing from "@/pages/internal/Pricing";
 import PricingAdmin from "@/pages/internal/PricingAdmin";
+import StandingOffer from "@/pages/internal/StandingOffer";
 import Quotes from "@/pages/internal/Quotes";
 import NewQuote from "@/pages/internal/NewQuote";
 import QuoteDetail from "@/pages/internal/QuoteDetail";
@@ -88,6 +89,11 @@ const App = () => (
             <Route path="/accounts/pricing" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><PricingAdmin /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/accounts/standing-offer" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><StandingOffer /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/accounts/quotes" element={
