@@ -15,6 +15,13 @@ import { AlertCircle, ExternalLink, Info, Loader2 } from 'lucide-react';
 import { RoastGroupPreview } from './RoastGroupPreview';
 import { PackagingVariantsSection, type PackagingVariantEntry } from './PackagingVariantsSection';
 import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
+import {
+  MixingConsole,
+  stripRedundantOverrides,
+  useAccountPricingPreset,
+  type MixingConsoleValue,
+  type MixingConsoleVariant,
+} from '@/components/pricing/MixingConsole';
 
 interface Client {
   id: string;
