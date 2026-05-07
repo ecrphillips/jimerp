@@ -651,19 +651,17 @@ export function ProductsListTab() {
     // Load current overrides
     const { data: ov } = await supabase
       .from('products')
-      .select('green_markup_multiplier_override, yield_loss_pct_override, process_rate_per_kg_override, overhead_per_kg_override, packaging_material_override, packaging_labour_override, wiggle_room_per_bag, wiggle_room_note')
+      .select('yield_loss_pct_override, process_per_kg_green_override, pkg_material_per_unit_override, pkg_labour_per_unit_override, adjustment_per_unit, adjustment_note')
       .eq('id', p.id)
       .maybeSingle();
     setOverridesValue({
       [p.id]: {
-        green_markup_multiplier_override: (ov as any)?.green_markup_multiplier_override ?? null,
         yield_loss_pct_override: (ov as any)?.yield_loss_pct_override ?? null,
-        process_rate_per_kg_override: (ov as any)?.process_rate_per_kg_override ?? null,
-        overhead_per_kg_override: (ov as any)?.overhead_per_kg_override ?? null,
-        packaging_material_override: (ov as any)?.packaging_material_override ?? null,
-        packaging_labour_override: (ov as any)?.packaging_labour_override ?? null,
-        wiggle_room_per_bag: (ov as any)?.wiggle_room_per_bag ?? null,
-        wiggle_room_note: (ov as any)?.wiggle_room_note ?? null,
+        process_per_kg_green_override: (ov as any)?.process_per_kg_green_override ?? null,
+        pkg_material_per_unit_override: (ov as any)?.pkg_material_per_unit_override ?? null,
+        pkg_labour_per_unit_override: (ov as any)?.pkg_labour_per_unit_override ?? null,
+        adjustment_per_unit: (ov as any)?.adjustment_per_unit ?? null,
+        adjustment_note: (ov as any)?.adjustment_note ?? null,
       },
     });
     setDialogOpen(true);
