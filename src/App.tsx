@@ -91,6 +91,11 @@ const App = () => (
                 <InternalLayout><PricingAdmin /></InternalLayout>
               </ProtectedRoute>
             } />
+            <Route path="/accounts/standing-offer" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><StandingOffer /></InternalLayout>
+              </ProtectedRoute>
+            } />
             <Route path="/accounts/quotes" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><Quotes /></InternalLayout>
