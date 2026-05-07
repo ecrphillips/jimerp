@@ -79,6 +79,8 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
   // Step 7: Pricing overrides per variant (mixing console)
   const [overrides, setOverrides] = useState<MixingConsoleValue>({});
 
+  // Wizard page (1 = details, 2 = pricing)
+  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
 
   // Sync lifecycle when modal opens with a new initialLifecycle
   useEffect(() => {
