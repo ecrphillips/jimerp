@@ -258,6 +258,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
           grind_options: ['WHOLE_BEAN'] as const,
           is_active: true,
           is_perennial: lifecycle === 'perennial',
+          pricing_incomplete: opts.pricingIncomplete,
           ...overrideFor(skuData),
         };
         const { data: newProduct, error } = await supabase
