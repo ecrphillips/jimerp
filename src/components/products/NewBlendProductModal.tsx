@@ -75,7 +75,9 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   // Step 7: Pricing overrides per variant
   const [overrides, setOverrides] = useState<MixingConsoleValue>({});
 
-  
+  // Wizard step
+  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
+
   // Queries
   const { data: clients } = useQuery({
     queryKey: ['all-accounts-with-code'],
