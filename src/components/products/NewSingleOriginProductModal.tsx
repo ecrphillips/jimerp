@@ -14,6 +14,14 @@ import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
 import { RoastGroupPreview } from './RoastGroupPreview';
 import { PackagingVariantsSection, type PackagingVariantEntry } from './PackagingVariantsSection';
 import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
+import {
+  MixingConsole,
+  buildEmptyMixingConsoleValue,
+  stripRedundantOverrides,
+  useAccountPricingPreset,
+  type MixingConsoleValue,
+  type MixingConsoleVariant,
+} from '@/components/pricing/MixingConsole';
 
 interface Client {
   id: string;
@@ -66,6 +74,10 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
   // Step 6: Lifecycle
   const [lifecycle, setLifecycle] = useState<LifecycleType | null>(initialLifecycle ?? null);
   const [lifecycleOverridden, setLifecycleOverridden] = useState(false);
+
+  // Step 7: Pricing overrides per variant (mixing console)
+  const [overrides, setOverrides] = useState<MixingConsoleValue>({});
+
 
   // Sync lifecycle when modal opens with a new initialLifecycle
   useEffect(() => {
@@ -174,6 +186,20 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
     packagingVariants.filter(v => v.grams > 0),
     [packagingVariants]
   );
+
+  // Mixing console variants
+  const variantKey = (v: PackagingVariantEntry) => `${v.packagingTypeId}-${v.grams}`;
+  const consoleVariants: MixingConsoleVariant[] = useMemo(
+    () => validVariants.map(v => ({
+      key: variantKey(v),
+      label: `${v.packagingTypeName} ${v.grams}g`,
+      bagSizeG: v.grams,
+      packagingVariant: null,
+    })),
+    [validVariants]
+  );
+  const presetQuery = useAccountPricingPreset(clientId || null);
+
   
   const canSave = useMemo(() => {
     if (!clientId) return false;
@@ -202,6 +228,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
     setPriceInput('');
     setLifecycle(initialLifecycle ?? null);
     setLifecycleOverridden(false);
+    setOverrides({});
   };
   
   // Save mutation
@@ -267,25 +294,47 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
       // Create products
       const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
       const hasPrice = !isNaN(priceValue);
-      
+
+      // Strip override values that equal the preset → null (keeps inheritance clean)
+      const cleanedOverrides = presetQuery.data
+        ? stripRedundantOverrides(overrides, presetQuery.data, {}, consoleVariants)
+        : overrides;
+
+      const overrideFor = (skuData: typeof resolvedSkus[number]) => {
+        const ov = cleanedOverrides[`${skuData.packagingTypeId}-${skuData.grams}`];
+        if (!ov) return {};
+        return {
+          green_markup_multiplier_override: ov.green_markup_multiplier_override,
+          yield_loss_pct_override: ov.yield_loss_pct_override,
+          process_rate_per_kg_override: ov.process_rate_per_kg_override,
+          overhead_per_kg_override: ov.overhead_per_kg_override,
+          packaging_material_override: ov.packaging_material_override,
+          packaging_labour_override: ov.packaging_labour_override,
+          wiggle_room_per_bag: ov.wiggle_room_per_bag,
+          wiggle_room_note: ov.wiggle_room_note,
+        };
+      };
+
       const createdProducts: Array<{ id: string; sku: string; wasAdjusted: boolean }> = [];
-      
+
       for (const skuData of resolvedSkus) {
+        const basePayload = {
+          account_id: clientId,
+          product_name: displayName,
+          sku: skuData.sku,
+          roast_group: roastGroupKey!,
+          packaging_type_id: skuData.packagingTypeId,
+          grams_per_unit: skuData.grams,
+          bag_size_g: skuData.grams, // Keep for backward compatibility
+          format: 'WHOLE_BEAN' as const,
+          grind_options: ['WHOLE_BEAN'] as const,
+          is_active: true,
+          is_perennial: lifecycle === 'perennial',
+          ...overrideFor(skuData),
+        };
         const { data: newProduct, error } = await supabase
           .from('products')
-          .insert({
-            account_id: clientId,
-            product_name: displayName,
-            sku: skuData.sku,
-            roast_group: roastGroupKey!,
-            packaging_type_id: skuData.packagingTypeId,
-            grams_per_unit: skuData.grams,
-            bag_size_g: skuData.grams, // Keep for backward compatibility
-            format: 'WHOLE_BEAN',
-            grind_options: ['WHOLE_BEAN'],
-            is_active: true,
-            is_perennial: lifecycle === 'perennial',
-          })
+          .insert(basePayload as any)
           .select('id, sku')
           .single();
         
@@ -296,19 +345,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
               const fallbackSku = `${skuData.sku}-${i}`;
               const { data: retryProduct, error: retryError } = await supabase
                 .from('products')
-                .insert({
-                  account_id: clientId,
-                  product_name: displayName,
-                  sku: fallbackSku,
-                  roast_group: roastGroupKey!,
-                  packaging_type_id: skuData.packagingTypeId,
-                  grams_per_unit: skuData.grams,
-                  bag_size_g: skuData.grams,
-                  format: 'WHOLE_BEAN',
-                  grind_options: ['WHOLE_BEAN'],
-                  is_active: true,
-                  is_perennial: lifecycle === 'perennial',
-                })
+                .insert({ ...basePayload, sku: fallbackSku } as any)
                 .select('id, sku')
                 .single();
               
@@ -327,6 +364,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
           createdProducts.push({ id: newProduct.id, sku: newProduct.sku, wasAdjusted: skuData.wasAdjusted });
         }
       }
+
       
       const adjustedCount = createdProducts.filter(c => c.wasAdjusted).length;
       
@@ -601,8 +639,24 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
               </>
             )}
           </div>
-          
-          {/* Actions */}
+
+          {/* Step 7: Pricing overrides (mixing console) */}
+          {validVariants.length > 0 && clientId && (
+            <div>
+              <Label>7. Pricing Overrides (optional)</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Adjust per-variant cost levers. Leave at preset to inherit from the account's tier or default profile.
+              </p>
+              <MixingConsole
+                accountId={clientId}
+                variants={consoleVariants}
+                value={overrides}
+                onChange={setOverrides}
+              />
+            </div>
+          )}
+
+
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button variant="outline" onClick={() => { resetForm(); onOpenChange(false); }}>
               Cancel
