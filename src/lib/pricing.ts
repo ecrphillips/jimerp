@@ -31,6 +31,13 @@ export type PricingInputs = {
 
 export type PackagingCostSource = 'OVERRIDE' | 'LOOKUP' | 'MISSING';
 
+export type LeverSource = 'product' | 'tier' | 'default';
+
+export type ResolvedLever = {
+  value: number;
+  source: LeverSource;
+};
+
 export type PricingResult = {
   inputs: PricingInputs;
 
@@ -56,6 +63,16 @@ export type PricingResult = {
   process_cost_per_kg_roasted: number;
   overhead_per_kg_roasted: number;
   total_roasted_cost_per_kg: number;
+
+  // Resolved lever provenance (product override / tier-linked profile / default profile)
+  green_markup_multiplier_resolved: ResolvedLever;
+  yield_loss_pct_resolved: ResolvedLever;
+  process_rate_per_kg_resolved: ResolvedLever;
+  overhead_per_kg_resolved: ResolvedLever;
+
+  // Wiggle room ($/bag, applied AFTER tier adjustment)
+  wiggle_room_per_bag: number | null;
+  wiggle_room_note: string | null;
   bag_size_kg: number;
   roasted_cost_per_bag: number;
   packaging_material_per_bag: number;
@@ -291,7 +308,9 @@ export async function calculatePrice(
     inputs.product_id
       ? supabase
           .from('products')
-          .select('id, packaging_material_override, packaging_labour_override')
+          .select(
+            'id, packaging_material_override, packaging_labour_override, green_markup_multiplier_override, yield_loss_pct_override, process_rate_per_kg_override, overhead_per_kg_override, wiggle_room_per_bag, wiggle_room_note',
+          )
           .eq('id', inputs.product_id)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
@@ -401,7 +420,47 @@ export async function calculatePrice(
   }
 
   const carry_risk_premium_pct_used = weighted_carry_risk_pct;
-  const yield_loss_pct_used = num(rules.yield_loss_pct);
+
+  // Product overrides (if a product_id was supplied)
+  const productOverridesData = (productRes.data as {
+    packaging_material_override: number | null;
+    packaging_labour_override: number | null;
+    green_markup_multiplier_override: number | null;
+    yield_loss_pct_override: number | null;
+    process_rate_per_kg_override: number | null;
+    overhead_per_kg_override: number | null;
+    wiggle_room_per_bag: number | null;
+    wiggle_room_note: string | null;
+  } | null) ?? null;
+
+  // Lever inheritance: product override → tier-linked profile → default profile.
+  // The resolved `profile` is already either the tier-linked profile or the default;
+  // tag source accordingly.
+  const profileLeverSource: LeverSource = resolvedTier ? 'tier' : 'default';
+
+  const resolveLever = (override: number | null | undefined, profileValue: number): ResolvedLever =>
+    override != null
+      ? { value: num(override), source: 'product' }
+      : { value: profileValue, source: profileLeverSource };
+
+  const green_markup_multiplier_resolved = resolveLever(
+    productOverridesData?.green_markup_multiplier_override ?? null,
+    num(rules.green_markup_multiplier, 1),
+  );
+  const yield_loss_pct_resolved = resolveLever(
+    productOverridesData?.yield_loss_pct_override ?? null,
+    num(rules.yield_loss_pct),
+  );
+  const process_rate_per_kg_resolved = resolveLever(
+    productOverridesData?.process_rate_per_kg_override ?? null,
+    num(rules.process_rate_per_kg),
+  );
+  const overhead_per_kg_resolved = resolveLever(
+    productOverridesData?.overhead_per_kg_override ?? null,
+    num(rules.overhead_per_kg),
+  );
+
+  const yield_loss_pct_used = yield_loss_pct_resolved.value;
 
   // 5) Cost stack
   const financing_cost_per_kg_green = computeFinancingCostPerKg(
@@ -416,14 +475,14 @@ export async function calculatePrice(
   );
   const marked_up_cost_per_kg_green = computeMarkedUpCostPerKg(
     derisked_cost_per_kg_green,
-    num(rules.green_markup_multiplier, 1),
+    green_markup_multiplier_resolved.value,
   );
   const roasted_cost_per_kg_from_green = computeRoastedCostFromGreen(
     marked_up_cost_per_kg_green,
     yield_loss_pct_used,
   );
-  const process_cost_per_kg_roasted = num(rules.process_rate_per_kg);
-  const overhead_per_kg_roasted = num(rules.overhead_per_kg);
+  const process_cost_per_kg_roasted = process_rate_per_kg_resolved.value;
+  const overhead_per_kg_roasted = overhead_per_kg_resolved.value;
   const total_roasted_cost_per_kg = computeTotalRoastedCostPerKg(
     roasted_cost_per_kg_from_green,
     process_cost_per_kg_roasted,
@@ -449,18 +508,14 @@ export async function calculatePrice(
     warnings.push(`Packaging cost lookup failed — ${packagingRes.error.message}`);
   }
 
-  const productData = (productRes.data as {
-    packaging_material_override: number | null;
-    packaging_labour_override: number | null;
-  } | null) ?? null;
   const packagingDefaults = (packagingRes.data as {
     material_cost_per_unit: number | null;
     labour_cost_per_unit: number | null;
   } | null) ?? null;
 
   // Material
-  if (productData?.packaging_material_override != null) {
-    packaging_material_per_bag = num(productData.packaging_material_override);
+  if (productOverridesData?.packaging_material_override != null) {
+    packaging_material_per_bag = num(productOverridesData.packaging_material_override);
     packaging_material_source = 'OVERRIDE';
   } else if (packagingDefaults && packagingDefaults.material_cost_per_unit != null) {
     packaging_material_per_bag = num(packagingDefaults.material_cost_per_unit);
@@ -473,8 +528,8 @@ export async function calculatePrice(
   }
 
   // Labour
-  if (productData?.packaging_labour_override != null) {
-    packaging_labour_per_bag = num(productData.packaging_labour_override);
+  if (productOverridesData?.packaging_labour_override != null) {
+    packaging_labour_per_bag = num(productOverridesData.packaging_labour_override);
     packaging_labour_source = 'OVERRIDE';
   } else if (packagingDefaults && packagingDefaults.labour_cost_per_unit != null) {
     packaging_labour_per_bag = num(packagingDefaults.labour_cost_per_unit);
@@ -498,7 +553,7 @@ export async function calculatePrice(
   const total_cost_per_bag = roasted_cost_per_bag + packaging_cost_per_bag;
 
   // 6) Tier-adjusted price
-  const { list, final } = applyTierAdjustment(
+  const { list, final: tierFinal } = applyTierAdjustment(
     total_cost_per_bag,
     resolvedTier
       ? {
@@ -511,6 +566,14 @@ export async function calculatePrice(
     num(rules.target_margin_pct),
     bag_size_kg,
   );
+
+  // 7) Wiggle room — applied AFTER tier adjustment as the last step
+  const wiggle_room_per_bag =
+    productOverridesData?.wiggle_room_per_bag != null
+      ? num(productOverridesData.wiggle_room_per_bag)
+      : null;
+  const wiggle_room_note = productOverridesData?.wiggle_room_note ?? null;
+  const final = wiggle_room_per_bag != null ? tierFinal + wiggle_room_per_bag : tierFinal;
 
   const margin_dollars = final - total_cost_per_bag;
   const margin_pct = final > 0 ? margin_dollars / final : 0;
@@ -539,6 +602,12 @@ export async function calculatePrice(
     process_cost_per_kg_roasted,
     overhead_per_kg_roasted,
     total_roasted_cost_per_kg,
+    green_markup_multiplier_resolved,
+    yield_loss_pct_resolved,
+    process_rate_per_kg_resolved,
+    overhead_per_kg_resolved,
+    wiggle_room_per_bag,
+    wiggle_room_note,
     bag_size_kg,
     roasted_cost_per_bag,
     packaging_material_per_bag,

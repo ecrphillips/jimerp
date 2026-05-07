@@ -3355,11 +3355,13 @@ export type Database = {
           created_at: string
           format: Database["public"]["Enums"]["product_format"]
           grams_per_unit: number | null
+          green_markup_multiplier_override: number | null
           grind_options: Database["public"]["Enums"]["grind_option"][] | null
           id: string
           internal_packaging_notes: string | null
           is_active: boolean
           is_perennial: boolean
+          overhead_per_kg_override: number | null
           pack_display_order: number | null
           packaging_labour_override: number | null
           packaging_material_override: number | null
@@ -3367,10 +3369,16 @@ export type Database = {
           packaging_variant:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
+          pricing_overrides_updated_at: string | null
+          pricing_overrides_updated_by: string | null
+          process_rate_per_kg_override: number | null
           product_name: string
           roast_group: string | null
           sku: string | null
           updated_at: string
+          wiggle_room_note: string | null
+          wiggle_room_per_bag: number | null
+          yield_loss_pct_override: number | null
         }
         Insert: {
           account_id?: string | null
@@ -3379,11 +3387,13 @@ export type Database = {
           created_at?: string
           format?: Database["public"]["Enums"]["product_format"]
           grams_per_unit?: number | null
+          green_markup_multiplier_override?: number | null
           grind_options?: Database["public"]["Enums"]["grind_option"][] | null
           id?: string
           internal_packaging_notes?: string | null
           is_active?: boolean
           is_perennial?: boolean
+          overhead_per_kg_override?: number | null
           pack_display_order?: number | null
           packaging_labour_override?: number | null
           packaging_material_override?: number | null
@@ -3391,10 +3401,16 @@ export type Database = {
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
+          pricing_overrides_updated_at?: string | null
+          pricing_overrides_updated_by?: string | null
+          process_rate_per_kg_override?: number | null
           product_name: string
           roast_group?: string | null
           sku?: string | null
           updated_at?: string
+          wiggle_room_note?: string | null
+          wiggle_room_per_bag?: number | null
+          yield_loss_pct_override?: number | null
         }
         Update: {
           account_id?: string | null
@@ -3403,11 +3419,13 @@ export type Database = {
           created_at?: string
           format?: Database["public"]["Enums"]["product_format"]
           grams_per_unit?: number | null
+          green_markup_multiplier_override?: number | null
           grind_options?: Database["public"]["Enums"]["grind_option"][] | null
           id?: string
           internal_packaging_notes?: string | null
           is_active?: boolean
           is_perennial?: boolean
+          overhead_per_kg_override?: number | null
           pack_display_order?: number | null
           packaging_labour_override?: number | null
           packaging_material_override?: number | null
@@ -3415,10 +3433,16 @@ export type Database = {
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
+          pricing_overrides_updated_at?: string | null
+          pricing_overrides_updated_by?: string | null
+          process_rate_per_kg_override?: number | null
           product_name?: string
           roast_group?: string | null
           sku?: string | null
           updated_at?: string
+          wiggle_room_note?: string | null
+          wiggle_room_per_bag?: number | null
+          yield_loss_pct_override?: number | null
         }
         Relationships: [
           {
