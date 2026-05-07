@@ -1014,15 +1014,17 @@ export function ProductsListTab() {
                   </CollapsibleTrigger>
                   <CollapsibleContent className="p-3 border-t space-y-3">
                     <MixingConsole
-                      accountId={editingProduct.account_id ?? editingProduct.client_id ?? null}
                       variants={[{
                         key: editingProduct.id,
-                        label: editingProduct.product_name,
+                        label: editingProduct.packaging_variant ?? editingProduct.product_name,
                         bagSizeG: editingProduct.bag_size_g,
-                        packagingVariant: editingProduct.packaging_variant,
                       }]}
                       value={overridesValue}
                       onChange={setOverridesValue}
+                      greenMarketPerKg={editingGreenMarketPerKg}
+                      roastGroupLabel={editingProduct.roast_group ?? null}
+                      preset={FALLBACK_PRESET}
+                      pkgDefaults={PKG_DEFAULTS}
                     />
                     <div className="flex justify-end">
                       <Button size="sm" onClick={() => saveOverridesMutation.mutate()} disabled={saveOverridesMutation.isPending}>
