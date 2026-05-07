@@ -2739,6 +2739,103 @@ export type Database = {
           },
         ]
       }
+      offer_workspace_lines: {
+        Row: {
+          account_id: string
+          client_facing_name: string
+          green_markup_multiplier_override: number | null
+          id: string
+          overhead_per_kg_override: number | null
+          packaging_variant: string
+          process_rate_per_kg_override: number | null
+          roast_group: string
+          saved_at: string | null
+          saved_by: string | null
+          saved_green_cost_per_kg: number | null
+          sort_order: number
+          updated_at: string
+          updated_by: string | null
+          wiggle_room_note: string | null
+          wiggle_room_per_bag: number | null
+          yield_loss_pct_override: number | null
+        }
+        Insert: {
+          account_id: string
+          client_facing_name: string
+          green_markup_multiplier_override?: number | null
+          id?: string
+          overhead_per_kg_override?: number | null
+          packaging_variant: string
+          process_rate_per_kg_override?: number | null
+          roast_group: string
+          saved_at?: string | null
+          saved_by?: string | null
+          saved_green_cost_per_kg?: number | null
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+          wiggle_room_note?: string | null
+          wiggle_room_per_bag?: number | null
+          yield_loss_pct_override?: number | null
+        }
+        Update: {
+          account_id?: string
+          client_facing_name?: string
+          green_markup_multiplier_override?: number | null
+          id?: string
+          overhead_per_kg_override?: number | null
+          packaging_variant?: string
+          process_rate_per_kg_override?: number | null
+          roast_group?: string
+          saved_at?: string | null
+          saved_by?: string | null
+          saved_green_cost_per_kg?: number | null
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+          wiggle_room_note?: string | null
+          wiggle_room_per_bag?: number | null
+          yield_loss_pct_override?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offer_workspace_lines_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      offer_workspace_sessions: {
+        Row: {
+          account_id: string
+          id: string
+          last_saved_at: string | null
+          last_saved_by: string | null
+        }
+        Insert: {
+          account_id: string
+          id?: string
+          last_saved_at?: string | null
+          last_saved_by?: string | null
+        }
+        Update: {
+          account_id?: string
+          id?: string
+          last_saved_at?: string | null
+          last_saved_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offer_workspace_sessions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: true
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_date_audit_log: {
         Row: {
           changed_at: string
@@ -4198,86 +4295,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
-      }
-      standing_offer_lines: {
-        Row: {
-          account_id: string
-          client_facing_name: string
-          id: string
-          notes: string | null
-          price_per_bag: number
-          roast_group: string
-          sort_order: number
-          updated_at: string
-          updated_by: string | null
-        }
-        Insert: {
-          account_id: string
-          client_facing_name: string
-          id?: string
-          notes?: string | null
-          price_per_bag: number
-          roast_group: string
-          sort_order?: number
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Update: {
-          account_id?: string
-          client_facing_name?: string
-          id?: string
-          notes?: string | null
-          price_per_bag?: number
-          roast_group?: string
-          sort_order?: number
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "standing_offer_lines_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "standing_offer_lines_roast_group_fkey"
-            columns: ["roast_group"]
-            isOneToOne: false
-            referencedRelation: "roast_groups"
-            referencedColumns: ["roast_group"]
-          },
-        ]
-      }
-      standing_offer_sessions: {
-        Row: {
-          account_id: string
-          id: string
-          last_updated_at: string | null
-          last_updated_by: string | null
-        }
-        Insert: {
-          account_id: string
-          id?: string
-          last_updated_at?: string | null
-          last_updated_by?: string | null
-        }
-        Update: {
-          account_id?: string
-          id?: string
-          last_updated_at?: string | null
-          last_updated_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "standing_offer_sessions_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: true
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       suppressed_emails: {
         Row: {
