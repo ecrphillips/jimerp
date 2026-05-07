@@ -1,4 +1,19 @@
-export default function MixingConsole(_props: any) {
+export type MixingConsoleValue = any;
+export type MixingConsoleVariant = any;
+
+export function buildEmptyMixingConsoleValue(..._args: any[]): any {
+  return {};
+}
+
+export function stripRedundantOverrides(..._args: any[]): any {
+  return {};
+}
+
+export function useAccountPricingPreset(..._args: any[]): any {
+  return { data: null, isLoading: false };
+}
+
+export function MixingConsole(_props: any) {
   return (
     <div className="p-4 text-sm text-muted-foreground border rounded-md">
       Pricing update in progress — check back soon.
@@ -6,6 +21,4 @@ export default function MixingConsole(_props: any) {
   );
 }
 
-export function MixingConsole_Named(_props: any) {
-  return null;
-}
+export default MixingConsole;
