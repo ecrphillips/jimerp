@@ -32,7 +32,6 @@ const FALLBACK_PRESET: PricingProfilePreset = {
   pkg_labour_per_unit: 0,
 };
 const PKG_DEFAULTS: Record<number, { material: number; labour: number }> = {};
-import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
 
 interface Client {
   id: string;
