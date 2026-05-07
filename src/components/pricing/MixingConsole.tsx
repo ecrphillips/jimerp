@@ -276,6 +276,8 @@ export function MixingConsole({
   value,
   onChange,
   previewBookValuePerKg = DEFAULT_BOOK_VALUE_PER_KG,
+  greenValueSource = 'placeholder',
+  roastGroupLabel,
 }: MixingConsoleProps) {
   const presetQuery = useAccountPricingPreset(accountId);
   const packagingDefaultsQuery = usePackagingDefaults(variants);
