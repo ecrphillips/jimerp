@@ -141,6 +141,18 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     packagingVariants.filter(v => v.grams > 0),
     [packagingVariants]
   );
+
+  const consoleVariants: MixingConsoleVariant[] = useMemo(
+    () => validVariants.map(v => ({
+      key: `${v.packagingTypeId}-${v.grams}`,
+      label: `${v.packagingTypeName} ${v.grams}g`,
+      bagSizeG: v.grams,
+      packagingVariant: null,
+    })),
+    [validVariants]
+  );
+  const presetQuery = useAccountPricingPreset(clientId || null);
+
   
   const canSave = useMemo(() => {
     if (!clientId) return false;
