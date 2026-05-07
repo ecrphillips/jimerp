@@ -203,6 +203,30 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
   );
   const presetQuery = useAccountPricingPreset(clientId || null);
 
+  // Roast group green value (only resolved for an existing roast group selection)
+  const greenValueQuery = useRoastGroupGreenValue(
+    roastGroupMode === 'existing' && selectedRoastGroup ? selectedRoastGroup : null,
+  );
+  const previewGreenValuePerKg =
+    greenValueQuery.data?.marketValuePerKg && greenValueQuery.data.marketValuePerKg > 0
+      ? greenValueQuery.data.marketValuePerKg
+      : 12;
+  const greenValueSource: 'lots' | 'placeholder' =
+    greenValueQuery.data?.source === 'lots' && greenValueQuery.data?.marketValuePerKg
+      ? 'lots'
+      : 'placeholder';
+  const selectedRoastGroupLabel = useMemo(() => {
+    if (roastGroupMode === 'existing') {
+      const rg = singleOriginRoastGroups.find(g => g.roast_group === selectedRoastGroup);
+      if (!rg) return null;
+      return `${rg.display_name?.trim() || rg.roast_group.replace(/_/g, ' ')} (${rg.roast_group_code})`;
+    }
+    if (roastGroupMode === 'new') {
+      return fullFinishedGoodName ? `${fullFinishedGoodName} (new)` : 'New roast group';
+    }
+    return null;
+  }, [roastGroupMode, selectedRoastGroup, singleOriginRoastGroups, fullFinishedGoodName]);
+
   
   const canSave = useMemo(() => {
     if (!clientId) return false;
