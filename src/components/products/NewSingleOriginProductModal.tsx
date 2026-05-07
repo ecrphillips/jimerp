@@ -598,7 +598,15 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
 
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button variant="outline" onClick={() => { resetForm(); onOpenChange(false); }}>Cancel</Button>
-            <Button onClick={() => setWizardStep(2)} disabled={!canSave}>Advance to Pricing</Button>
+            <Button
+              onClick={() => {
+                setOverrides(buildEmptyMixingConsoleValue(consoleVariants));
+                setWizardStep(2);
+              }}
+              disabled={!canSave}
+            >
+              Advance to Pricing
+            </Button>
           </div>
         </div>
         )}
@@ -608,7 +616,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
           <div>
             <Label>Pricing Overrides</Label>
             <p className="text-xs text-muted-foreground mb-2">
-              Adjust per-variant cost levers. Leave at preset to inherit from the account's tier or default profile.
+              Adjust per-variant cost levers. Leave at preset to inherit defaults.
             </p>
             {greenValueSource === 'placeholder' && (
               <p className="text-xs text-amber-600 mb-2">
@@ -616,13 +624,13 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
               </p>
             )}
             <MixingConsole
-              accountId={clientId}
               variants={consoleVariants}
               value={overrides}
               onChange={setOverrides}
-              previewBookValuePerKg={previewGreenValuePerKg}
-              greenValueSource={greenValueSource}
+              greenMarketPerKg={previewGreenValuePerKg}
               roastGroupLabel={selectedRoastGroupLabel}
+              preset={FALLBACK_PRESET}
+              pkgDefaults={PKG_DEFAULTS}
             />
           </div>
 
@@ -638,7 +646,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
               </Button>
               <Button
                 onClick={() => saveMutation.mutate({ pricingIncomplete: false })}
-                disabled={!canSave || saveMutation.isPending}
+                disabled={!canSave || saveMutation.isPending || hasMixingConsoleErrors(overrides)}
               >
                 {saveMutation.isPending ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating…</>
