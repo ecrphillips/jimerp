@@ -21,6 +21,8 @@ import { NewBlendProductModal } from './NewBlendProductModal';
 import { SafeDeleteModal } from '@/components/SafeDeleteModal';
 import { RoastGroupRerouteModal } from './RoastGroupRerouteModal';
 import { Trash2, ChevronRight, ChevronDown, X } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { MixingConsole, stripRedundantOverrides, useAccountPricingPreset, type MixingConsoleValue } from '@/components/pricing/MixingConsole';
 
 interface Product {
   id: string;
