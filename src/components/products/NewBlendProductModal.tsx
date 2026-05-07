@@ -191,6 +191,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     setPriceInput('');
     setLifecycle(null);
     setOverrides({});
+    setWizardStep(1);
   };
   
   // Navigate to roast groups tab
