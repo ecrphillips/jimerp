@@ -319,14 +319,19 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
         count: createdProducts.length, 
         name: trimmedName, 
         adjustedCount,
+        pricingIncomplete: opts.pricingIncomplete,
       };
     },
     onSuccess: (result) => {
-      let message = `Created ${result.count} product${result.count > 1 ? 's' : ''} for ${result.name}`;
-      if (result.adjustedCount > 0) {
-        message += ` (${result.adjustedCount} SKU${result.adjustedCount > 1 ? 's' : ''} auto-adjusted for uniqueness)`;
+      if (result.pricingIncomplete) {
+        toast.success('Product created. Pricing marked as incomplete.');
+      } else {
+        let message = `Created ${result.count} product${result.count > 1 ? 's' : ''} for ${result.name}`;
+        if (result.adjustedCount > 0) {
+          message += ` (${result.adjustedCount} SKU${result.adjustedCount > 1 ? 's' : ''} auto-adjusted for uniqueness)`;
+        }
+        toast.success(message);
       }
-      toast.success(message);
       queryClient.invalidateQueries({ queryKey: ['all-products'] });
       queryClient.invalidateQueries({ queryKey: ['all-prices'] });
       queryClient.invalidateQueries({ queryKey: ['active-roast-groups-with-code'] });
