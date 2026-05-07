@@ -31,6 +31,13 @@ export type PricingInputs = {
 
 export type PackagingCostSource = 'OVERRIDE' | 'LOOKUP' | 'MISSING';
 
+export type LeverSource = 'product' | 'tier' | 'default';
+
+export type ResolvedLever = {
+  value: number;
+  source: LeverSource;
+};
+
 export type PricingResult = {
   inputs: PricingInputs;
 
@@ -56,6 +63,16 @@ export type PricingResult = {
   process_cost_per_kg_roasted: number;
   overhead_per_kg_roasted: number;
   total_roasted_cost_per_kg: number;
+
+  // Resolved lever provenance (product override / tier-linked profile / default profile)
+  green_markup_multiplier_resolved: ResolvedLever;
+  yield_loss_pct_resolved: ResolvedLever;
+  process_rate_per_kg_resolved: ResolvedLever;
+  overhead_per_kg_resolved: ResolvedLever;
+
+  // Wiggle room ($/bag, applied AFTER tier adjustment)
+  wiggle_room_per_bag: number | null;
+  wiggle_room_note: string | null;
   bag_size_kg: number;
   roasted_cost_per_bag: number;
   packaging_material_per_bag: number;
