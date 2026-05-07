@@ -186,6 +186,20 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
     packagingVariants.filter(v => v.grams > 0),
     [packagingVariants]
   );
+
+  // Mixing console variants
+  const variantKey = (v: PackagingVariantEntry) => `${v.packagingTypeId}-${v.grams}`;
+  const consoleVariants: MixingConsoleVariant[] = useMemo(
+    () => validVariants.map(v => ({
+      key: variantKey(v),
+      label: `${v.packagingTypeName} ${v.grams}g`,
+      bagSizeG: v.grams,
+      packagingVariant: null,
+    })),
+    [validVariants]
+  );
+  const presetQuery = useAccountPricingPreset(clientId || null);
+
   
   const canSave = useMemo(() => {
     if (!clientId) return false;
