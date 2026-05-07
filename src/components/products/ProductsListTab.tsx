@@ -990,7 +990,38 @@ export function ProductsListTab() {
                 <Label htmlFor="perennial">Perennial</Label>
               </div>
             </div>
+
+            {/* Pricing Overrides (ADMIN/OPS only) */}
+            {isInternal && editingProduct && (
+              <Collapsible open={pricingOverridesOpen} onOpenChange={setPricingOverridesOpen}>
+                <div className="border rounded-md">
+                  <CollapsibleTrigger className="w-full px-3 py-2 flex items-center justify-between hover:bg-muted/50">
+                    <span className="text-sm font-medium">Pricing Overrides</span>
+                    {pricingOverridesOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="p-3 border-t space-y-3">
+                    <MixingConsole
+                      accountId={editingProduct.account_id ?? editingProduct.client_id ?? null}
+                      variants={[{
+                        key: editingProduct.id,
+                        label: editingProduct.product_name,
+                        bagSizeG: editingProduct.bag_size_g,
+                        packagingVariant: editingProduct.packaging_variant,
+                      }]}
+                      value={overridesValue}
+                      onChange={setOverridesValue}
+                    />
+                    <div className="flex justify-end">
+                      <Button size="sm" onClick={() => saveOverridesMutation.mutate()} disabled={saveOverridesMutation.isPending}>
+                        {saveOverridesMutation.isPending ? 'Saving…' : 'Save Overrides'}
+                      </Button>
+                    </div>
+                  </CollapsibleContent>
+                </div>
+              </Collapsible>
+            )}
           </div>
+
           <div className="flex-shrink-0 flex justify-between items-center px-6 py-4 border-t bg-background">
             {editingProduct ? (
               <Button variant="secondary" onClick={() => openAddVariant(editingProduct)}>Add Variant</Button>
