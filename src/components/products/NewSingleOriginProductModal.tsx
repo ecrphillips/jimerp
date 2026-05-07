@@ -232,11 +232,12 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
     setLifecycle(initialLifecycle ?? null);
     setLifecycleOverridden(false);
     setOverrides({});
+    setWizardStep(1);
   };
   
   // Save mutation
   const saveMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts: { pricingIncomplete: boolean }) => {
       const displayName = fullFinishedGoodName;
       if (!displayName) throw new Error('Product name is required');
       if (!selectedClient) throw new Error('Client is required');
