@@ -583,7 +583,7 @@ export function ProductsListTab() {
     onError: (e: any) => { toast.error(e?.message ?? 'Failed to save overrides'); },
   });
 
-
+  const variantBaseName = variantSource ? stripPackagingSuffix(variantSource.product_name) : '';
   const variantLabel = variantPackaging ? PACKAGING_OPTIONS.find(o => o.value === variantPackaging)?.label ?? '' : '';
   const variantNewName = variantPackaging ? `${variantBaseName} ${variantLabel}` : '';
 
