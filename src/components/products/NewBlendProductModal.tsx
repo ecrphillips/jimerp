@@ -223,9 +223,11 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
       const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
       const hasPrice = !isNaN(priceValue);
 
-      const cleanedOverrides = presetQuery.data
-        ? stripRedundantOverrides(overrides, presetQuery.data, {}, consoleVariants)
-        : overrides;
+      const cleanedOverrides = opts.pricingIncomplete
+        ? {}
+        : presetQuery.data
+          ? stripRedundantOverrides(overrides, presetQuery.data, {}, consoleVariants)
+          : overrides;
       const overrideFor = (skuData: typeof resolvedSkus[number]) => {
         const ov = cleanedOverrides[`${skuData.packagingTypeId}-${skuData.grams}`];
         if (!ov) return {};
