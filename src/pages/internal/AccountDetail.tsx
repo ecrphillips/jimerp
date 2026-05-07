@@ -1634,9 +1634,6 @@ export default function AccountDetail() {
           <TabsTrigger value="users">Users</TabsTrigger>
           {hasCoroasting && <TabsTrigger value="coroasting">Co-Roasting</TabsTrigger>}
           {(authUser?.role === 'ADMIN' || authUser?.role === 'OPS') && (
-            <TabsTrigger value="pricing">Pricing</TabsTrigger>
-          )}
-          {(authUser?.role === 'ADMIN' || authUser?.role === 'OPS') && (
             <TabsTrigger value="pricing-analysis">Pricing Analysis</TabsTrigger>
           )}
           {(authUser?.role === 'ADMIN' || authUser?.role === 'OPS') && (
