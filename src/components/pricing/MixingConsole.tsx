@@ -68,10 +68,30 @@ export function buildEmptyMixingConsoleValue(
  */
 export function stripRedundantOverrides(
   value: MixingConsoleValue,
-  variants: MixingConsoleVariant[],
-  preset: PricingProfilePreset,
-  pkgDefaults: Record<number, { material: number; labour: number }>,
+  variantsOrPreset: any,
+  presetOrPkg: any,
+  pkgOrVariants: any = {},
 ): MixingConsoleValue {
+  // Accept arg order (value, variants, preset, pkgDefaults) OR legacy
+  // (value, preset, pkgDefaults, variants) — wiring will be unified later.
+  const variants: MixingConsoleVariant[] = Array.isArray(variantsOrPreset)
+    ? variantsOrPreset
+    : Array.isArray(pkgOrVariants)
+      ? pkgOrVariants
+      : [];
+  const preset: PricingProfilePreset =
+    !Array.isArray(variantsOrPreset) && variantsOrPreset
+      ? variantsOrPreset
+      : !Array.isArray(presetOrPkg) && presetOrPkg && 'yield_loss_pct' in presetOrPkg
+        ? presetOrPkg
+        : { yield_loss_pct: 0, process_per_kg_green: 0, pkg_labour_per_unit: 0 };
+  const pkgDefaults: Record<number, { material: number; labour: number }> =
+    !Array.isArray(presetOrPkg) && presetOrPkg && !('yield_loss_pct' in presetOrPkg)
+      ? presetOrPkg
+      : !Array.isArray(pkgOrVariants) && pkgOrVariants
+        ? pkgOrVariants
+        : {};
+
   const out: MixingConsoleValue = {};
   for (const v of variants) {
     const cur = value[v.key] ?? {
