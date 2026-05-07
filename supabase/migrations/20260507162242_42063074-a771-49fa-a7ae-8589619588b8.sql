@@ -1,0 +1,1 @@
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS pricing_incomplete boolean NOT NULL DEFAULT false;
