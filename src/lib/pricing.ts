@@ -308,7 +308,9 @@ export async function calculatePrice(
     inputs.product_id
       ? supabase
           .from('products')
-          .select('id, packaging_material_override, packaging_labour_override')
+          .select(
+            'id, packaging_material_override, packaging_labour_override, green_markup_multiplier_override, yield_loss_pct_override, process_rate_per_kg_override, overhead_per_kg_override, wiggle_room_per_bag, wiggle_room_note',
+          )
           .eq('id', inputs.product_id)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
