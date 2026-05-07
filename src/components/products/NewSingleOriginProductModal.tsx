@@ -18,11 +18,19 @@ import {
   MixingConsole,
   buildEmptyMixingConsoleValue,
   stripRedundantOverrides,
-  useAccountPricingPreset,
+  hasMixingConsoleErrors,
   type MixingConsoleValue,
   type MixingConsoleVariant,
+  type PricingProfilePreset,
 } from '@/components/pricing/MixingConsole';
 import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
+
+const FALLBACK_PRESET: PricingProfilePreset = {
+  yield_loss_pct: 16,
+  process_per_kg_green: 0,
+  pkg_labour_per_unit: 0,
+};
+const PKG_DEFAULTS: Record<number, { material: number; labour: number }> = {};
 
 interface Client {
   id: string;
