@@ -17,12 +17,21 @@ import { PackagingVariantsSection, type PackagingVariantEntry } from './Packagin
 import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
 import {
   MixingConsole,
+  buildEmptyMixingConsoleValue,
   stripRedundantOverrides,
-  useAccountPricingPreset,
+  hasMixingConsoleErrors,
   type MixingConsoleValue,
   type MixingConsoleVariant,
+  type PricingProfilePreset,
 } from '@/components/pricing/MixingConsole';
 import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
+
+const FALLBACK_PRESET: PricingProfilePreset = {
+  yield_loss_pct: 16,
+  process_per_kg_green: 0,
+  pkg_labour_per_unit: 0,
+};
+const PKG_DEFAULTS: Record<number, { material: number; labour: number }> = {};
 
 interface Client {
   id: string;
@@ -154,7 +163,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     })),
     [validVariants]
   );
-  const presetQuery = useAccountPricingPreset(clientId || null);
+  
 
   // Resolve real green value for the selected post-roast blend roast group
   const greenValueQuery = useRoastGroupGreenValue(selectedBlendRoastGroup || null);
@@ -225,21 +234,17 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
 
       const cleanedOverrides = opts.pricingIncomplete
         ? {}
-        : presetQuery.data
-          ? stripRedundantOverrides(overrides, presetQuery.data, {}, consoleVariants)
-          : overrides;
+        : stripRedundantOverrides(overrides, consoleVariants, FALLBACK_PRESET, PKG_DEFAULTS);
       const overrideFor = (skuData: typeof resolvedSkus[number]) => {
         const ov = cleanedOverrides[`${skuData.packagingTypeId}-${skuData.grams}`];
         if (!ov) return {};
         return {
-          green_markup_multiplier_override: ov.green_markup_multiplier_override,
           yield_loss_pct_override: ov.yield_loss_pct_override,
-          process_rate_per_kg_override: ov.process_rate_per_kg_override,
-          overhead_per_kg_override: ov.overhead_per_kg_override,
-          packaging_material_override: ov.packaging_material_override,
-          packaging_labour_override: ov.packaging_labour_override,
-          wiggle_room_per_bag: ov.wiggle_room_per_bag,
-          wiggle_room_note: ov.wiggle_room_note,
+          process_per_kg_green_override: ov.process_per_kg_green_override,
+          pkg_material_per_unit_override: ov.pkg_material_per_unit_override,
+          pkg_labour_per_unit_override: ov.pkg_labour_per_unit_override,
+          adjustment_per_unit: ov.adjustment_per_unit,
+          adjustment_note: ov.adjustment_note,
         };
       };
 
@@ -444,7 +449,15 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
 
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button variant="outline" onClick={() => { resetForm(); onOpenChange(false); }}>Cancel</Button>
-            <Button onClick={() => setWizardStep(2)} disabled={!canSave}>Advance to Pricing</Button>
+            <Button
+              onClick={() => {
+                setOverrides(buildEmptyMixingConsoleValue(consoleVariants));
+                setWizardStep(2);
+              }}
+              disabled={!canSave}
+            >
+              Advance to Pricing
+            </Button>
           </div>
         </div>
         )}
@@ -453,18 +466,18 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
         <div className="space-y-6">
           <div>
             <Label>Pricing Overrides</Label>
-            <p className="text-xs text-muted-foreground mb-2">Adjust per-variant cost levers. Leave at preset to inherit from the account's tier or default profile.</p>
+            <p className="text-xs text-muted-foreground mb-2">Adjust per-variant cost levers. Leave at preset to inherit defaults.</p>
             {greenValueSource === 'placeholder' && (
               <p className="text-xs text-amber-600 mb-2">Pricing preview is using a placeholder green value (no confirmed-cost lot linked to this roast group yet).</p>
             )}
             <MixingConsole
-              accountId={clientId}
               variants={consoleVariants}
               value={overrides}
               onChange={setOverrides}
-              previewBookValuePerKg={previewGreenValuePerKg}
-              greenValueSource={greenValueSource}
+              greenMarketPerKg={previewGreenValuePerKg}
               roastGroupLabel={selectedRoastGroupLabel}
+              preset={FALLBACK_PRESET}
+              pkgDefaults={PKG_DEFAULTS}
             />
           </div>
 
@@ -474,7 +487,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
               <Button variant="secondary" onClick={() => saveMutation.mutate({ pricingIncomplete: true })} disabled={!canSave || saveMutation.isPending}>
                 Complete pricing later
               </Button>
-              <Button onClick={() => saveMutation.mutate({ pricingIncomplete: false })} disabled={!canSave || saveMutation.isPending}>
+              <Button onClick={() => saveMutation.mutate({ pricingIncomplete: false })} disabled={!canSave || saveMutation.isPending || hasMixingConsoleErrors(overrides)}>
                 {saveMutation.isPending ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating…</>) : (`Create ${validVariants.length} Product${validVariants.length !== 1 ? 's' : ''}`)}
               </Button>
             </div>
