@@ -560,7 +560,30 @@ export function ProductsListTab() {
     onError: (err) => { console.error(err); toast.error('Failed to set product inactive'); },
   });
 
-  const variantBaseName = variantSource ? stripPackagingSuffix(variantSource.product_name) : '';
+  const saveOverridesMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingProduct || !editingPresetQuery.data) return;
+      const consoleVariants = [{ key: editingProduct.id, label: editingProduct.product_name, bagSizeG: editingProduct.bag_size_g, packagingVariant: editingProduct.packaging_variant }];
+      const cleaned = stripRedundantOverrides(overridesValue, editingPresetQuery.data, {}, consoleVariants);
+      const ov = cleaned[editingProduct.id];
+      if (!ov) return;
+      const { error } = await supabase.from('products').update({
+        green_markup_multiplier_override: ov.green_markup_multiplier_override,
+        yield_loss_pct_override: ov.yield_loss_pct_override,
+        process_rate_per_kg_override: ov.process_rate_per_kg_override,
+        overhead_per_kg_override: ov.overhead_per_kg_override,
+        packaging_material_override: ov.packaging_material_override,
+        packaging_labour_override: ov.packaging_labour_override,
+        wiggle_room_per_bag: ov.wiggle_room_per_bag,
+        wiggle_room_note: ov.wiggle_room_note,
+      } as any).eq('id', editingProduct.id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success('Pricing overrides saved'); queryClient.invalidateQueries({ queryKey: ['all-products'] }); },
+    onError: (e: any) => { toast.error(e?.message ?? 'Failed to save overrides'); },
+  });
+
+
   const variantLabel = variantPackaging ? PACKAGING_OPTIONS.find(o => o.value === variantPackaging)?.label ?? '' : '';
   const variantNewName = variantPackaging ? `${variantBaseName} ${variantLabel}` : '';
 
