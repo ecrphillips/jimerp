@@ -156,7 +156,21 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   );
   const presetQuery = useAccountPricingPreset(clientId || null);
 
-  
+  // Resolve real green value for the selected post-roast blend roast group
+  const greenValueQuery = useRoastGroupGreenValue(selectedBlendRoastGroup || null);
+  const previewGreenValuePerKg =
+    greenValueQuery.data?.marketValuePerKg && greenValueQuery.data.marketValuePerKg > 0
+      ? greenValueQuery.data.marketValuePerKg
+      : 12;
+  const greenValueSource: 'lots' | 'placeholder' =
+    greenValueQuery.data?.source === 'lots' && greenValueQuery.data?.marketValuePerKg
+      ? 'lots'
+      : 'placeholder';
+  const selectedRgRecord = postRoastBlendRoastGroups.find(g => g.roast_group === selectedBlendRoastGroup);
+  const selectedRoastGroupLabel = selectedRgRecord
+    ? `${selectedRgRecord.display_name?.trim() || selectedRgRecord.roast_group.replace(/_/g, ' ')} (${selectedRgRecord.roast_group_code})`
+    : null;
+
   const canSave = useMemo(() => {
     if (!clientId) return false;
     if (!selectedClient?.account_code) return false;
