@@ -116,7 +116,10 @@ export function ProductsListTab() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [overridesValue, setOverridesValue] = useState<MixingConsoleValue>({});
   const [pricingOverridesOpen, setPricingOverridesOpen] = useState(false);
-  const editingPresetQuery = useAccountPricingPreset(editingProduct?.account_id ?? editingProduct?.client_id ?? null);
+  const editingGreenValue = useRoastGroupGreenValue(editingProduct?.roast_group ?? null);
+  const editingGreenMarketPerKg = editingGreenValue.data?.marketValuePerKg && editingGreenValue.data.marketValuePerKg > 0
+    ? editingGreenValue.data.marketValuePerKg
+    : null;
 
   // Product type choice + separate modals
   const [typeChoiceOpen, setTypeChoiceOpen] = useState(false);
