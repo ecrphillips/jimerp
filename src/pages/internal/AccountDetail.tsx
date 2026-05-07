@@ -25,7 +25,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
 import { PronounsField } from '@/components/contacts/PronounsField';
 import { formatPronounsSuffix } from '@/lib/pronounOptions';
-import { LockedPricesTab } from '@/components/pricing/LockedPricesTab';
+
 import PricingAnalysisTab from '@/components/account/PricingAnalysisTab';
 import OfferWorkspaceTab from '@/components/account/OfferWorkspaceTab';
 
