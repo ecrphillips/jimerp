@@ -22,6 +22,7 @@ import {
   type MixingConsoleValue,
   type MixingConsoleVariant,
 } from '@/components/pricing/MixingConsole';
+import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
 
 interface Client {
   id: string;
@@ -78,6 +79,8 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
   // Step 7: Pricing overrides per variant (mixing console)
   const [overrides, setOverrides] = useState<MixingConsoleValue>({});
 
+  // Wizard page (1 = details, 2 = pricing)
+  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
 
   // Sync lifecycle when modal opens with a new initialLifecycle
   useEffect(() => {
@@ -200,6 +203,30 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
   );
   const presetQuery = useAccountPricingPreset(clientId || null);
 
+  // Roast group green value (only resolved for an existing roast group selection)
+  const greenValueQuery = useRoastGroupGreenValue(
+    roastGroupMode === 'existing' && selectedRoastGroup ? selectedRoastGroup : null,
+  );
+  const previewGreenValuePerKg =
+    greenValueQuery.data?.marketValuePerKg && greenValueQuery.data.marketValuePerKg > 0
+      ? greenValueQuery.data.marketValuePerKg
+      : 12;
+  const greenValueSource: 'lots' | 'placeholder' =
+    greenValueQuery.data?.source === 'lots' && greenValueQuery.data?.marketValuePerKg
+      ? 'lots'
+      : 'placeholder';
+  const selectedRoastGroupLabel = useMemo(() => {
+    if (roastGroupMode === 'existing') {
+      const rg = singleOriginRoastGroups.find(g => g.roast_group === selectedRoastGroup);
+      if (!rg) return null;
+      return `${rg.display_name?.trim() || rg.roast_group.replace(/_/g, ' ')} (${rg.roast_group_code})`;
+    }
+    if (roastGroupMode === 'new') {
+      return fullFinishedGoodName ? `${fullFinishedGoodName} (new)` : 'New roast group';
+    }
+    return null;
+  }, [roastGroupMode, selectedRoastGroup, singleOriginRoastGroups, fullFinishedGoodName]);
+
   
   const canSave = useMemo(() => {
     if (!clientId) return false;
@@ -229,11 +256,12 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
     setLifecycle(initialLifecycle ?? null);
     setLifecycleOverridden(false);
     setOverrides({});
+    setWizardStep(1);
   };
   
   // Save mutation
   const saveMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts: { pricingIncomplete: boolean }) => {
       const displayName = fullFinishedGoodName;
       if (!displayName) throw new Error('Product name is required');
       if (!selectedClient) throw new Error('Client is required');
@@ -295,10 +323,12 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
       const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
       const hasPrice = !isNaN(priceValue);
 
-      // Strip override values that equal the preset → null (keeps inheritance clean)
-      const cleanedOverrides = presetQuery.data
-        ? stripRedundantOverrides(overrides, presetQuery.data, {}, consoleVariants)
-        : overrides;
+      // If user chose "Complete pricing later", do not write any overrides
+      const cleanedOverrides = opts.pricingIncomplete
+        ? {}
+        : presetQuery.data
+          ? stripRedundantOverrides(overrides, presetQuery.data, {}, consoleVariants)
+          : overrides;
 
       const overrideFor = (skuData: typeof resolvedSkus[number]) => {
         const ov = cleanedOverrides[`${skuData.packagingTypeId}-${skuData.grams}`];
@@ -330,6 +360,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
           grind_options: ['WHOLE_BEAN'] as const,
           is_active: true,
           is_perennial: lifecycle === 'perennial',
+          pricing_incomplete: opts.pricingIncomplete,
           ...overrideFor(skuData),
         };
         const { data: newProduct, error } = await supabase
@@ -391,14 +422,19 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
         count: createdProducts.length, 
         name: displayName, 
         adjustedCount,
+        pricingIncomplete: opts.pricingIncomplete,
       };
     },
     onSuccess: (result) => {
-      let message = `Created ${result.count} product${result.count > 1 ? 's' : ''}: ${result.name}`;
-      if (result.adjustedCount > 0) {
-        message += ` (${result.adjustedCount} SKU${result.adjustedCount > 1 ? 's' : ''} auto-adjusted for uniqueness)`;
+      if (result.pricingIncomplete) {
+        toast.success('Product created. Pricing marked as incomplete.');
+      } else {
+        let message = `Created ${result.count} product${result.count > 1 ? 's' : ''}: ${result.name}`;
+        if (result.adjustedCount > 0) {
+          message += ` (${result.adjustedCount} SKU${result.adjustedCount > 1 ? 's' : ''} auto-adjusted for uniqueness)`;
+        }
+        toast.success(message);
       }
-      toast.success(message);
       queryClient.invalidateQueries({ queryKey: ['all-products'] });
       queryClient.invalidateQueries({ queryKey: ['all-prices'] });
       queryClient.invalidateQueries({ queryKey: ['active-roast-groups-with-code'] });
@@ -413,12 +449,15 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
   });
   
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setWizardStep(1); }}>
+      <DialogContent className={wizardStep === 2 ? 'max-w-6xl max-h-[90vh] overflow-y-auto' : 'max-w-2xl max-h-[90vh] overflow-y-auto'}>
         <DialogHeader>
-          <DialogTitle>New Product</DialogTitle>
+          <DialogTitle>
+            {wizardStep === 1 ? 'New Product — Details' : 'New Product — Pricing'}
+          </DialogTitle>
         </DialogHeader>
-        
+
+        {wizardStep === 1 && (
         <div className="space-y-6">
           {/* Step 1: Client */}
           <div>
@@ -439,34 +478,28 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
               <p className="text-xs text-amber-600 mt-1">⚠ This account has no account code — SKUs cannot be generated. Set an account code on the account profile first.</p>
             )}
           </div>
-          
+
           {/* Step 2: Roast Group */}
           <div className="space-y-3">
             <Label>2. Roast Group</Label>
-            <RadioGroup 
-              value={roastGroupMode} 
+            <RadioGroup
+              value={roastGroupMode}
               onValueChange={(v) => setRoastGroupMode(v as RoastGroupMode)}
               className="flex gap-4"
             >
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="existing" id="rg-existing" />
-                <Label htmlFor="rg-existing" className="font-normal cursor-pointer">
-                  Select existing
-                </Label>
+                <Label htmlFor="rg-existing" className="font-normal cursor-pointer">Select existing</Label>
               </div>
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="new" id="rg-new" />
-                <Label htmlFor="rg-new" className="font-normal cursor-pointer">
-                  Create new roast group
-                </Label>
+                <Label htmlFor="rg-new" className="font-normal cursor-pointer">Create new roast group</Label>
               </div>
             </RadioGroup>
-            
+
             {roastGroupMode === 'existing' && (
               <Select value={selectedRoastGroup || 'NONE'} onValueChange={(v) => setSelectedRoastGroup(v === 'NONE' ? '' : v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select roast group" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select roast group" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="NONE">Select roast group...</SelectItem>
                   {singleOriginRoastGroups.map(g => (
@@ -477,99 +510,53 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
                 </SelectContent>
               </Select>
             )}
-            
+
             {roastGroupMode === 'new' && (
               <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
                 <div>
                   <Label htmlFor="origin" className="text-xs text-muted-foreground">Origin</Label>
                   <Select value={origin || 'NONE'} onValueChange={(v) => setOrigin(v === 'NONE' ? '' : v)}>
-                    <SelectTrigger id="origin">
-                      <SelectValue placeholder="Select origin" />
-                    </SelectTrigger>
+                    <SelectTrigger id="origin"><SelectValue placeholder="Select origin" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="NONE">Select origin...</SelectItem>
-                      {COMMON_ORIGINS.map(o => (
-                        <SelectItem key={o} value={o}>{o}</SelectItem>
-                      ))}
+                      {COMMON_ORIGINS.map(o => (<SelectItem key={o} value={o}>{o}</SelectItem>))}
                       <SelectItem value="__custom__">+ Add new origin</SelectItem>
                     </SelectContent>
                   </Select>
                   {origin === '__custom__' && (
-                    <Input
-                      className="mt-2"
-                      placeholder="Enter origin name"
-                      value={customOrigin}
-                      onChange={(e) => setCustomOrigin(e.target.value)}
-                    />
+                    <Input className="mt-2" placeholder="Enter origin name" value={customOrigin} onChange={(e) => setCustomOrigin(e.target.value)} />
                   )}
                 </div>
-                
                 <div>
-                  <Label htmlFor="cropsterRef" className="text-xs text-muted-foreground">
-                    Cropster Profile Ref (optional)
-                  </Label>
-                  <Input
-                    id="cropsterRef"
-                    placeholder="e.g. R-1234 or profile name"
-                    value={cropsterProfileRef}
-                    onChange={(e) => setCropsterProfileRef(e.target.value)}
-                  />
+                  <Label htmlFor="cropsterRef" className="text-xs text-muted-foreground">Cropster Profile Ref (optional)</Label>
+                  <Input id="cropsterRef" placeholder="e.g. R-1234 or profile name" value={cropsterProfileRef} onChange={(e) => setCropsterProfileRef(e.target.value)} />
                 </div>
-                
-                {/* Roast Group Preview */}
                 {fullFinishedGoodName && (
-                  <RoastGroupPreview
-                    displayName={fullFinishedGoodName}
-                    existingKeys={existingRoastGroupKeys}
-                    existingCodes={existingRoastGroupCodes}
-                  />
+                  <RoastGroupPreview displayName={fullFinishedGoodName} existingKeys={existingRoastGroupKeys} existingCodes={existingRoastGroupCodes} />
                 )}
               </div>
             )}
           </div>
-          
+
           {/* Step 3: Finished Good Name */}
           <div>
             <Label htmlFor="fgName">3. Finished Good Name</Label>
             {roastGroupMode === 'new' && originPrefix ? (
               <div className="flex items-center gap-0">
-                <div className="flex-shrink-0 px-3 py-2 bg-muted border border-r-0 rounded-l-md text-sm text-muted-foreground">
-                  {originPrefix} -
-                </div>
-                <Input
-                  id="fgName"
-                  className="rounded-l-none"
-                  placeholder="e.g. Hermanos, Santa Rosa, Yirgacheffe Natural"
-                  value={finishedGoodName}
-                  onChange={(e) => setFinishedGoodName(e.target.value)}
-                />
+                <div className="flex-shrink-0 px-3 py-2 bg-muted border border-r-0 rounded-l-md text-sm text-muted-foreground">{originPrefix} -</div>
+                <Input id="fgName" className="rounded-l-none" placeholder="e.g. Hermanos, Santa Rosa, Yirgacheffe Natural" value={finishedGoodName} onChange={(e) => setFinishedGoodName(e.target.value)} />
               </div>
             ) : (
-              <Input
-                id="fgName"
-                placeholder={roastGroupMode === 'existing' 
-                  ? "e.g. Guatemala Huehuetenango, Ethiopia Yirgacheffe Natural"
-                  : "Select an origin above first"}
-                value={finishedGoodName}
-                onChange={(e) => setFinishedGoodName(e.target.value)}
-                disabled={roastGroupMode === 'new' && !originPrefix}
-              />
+              <Input id="fgName" placeholder={roastGroupMode === 'existing' ? "e.g. Guatemala Huehuetenango, Ethiopia Yirgacheffe Natural" : "Select an origin above first"} value={finishedGoodName} onChange={(e) => setFinishedGoodName(e.target.value)} disabled={roastGroupMode === 'new' && !originPrefix} />
             )}
             <p className="text-xs text-muted-foreground mt-1">
-              {fullFinishedGoodName 
-                ? <>Full name: <span className="font-medium">{fullFinishedGoodName}</span></> 
-                : 'This name appears on orders, pack lists, and shipping.'}
+              {fullFinishedGoodName ? <>Full name: <span className="font-medium">{fullFinishedGoodName}</span></> : 'This name appears on orders, pack lists, and shipping.'}
             </p>
           </div>
-          
-          {/* Step 4: Packaging Variants (new gram-based section) */}
-          <PackagingVariantsSection
-            selectedVariants={packagingVariants}
-            onVariantsChange={setPackagingVariants}
-            stepNumber={4}
-          />
-          
-          {/* SKU Preview Section */}
+
+          {/* Step 4: Packaging */}
+          <PackagingVariantsSection selectedVariants={packagingVariants} onVariantsChange={setPackagingVariants} stepNumber={4} />
+
           <GramBasedSkuPreview
             clientCode={selectedClient?.account_code ?? ''}
             origin={originForSku}
@@ -579,103 +566,87 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
             variants={validVariants}
             existingSkus={existingSkus ?? new Set()}
           />
-          
+
           {/* Step 5: Price */}
           <div>
             <Label htmlFor="price">5. Initial Unit Price (CAD) — Optional</Label>
-            <Input
-              id="price"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="e.g. 12.50"
-              value={priceInput}
-              onChange={(e) => setPriceInput(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Applied to all variants. Leave blank to default to $0.00.
-            </p>
+            <Input id="price" type="number" step="0.01" min="0" placeholder="e.g. 12.50" value={priceInput} onChange={(e) => setPriceInput(e.target.value)} />
+            <p className="text-xs text-muted-foreground mt-1">Applied to all variants. Leave blank to default to $0.00.</p>
           </div>
-          
+
           {/* Step 6: Lifecycle */}
           <div>
             <Label>6. Product Lifecycle</Label>
             {initialLifecycle && !lifecycleOverridden ? (
               <div className="flex items-center gap-2 mt-2">
-                <span className="text-sm">
-                  {lifecycle === 'perennial' ? 'Perennial' : 'One-Off / Seasonal'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setLifecycleOverridden(true)}
-                  className="text-xs text-muted-foreground hover:text-foreground underline"
-                >
-                  Change
-                </button>
+                <span className="text-sm">{lifecycle === 'perennial' ? 'Perennial' : 'One-Off / Seasonal'}</span>
+                <button type="button" onClick={() => setLifecycleOverridden(true)} className="text-xs text-muted-foreground hover:text-foreground underline">Change</button>
               </div>
             ) : (
               <>
-                <RadioGroup 
-                  value={lifecycle ?? ''} 
-                  onValueChange={(v) => setLifecycle(v as LifecycleType)}
-                  className="flex gap-6 mt-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem value="perennial" id="lc-perennial" />
-                    <Label htmlFor="lc-perennial" className="font-normal cursor-pointer">
-                      Perennial
-                    </Label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem value="seasonal" id="lc-seasonal" />
-                    <Label htmlFor="lc-seasonal" className="font-normal cursor-pointer">
-                      Seasonal
-                    </Label>
-                  </div>
+                <RadioGroup value={lifecycle ?? ''} onValueChange={(v) => setLifecycle(v as LifecycleType)} className="flex gap-6 mt-2">
+                  <div className="flex items-center gap-2"><RadioGroupItem value="perennial" id="lc-perennial" /><Label htmlFor="lc-perennial" className="font-normal cursor-pointer">Perennial</Label></div>
+                  <div className="flex items-center gap-2"><RadioGroupItem value="seasonal" id="lc-seasonal" /><Label htmlFor="lc-seasonal" className="font-normal cursor-pointer">Seasonal</Label></div>
                 </RadioGroup>
-                {!lifecycle && (
-                  <p className="text-xs text-destructive mt-1">Please select a lifecycle</p>
-                )}
+                {!lifecycle && (<p className="text-xs text-destructive mt-1">Please select a lifecycle</p>)}
               </>
             )}
           </div>
 
-          {/* Step 7: Pricing overrides (mixing console) */}
-          {validVariants.length > 0 && clientId && (
-            <div>
-              <Label>7. Pricing Overrides (optional)</Label>
-              <p className="text-xs text-muted-foreground mb-2">
-                Adjust per-variant cost levers. Leave at preset to inherit from the account's tier or default profile.
-              </p>
-              <MixingConsole
-                accountId={clientId}
-                variants={consoleVariants}
-                value={overrides}
-                onChange={setOverrides}
-              />
-            </div>
-          )}
-
-
           <div className="flex justify-end gap-2 pt-4 border-t">
-            <Button variant="outline" onClick={() => { resetForm(); onOpenChange(false); }}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => saveMutation.mutate()} 
-              disabled={!canSave || saveMutation.isPending}
-            >
-              {saveMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating…
-                </>
-              ) : (
-                `Create ${validVariants.length} Product${validVariants.length !== 1 ? 's' : ''}`
-              )}
-            </Button>
+            <Button variant="outline" onClick={() => { resetForm(); onOpenChange(false); }}>Cancel</Button>
+            <Button onClick={() => setWizardStep(2)} disabled={!canSave}>Advance to Pricing</Button>
           </div>
         </div>
+        )}
+
+        {wizardStep === 2 && (
+        <div className="space-y-6">
+          <div>
+            <Label>Pricing Overrides</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Adjust per-variant cost levers. Leave at preset to inherit from the account's tier or default profile.
+            </p>
+            {greenValueSource === 'placeholder' && (
+              <p className="text-xs text-amber-600 mb-2">
+                Pricing preview is using a placeholder green value (no confirmed-cost lot linked to this roast group yet).
+              </p>
+            )}
+            <MixingConsole
+              accountId={clientId}
+              variants={consoleVariants}
+              value={overrides}
+              onChange={setOverrides}
+              previewBookValuePerKg={previewGreenValuePerKg}
+              greenValueSource={greenValueSource}
+              roastGroupLabel={selectedRoastGroupLabel}
+            />
+          </div>
+
+          <div className="flex justify-between gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={() => setWizardStep(1)}>Back</Button>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => saveMutation.mutate({ pricingIncomplete: true })}
+                disabled={!canSave || saveMutation.isPending}
+              >
+                Complete pricing later
+              </Button>
+              <Button
+                onClick={() => saveMutation.mutate({ pricingIncomplete: false })}
+                disabled={!canSave || saveMutation.isPending}
+              >
+                {saveMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating…</>
+                ) : (
+                  `Create ${validVariants.length} Product${validVariants.length !== 1 ? 's' : ''}`
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+        )}
       </DialogContent>
     </Dialog>
   );

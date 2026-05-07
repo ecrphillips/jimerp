@@ -3384,6 +3384,7 @@ export type Database = {
           packaging_variant:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
+          pricing_incomplete: boolean
           pricing_overrides_updated_at: string | null
           pricing_overrides_updated_by: string | null
           process_rate_per_kg_override: number | null
@@ -3416,6 +3417,7 @@ export type Database = {
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
+          pricing_incomplete?: boolean
           pricing_overrides_updated_at?: string | null
           pricing_overrides_updated_by?: string | null
           process_rate_per_kg_override?: number | null
@@ -3448,6 +3450,7 @@ export type Database = {
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
+          pricing_incomplete?: boolean
           pricing_overrides_updated_at?: string | null
           pricing_overrides_updated_by?: string | null
           process_rate_per_kg_override?: number | null

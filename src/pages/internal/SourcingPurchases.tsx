@@ -1390,7 +1390,7 @@ function CreatePurchaseModal({
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button disabled={!vendorId} onClick={() => setStep(2)}>Next</Button>
+              <Button disabled={!vendorId} onClick={() => setStep(2)}>Advance to Coffee Lines</Button>
             </DialogFooter>
           </>
         ) : (

@@ -63,8 +63,12 @@ export interface MixingConsoleProps {
   variants: MixingConsoleVariant[];
   value: MixingConsoleValue;
   onChange: (next: MixingConsoleValue) => void;
-  /** Placeholder book value for preview ($/kg green). Defaults to $12. */
+  /** Book value used for preview ($/kg green). Defaults to $12. */
   previewBookValuePerKg?: number;
+  /** Source of the preview green value — controls "est." badge. */
+  greenValueSource?: 'lots' | 'placeholder';
+  /** Optional roast group label shown in the read-only Roast Group column. */
+  roastGroupLabel?: string | null;
 }
 
 type PresetValues = {
@@ -272,6 +276,8 @@ export function MixingConsole({
   value,
   onChange,
   previewBookValuePerKg = DEFAULT_BOOK_VALUE_PER_KG,
+  greenValueSource = 'placeholder',
+  roastGroupLabel,
 }: MixingConsoleProps) {
   const presetQuery = useAccountPricingPreset(accountId);
   const packagingDefaultsQuery = usePackagingDefaults(variants);
@@ -408,7 +414,7 @@ export function MixingConsole({
           <span className="font-medium">
             {preset.source === 'tier' ? `tier-linked profile "${preset.profileName}"` : `default profile "${preset.profileName}"`}
           </span>
-          . Preview uses placeholder green cost ${previewBookValuePerKg.toFixed(2)}/kg.
+          .
         </div>
       </div>
 
@@ -417,6 +423,8 @@ export function MixingConsole({
           <thead className="bg-muted/40">
             <tr className="text-left">
               <th className="px-2 py-2 font-medium">Variant</th>
+              <th className="px-2 py-2 font-medium">Roast Group</th>
+              <th className="px-2 py-2 font-medium">Green $/kg</th>
               <ColHeader label="Green Markup" lever="green_markup" linked={linked} onToggle={toggleLink} />
               <ColHeader label="Yield Loss %" lever="yield_loss" linked={linked} onToggle={toggleLink} />
               <ColHeader label="Process $/kg" lever="process_rate" linked={linked} onToggle={toggleLink} />
@@ -436,6 +444,17 @@ export function MixingConsole({
               return (
                 <tr key={v.key} className="border-t align-top">
                   <td className="px-2 py-2 font-medium whitespace-nowrap">{v.label}</td>
+                  <td className="px-2 py-2 whitespace-nowrap text-muted-foreground">
+                    {roastGroupLabel || '—'}
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    <div className="flex items-center gap-1">
+                      <span>${previewBookValuePerKg.toFixed(2)}</span>
+                      {greenValueSource === 'placeholder' && (
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-400 text-amber-600">est.</Badge>
+                      )}
+                    </div>
+                  </td>
                   <NumCell
                     value={ov.green_markup_multiplier_override}
                     preset={preset.green_markup_multiplier}
