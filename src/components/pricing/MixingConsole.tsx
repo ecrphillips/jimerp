@@ -414,7 +414,7 @@ export function MixingConsole({
           <span className="font-medium">
             {preset.source === 'tier' ? `tier-linked profile "${preset.profileName}"` : `default profile "${preset.profileName}"`}
           </span>
-          . Preview uses placeholder green cost ${previewBookValuePerKg.toFixed(2)}/kg.
+          .
         </div>
       </div>
 
