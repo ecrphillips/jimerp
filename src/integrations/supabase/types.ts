@@ -168,11 +168,16 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          managed_sku_count: number | null
+          monthly_service_fee: number | null
           notes_internal: string | null
           pricing_tier_id: string | null
           programs: string[]
           pronouns: string | null
           relationship_id: string | null
+          service_fee_notes: string | null
+          service_fee_updated_at: string | null
+          service_fee_updated_by: string | null
           updated_at: string
         }
         Insert: {
@@ -195,11 +200,16 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          managed_sku_count?: number | null
+          monthly_service_fee?: number | null
           notes_internal?: string | null
           pricing_tier_id?: string | null
           programs?: string[]
           pronouns?: string | null
           relationship_id?: string | null
+          service_fee_notes?: string | null
+          service_fee_updated_at?: string | null
+          service_fee_updated_by?: string | null
           updated_at?: string
         }
         Update: {
@@ -222,11 +232,16 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          managed_sku_count?: number | null
+          monthly_service_fee?: number | null
           notes_internal?: string | null
           pricing_tier_id?: string | null
           programs?: string[]
           pronouns?: string | null
           relationship_id?: string | null
+          service_fee_notes?: string | null
+          service_fee_updated_at?: string | null
+          service_fee_updated_by?: string | null
           updated_at?: string
         }
         Relationships: [
