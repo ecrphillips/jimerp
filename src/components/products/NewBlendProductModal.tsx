@@ -173,6 +173,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     setPackagingVariants([]);
     setPriceInput('');
     setLifecycle(null);
+    setOverrides({});
   };
   
   // Navigate to roast groups tab
