@@ -553,7 +553,7 @@ export async function calculatePrice(
   const total_cost_per_bag = roasted_cost_per_bag + packaging_cost_per_bag;
 
   // 6) Tier-adjusted price
-  const { list, final } = applyTierAdjustment(
+  const { list, final: tierFinal } = applyTierAdjustment(
     total_cost_per_bag,
     resolvedTier
       ? {
@@ -566,6 +566,14 @@ export async function calculatePrice(
     num(rules.target_margin_pct),
     bag_size_kg,
   );
+
+  // 7) Wiggle room — applied AFTER tier adjustment as the last step
+  const wiggle_room_per_bag =
+    productOverridesData?.wiggle_room_per_bag != null
+      ? num(productOverridesData.wiggle_room_per_bag)
+      : null;
+  const wiggle_room_note = productOverridesData?.wiggle_room_note ?? null;
+  const final = wiggle_room_per_bag != null ? tierFinal + wiggle_room_per_bag : tierFinal;
 
   const margin_dollars = final - total_cost_per_bag;
   const margin_pct = final > 0 ? margin_dollars / final : 0;
@@ -594,6 +602,12 @@ export async function calculatePrice(
     process_cost_per_kg_roasted,
     overhead_per_kg_roasted,
     total_roasted_cost_per_kg,
+    green_markup_multiplier_resolved,
+    yield_loss_pct_resolved,
+    process_rate_per_kg_resolved,
+    overhead_per_kg_resolved,
+    wiggle_room_per_bag,
+    wiggle_room_note,
     bag_size_kg,
     roasted_cost_per_bag,
     packaging_material_per_bag,
