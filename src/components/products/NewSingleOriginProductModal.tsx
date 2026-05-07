@@ -14,6 +14,14 @@ import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
 import { RoastGroupPreview } from './RoastGroupPreview';
 import { PackagingVariantsSection, type PackagingVariantEntry } from './PackagingVariantsSection';
 import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
+import {
+  MixingConsole,
+  buildEmptyMixingConsoleValue,
+  stripRedundantOverrides,
+  useAccountPricingPreset,
+  type MixingConsoleValue,
+  type MixingConsoleVariant,
+} from '@/components/pricing/MixingConsole';
 
 interface Client {
   id: string;
