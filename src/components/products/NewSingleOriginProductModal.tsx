@@ -209,7 +209,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
     })),
     [validVariants]
   );
-  const presetQuery = useAccountPricingPreset(clientId || null);
+  
 
   // Roast group green value (only resolved for an existing roast group selection)
   const greenValueQuery = useRoastGroupGreenValue(
