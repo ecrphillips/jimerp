@@ -102,8 +102,13 @@ interface ProductFamily {
 
 export function ProductsListTab() {
   const queryClient = useQueryClient();
+  const { authUser } = useAuth();
+  const isInternal = authUser?.role === 'ADMIN' || authUser?.role === 'OPS';
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [overridesValue, setOverridesValue] = useState<MixingConsoleValue>({});
+  const [pricingOverridesOpen, setPricingOverridesOpen] = useState(false);
+  const editingPresetQuery = useAccountPricingPreset(editingProduct?.account_id ?? editingProduct?.client_id ?? null);
 
   // Product type choice + separate modals
   const [typeChoiceOpen, setTypeChoiceOpen] = useState(false);
