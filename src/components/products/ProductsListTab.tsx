@@ -670,13 +670,16 @@ export function ProductsListTab() {
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     const editId = searchParams.get('edit');
+    const section = searchParams.get('section');
     if (!editId || !products) return;
     const target = products.find((p) => p.id === editId);
     if (target) {
       openEdit(target);
-      // Clear the param so re-renders don't keep reopening
+      if (section === 'pricing') setPricingOverridesOpen(true);
+      // Clear the params so re-renders don't keep reopening
       const next = new URLSearchParams(searchParams);
       next.delete('edit');
+      next.delete('section');
       setSearchParams(next, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
