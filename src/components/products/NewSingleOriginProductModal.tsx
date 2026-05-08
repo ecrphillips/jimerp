@@ -375,6 +375,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
         if (error) {
           // If SKU collision at DB level, try with suffix
           if (error.code === '23505' && error.message?.toLowerCase().includes('sku')) {
+            let resolved = false;
             for (let i = 2; i <= 50; i++) {
               const fallbackSku = `${skuData.sku}-${i}`;
               const { data: retryProduct, error: retryError } = await supabase
@@ -382,14 +383,18 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
                 .insert({ ...basePayload, sku: fallbackSku } as any)
                 .select('id, sku')
                 .single();
-              
+
               if (!retryError) {
                 createdProducts.push({ id: retryProduct.id, sku: retryProduct.sku, wasAdjusted: true });
+                resolved = true;
                 break;
               }
               if (retryError.code !== '23505') {
                 throw retryError;
               }
+            }
+            if (!resolved) {
+              throw new Error(`Could not generate unique SKU for ${skuData.sku} after 50 attempts.`);
             }
           } else {
             throw error;
@@ -417,7 +422,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
           .insert(priceInserts);
         
         if (priceError) {
-          console.error('Price insert failed:', priceError);
+          throw priceError;
         }
       }
       

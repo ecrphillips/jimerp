@@ -1374,21 +1374,6 @@ function CustomRateOverrides({ account, refetch }: { account: any; refetch: () =
   const isAdmin = authUser?.role === 'ADMIN';
   const hasCoroasting = account.programs?.includes('COROASTING');
 
-  if (!isAdmin || !hasCoroasting) return null;
-
-  const tier = account.coroast_tier ?? 'MEMBER';
-  const tierDefaults = TIER_DEFAULTS[tier] ?? TIER_DEFAULTS.MEMBER;
-
-  const startEdit = () => {
-    const f: Record<string, string> = {};
-    for (const field of OVERRIDE_FIELDS) {
-      const val = account[field.key];
-      f[field.key] = val != null ? String(val) : '';
-    }
-    setForm(f);
-    setEditing(true);
-  };
-
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload: Record<string, number | null> = {};
@@ -1407,6 +1392,21 @@ function CustomRateOverrides({ account, refetch }: { account: any; refetch: () =
     },
     onError: (err: Error) => toast.error(err.message),
   });
+
+  if (!isAdmin || !hasCoroasting) return null;
+
+  const tier = account.coroast_tier ?? 'MEMBER';
+  const tierDefaults = TIER_DEFAULTS[tier] ?? TIER_DEFAULTS.MEMBER;
+
+  const startEdit = () => {
+    const f: Record<string, string> = {};
+    for (const field of OVERRIDE_FIELDS) {
+      const val = account[field.key];
+      f[field.key] = val != null ? String(val) : '';
+    }
+    setForm(f);
+    setEditing(true);
+  };
 
   return (
     <Card>
