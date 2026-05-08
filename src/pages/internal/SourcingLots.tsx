@@ -32,6 +32,7 @@ import { BookValueReportModal } from '@/components/sourcing/BookValueReportModal
 import { MarkLotReceivedModal } from '@/components/sourcing/MarkLotReceivedModal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useDefaultPricingFinancing } from '@/hooks/useDefaultPricingFinancing';
+import { useEffectiveFxRate } from '@/lib/fxRate';
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -711,19 +712,7 @@ function LotDetailPanel({
     },
   });
 
-  const { data: liveFxRateSetting } = useQuery({
-    queryKey: ['app_settings', 'fx_rate_usd_to_cad'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('app_settings')
-        .select('value_json')
-        .eq('key', 'fx_rate_usd_to_cad')
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
-  const liveFxRate: number | null = Number((liveFxRateSetting?.value_json as any)?.rate) || null;
+  const { effectiveRate: liveFxRate } = useEffectiveFxRate();
 
   // ─── Local cost state ────────────────────────────────────
   const [fxRate, setFxRate] = useState<number | null>(null);
