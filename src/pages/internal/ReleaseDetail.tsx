@@ -18,6 +18,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ArrowLeft, CalendarIcon, Save, Trash2, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useEffectiveFxRate } from '@/lib/fxRate';
 import { formatPerKg, formatPerLb } from '@/lib/formatMoney';
 import {
   Currency,
