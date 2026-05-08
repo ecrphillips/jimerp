@@ -20,7 +20,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Search, Check, FileText, AlertTriangle, CheckCircle2, Pencil, Trash2, PackageCheck } from 'lucide-react';
+import { Search, Check, FileText, AlertTriangle, CheckCircle2, Pencil, Trash2, PackageCheck, Table2 } from 'lucide-react';
+import { BulkEditGrid } from '@/components/bulk-edit/BulkEditGrid';
+import { useLotsBulkEdit } from '@/components/bulk-edit/configs/lots';
+import { useBulkEditLogoutCleanup } from '@/components/bulk-edit/useChangeHighlights';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { CoverageCalendar } from '@/components/sourcing/CoverageCalendar';
 import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
@@ -147,8 +150,11 @@ function CostingStatusBadge({ costingStatus }: { costingStatus: string }) {
 export default function SourcingLots() {
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') === 'coverage' ? 'coverage' : 'lots';
-  const { authUser } = useAuth();
+  const { authUser, user } = useAuth();
   const isAdmin = authUser?.role === 'ADMIN';
+  useBulkEditLogoutCleanup(user?.id);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const lotsBulk = useLotsBulkEdit(bulkEditOpen);
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [physicalFilter, setPhysicalFilter] = useState<string>('ALL');
@@ -251,15 +257,40 @@ export default function SourcingLots() {
           <p className="text-sm text-muted-foreground">Green coffee inventory</p>
         </div>
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button
+              variant={bulkEditOpen ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setBulkEditOpen((o) => !o)}
+              className="gap-1.5"
+            >
+              <Table2 className="h-4 w-4" /> {bulkEditOpen ? 'Close Bulk Edit' : 'Bulk Edit'}
+            </Button>
+          )}
           <ViewToggle value={viewMode} onChange={setViewMode} />
           <Button variant="outline" size="sm" onClick={() => setFloorCountOpen(true)}>Floor Count</Button>
           <Button variant="outline" size="sm" onClick={() => setBookValueOpen(true)}>Book Value Report</Button>
         </div>
       </div>
 
+      {bulkEditOpen && isAdmin && (
+        <BulkEditGrid
+          tableKey="lots"
+          title="Bulk Edit — Green Lots"
+          columns={lotsBulk.columns}
+          rows={lotsBulk.rows}
+          isLoading={lotsBulk.isLoading}
+          getRowId={lotsBulk.getRowId}
+          onCellSave={lotsBulk.onCellSave}
+          csvFilename={`lots-${new Date().toISOString().slice(0, 10)}.csv`}
+          onClose={() => setBulkEditOpen(false)}
+        />
+      )}
+
       <FloorCountModal open={floorCountOpen} onOpenChange={setFloorCountOpen} lots={lots} purchaseLineByLotId={purchaseLineByLotId} contractMap={contractMap} />
       <BookValueReportModal open={bookValueOpen} onOpenChange={setBookValueOpen} lots={lots} purchaseLineByLotId={purchaseLineByLotId} />
 
+      {!bulkEditOpen && (
       <Tabs defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="lots">Lots</TabsTrigger>
@@ -412,6 +443,7 @@ export default function SourcingLots() {
           <CoverageCalendar />
         </TabsContent>
       </Tabs>
+      )}
 
       <LotDetailPanel lotId={selectedLotId} onClose={() => setSelectedLotId(null)} contractMap={contractMap} purchaseLineByLotId={purchaseLineByLotId} onMarkReceived={(l) => setMarkReceivedLot(l)} />
 
