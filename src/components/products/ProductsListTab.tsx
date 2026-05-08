@@ -25,6 +25,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { BulkEditGrid } from '@/components/bulk-edit/BulkEditGrid';
 import { useProductsBulkEdit } from '@/components/bulk-edit/configs/products';
 import { useBulkEditLogoutCleanup } from '@/components/bulk-edit/useChangeHighlights';
+import { MixingConsole, buildEmptyMixingConsoleValue, stripRedundantOverrides, hasMixingConsoleErrors, type MixingConsoleValue, type PricingProfilePreset } from '@/components/pricing/MixingConsole';
+import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
+
+const FALLBACK_PRESET: PricingProfilePreset = {
+  yield_loss_pct: 16,
+  process_per_kg_green: 0,
+  pkg_labour_per_unit: 0,
+};
+const PKG_DEFAULTS: Record<number, { material: number; labour: number }> = {};
 
 interface Product {
   id: string;
@@ -104,12 +113,20 @@ interface ProductFamily {
 
 export function ProductsListTab() {
   const queryClient = useQueryClient();
-  const { isAdmin, user } = useAuth();
+  const { authUser, user } = useAuth();
+  const isAdmin = authUser?.role === 'ADMIN';
+  const isInternal = authUser?.role === 'ADMIN' || authUser?.role === 'OPS';
   useBulkEditLogoutCleanup(user?.id);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const productsBulk = useProductsBulkEdit(bulkEditOpen);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [overridesValue, setOverridesValue] = useState<MixingConsoleValue>({});
+  const [pricingOverridesOpen, setPricingOverridesOpen] = useState(false);
+  const editingGreenValue = useRoastGroupGreenValue(editingProduct?.roast_group ?? null);
+  const editingGreenMarketPerKg = editingGreenValue.data?.marketValuePerKg && editingGreenValue.data.marketValuePerKg > 0
+    ? editingGreenValue.data.marketValuePerKg
+    : null;
 
   // Product type choice + separate modals
   const [typeChoiceOpen, setTypeChoiceOpen] = useState(false);
@@ -561,6 +578,30 @@ export function ProductsListTab() {
     onError: (err) => { console.error(err); toast.error('Failed to set product inactive'); },
   });
 
+  const saveOverridesMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingProduct) return;
+      if (hasMixingConsoleErrors(overridesValue)) {
+        throw new Error('Adjustment requires a note.');
+      }
+      const consoleVariants = [{ key: editingProduct.id, label: editingProduct.product_name, bagSizeG: editingProduct.bag_size_g }];
+      const cleaned = stripRedundantOverrides(overridesValue, consoleVariants, FALLBACK_PRESET, PKG_DEFAULTS);
+      const ov = cleaned[editingProduct.id];
+      if (!ov) return;
+      const { error } = await supabase.from('products').update({
+        yield_loss_pct_override: ov.yield_loss_pct_override,
+        process_per_kg_green_override: ov.process_per_kg_green_override,
+        pkg_material_per_unit_override: ov.pkg_material_per_unit_override,
+        pkg_labour_per_unit_override: ov.pkg_labour_per_unit_override,
+        adjustment_per_unit: ov.adjustment_per_unit,
+        adjustment_note: ov.adjustment_note,
+      } as any).eq('id', editingProduct.id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success('Pricing overrides saved'); queryClient.invalidateQueries({ queryKey: ['all-products'] }); },
+    onError: (e: any) => { toast.error(e?.message ?? 'Failed to save overrides'); },
+  });
+
   const variantBaseName = variantSource ? stripPackagingSuffix(variantSource.product_name) : '';
   const variantLabel = variantPackaging ? PACKAGING_OPTIONS.find(o => o.value === variantPackaging)?.label ?? '' : '';
   const variantNewName = variantPackaging ? `${variantBaseName} ${variantLabel}` : '';
@@ -597,7 +638,7 @@ export function ProductsListTab() {
   const handleChooseSingleOrigin = (lifecycle: 'perennial' | 'seasonal') => { setTypeChoiceOpen(false); setPendingLifecycle(lifecycle); setSingleOriginModalOpen(true); };
   const handleChooseBlend = (lifecycle: 'perennial' | 'seasonal') => { setTypeChoiceOpen(false); setPendingLifecycle(lifecycle); setBlendModalOpen(true); };
 
-  const openEdit = (p: Product) => {
+  const openEdit = async (p: Product) => {
     setEditingProduct(p); setProductName(p.product_name); setSku(p.sku ?? '');
     setFormatState(p.format); setBagSize(p.bag_size_g); setGrindOptions(p.grind_options ?? []);
     setClientId(p.account_id ?? p.client_id ?? ''); setIsActive(p.is_active);
@@ -613,8 +654,26 @@ export function ProductsListTab() {
         ? ''
         : String(p.packaging_labour_override),
     );
+    setPricingOverridesOpen(false);
+    // Load current overrides
+    const { data: ov } = await supabase
+      .from('products')
+      .select('yield_loss_pct_override, process_per_kg_green_override, pkg_material_per_unit_override, pkg_labour_per_unit_override, adjustment_per_unit, adjustment_note')
+      .eq('id', p.id)
+      .maybeSingle();
+    setOverridesValue({
+      [p.id]: {
+        yield_loss_pct_override: (ov as any)?.yield_loss_pct_override ?? null,
+        process_per_kg_green_override: (ov as any)?.process_per_kg_green_override ?? null,
+        pkg_material_per_unit_override: (ov as any)?.pkg_material_per_unit_override ?? null,
+        pkg_labour_per_unit_override: (ov as any)?.pkg_labour_per_unit_override ?? null,
+        adjustment_per_unit: (ov as any)?.adjustment_per_unit ?? null,
+        adjustment_note: (ov as any)?.adjustment_note ?? null,
+      },
+    });
     setDialogOpen(true);
   };
+
 
   const openAddVariant = (p: Product) => {
     setDialogOpen(false); setEditingProduct(null);
@@ -628,13 +687,16 @@ export function ProductsListTab() {
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     const editId = searchParams.get('edit');
+    const section = searchParams.get('section');
     if (!editId || !products) return;
     const target = products.find((p) => p.id === editId);
     if (target) {
       openEdit(target);
-      // Clear the param so re-renders don't keep reopening
+      if (section === 'pricing') setPricingOverridesOpen(true);
+      // Clear the params so re-renders don't keep reopening
       const next = new URLSearchParams(searchParams);
       next.delete('edit');
+      next.delete('section');
       setSearchParams(next, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -972,7 +1034,40 @@ export function ProductsListTab() {
                 <Label htmlFor="perennial">Perennial</Label>
               </div>
             </div>
+
+            {/* Pricing Overrides (ADMIN/OPS only) */}
+            {isInternal && editingProduct && (
+              <Collapsible open={pricingOverridesOpen} onOpenChange={setPricingOverridesOpen}>
+                <div className="border rounded-md">
+                  <CollapsibleTrigger className="w-full px-3 py-2 flex items-center justify-between hover:bg-muted/50">
+                    <span className="text-sm font-medium">Pricing Overrides</span>
+                    {pricingOverridesOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="p-3 border-t space-y-3">
+                    <MixingConsole
+                      variants={[{
+                        key: editingProduct.id,
+                        label: editingProduct.packaging_variant ?? editingProduct.product_name,
+                        bagSizeG: editingProduct.bag_size_g,
+                      }]}
+                      value={overridesValue}
+                      onChange={setOverridesValue}
+                      greenMarketPerKg={editingGreenMarketPerKg}
+                      roastGroupLabel={editingProduct.roast_group ?? null}
+                      preset={FALLBACK_PRESET}
+                      pkgDefaults={PKG_DEFAULTS}
+                    />
+                    <div className="flex justify-end">
+                      <Button size="sm" onClick={() => saveOverridesMutation.mutate()} disabled={saveOverridesMutation.isPending}>
+                        {saveOverridesMutation.isPending ? 'Saving…' : 'Save Overrides'}
+                      </Button>
+                    </div>
+                  </CollapsibleContent>
+                </div>
+              </Collapsible>
+            )}
           </div>
+
           <div className="flex-shrink-0 flex justify-between items-center px-6 py-4 border-t bg-background">
             {editingProduct ? (
               <Button variant="secondary" onClick={() => openAddVariant(editingProduct)}>Add Variant</Button>

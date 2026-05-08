@@ -83,18 +83,16 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
       if (result.error) { toast.error(result.error); return; }
 
       // Update extra fields not handled by createOrReuseRoastGroup
-      if (result.created) {
-        await supabase
-          .from('roast_groups')
-          .update({
-            is_seasonal: isSeasonal,
-            default_roaster: defaultRoaster as any,
-            standard_batch_kg: batchKg,
-            expected_yield_loss_pct: yieldLoss,
-            blend_type: isBlend ? blendType : null,
-          })
-          .eq('roast_group', result.roastGroupKey);
-      }
+      await supabase
+        .from('roast_groups')
+        .update({
+          is_seasonal: isSeasonal,
+          default_roaster: defaultRoaster as any,
+          standard_batch_kg: batchKg,
+          expected_yield_loss_pct: yieldLoss,
+          blend_type: isBlend ? blendType : null,
+        })
+        .eq('roast_group', result.roastGroupKey);
 
       toast.success(result.created ? 'Roast group created' : 'Existing roast group reused');
       queryClient.invalidateQueries({ queryKey: ['roast-groups-list'] });

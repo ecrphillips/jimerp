@@ -317,7 +317,7 @@ export function PlanBlendBatchesModal({
     enrichedComponents.reduce((sum, c) => sum + c.pct, 0),
     [enrichedComponents]
   );
-  const recipeValid = recipeTotalPct === 100;
+  const recipeValid = Math.abs(recipeTotalPct - 100) <= 1;
   
   // Calculate component shortfalls based on blend demand
   // For blends, we use available WIP from component groups, not the output linked to this blend
@@ -555,7 +555,7 @@ export function PlanBlendBatchesModal({
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              Blend recipe percentages must sum to 100%. Current total: {recipeTotalPct}%.
+              Blend recipe percentages must sum to within 1% of 100%. Current total: {recipeTotalPct.toFixed(2)}%.
             </AlertDescription>
           </Alert>
         ) : showSuccess ? (

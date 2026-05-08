@@ -38,7 +38,7 @@ interface OrderData {
   requested_ship_date: string | null;
   delivery_method: DeliveryMethod;
   status: OrderStatus;
-  client_id: string;
+  account_id: string;
   updated_at?: string;
   created_by_admin?: boolean;
 }
@@ -86,7 +86,7 @@ export function OrderEditModal({
       const { data, error } = await supabase
         .from('products')
         .select('id, product_name, bag_size_g')
-        .eq('client_id', clientId)
+        .eq('account_id', clientId)
         .eq('is_active', true)
         .order('product_name');
       if (error) throw error;

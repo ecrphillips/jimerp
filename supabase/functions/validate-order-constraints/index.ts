@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 interface ValidationRequest {
-  client_id: string;
+  account_id: string;
   line_items: Array<{
     product_id: string;
     quantity_units: number;
@@ -52,7 +52,7 @@ serve(async (req) => {
       );
     }
 
-    // Get user's role and (for CLIENTs) their bound client_id
+    // Get user's role
     const { data: roleData } = await supabaseClient
       .from("user_roles")
       .select("role, client_id")
@@ -63,13 +63,21 @@ serve(async (req) => {
     const isAdminOrOps = userRole === "ADMIN" || userRole === "OPS";
 
     const body: ValidationRequest = await req.json();
-    const { client_id, line_items, bypass_constraints = false } = body;
+    const { account_id, line_items, bypass_constraints = false } = body;
 
-    // CLIENT users can only validate orders for their own client
+    // CLIENT users can only validate orders for an account they are an active member of
     if (!isAdminOrOps) {
-      if (userRole !== "CLIENT" || !roleData?.client_id || roleData.client_id !== client_id) {
+      const { data: membership } = await supabaseClient
+        .from("account_users")
+        .select("id")
+        .eq("account_id", account_id)
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (userRole !== "CLIENT" || !membership) {
         return new Response(
-          JSON.stringify({ valid: false, errors: ["Forbidden: client_id does not match calling user"] }),
+          JSON.stringify({ valid: false, errors: ["Forbidden: not an active member of this account"] }),
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -85,21 +93,27 @@ serve(async (req) => {
 
     const errors: string[] = [];
 
-    // Fetch client constraints
-    const { data: clientData, error: clientError } = await supabaseClient
-      .from("clients")
-      .select("case_only, case_size")
-      .eq("id", client_id)
-      .single();
+    // Fetch case constraints via user's legacy client_id (service role bypasses RLS).
+    // roleData.client_id is the user_roles.client_id for CLIENT users.
+    // TODO: migrate case_only/case_size to accounts table to remove this bridge.
+    const legacyClientId = roleData?.client_id;
+    const { data: clientData, error: clientError } = legacyClientId
+      ? await supabaseClient
+          .from("clients")
+          .select("case_only, case_size")
+          .eq("id", legacyClientId)
+          .maybeSingle()
+      : { data: null, error: null };
 
     if (clientError) {
       return new Response(
-        JSON.stringify({ valid: false, errors: ["Client not found"] }),
+        JSON.stringify({ valid: false, errors: ["Error fetching client constraints"] }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const { case_only, case_size } = clientData;
+    const case_only = clientData?.case_only ?? false;
+    const case_size = clientData?.case_size ?? null;
 
     // Validate case quantities (only for non-admin/ops users or when not bypassing)
     if (case_only && case_size && !isAdminOrOps) {
@@ -124,7 +138,7 @@ serve(async (req) => {
     const { data: allowedProducts } = await supabaseClient
       .from("client_allowed_products")
       .select("product_id")
-      .eq("client_id", client_id);
+      .eq("account_id", account_id);
 
     // Only enforce if there are restrictions set
     if (allowedProducts && allowedProducts.length > 0 && !isAdminOrOps) {

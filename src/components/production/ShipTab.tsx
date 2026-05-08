@@ -746,10 +746,12 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
             <div className="space-y-2">
               {authShortList.map((item) => (
                 <div key={item.product_id} className="flex items-center justify-between p-2 bg-background rounded border border-warning/30">
-                  <div className="flex items-center gap-2">
-                    <Package className="h-4 w-4 text-warning" />
-                    <span className="font-medium">{item.product_name}</span>
-                    <span className="text-xs text-muted-foreground">{item.bag_size_g}g</span>
+                  <div className="flex items-start gap-2">
+                    <Package className="h-4 w-4 text-warning mt-0.5" />
+                    <div className="flex flex-col gap-1">
+                      <span className="font-medium">{item.product_name}</span>
+                      <PackagingBadge variant={(item as { packaging_variant?: PackagingVariant | null }).packaging_variant ?? null} />
+                    </div>
                   </div>
                   <div className="text-sm font-mono">
                     <span className="text-warning font-medium">Short: {item.shortage}</span>

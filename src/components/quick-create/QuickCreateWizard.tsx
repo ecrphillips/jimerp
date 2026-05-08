@@ -482,7 +482,7 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
             </div>
             <div className="flex justify-between mt-4">
               <Button variant="ghost" size="sm" onClick={() => setStep(1)}><ArrowLeft className="h-4 w-4 mr-1" /> Back</Button>
-              <Button size="sm" onClick={() => setStep(3)} disabled={!pProductName.trim() || pVariants.length === 0}>Next</Button>
+              <Button size="sm" onClick={() => setStep(3)} disabled={!pProductName.trim() || pVariants.length === 0}>Advance to Roast Group</Button>
             </div>
           </>
         );
@@ -533,7 +533,7 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
             <button onClick={() => { setPRoastGroupMode('skip'); setStep(4); }} className="text-xs text-muted-foreground hover:text-foreground mt-3 underline">I'll do this later</button>
             <div className="flex justify-between mt-4">
               <Button variant="ghost" size="sm" onClick={() => setStep(2)}><ArrowLeft className="h-4 w-4 mr-1" /> Back</Button>
-              <Button size="sm" onClick={() => setStep(4)} disabled={pRoastGroupMode === 'existing' && !pExistingRG || pRoastGroupMode === 'new' && !pNewRGName.trim()}>Next</Button>
+              <Button size="sm" onClick={() => setStep(4)} disabled={pRoastGroupMode === 'existing' && !pExistingRG || pRoastGroupMode === 'new' && !pNewRGName.trim()}>Advance to Green Lot</Button>
             </div>
           </>
         );

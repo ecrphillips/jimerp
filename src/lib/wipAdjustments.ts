@@ -48,4 +48,7 @@ export const WIP_ADJUSTMENT_QUERY_KEYS: string[][] = [
   ['roast-group-wip'],
   ['roast-group-detail'],
   ['roast-group-inventory-levels'],
+  // Authoritative hooks used by the production page
+  ['authoritative-wip-manual-adjustments'],
+  ['authoritative-wip-ledger'],
 ];

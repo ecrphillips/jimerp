@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { startOfDay, startOfWeek, addDays, format, getHours, getDay } from 'date-fns';
+import { startOfDay, startOfWeek, addDays, format, getHours, getMinutes, getDay } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 
 export type TimeHorizon = 'today' | 'tomorrow' | 'week';
@@ -84,10 +84,13 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
       const staffJson = staffRow?.value_json as { staff_count: number } | null;
       const staffCount = staffJson?.staff_count ?? 2.5;
 
-      // Hours remaining today
+      // Hours remaining today (fractional so load doesn't jump at whole-hour boundaries)
       const currentHour = getHours(zonedNow);
+      const currentMinute = getMinutes(zonedNow);
       const inWindow = currentHour >= prodStartHour && currentHour < prodEndHour;
-      const hoursRemainingToday = inWindow ? Math.max(0, prodEndHour - currentHour) : 0;
+      const hoursRemainingToday = inWindow
+        ? Math.max(0, prodEndHour - currentHour - currentMinute / 60)
+        : 0;
 
       const dateFilter = getDateFilter();
 
@@ -119,12 +122,20 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
       // ===== Channel 2b: Co-roasting today =====
       const { data: coroastBookings } = await supabase
         .from('coroast_bookings')
-        .select('duration_hours')
+        .select('duration_hours, end_time')
         .eq('status', 'CONFIRMED')
         .eq('booking_date', todayStr);
 
       let loringCoroastKgToday = 0;
+      const currentTotalMinutes = currentHour * 60 + currentMinute;
+
       for (const b of coroastBookings || []) {
+        // For today's view, skip bookings that have already ended — their work is done
+        // and they should no longer contribute to remaining demand.
+        if (horizon === 'today' && b.end_time) {
+          const [endH, endM] = b.end_time.split(':').map(Number);
+          if (endH * 60 + (endM || 0) <= currentTotalMinutes) continue;
+        }
         loringCoroastKgToday += (Number(b.duration_hours ?? 0)) * 40;
       }
 

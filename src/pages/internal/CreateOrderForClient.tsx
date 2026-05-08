@@ -161,6 +161,37 @@ export default function CreateOrderForClient() {
     enabled: !!selectedClientId,
   });
 
+  // Fetch active locked prices for this account; layered over price_list.
+  const { data: lockedPrices } = useQuery({
+    queryKey: ['order-locked-prices', selectedClientId],
+    queryFn: async () => {
+      if (!selectedClientId) return {};
+      const today = new Date().toISOString().slice(0, 10);
+      const { data, error } = await (supabase as any)
+        .from('locked_prices')
+        .select('product_id, locked_price, effective_from, expires_at')
+        .eq('account_id', selectedClientId)
+        .eq('is_archived', false)
+        .order('effective_from', { ascending: false });
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      for (const r of data ?? []) {
+        if (r.expires_at && r.expires_at < today) continue;
+        if (!(r.product_id in map)) map[r.product_id] = Number(r.locked_price);
+      }
+      return map;
+    },
+    enabled: !!selectedClientId,
+  });
+
+  const effectivePrice = (productId: string): { price: number | null; locked: boolean } => {
+    if (lockedPrices && productId in lockedPrices) {
+      return { price: lockedPrices[productId], locked: true };
+    }
+    const p = prices?.[productId];
+    return { price: p ?? null, locked: false };
+  };
+
   // Reset line items, location, deadline, and confirm flag when client changes
   React.useEffect(() => {
     setLineItems([]);
@@ -197,7 +228,7 @@ export default function CreateOrderForClient() {
       quantity: qty,
       grind: grindOpts.length > 0 ? grindOpts[0] : null,
       grindOptions: grindOpts,
-      price: prices?.[product.id] ?? null,
+      price: effectivePrice(product.id).price,
       packagingTypeName,
       gramsPerUnit,
     };

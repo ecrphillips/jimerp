@@ -151,6 +151,7 @@ export type Database = {
         Row: {
           account_code: string | null
           account_name: string
+          archetype: string | null
           billing_address: string | null
           billing_contact_name: string | null
           billing_email: string | null
@@ -168,16 +169,22 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          managed_sku_count: number | null
+          monthly_service_fee: number | null
           notes_internal: string | null
-          pricing_tier_id: string | null
+          pricing_profile_id: string | null
           programs: string[]
           pronouns: string | null
           relationship_id: string | null
+          service_fee_notes: string | null
+          service_fee_updated_at: string | null
+          service_fee_updated_by: string | null
           updated_at: string
         }
         Insert: {
           account_code?: string | null
           account_name: string
+          archetype?: string | null
           billing_address?: string | null
           billing_contact_name?: string | null
           billing_email?: string | null
@@ -195,16 +202,22 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          managed_sku_count?: number | null
+          monthly_service_fee?: number | null
           notes_internal?: string | null
-          pricing_tier_id?: string | null
+          pricing_profile_id?: string | null
           programs?: string[]
           pronouns?: string | null
           relationship_id?: string | null
+          service_fee_notes?: string | null
+          service_fee_updated_at?: string | null
+          service_fee_updated_by?: string | null
           updated_at?: string
         }
         Update: {
           account_code?: string | null
           account_name?: string
+          archetype?: string | null
           billing_address?: string | null
           billing_contact_name?: string | null
           billing_email?: string | null
@@ -222,19 +235,24 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          managed_sku_count?: number | null
+          monthly_service_fee?: number | null
           notes_internal?: string | null
-          pricing_tier_id?: string | null
+          pricing_profile_id?: string | null
           programs?: string[]
           pronouns?: string | null
           relationship_id?: string | null
+          service_fee_notes?: string | null
+          service_fee_updated_at?: string | null
+          service_fee_updated_by?: string | null
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "accounts_pricing_tier_id_fkey"
-            columns: ["pricing_tier_id"]
+            foreignKeyName: "accounts_pricing_profile_id_fkey"
+            columns: ["pricing_profile_id"]
             isOneToOne: false
-            referencedRelation: "pricing_tiers"
+            referencedRelation: "pricing_rule_profiles"
             referencedColumns: ["id"]
           },
           {
@@ -2632,6 +2650,103 @@ export type Database = {
           },
         ]
       }
+      offer_workspace_lines: {
+        Row: {
+          account_id: string
+          adjustment_note: string | null
+          adjustment_per_unit: number | null
+          client_facing_name: string
+          id: string
+          packaging_variant: string
+          pkg_labour_per_unit_override: number | null
+          pkg_material_per_unit_override: number | null
+          process_per_kg_green_override: number | null
+          roast_group: string
+          saved_at: string | null
+          saved_by: string | null
+          saved_green_cost_per_kg: number | null
+          sort_order: number
+          updated_at: string
+          updated_by: string | null
+          yield_loss_pct_override: number | null
+        }
+        Insert: {
+          account_id: string
+          adjustment_note?: string | null
+          adjustment_per_unit?: number | null
+          client_facing_name: string
+          id?: string
+          packaging_variant: string
+          pkg_labour_per_unit_override?: number | null
+          pkg_material_per_unit_override?: number | null
+          process_per_kg_green_override?: number | null
+          roast_group: string
+          saved_at?: string | null
+          saved_by?: string | null
+          saved_green_cost_per_kg?: number | null
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+          yield_loss_pct_override?: number | null
+        }
+        Update: {
+          account_id?: string
+          adjustment_note?: string | null
+          adjustment_per_unit?: number | null
+          client_facing_name?: string
+          id?: string
+          packaging_variant?: string
+          pkg_labour_per_unit_override?: number | null
+          pkg_material_per_unit_override?: number | null
+          process_per_kg_green_override?: number | null
+          roast_group?: string
+          saved_at?: string | null
+          saved_by?: string | null
+          saved_green_cost_per_kg?: number | null
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+          yield_loss_pct_override?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offer_workspace_lines_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      offer_workspace_sessions: {
+        Row: {
+          account_id: string
+          id: string
+          last_saved_at: string | null
+          last_saved_by: string | null
+        }
+        Insert: {
+          account_id: string
+          id?: string
+          last_saved_at?: string | null
+          last_saved_by?: string | null
+        }
+        Update: {
+          account_id?: string
+          id?: string
+          last_saved_at?: string | null
+          last_saved_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offer_workspace_sessions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: true
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_date_audit_log: {
         Row: {
           changed_at: string
@@ -3018,131 +3133,37 @@ export type Database = {
           is_default: boolean
           name: string
           notes: string | null
+          pkg_labour_per_unit: number | null
+          pkg_material_per_unit: number | null
+          process_per_kg_green: number | null
           updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_default?: boolean
-          name: string
-          notes?: string | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          is_default?: boolean
-          name?: string
-          notes?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      pricing_rules: {
-        Row: {
-          carry_risk_premium_pct: number
-          financing_apr_pct: number
-          financing_days: number
-          green_markup_multiplier: number
-          id: string
-          overhead_per_kg: number
-          process_rate_per_kg: number
-          profile_id: string
-          target_margin_pct: number
-          updated_at: string
-          updated_by: string | null
           yield_loss_pct: number
         }
         Insert: {
-          carry_risk_premium_pct?: number
-          financing_apr_pct?: number
-          financing_days?: number
-          green_markup_multiplier?: number
-          id?: string
-          overhead_per_kg?: number
-          process_rate_per_kg?: number
-          profile_id: string
-          target_margin_pct?: number
-          updated_at?: string
-          updated_by?: string | null
-          yield_loss_pct?: number
-        }
-        Update: {
-          carry_risk_premium_pct?: number
-          financing_apr_pct?: number
-          financing_days?: number
-          green_markup_multiplier?: number
-          id?: string
-          overhead_per_kg?: number
-          process_rate_per_kg?: number
-          profile_id?: string
-          target_margin_pct?: number
-          updated_at?: string
-          updated_by?: string | null
-          yield_loss_pct?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pricing_rules_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: true
-            referencedRelation: "pricing_rule_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      pricing_tiers: {
-        Row: {
-          created_at: string
-          display_order: number
-          id: string
-          is_default: boolean
-          markup_adjustment_type: string
-          markup_multiplier: number | null
-          name: string
-          notes: string | null
-          per_kg_fee: number | null
-          profile_id: string
-          target_margin_pct: number | null
-          updated_at: string
-        }
-        Insert: {
           created_at?: string
-          display_order?: number
           id?: string
           is_default?: boolean
-          markup_adjustment_type?: string
-          markup_multiplier?: number | null
           name: string
           notes?: string | null
-          per_kg_fee?: number | null
-          profile_id: string
-          target_margin_pct?: number | null
+          pkg_labour_per_unit?: number | null
+          pkg_material_per_unit?: number | null
+          process_per_kg_green?: number | null
           updated_at?: string
+          yield_loss_pct?: number
         }
         Update: {
           created_at?: string
-          display_order?: number
           id?: string
           is_default?: boolean
-          markup_adjustment_type?: string
-          markup_multiplier?: number | null
           name?: string
           notes?: string | null
-          per_kg_fee?: number | null
-          profile_id?: string
-          target_margin_pct?: number | null
+          pkg_labour_per_unit?: number | null
+          pkg_material_per_unit?: number | null
+          process_per_kg_green?: number | null
           updated_at?: string
+          yield_loss_pct?: number
         }
-        Relationships: [
-          {
-            foreignKeyName: "pricing_tiers_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: false
-            referencedRelation: "pricing_rule_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       production_checkmarks: {
         Row: {
@@ -3258,6 +3279,8 @@ export type Database = {
       products: {
         Row: {
           account_id: string | null
+          adjustment_note: string | null
+          adjustment_per_unit: number | null
           bag_size_g: number
           client_id: string | null
           created_at: string
@@ -3275,13 +3298,22 @@ export type Database = {
           packaging_variant:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
+          pkg_labour_per_unit_override: number | null
+          pkg_material_per_unit_override: number | null
+          pricing_incomplete: boolean
+          pricing_overrides_updated_at: string | null
+          pricing_overrides_updated_by: string | null
+          process_per_kg_green_override: number | null
           product_name: string
           roast_group: string | null
           sku: string | null
           updated_at: string
+          yield_loss_pct_override: number | null
         }
         Insert: {
           account_id?: string | null
+          adjustment_note?: string | null
+          adjustment_per_unit?: number | null
           bag_size_g: number
           client_id?: string | null
           created_at?: string
@@ -3299,13 +3331,22 @@ export type Database = {
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
+          pkg_labour_per_unit_override?: number | null
+          pkg_material_per_unit_override?: number | null
+          pricing_incomplete?: boolean
+          pricing_overrides_updated_at?: string | null
+          pricing_overrides_updated_by?: string | null
+          process_per_kg_green_override?: number | null
           product_name: string
           roast_group?: string | null
           sku?: string | null
           updated_at?: string
+          yield_loss_pct_override?: number | null
         }
         Update: {
           account_id?: string | null
+          adjustment_note?: string | null
+          adjustment_per_unit?: number | null
           bag_size_g?: number
           client_id?: string | null
           created_at?: string
@@ -3323,10 +3364,17 @@ export type Database = {
           packaging_variant?:
             | Database["public"]["Enums"]["packaging_variant"]
             | null
+          pkg_labour_per_unit_override?: number | null
+          pkg_material_per_unit_override?: number | null
+          pricing_incomplete?: boolean
+          pricing_overrides_updated_at?: string | null
+          pricing_overrides_updated_by?: string | null
+          process_per_kg_green_override?: number | null
           product_name?: string
           roast_group?: string | null
           sku?: string | null
           updated_at?: string
+          yield_loss_pct_override?: number | null
         }
         Relationships: [
           {
@@ -3513,7 +3561,6 @@ export type Database = {
           profile_id_override: string | null
           quantity_bags: number
           quote_id: string
-          tier_id_override: string | null
           updated_at: string
         }
         Insert: {
@@ -3538,7 +3585,6 @@ export type Database = {
           profile_id_override?: string | null
           quantity_bags?: number
           quote_id: string
-          tier_id_override?: string | null
           updated_at?: string
         }
         Update: {
@@ -3563,7 +3609,6 @@ export type Database = {
           profile_id_override?: string | null
           quantity_bags?: number
           quote_id?: string
-          tier_id_override?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -3595,17 +3640,11 @@ export type Database = {
             referencedRelation: "quotes"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "quote_line_items_tier_id_override_fkey"
-            columns: ["tier_id_override"]
-            isOneToOne: false
-            referencedRelation: "pricing_tiers"
-            referencedColumns: ["id"]
-          },
         ]
       }
       quotes: {
         Row: {
+          accepted_at: string | null
           account_id: string | null
           created_at: string
           created_by: string | null
@@ -3614,6 +3653,7 @@ export type Database = {
           internal_notes: string | null
           prospect_id: string | null
           quote_number: string
+          sent_at: string | null
           status: string
           title: string | null
           updated_at: string
@@ -3621,6 +3661,7 @@ export type Database = {
           valid_until: string | null
         }
         Insert: {
+          accepted_at?: string | null
           account_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -3629,6 +3670,7 @@ export type Database = {
           internal_notes?: string | null
           prospect_id?: string | null
           quote_number: string
+          sent_at?: string | null
           status?: string
           title?: string | null
           updated_at?: string
@@ -3636,6 +3678,7 @@ export type Database = {
           valid_until?: string | null
         }
         Update: {
+          accepted_at?: string | null
           account_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -3644,6 +3687,7 @@ export type Database = {
           internal_notes?: string | null
           prospect_id?: string | null
           quote_number?: string
+          sent_at?: string | null
           status?: string
           title?: string | null
           updated_at?: string
@@ -4208,6 +4252,14 @@ export type Database = {
         Args: { _account_id: string }
         Returns: undefined
       }
+      _derive_green_source: {
+        Args: { _line_id: string }
+        Returns: {
+          green_source_id: string
+          green_source_type: string
+          theoretical_blend_ratios: Json
+        }[]
+      }
       _get_or_create_billing_period: {
         Args: { _account_id: string; _booking_date: string }
         Returns: string
@@ -4303,6 +4355,8 @@ export type Database = {
         }
         Returns: boolean
       }
+      mark_quote_accepted: { Args: { p_quote_id: string }; Returns: Json }
+      mark_quote_sent: { Args: { p_quote_id: string }; Returns: undefined }
       move_to_dlq: {
         Args: {
           dlq_name: string
@@ -4320,6 +4374,11 @@ export type Database = {
           msg_id: number
           read_ct: number
         }[]
+      }
+      reverse_quote_to_sent: { Args: { p_quote_id: string }; Returns: Json }
+      sync_locked_price_for_quote_line: {
+        Args: { p_line_id: string }
+        Returns: undefined
       }
     }
     Enums: {

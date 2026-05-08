@@ -28,6 +28,7 @@ interface RoastGroup {
   default_roaster: DefaultRoaster;
   is_active: boolean;
   is_blend: boolean;
+  blend_type: string | null;
   origin: string | null;
   blend_name: string | null;
   notes: string | null;
@@ -289,6 +290,7 @@ export function RoastGroupsTab() {
         is_active: isActive,
         notes: notes || null,
         cropster_profile_ref: cropsterProfileRef.trim() || null,
+        ...(editingGroup ? { blend_type: editingGroup.blend_type ?? null } : {}),
       };
 
       if (editingGroup) {

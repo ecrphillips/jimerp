@@ -770,6 +770,7 @@ function LotDetailPanel({
   const toCad = useCallback((val: number | null, isUsd: boolean, rate: number | null) => {
     if (val == null) return null;
     if (isUsd && rate) return val * rate;
+    if (isUsd && !rate) return null; // USD cost with no FX rate — cannot convert
     return val;
   }, []);
 
@@ -923,6 +924,9 @@ function LotDetailPanel({
     !!lot.freight_confirmed_at && !!lot.duties_confirmed_at && !!lot.transaction_fees_confirmed_at &&
     !!lot.other_costs_confirmed_at
   ) : false;
+
+  // Prevent confirming costs when any USD-flagged cost has no FX rate
+  const hasUsdCostWithoutRate = (invoiceIsUsd || carryFeesIsUsd || freightIsUsd) && !fxRate;
 
   // Notes
   const [noteText, setNoteText] = useState('');
@@ -1363,7 +1367,7 @@ function LotDetailPanel({
                   <Button size="sm" variant="outline" onClick={saveCostValues} disabled={fieldSaveMutation.isPending}>
                     Save Draft
                   </Button>
-                  <Button onClick={() => confirmCostsMutation.mutate()} disabled={confirmCostsMutation.isPending}>
+                  <Button onClick={() => confirmCostsMutation.mutate()} disabled={confirmCostsMutation.isPending || hasUsdCostWithoutRate} title={hasUsdCostWithoutRate ? 'Set an FX rate before confirming — one or more costs are in USD' : undefined}>
                     {confirmCostsMutation.isPending ? 'Confirming…' : 'Confirm Costs'}
                   </Button>
                 </div>

@@ -93,8 +93,10 @@ interface RoastGroupDrawerProps {
   onAdjustWipFg: (roastGroup: string) => void;
   isDragging?: boolean;
   isBlend?: boolean;
+  isPreRoastBlend?: boolean;
   isCompleted?: boolean; // true if no remaining demand but has activity (batches/WIP)
   onPlanBlendBatches?: () => void;
+  onPlanDirectBatch?: () => void;
   onBlendBatches?: () => void;
   components: RoastGroupComponent[];
   roastGroupsLookupMap: Map<string, { display_name: string | null; origin: string | null }>;
@@ -117,8 +119,10 @@ export function RoastGroupDrawer({
   onAdjustWipFg,
   isDragging = false,
   isBlend = false,
+  isPreRoastBlend = false,
   isCompleted = false,
   onPlanBlendBatches,
+  onPlanDirectBatch,
   onBlendBatches,
   components,
   roastGroupsLookupMap,
@@ -942,24 +946,30 @@ export function RoastGroupDrawer({
                       className="h-7 text-xs"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onPlanBlendBatches?.();
+                        if (isPreRoastBlend) {
+                          onPlanDirectBatch?.();
+                        } else {
+                          onPlanBlendBatches?.();
+                        }
                       }}
                     >
                       <Plus className="h-3 w-3 mr-1" />
                       Plan batches
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="default"
-                      className="h-7 text-xs"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onBlendBatches?.();
-                      }}
-                    >
-                      <Layers className="h-3 w-3 mr-1" />
-                      Blend batches
-                    </Button>
+                    {!isPreRoastBlend && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onBlendBatches?.();
+                        }}
+                      >
+                        <Layers className="h-3 w-3 mr-1" />
+                        Blend batches
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <Button
@@ -1011,7 +1021,7 @@ export function RoastGroupDrawer({
               )}
 
               {/* Batch Queue - different display for blends vs single origins */}
-              {isBlend ? (
+              {isBlend && !isPreRoastBlend ? (
                 // For blends: show component batches grouped by component roast group
                 <div className="space-y-4">
                   {/* Blend Demand Header */}
