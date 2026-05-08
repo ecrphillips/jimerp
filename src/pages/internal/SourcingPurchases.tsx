@@ -828,6 +828,7 @@ function CreatePurchaseModal({
   const [invoiceDate, setInvoiceDate] = useState<Date | undefined>();
   const [dueDate, setDueDate] = useState<Date | undefined>();
   const [fxRate, setFxRate] = useState('');
+  const { effectiveRate: effectiveFxRate } = useEffectiveFxRate();
   const [sharedCosts, setSharedCosts] = useState<SharedCosts>(makeDefaultSharedCosts('CAD'));
   const [headerNotes, setHeaderNotes] = useState('');
 
