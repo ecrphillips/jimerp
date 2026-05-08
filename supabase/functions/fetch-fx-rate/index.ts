@@ -31,8 +31,10 @@ serve(async (req: Request) => {
 
     const token = authHeader.replace("Bearer ", "");
     const isServiceRole = token === serviceRoleKey;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const isAnonKey = anonKey !== "" && token === anonKey;
 
-    if (!isServiceRole) {
+    if (!isServiceRole && !isAnonKey) {
       const { data: { user }, error: authError } = await adminClient.auth.getUser(token);
       if (authError || !user) {
         return new Response(

@@ -30,7 +30,7 @@ export function FxRateSettings() {
     },
   });
 
-  const fxValue = setting?.value_json as FxRateValue | undefined;
+  const fxValue = setting?.value_json as unknown as FxRateValue | undefined;
   const isLive = fxValue?.source === 'bank-of-canada';
 
   const refreshMutation = useMutation({
