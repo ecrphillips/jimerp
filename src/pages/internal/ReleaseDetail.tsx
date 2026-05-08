@@ -152,19 +152,8 @@ export default function ReleaseDetail() {
     return m;
   }, [contracts]);
 
-  const { data: fxRateSetting } = useQuery({
-    queryKey: ['app_settings', 'fx_rate_usd_to_cad'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('app_settings')
-        .select('value_json')
-        .eq('key', 'fx_rate_usd_to_cad')
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
-  const placeholderFxRate: number = Number((fxRateSetting?.value_json as any)?.rate) || 1.38;
+  const { effectiveRate } = useEffectiveFxRate();
+  const placeholderFxRate: number = effectiveRate ?? 1.40;
 
   // Hydrate edit state when release loads
   useEffect(() => {
