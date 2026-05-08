@@ -12,6 +12,7 @@ import { GenericLaneConversion } from '@/components/admin/GenericLaneConversion'
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { OrderNotificationSettings } from '@/components/admin/OrderNotificationSettings';
+import { FxRateSettings } from '@/components/admin/FxRateSettings';
 import { BuildInfoPanel } from '@/components/admin/BuildInfoPanel';
 import { PackagingTypesManager } from '@/components/admin/PackagingTypesManager';
 import { buildSku, getOriginCode, generateFgNameCode, formatGramsSuffix } from '@/lib/skuGenerator';
@@ -347,6 +348,9 @@ export default function AdminTools() {
 
       {/* Packaging Types Manager */}
       <PackagingTypesManager />
+
+      {/* USD/CAD Exchange Rate */}
+      <FxRateSettings />
 
       {/* Order Submit Notifications */}
       <OrderNotificationSettings />
