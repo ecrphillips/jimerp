@@ -26,6 +26,7 @@ import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
 import { COMMON_ORIGINS, OTHER_ORIGINS, getCountryName } from '@/lib/coffeeOrigins';
 import { allocatePoNumber, poFromExisting, allocateSingleLotNumber } from '@/lib/lotNumberGenerator';
 import { useNavigate } from 'react-router-dom';
+import { useEffectiveFxRate } from '@/lib/fxRate';
 
 // ─── Types ─────────────────────────────────────────────────
 
