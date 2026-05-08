@@ -909,11 +909,11 @@ function CreatePurchaseModal({
       setInvoiceNumber('');
       setInvoiceDate(undefined);
       setDueDate(undefined);
-      setFxRate('');
+      setFxRate(effectiveFxRate != null ? String(effectiveFxRate) : '');
       setSharedCosts(makeDefaultSharedCosts('CAD'));
       setHeaderNotes('');
       setLines([emptyLine()]);
-      prevFxRef.current = '';
+      prevFxRef.current = effectiveFxRate != null ? String(effectiveFxRate) : '';
     }
     // Reset confirmation state
     setConfirmCosting(true);
