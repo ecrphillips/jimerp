@@ -153,12 +153,12 @@ export default function ReleaseDetail() {
   }, [contracts]);
 
   const { data: fxRateSetting } = useQuery({
-    queryKey: ['app_settings', 'placeholder_fx_rate_usd_to_cad'],
+    queryKey: ['app_settings', 'fx_rate_usd_to_cad'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('app_settings')
         .select('value_json')
-        .eq('key', 'placeholder_fx_rate_usd_to_cad')
+        .eq('key', 'fx_rate_usd_to_cad')
         .maybeSingle();
       if (error) throw error;
       return data;

@@ -711,6 +711,20 @@ function LotDetailPanel({
     },
   });
 
+  const { data: liveFxRateSetting } = useQuery({
+    queryKey: ['app_settings', 'fx_rate_usd_to_cad'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value_json')
+        .eq('key', 'fx_rate_usd_to_cad')
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+  const liveFxRate: number | null = Number((liveFxRateSetting?.value_json as any)?.rate) || null;
+
   // ─── Local cost state ────────────────────────────────────
   const [fxRate, setFxRate] = useState<number | null>(null);
   const [invoiceAmt, setInvoiceAmt] = useState<number>(0);
@@ -735,7 +749,8 @@ function LotDetailPanel({
   // Sync from DB
   useEffect(() => {
     if (lot) {
-      setFxRate(lot.fx_rate);
+      // Prefill with live BoC rate when lot has no confirmed fx_rate yet
+      setFxRate(lot.fx_rate ?? liveFxRate);
       if (lot.invoice_is_usd && lot.fx_rate && lot.invoice_amount_cad != null) {
         setInvoiceAmt(lot.invoice_amount_cad / lot.fx_rate);
       } else {
@@ -765,7 +780,7 @@ function LotDetailPanel({
       setEditVendorInvoice(lot.vendor_invoice_number || '');
       setEditLotNumber(lot.lot_number || '');
     }
-  }, [lot]);
+  }, [lot, liveFxRate]);
 
   const toCad = useCallback((val: number | null, isUsd: boolean, rate: number | null) => {
     if (val == null) return null;
