@@ -20,8 +20,11 @@ import { NewSingleOriginProductModal } from './NewSingleOriginProductModal';
 import { NewBlendProductModal } from './NewBlendProductModal';
 import { SafeDeleteModal } from '@/components/SafeDeleteModal';
 import { RoastGroupRerouteModal } from './RoastGroupRerouteModal';
-import { Trash2, ChevronRight, ChevronDown, X } from 'lucide-react';
+import { Trash2, ChevronRight, ChevronDown, X, Table2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { BulkEditGrid } from '@/components/bulk-edit/BulkEditGrid';
+import { useProductsBulkEdit } from '@/components/bulk-edit/configs/products';
+import { useBulkEditLogoutCleanup } from '@/components/bulk-edit/useChangeHighlights';
 import { MixingConsole, buildEmptyMixingConsoleValue, stripRedundantOverrides, hasMixingConsoleErrors, type MixingConsoleValue, type PricingProfilePreset } from '@/components/pricing/MixingConsole';
 import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
 
@@ -110,8 +113,12 @@ interface ProductFamily {
 
 export function ProductsListTab() {
   const queryClient = useQueryClient();
-  const { authUser } = useAuth();
+  const { authUser, user } = useAuth();
+  const isAdmin = authUser?.role === 'ADMIN';
   const isInternal = authUser?.role === 'ADMIN' || authUser?.role === 'OPS';
+  useBulkEditLogoutCleanup(user?.id);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const productsBulk = useProductsBulkEdit(bulkEditOpen);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [overridesValue, setOverridesValue] = useState<MixingConsoleValue>({});
@@ -714,6 +721,15 @@ export function ProductsListTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end gap-2">
+        {isAdmin && (
+          <Button
+            variant={bulkEditOpen ? 'default' : 'outline'}
+            onClick={() => setBulkEditOpen((o) => !o)}
+            className="gap-1"
+          >
+            <Table2 className="h-4 w-4" /> {bulkEditOpen ? 'Close Bulk Edit' : 'Bulk Edit'}
+          </Button>
+        )}
         {productsWithoutPrice.length > 0 && (
           <Button variant="outline" onClick={() => backfillMutation.mutate()} disabled={backfillMutation.isPending}>
             {backfillMutation.isPending ? 'Setting…' : `Set $0.00 for ${productsWithoutPrice.length} unpriced`}
@@ -722,6 +738,20 @@ export function ProductsListTab() {
         <Button onClick={openNew}>Add Product</Button>
       </div>
 
+      {bulkEditOpen && isAdmin ? (
+        <BulkEditGrid
+          tableKey="products"
+          title="Bulk Edit — Products"
+          columns={productsBulk.columns}
+          rows={productsBulk.rows}
+          isLoading={productsBulk.isLoading}
+          getRowId={productsBulk.getRowId}
+          onCellSave={productsBulk.onCellSave}
+          group={productsBulk.group}
+          csvFilename={`products-${new Date().toISOString().slice(0, 10)}.csv`}
+          onClose={() => setBulkEditOpen(false)}
+        />
+      ) : (
       <Card>
         <CardHeader>
           <CardTitle>All Products</CardTitle>
@@ -873,6 +903,7 @@ export function ProductsListTab() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Edit Product Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

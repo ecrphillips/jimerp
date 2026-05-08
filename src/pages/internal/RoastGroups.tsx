@@ -4,7 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, AlertTriangle, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Plus, AlertTriangle, ArrowUp, ArrowDown, ArrowUpDown, Table2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { BulkEditGrid } from '@/components/bulk-edit/BulkEditGrid';
+import { useRoastGroupsBulkEdit } from '@/components/bulk-edit/configs/roastGroups';
+import { useBulkEditLogoutCleanup } from '@/components/bulk-edit/useChangeHighlights';
 import { cn } from '@/lib/utils';
 import { getDisplayName } from '@/lib/roastGroupUtils';
 import { NewRoastGroupModal } from '@/components/roast-groups/NewRoastGroupModal';
@@ -28,6 +32,10 @@ function formatRoaster(value: string | null | undefined) {
 
 export default function RoastGroups() {
   const navigate = useNavigate();
+  const { isAdmin, user } = useAuth();
+  useBulkEditLogoutCleanup(user?.id);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const roastGroupsBulk = useRoastGroupsBulkEdit(bulkEditOpen);
   const [filter, setFilter] = useState<FilterType>('ACTIVE');
   const [modalOpen, setModalOpen] = useState(false);
   const [viewMode, setViewMode] = useViewMode('manufacturing_view_roast_groups', 'cards');
@@ -261,6 +269,15 @@ export default function RoastGroups() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Roast Groups</h1>
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button
+              variant={bulkEditOpen ? 'default' : 'outline'}
+              onClick={() => setBulkEditOpen((o) => !o)}
+              className="gap-1.5"
+            >
+              <Table2 className="h-4 w-4" /> {bulkEditOpen ? 'Close Bulk Edit' : 'Bulk Edit'}
+            </Button>
+          )}
           <ViewToggle value={viewMode} onChange={setViewMode} />
           <Button onClick={() => setModalOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -269,6 +286,22 @@ export default function RoastGroups() {
         </div>
       </div>
 
+      {bulkEditOpen && isAdmin && (
+        <BulkEditGrid
+          tableKey="roast_groups"
+          title="Bulk Edit — Roast Groups"
+          columns={roastGroupsBulk.columns}
+          rows={roastGroupsBulk.rows}
+          isLoading={roastGroupsBulk.isLoading}
+          getRowId={roastGroupsBulk.getRowId}
+          onCellSave={roastGroupsBulk.onCellSave}
+          csvFilename={`roast-groups-${new Date().toISOString().slice(0, 10)}.csv`}
+          onClose={() => setBulkEditOpen(false)}
+        />
+      )}
+
+      {!bulkEditOpen && (
+      <>
       {/* Filter chips */}
       <div className="flex flex-wrap gap-2">
         {filters.map(f => (
@@ -513,6 +546,8 @@ export default function RoastGroups() {
             </Table>
           </div>
         </TooltipProvider>
+      )}
+      </>
       )}
 
       <NewRoastGroupModal open={modalOpen} onOpenChange={setModalOpen} />
