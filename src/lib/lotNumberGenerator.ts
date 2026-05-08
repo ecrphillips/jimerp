@@ -96,13 +96,21 @@ export async function allocateLotNumbers(
   });
 }
 
-/** Allocate a single lot number under an existing PO. */
+/**
+ * Allocate a single lot number under an existing PO.
+ * Pass `vendorAbbrOverride` to use a different vendor prefix than the PO's own vendor
+ * (needed for multi-vendor releases where each line has its own vendor).
+ */
 export async function allocateSingleLotNumber(
   po: AllocatedPo,
   originCode: string | null | undefined,
+  vendorAbbrOverride?: string | null,
 ): Promise<string> {
-  const [lot] = await allocateLotNumbers(po, [originCode]);
-  return lot.lotNumber;
+  const iso3 = normalizeOrigin(originCode);
+  const vendorAbbr = normalizeVendor(vendorAbbrOverride ?? po.vendorAbbr);
+  const start = await allocateSequence('lot_sequence', 1);
+  const lotSeq = pad(start, 4);
+  return `${vendorAbbr}-P${po.poDigits}-${iso3}-L${lotSeq}`;
 }
 
 /**

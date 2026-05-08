@@ -36,6 +36,7 @@ interface ReleaseLineRow {
   bags_requested: number;
   bag_size_kg: number;
   lot_id: string | null;
+  vendor_id: string | null;
 }
 
 type Filter = 'ALL' | 'PENDING' | 'INVOICED';
@@ -64,7 +65,7 @@ export default function SourcingReleases() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('green_release_lines')
-        .select('id, release_id, bags_requested, bag_size_kg, lot_id');
+        .select('id, release_id, bags_requested, bag_size_kg, lot_id, vendor_id');
       if (error) throw error;
       return data as ReleaseLineRow[];
     },
@@ -102,19 +103,38 @@ export default function SourcingReleases() {
       if (filter !== 'ALL' && r.status !== filter) return false;
       if (search) {
         const q = search.toLowerCase();
-        const vname = (r.vendor_id ? vendorMap[r.vendor_id] : '') || '';
-        const inv = r.invoice_number || '';
-        if (!vname.toLowerCase().includes(q) && !inv.toLowerCase().includes(q)) return false;
+        const inv = (r.invoice_number || '').toLowerCase();
+        const po = (r.po_number || '').toLowerCase();
+        // Match against all vendor names on the release lines
+        const lineVendorIds = (linesByRelease[r.id] || []).map(l => l.vendor_id).filter(Boolean) as string[];
+        const releaseVendorIds = r.vendor_id ? [r.vendor_id, ...lineVendorIds] : lineVendorIds;
+        const vendorNames = [...new Set(releaseVendorIds)].map(id => (vendorMap[id] || '').toLowerCase());
+        const vendorMatch = vendorNames.some(n => n.includes(q));
+        if (!vendorMatch && !inv.includes(q) && !po.includes(q)) return false;
       }
       return true;
     });
-  }, [releases, filter, search, vendorMap]);
+  }, [releases, filter, search, vendorMap, linesByRelease]);
 
   function summary(r: ReleaseRow) {
     const ls = linesByRelease[r.id] || [];
     const lots = ls.length;
     const totalKg = ls.reduce((s, l) => s + (l.bags_requested || 0) * Number(l.bag_size_kg || 0), 0);
-    return { lots, totalKg };
+    // Determine vendor label: use release.vendor_id if set (single vendor), else check line vendor_ids
+    let vendorLabel: string;
+    if (r.vendor_id) {
+      vendorLabel = vendorMap[r.vendor_id] || '—';
+    } else {
+      const distinctVendors = [...new Set(ls.map(l => l.vendor_id).filter(Boolean))];
+      if (distinctVendors.length === 1) {
+        vendorLabel = vendorMap[distinctVendors[0]!] || '—';
+      } else if (distinctVendors.length > 1) {
+        vendorLabel = 'Multiple vendors';
+      } else {
+        vendorLabel = '—';
+      }
+    }
+    return { lots, totalKg, vendorLabel };
   }
 
   return (
@@ -179,7 +199,7 @@ export default function SourcingReleases() {
               </TableHeader>
               <TableBody>
                 {filtered.map(r => {
-                  const { lots, totalKg } = summary(r);
+                  const { lots, totalKg, vendorLabel } = summary(r);
                   const dateLabel = r.received_date
                     ? `Received ${format(parseISO(r.received_date), 'MMM d, yyyy')}`
                     : r.eta_date
@@ -188,7 +208,7 @@ export default function SourcingReleases() {
                   return (
                     <TableRow key={r.id}>
                       <TableCell className="font-mono text-xs">{r.po_number || <span className="text-muted-foreground">—</span>}</TableCell>
-                      <TableCell className="font-medium">{(r.vendor_id && vendorMap[r.vendor_id]) || '—'}</TableCell>
+                      <TableCell className="font-medium">{vendorLabel}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={statusBadgeClass(r.status)}>{r.status}</Badge>
                       </TableCell>
@@ -209,7 +229,7 @@ export default function SourcingReleases() {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map(r => {
-              const { lots, totalKg } = summary(r);
+              const { lots, totalKg, vendorLabel } = summary(r);
               const dateLabel = r.received_date
                 ? `Received ${format(parseISO(r.received_date), 'MMM d, yyyy')}`
                 : r.eta_date
@@ -219,7 +239,7 @@ export default function SourcingReleases() {
                 <Card key={r.id} className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => navigate(`/sourcing/releases/${r.id}`)}>
                   <CardContent className="p-4 space-y-2">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="font-semibold text-base leading-tight">{(r.vendor_id && vendorMap[r.vendor_id]) || '—'}</p>
+                      <p className="font-semibold text-base leading-tight">{vendorLabel}</p>
                       <Badge variant="outline" className={statusBadgeClass(r.status)}>{r.status}</Badge>
                     </div>
                     {r.po_number && <p className="text-xs font-mono text-foreground">{r.po_number}</p>}
