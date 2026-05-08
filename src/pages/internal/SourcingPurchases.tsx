@@ -920,7 +920,7 @@ function CreatePurchaseModal({
     setConfirmCosting(true);
     setMarkPaid(false);
     setPaidDate(new Date());
-  }, [open, existingPurchase, existingLines]);
+  }, [open, existingPurchase, existingLines, effectiveFxRate]);
 
   const selectedVendor = vendors.find(v => v.id === vendorId);
 
