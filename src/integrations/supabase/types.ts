@@ -1864,6 +1864,7 @@ export type Database = {
           invoice_confirmed_at: string | null
           invoice_confirmed_by: string | null
           invoice_is_usd: boolean
+          is_placeholder: boolean
           kg_on_hand: number
           kg_received: number | null
           lot_fx_rate: number | null
@@ -1947,6 +1948,7 @@ export type Database = {
           invoice_confirmed_at?: string | null
           invoice_confirmed_by?: string | null
           invoice_is_usd?: boolean
+          is_placeholder?: boolean
           kg_on_hand?: number
           kg_received?: number | null
           lot_fx_rate?: number | null
@@ -2030,6 +2032,7 @@ export type Database = {
           invoice_confirmed_at?: string | null
           invoice_confirmed_by?: string | null
           invoice_is_usd?: boolean
+          is_placeholder?: boolean
           kg_on_hand?: number
           kg_received?: number | null
           lot_fx_rate?: number | null
@@ -2164,6 +2167,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          deferred_to_release_id: string | null
           due_date: string | null
           fx_rate: number | null
           fx_rate_is_cad: boolean
@@ -2174,6 +2178,7 @@ export type Database = {
           paid_at: string | null
           po_number: string | null
           shared_carry_usd: number
+          shared_costs_deferred: boolean
           shared_freight_usd: number
           shared_other_label: string | null
           shared_other_usd: number
@@ -2183,6 +2188,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          deferred_to_release_id?: string | null
           due_date?: string | null
           fx_rate?: number | null
           fx_rate_is_cad?: boolean
@@ -2193,6 +2199,7 @@ export type Database = {
           paid_at?: string | null
           po_number?: string | null
           shared_carry_usd?: number
+          shared_costs_deferred?: boolean
           shared_freight_usd?: number
           shared_other_label?: string | null
           shared_other_usd?: number
@@ -2202,6 +2209,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          deferred_to_release_id?: string | null
           due_date?: string | null
           fx_rate?: number | null
           fx_rate_is_cad?: boolean
@@ -2212,6 +2220,7 @@ export type Database = {
           paid_at?: string | null
           po_number?: string | null
           shared_carry_usd?: number
+          shared_costs_deferred?: boolean
           shared_freight_usd?: number
           shared_other_label?: string | null
           shared_other_usd?: number
@@ -2219,6 +2228,13 @@ export type Database = {
           vendor_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "green_purchases_deferred_to_release_id_fkey"
+            columns: ["deferred_to_release_id"]
+            isOneToOne: false
+            referencedRelation: "green_releases"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "green_purchases_vendor_id_fkey"
             columns: ["vendor_id"]
