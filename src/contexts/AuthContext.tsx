@@ -18,6 +18,7 @@ interface AuthUser {
   canManageLocations: boolean;
   canInviteUsers: boolean;
   locationAccess: string;
+  programs: string[];
 }
 
 interface AuthContextType {
@@ -79,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let canManageLocations = false;
       let canInviteUsers = false;
       let locationAccess = 'ALL';
+      let programs: string[] = [];
 
       // For CLIENT users, look up account_users record
       if (roleData.role === 'CLIENT') {
@@ -101,6 +103,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           canManageLocations = accountUser.can_manage_locations;
           canInviteUsers = accountUser.can_invite_users;
           locationAccess = accountUser.location_access;
+
+          // Fetch account programs (used by UI to gate permission checkboxes)
+          const { data: acct } = await supabase
+            .from('accounts')
+            .select('programs')
+            .eq('id', accountUser.account_id)
+            .maybeSingle();
+          programs = (acct?.programs as string[] | null) ?? [];
         }
       }
 
@@ -118,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         canManageLocations,
         canInviteUsers,
         locationAccess,
+        programs,
       };
     } catch (error) {
       console.error('Error in fetchUserData:', error);
