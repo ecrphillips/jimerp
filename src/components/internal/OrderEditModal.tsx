@@ -165,6 +165,19 @@ export function OrderEditModal({
       }
     },
     onSuccess: () => {
+      // Fire confirmation email when order transitions to CONFIRMED.
+      // Only triggers when the new status IS 'CONFIRMED' (covers any → CONFIRMED).
+      // TODO: Deploy supabase/functions/confirm-order-email before this goes live.
+      if (status === 'CONFIRMED') {
+        supabase.functions.invoke('confirm-order-email', {
+          body: { order_id: order.id },
+        }).then(({ error }) => {
+          if (error) console.warn('[confirm-order-email] Failed to invoke:', error);
+        }).catch((err) => {
+          console.warn('[confirm-order-email] Invocation error:', err);
+        });
+      }
+
       toast.success('Order updated successfully');
       queryClient.invalidateQueries({ queryKey: ['order', order.id] });
       queryClient.invalidateQueries({ queryKey: ['order-line-items', order.id] });

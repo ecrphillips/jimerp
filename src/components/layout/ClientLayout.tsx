@@ -10,7 +10,8 @@ import {
   User,
   LogOut,
   Menu,
-  X
+  X,
+  ShoppingBag
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import hiIcon from '@/assets/home-island-icon.png';
@@ -23,7 +24,8 @@ interface ClientLayoutProps {
 const navItems = [
   { to: '/portal', label: 'Home', icon: Home, end: true },
   { to: '/portal/new-order', label: 'New Order', icon: PlusCircle },
-  { to: '/portal/orders', label: 'Order History', icon: ClipboardList },
+  { to: '/portal/orders', label: 'My Orders', icon: ClipboardList },
+  { to: '/portal/products', label: 'My Products', icon: ShoppingBag },
   { to: '/portal/account', label: 'Account', icon: User },
 ];
 
