@@ -706,12 +706,12 @@ ${userName}`;
             {tab === 'contracts' && (
               <div className="space-y-3">
                 <div className="flex gap-2 flex-wrap">
-                  <Select value={contractVendorFilter} onValueChange={setContractVendorFilter}>
+                  <Select value={contractVendorFilter || '__all__'} onValueChange={(v) => setContractVendorFilter(v === '__all__' ? '' : v)}>
                     <SelectTrigger className="h-9 w-48">
                       <SelectValue placeholder="All vendors" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All vendors</SelectItem>
+                      <SelectItem value="__all__">All vendors</SelectItem>
                       {vendors.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
