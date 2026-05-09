@@ -4302,6 +4302,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _assert_account_owner: {
+        Args: { _account_id: string }
+        Returns: undefined
+      }
       _assert_active_coroast_member: {
         Args: { _account_id: string }
         Returns: undefined
@@ -4421,6 +4425,45 @@ export type Database = {
         Returns: number
       }
       nextval_text: { Args: { seq_name: string }; Returns: number }
+      owner_create_location: {
+        Args: {
+          p_account_id: string
+          p_address?: string
+          p_location_code: string
+          p_location_name: string
+          p_qbo_billing_entity?: string
+        }
+        Returns: string
+      }
+      owner_deactivate_user: {
+        Args: { p_account_id: string; p_account_user_id: string }
+        Returns: undefined
+      }
+      owner_update_account: {
+        Args: {
+          p_account_id: string
+          p_account_name: string
+          p_billing_address?: string
+          p_billing_contact_name?: string
+          p_billing_email?: string
+          p_billing_phone?: string
+        }
+        Returns: undefined
+      }
+      owner_update_user_permissions: {
+        Args: {
+          p_account_id: string
+          p_account_user_id: string
+          p_assigned_location_ids?: string[]
+          p_can_book_roaster: boolean
+          p_can_invite_users: boolean
+          p_can_manage_locations: boolean
+          p_can_place_orders: boolean
+          p_is_owner: boolean
+          p_location_access: string
+        }
+        Returns: undefined
+      }
       read_email_batch: {
         Args: { batch_size: number; queue_name: string; vt: number }
         Returns: {
