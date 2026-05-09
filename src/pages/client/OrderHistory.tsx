@@ -13,6 +13,7 @@ interface Order {
   order_number: string;
   status: string;
   requested_ship_date: string | null;
+  work_deadline_at: string | null;
   delivery_method: string;
   client_po: string | null;
   client_notes: string | null;
@@ -20,11 +21,9 @@ interface Order {
   location_id: string | null;
 }
 
-interface LineItem {
-  id: string;
+interface LineItemSummary {
+  order_id: string;
   quantity_units: number;
-  grind: string | null;
-  unit_price_locked: number;
   product: { product_name: string } | null;
 }
 
@@ -37,13 +36,40 @@ export default function OrderHistory() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('orders')
-        .select('id, order_number, status, requested_ship_date, delivery_method, client_po, client_notes, created_at, location_id')
+        .select('id, order_number, status, requested_ship_date, work_deadline_at, delivery_method, client_po, client_notes, created_at, location_id')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       return (data ?? []) as Order[];
     },
   });
+
+  // Fetch line item summaries for all orders in the list view
+  const { data: allLineItems } = useQuery({
+    queryKey: ['client-orders-line-items', orders?.map(o => o.id)],
+    queryFn: async () => {
+      const orderIds = (orders ?? []).map(o => o.id);
+      if (orderIds.length === 0) return [] as LineItemSummary[];
+      const { data, error } = await supabase
+        .from('order_line_items')
+        .select('order_id, quantity_units, product:products(product_name)')
+        .in('order_id', orderIds);
+      if (error) throw error;
+      return (data ?? []) as LineItemSummary[];
+    },
+    enabled: (orders ?? []).length > 0,
+  });
+
+  // Build map: orderId → summary strings
+  const lineItemMap = React.useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const li of allLineItems ?? []) {
+      if (!map[li.order_id]) map[li.order_id] = [];
+      const name = li.product?.product_name ?? 'Unknown';
+      map[li.order_id].push(`${name} — ${li.quantity_units} units`);
+    }
+    return map;
+  }, [allLineItems]);
 
   const { data: lineItems } = useQuery({
     queryKey: ['client-order-line-items', selectedOrderId],
@@ -55,30 +81,30 @@ export default function OrderHistory() {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      return (data ?? []) as LineItem[];
+      return (data ?? []) as { id: string; quantity_units: number; grind: string | null; unit_price_locked: number; product: { product_name: string } | null }[];
     },
     enabled: !!selectedOrderId,
   });
 
   const cancelMutation = useMutation({
     mutationFn: async (orderId: string) => {
-      const { data, error, count } = await supabase
+      const { data, error } = await supabase
         .from('orders')
         .update({ status: 'CANCELLED' })
         .eq('id', orderId)
         .eq('status', 'SUBMITTED')
         .select();
-      
+
       if (error) {
         console.error('Cancel error:', error.code, error.message, error.details);
         throw new Error(`${error.code}: ${error.message}`);
       }
-      
+
       if (!data || data.length === 0) {
         console.error('Cancel returned 0 rows - permission or status mismatch');
         throw new Error('No rows updated — order may already be processed or you lack permission');
       }
-      
+
       return data;
     },
     onSuccess: () => {
@@ -116,6 +142,12 @@ export default function OrderHistory() {
               <div><strong>Status:</strong> {selectedOrder.status}</div>
               <div><strong>Delivery:</strong> {selectedOrder.delivery_method}</div>
               <div><strong>Client PO:</strong> {selectedOrder.client_po || '—'}</div>
+              <div>
+                <strong>Planned Roast Day:</strong>{' '}
+                {selectedOrder.work_deadline_at
+                  ? format(new Date(selectedOrder.work_deadline_at), 'MMM d, yyyy')
+                  : '—'}
+              </div>
               <div>
                 <strong>Requested Ship Date:</strong>{' '}
                 {selectedOrder.requested_ship_date
@@ -199,7 +231,7 @@ export default function OrderHistory() {
   return (
     <div className="page-container">
       <div className="page-header">
-        <h1 className="page-title">Order History</h1>
+        <h1 className="page-title">My Orders</h1>
       </div>
       <Card>
         <CardHeader><CardTitle>Your Orders</CardTitle></CardHeader>
@@ -208,38 +240,78 @@ export default function OrderHistory() {
             <p className="text-muted-foreground">Loading…</p>
           ) : error ? (
             <p className="text-destructive">Failed to load: {error instanceof Error ? error.message : String(error)}</p>
-          ) : orders.length === 0 ? (
+          ) : (orders ?? []).length === 0 ? (
             <p className="text-muted-foreground">No orders yet.</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left">
-                  <th className="pb-2">Order #</th>
-                  <th className="pb-2">Date</th>
-                  <th className="pb-2">Ship Date</th>
-                  <th className="pb-2">Status</th>
+                  <th className="pb-2 pr-4">Order #</th>
+                  <th className="pb-2 pr-4">Status</th>
+                  <th className="pb-2 pr-4">Planned Roast Day</th>
+                  <th className="pb-2 pr-4">Ship Date</th>
+                  <th className="pb-2">Items</th>
                   <th className="pb-2"></th>
                 </tr>
               </thead>
               <tbody>
-                {orders.map((o) => (
-                  <tr key={o.id} className="border-b last:border-0 cursor-pointer hover:bg-muted/50" onClick={() => setSelectedOrderId(o.id)}>
-                    <td className="py-2">
-                      <span className="font-medium">{o.order_number}</span>
-                      <LocationCodeDisplay locationId={o.location_id} />
-                    </td>
-                    <td className="py-2">{format(new Date(o.created_at), 'MMM d, yyyy')}</td>
-                    <td className="py-2">{o.requested_ship_date ? format(new Date(o.requested_ship_date), 'MMM d') : '—'}</td>
-                    <td className="py-2">
-                      <span className={`rounded px-2 py-0.5 text-xs ${o.status === 'SUBMITTED' ? 'bg-amber-100 text-amber-800' : o.status === 'CANCELLED' ? 'bg-red-100 text-red-800' : ''}`}>
-                        {o.status}
-                      </span>
-                    </td>
-                    <td className="py-2 text-right">
-                      <Button size="sm" variant="ghost">View</Button>
-                    </td>
-                  </tr>
-                ))}
+                {(orders ?? []).map((o) => {
+                  const summaries = lineItemMap[o.id] ?? [];
+                  const displaySummaries = summaries.slice(0, 2);
+                  const overflow = summaries.length - displaySummaries.length;
+                  return (
+                    <tr
+                      key={o.id}
+                      className="border-b last:border-0 cursor-pointer hover:bg-muted/50"
+                      onClick={() => setSelectedOrderId(o.id)}
+                    >
+                      <td className="py-3 pr-4">
+                        <span className="font-medium">{o.order_number}</span>
+                        <LocationCodeDisplay locationId={o.location_id} />
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span className={`rounded px-2 py-0.5 text-xs font-medium ${
+                          o.status === 'SUBMITTED' ? 'bg-amber-100 text-amber-800'
+                          : o.status === 'CONFIRMED' ? 'bg-blue-100 text-blue-800'
+                          : o.status === 'IN_PRODUCTION' ? 'bg-orange-100 text-orange-800'
+                          : o.status === 'READY' ? 'bg-green-100 text-green-800'
+                          : o.status === 'SHIPPED' ? 'bg-green-100 text-green-800'
+                          : o.status === 'CANCELLED' ? 'bg-red-100 text-red-800'
+                          : 'bg-muted text-muted-foreground'
+                        }`}>
+                          {o.status}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-4 text-muted-foreground">
+                        {o.work_deadline_at
+                          ? format(new Date(o.work_deadline_at), 'MMM d, yyyy')
+                          : '—'}
+                      </td>
+                      <td className="py-3 pr-4 text-muted-foreground">
+                        {o.requested_ship_date
+                          ? format(new Date(o.requested_ship_date), 'MMM d, yyyy')
+                          : '—'}
+                      </td>
+                      <td className="py-3">
+                        {displaySummaries.length === 0 ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <div className="space-y-0.5">
+                            {displaySummaries.map((s, i) => (
+                              <div key={i} className="text-xs text-muted-foreground">{s}</div>
+                            ))}
+                            {overflow > 0 && (
+                              <div className="text-xs text-muted-foreground">+{overflow} more</div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 text-right">
+                        <Button size="sm" variant="ghost">View</Button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
