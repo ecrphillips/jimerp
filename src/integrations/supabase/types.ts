@@ -2236,10 +2236,18 @@ export type Database = {
           created_at: string
           id: string
           lot_id: string | null
+          lot_identifier: string | null
           notes: string | null
+          origin_country: string | null
           original_price: Json | null
           price_per_lb_usd: number | null
+          producer: string | null
+          purchase_line_id: string | null
+          region: string | null
           release_id: string
+          source_type: string
+          variety: string | null
+          vendor_id: string | null
         }
         Insert: {
           bag_size_kg: number
@@ -2248,10 +2256,18 @@ export type Database = {
           created_at?: string
           id?: string
           lot_id?: string | null
+          lot_identifier?: string | null
           notes?: string | null
+          origin_country?: string | null
           original_price?: Json | null
           price_per_lb_usd?: number | null
+          producer?: string | null
+          purchase_line_id?: string | null
+          region?: string | null
           release_id: string
+          source_type?: string
+          variety?: string | null
+          vendor_id?: string | null
         }
         Update: {
           bag_size_kg?: number
@@ -2260,10 +2276,18 @@ export type Database = {
           created_at?: string
           id?: string
           lot_id?: string | null
+          lot_identifier?: string | null
           notes?: string | null
+          origin_country?: string | null
           original_price?: Json | null
           price_per_lb_usd?: number | null
+          producer?: string | null
+          purchase_line_id?: string | null
+          region?: string | null
           release_id?: string
+          source_type?: string
+          variety?: string | null
+          vendor_id?: string | null
         }
         Relationships: [
           {
@@ -2281,10 +2305,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "green_release_lines_purchase_line_id_fkey"
+            columns: ["purchase_line_id"]
+            isOneToOne: false
+            referencedRelation: "green_purchase_lines"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "green_release_lines_release_id_fkey"
             columns: ["release_id"]
             isOneToOne: false
             referencedRelation: "green_releases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "green_release_lines_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "green_vendors"
             referencedColumns: ["id"]
           },
         ]
