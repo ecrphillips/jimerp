@@ -308,7 +308,7 @@ const App = () => (
             } />
             <Route path="/portal/products" element={
               <ProtectedRoute allowedRoles={['CLIENT']}>
-                <ClientLayout><Products /></ClientLayout>
+                <ClientLayout><ClientProducts /></ClientLayout>
               </ProtectedRoute>
             } />
             <Route path="/portal/account" element={
