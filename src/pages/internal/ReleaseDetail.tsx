@@ -58,6 +58,13 @@ interface LineRow {
   price_per_lb_usd: number | null;
   original_price: any;
   notes: string | null;
+  source_type: string | null;
+  vendor_id: string | null;
+  lot_identifier: string | null;
+  origin_country: string | null;
+  region: string | null;
+  producer: string | null;
+  variety: string | null;
 }
 
 interface LotRow {
@@ -116,6 +123,23 @@ export default function ReleaseDetail() {
     },
     enabled: !!id,
   });
+
+  const lineVendorIds = useMemo(() => [...new Set(lines.map(l => l.vendor_id).filter(Boolean) as string[])], [lines]);
+  const { data: lineVendors = [] } = useQuery({
+    queryKey: ['green-vendors-by-ids', lineVendorIds],
+    queryFn: async () => {
+      if (lineVendorIds.length === 0) return [] as { id: string; name: string }[];
+      const { data, error } = await supabase.from('green_vendors').select('id, name').in('id', lineVendorIds);
+      if (error) throw error;
+      return data as { id: string; name: string }[];
+    },
+    enabled: lineVendorIds.length > 0,
+  });
+  const lineVendorMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    lineVendors.forEach(v => { m[v.id] = v.name; });
+    return m;
+  }, [lineVendors]);
 
   const lotIds = lines.map(l => l.lot_id).filter(Boolean) as string[];
   const { data: lots = [] } = useQuery({
@@ -389,7 +413,11 @@ export default function ReleaseDetail() {
       <Card>
         <CardContent className="p-5 space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold">{vendor?.name || 'Release'}</h1>
+            <h1 className="text-2xl font-bold">
+              {release.vendor_id
+                ? (vendor?.name || 'Release')
+                : (lineVendorIds.length > 1 ? 'Multiple vendors' : (lineVendorIds.length === 1 ? (lineVendorMap[lineVendorIds[0]] || 'Release') : 'Release'))}
+            </h1>
             {release.po_number && (
               <Badge variant="outline" className="font-mono text-sm">{release.po_number}</Badge>
             )}
@@ -506,7 +534,9 @@ export default function ReleaseDetail() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Lot #</TableHead>
+                  <TableHead>Vendor</TableHead>
                   <TableHead>Origin</TableHead>
+                  <TableHead>Source</TableHead>
                   <TableHead className="text-right">Bags</TableHead>
                   <TableHead className="text-right">Total kg</TableHead>
                   <TableHead className="text-right">Coffee $/lb</TableHead>
@@ -524,10 +554,18 @@ export default function ReleaseDetail() {
                   const lineKg = (l.bags_requested || 0) * Number(l.bag_size_kg || 0);
                   const bookKg = bookValuePerKgUsd(l.price_per_lb_usd, sharedShareUsdPerKg);
                   const bookLb = bookValuePerLbUsd(l.price_per_lb_usd, sharedShareUsdPerKg);
+                  // Origin: use line-level field first (PURCHASE/ADHOC), fall back to contract
+                  const originDisplay = l.origin_country || contract?.origin_country || contract?.origin || '—';
+                  const vendorName = l.vendor_id ? (lineVendorMap[l.vendor_id] || '—') : (vendor?.name || '—');
+                  const sourceLabel = l.source_type === 'PURCHASE' ? 'Purchase' : l.source_type === 'ADHOC' ? 'Ad-hoc' : 'Contract';
                   return (
                     <TableRow key={l.id}>
                       <TableCell className="font-mono text-xs">{lot?.lot_number || '—'}</TableCell>
-                      <TableCell className="text-sm">{contract?.origin_country || contract?.origin || '—'}</TableCell>
+                      <TableCell className="text-sm">{vendorName}</TableCell>
+                      <TableCell className="text-sm">{originDisplay}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">{sourceLabel}</Badge>
+                      </TableCell>
                       <TableCell className="text-right">{l.bags_requested}</TableCell>
                       <TableCell className="text-right">{lineKg.toLocaleString()} kg</TableCell>
                       <TableCell className="text-right">{l.price_per_lb_usd != null ? formatPerLb(Number(l.price_per_lb_usd), 'USD') : '—'}</TableCell>
@@ -548,8 +586,7 @@ export default function ReleaseDetail() {
               </TableBody>
               <tfoot className="bg-muted/30 border-t font-medium text-sm">
                 <tr>
-                  <td className="p-2"></td>
-                  <td className="p-2 text-right">Total</td>
+                  <td className="p-2" colSpan={4}></td>
                   <td className="p-2 text-right">{totalBags}</td>
                   <td className="p-2 text-right">{totalKg.toLocaleString()} kg</td>
                   <td className="p-2"></td>
