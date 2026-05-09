@@ -56,7 +56,7 @@ import AdminFeedback from "@/pages/internal/AdminFeedback";
 import Portal from "@/pages/client/Portal";
 import NewOrder from "@/pages/client/NewOrder";
 import OrderHistory from "@/pages/client/OrderHistory";
-import Products from "@/pages/client/Products";
+import ClientProducts from "@/pages/client/Products";
 import Account from "@/pages/client/Account";
 import MemberSchedule from "@/pages/member/MemberSchedule";
 import MemberBilling from "@/pages/member/MemberBilling";
