@@ -174,52 +174,67 @@ Home Island Manufacturing`;
     const subject = `Order Confirmed — ${orderNumber} — ${accountName}`;
 
     // ========== ENQUEUE EMAIL ==========
-    const messageId = crypto.randomUUID();
+    // CC strategy: the shared process-email-queue / sendLovableEmail pipeline
+    // does NOT forward a `cc` field, so instead of relying on `cc` we enqueue a
+    // SECOND message addressed directly to the orders inbox with the same body
+    // and a distinct message_id. (Option B from the spec.)
+    const senderDomain = FROM_ADDRESS.split("@")[1];
 
-    await adminClient.from("email_send_log").insert({
-      message_id: messageId,
-      template_name: "order_confirmation",
-      recipient_email: account.billing_email,
-      status: "pending",
-    });
-
-    const { error: enqueueError } = await adminClient.rpc("enqueue_email", {
-      queue_name: "transactional_emails",
-      payload: {
-        message_id: messageId,
-        to: account.billing_email,
-        // TODO: Verify enqueue_email RPC and process-email-queue forward `cc` to Resend.
-        // If not supported yet, remove this field and handle CC separately.
-        cc: CC_ADDRESS,
-        from: FROM_DISPLAY,
-        sender_domain: FROM_ADDRESS.split("@")[1],
-        subject,
-        text: emailText,
-        purpose: "transactional",
-        label: "order_confirmation",
-        queued_at: new Date().toISOString(),
-      },
-    });
-
-    if (enqueueError) {
-      console.error("[confirm-order-email] Failed to enqueue:", enqueueError.message);
+    async function enqueueOne(recipient: string): Promise<{ ok: boolean; message_id: string; error?: string }> {
+      const messageId = crypto.randomUUID();
       await adminClient.from("email_send_log").insert({
         message_id: messageId,
         template_name: "order_confirmation",
-        recipient_email: account.billing_email,
-        status: "failed",
-        error_message: "Failed to enqueue",
+        recipient_email: recipient,
+        status: "pending",
       });
+
+      const { error: enqueueError } = await adminClient.rpc("enqueue_email", {
+        queue_name: "transactional_emails",
+        payload: {
+          message_id: messageId,
+          to: recipient,
+          from: FROM_DISPLAY,
+          sender_domain: senderDomain,
+          subject,
+          text: emailText,
+          purpose: "transactional",
+          label: "order_confirmation",
+          queued_at: new Date().toISOString(),
+        },
+      });
+
+      if (enqueueError) {
+        await adminClient.from("email_send_log").insert({
+          message_id: messageId,
+          template_name: "order_confirmation",
+          recipient_email: recipient,
+          status: "failed",
+          error_message: "Failed to enqueue",
+        });
+        return { ok: false, message_id: messageId, error: enqueueError.message };
+      }
+      return { ok: true, message_id: messageId };
+    }
+
+    const primary = await enqueueOne(account.billing_email);
+    if (!primary.ok) {
+      console.error("[confirm-order-email] Failed to enqueue primary:", primary.error);
       return new Response(
         JSON.stringify({ ok: false, error: "Failed to enqueue email" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`[confirm-order-email] Enqueued confirmation for order ${orderNumber} → ${account.billing_email}`);
+    const ccCopy = await enqueueOne(CC_ADDRESS);
+    if (!ccCopy.ok) {
+      console.warn("[confirm-order-email] Failed to enqueue CC copy (non-fatal):", ccCopy.error);
+    }
+
+    console.log(`[confirm-order-email] Enqueued confirmation for order ${orderNumber} → ${account.billing_email} (cc copy: ${CC_ADDRESS})`);
 
     return new Response(
-      JSON.stringify({ ok: true, message_id: messageId }),
+      JSON.stringify({ ok: true, message_id: primary.message_id, cc_message_id: ccCopy.message_id }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
