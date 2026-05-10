@@ -4322,6 +4322,10 @@ export type Database = {
         Args: { _account_id: string; _booking_date: string }
         Returns: string
       }
+      account_id_for_account_user: {
+        Args: { _account_user_id: string }
+        Returns: string
+      }
       allocate_sourcing_sequence: {
         Args: { _count?: number; _key: string }
         Returns: number
@@ -4413,6 +4417,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_account_member: { Args: { _account_id: string }; Returns: boolean }
       mark_quote_accepted: { Args: { p_quote_id: string }; Returns: Json }
       mark_quote_sent: { Args: { p_quote_id: string }; Returns: undefined }
       move_to_dlq: {
