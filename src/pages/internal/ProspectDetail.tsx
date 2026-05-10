@@ -13,9 +13,36 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ArrowLeft, Copy, Check, FileText, Plus, CheckCircle2, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Copy, Check, FileText, Plus, CheckCircle2, ExternalLink, Send, RotateCcw, Ban, Eye } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 import { PronounsField } from '@/components/contacts/PronounsField';
+
+interface InvitationRow {
+  id: string;
+  token: string;
+  invited_at: string;
+  expires_at: string;
+  resent_at: string | null;
+  retired_at: string | null;
+}
+
+interface SubmissionRow {
+  id: string;
+  selected_tier: string | null;
+  company_name: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  billing_address_line1: string | null;
+  billing_address_line2: string | null;
+  billing_city: string | null;
+  billing_province: string | null;
+  billing_postal_code: string | null;
+  estimated_monthly_kg: number | null;
+  notes: string | null;
+  submitted_at: string;
+  status: string;
+}
 
 type ProspectStream = Database['public']['Enums']['prospect_stream'];
 type ProspectStage = Database['public']['Enums']['prospect_stage'];
@@ -66,9 +93,20 @@ export default function ProspectDetail() {
   const [noteText, setNoteText] = useState('');
   const [followUpBy, setFollowUpBy] = useState('');
 
+  // Email
+  const [formProspectEmail, setFormProspectEmail] = useState('');
+
   // Brief Me
   const [briefOpen, setBriefOpen] = useState(false);
   const [briefCopied, setBriefCopied] = useState(false);
+
+  // Invitation
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [retireConfirmOpen, setRetireConfirmOpen] = useState(false);
+
+  // Submission viewer
+  const [submissionOpen, setSubmissionOpen] = useState(false);
+  const [selectedSubmission, setSelectedSubmission] = useState<SubmissionRow | null>(null);
 
   // Convert modal
   const [convertOpen, setConvertOpen] = useState(false);
@@ -174,12 +212,39 @@ export default function ProspectDetail() {
     },
   });
 
+  const { data: invitation, refetch: refetchInvitation } = useQuery({
+    queryKey: ['prospect-invitation', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('coroast_prospect_invitations' as any)
+        .select('id, token, invited_at, expires_at, resent_at, retired_at')
+        .eq('prospect_id', id!)
+        .maybeSingle();
+      return (data ?? null) as InvitationRow | null;
+    },
+  });
+
+  const { data: submissions = [], refetch: refetchSubmissions } = useQuery({
+    queryKey: ['prospect-submissions', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('coroast_prospect_submissions' as any)
+        .select('id, selected_tier, company_name, contact_name, contact_email, contact_phone, billing_address_line1, billing_address_line2, billing_city, billing_province, billing_postal_code, estimated_monthly_kg, notes, submitted_at, status')
+        .eq('prospect_id', id!)
+        .order('submitted_at', { ascending: false });
+      return (data ?? []) as SubmissionRow[];
+    },
+  });
+
   // Initialize form when prospect loads
   useEffect(() => {
     if (prospect && !formDirty) {
       setFormBusinessName(prospect.business_name);
       setFormContactName(prospect.contact_name || '');
       setFormContactInfo(prospect.contact_info || '');
+      setFormProspectEmail((prospect as any).prospect_email || '');
       setFormPronouns((prospect as any).pronouns ?? null);
       setFormStream(prospect.stream as ProspectStream);
       setFormStage(prospect.stage as ProspectStage);
@@ -194,6 +259,7 @@ export default function ProspectDetail() {
           business_name: formBusinessName.trim(),
           contact_name: formContactName.trim() || null,
           contact_info: formContactInfo.trim() || null,
+          prospect_email: formProspectEmail.trim() || null,
           pronouns: formPronouns ? formPronouns.trim() || null : null,
           stream: formStream,
           stage: formStage,
@@ -240,6 +306,34 @@ export default function ProspectDetail() {
     setConvertOpen(true);
   };
 
+  const handleSendInvitation = async () => {
+    setInviteLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-prospect-invitation', {
+        body: { prospect_id: id },
+      });
+      const errMsg = (error?.message || (data as any)?.error) as string | undefined;
+      if (errMsg) throw new Error(errMsg === 'no_email' ? 'Add an email address before sending.' : errMsg);
+      toast.success(invitation ? 'Invitation resent' : 'Invitation sent');
+      refetchInvitation();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to send invitation');
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const handleRetireInvitation = async () => {
+    if (!invitation) return;
+    await supabase
+      .from('coroast_prospect_invitations' as any)
+      .update({ retired_at: new Date().toISOString() })
+      .eq('id', invitation.id);
+    refetchInvitation();
+    setRetireConfirmOpen(false);
+    toast.success('Invitation retired');
+  };
+
   const handleConvertToAccount = async () => {
     if (!prospect || (!convertMfg && !convertCoroast)) return;
     setConvertLoading(true);
@@ -270,6 +364,21 @@ export default function ProspectDetail() {
         .from('prospects')
         .update({ converted: true, converted_to_account_id: account.id } as any)
         .eq('id', id!);
+
+      // Retire invitation and mark submission converted if they exist
+      if (invitation) {
+        await supabase
+          .from('coroast_prospect_invitations' as any)
+          .update({ retired_at: new Date().toISOString() })
+          .eq('id', invitation.id);
+      }
+      const latestPending = submissions.find(s => s.status === 'PENDING');
+      if (latestPending) {
+        await supabase
+          .from('coroast_prospect_submissions' as any)
+          .update({ status: 'CONVERTED' })
+          .eq('id', latestPending.id);
+      }
 
       toast.success('Converted to Account');
       navigate(`/accounts/${account.id}`);
@@ -384,11 +493,20 @@ export default function ProspectDetail() {
               onChange={(next) => { setFormPronouns(next); setFormDirty(true); }}
             />
             <div>
-              <Label>Email / Phone</Label>
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={formProspectEmail}
+                onChange={(e) => { setFormProspectEmail(e.target.value); setFormDirty(true); }}
+                placeholder="hello@example.com"
+              />
+            </div>
+            <div>
+              <Label>Phone / Other Contact</Label>
               <Input
                 value={formContactInfo}
                 onChange={(e) => { setFormContactInfo(e.target.value); setFormDirty(true); }}
-                placeholder="email@example.com | 604-555-1234"
+                placeholder="604-555-1234"
               />
             </div>
             <div>
@@ -548,7 +666,130 @@ export default function ProspectDetail() {
         </CardContent>
       </Card>
 
-      {/* Section 4: Convert */}
+      {/* Section 4: Explore Invitation (co-roast prospects only) */}
+      {(prospect.stream === 'CO_ROAST' || prospect.stream === 'BOTH') && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Explore Invitation</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* No invitation yet */}
+            {!invitation && (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Send a private link so this prospect can explore co-roasting tiers, run their numbers, and express interest.
+                </p>
+                {!((prospect as any).prospect_email) && (
+                  <p className="text-xs text-amber-600">Add an email address above before sending.</p>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={inviteLoading || !((prospect as any).prospect_email)}
+                  onClick={handleSendInvitation}
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {inviteLoading ? 'Sending…' : 'Send Invitation'}
+                </Button>
+              </div>
+            )}
+
+            {/* Active invitation */}
+            {invitation && invitation.retired_at === null && new Date(invitation.expires_at) > new Date() && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge className="bg-green-600 text-white">Active</Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {invitation.resent_at
+                      ? `Last sent ${format(new Date(invitation.resent_at), 'MMM d, yyyy')}`
+                      : `Sent ${format(new Date(invitation.invited_at), 'MMM d, yyyy')}`}
+                    {' · '}expires {format(new Date(invitation.expires_at), 'MMM d, yyyy')}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs bg-muted px-2 py-1 rounded truncate max-w-xs">
+                    {`${window.location.origin}/explore/${invitation.token}`}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/explore/${invitation.token}`);
+                      toast.success('Link copied');
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="gap-1.5" disabled={inviteLoading} onClick={handleSendInvitation}>
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    {inviteLoading ? 'Sending…' : 'Resend'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-muted-foreground"
+                    onClick={() => setRetireConfirmOpen(true)}
+                  >
+                    <Ban className="h-3.5 w-3.5" />
+                    Retire
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Expired invitation */}
+            {invitation && invitation.retired_at === null && new Date(invitation.expires_at) <= new Date() && (
+              <div className="space-y-2">
+                <Badge variant="secondary">Expired</Badge>
+                <Button variant="outline" size="sm" className="gap-1.5" disabled={inviteLoading} onClick={handleSendInvitation}>
+                  <Send className="h-3.5 w-3.5" />
+                  {inviteLoading ? 'Sending…' : 'Resend Invitation'}
+                </Button>
+              </div>
+            )}
+
+            {/* Retired invitation */}
+            {invitation && invitation.retired_at !== null && (
+              <div className="space-y-2">
+                <Badge variant="outline">Retired</Badge>
+                <p className="text-xs text-muted-foreground">Invitation retired — prospect converted to account.</p>
+              </div>
+            )}
+
+            {/* Submissions */}
+            {submissions.length > 0 && (
+              <div className="border-t pt-3 space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Expressions of Interest ({submissions.length})
+                </p>
+                {submissions.map((sub) => (
+                  <div key={sub.id} className="flex items-center justify-between text-sm border rounded-md px-3 py-2">
+                    <div>
+                      <span className="font-medium">{sub.selected_tier ?? '—'}</span>
+                      <span className="text-muted-foreground ml-2 text-xs">
+                        {format(new Date(sub.submitted_at), 'MMM d, yyyy')}
+                      </span>
+                      <Badge variant="outline" className="ml-2 text-xs">{sub.status}</Badge>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setSelectedSubmission(sub); setSubmissionOpen(true); }}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Section 5: Convert */}
       {(showConvert || prospect.converted) && (
         <Card>
           <CardHeader>
@@ -613,6 +854,61 @@ export default function ProspectDetail() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Retire Confirmation */}
+      <Dialog open={retireConfirmOpen} onOpenChange={setRetireConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Retire invitation?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">The link will stop working immediately.</p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" onClick={() => setRetireConfirmOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleRetireInvitation}>Retire</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Submission Detail Modal */}
+      <Dialog open={submissionOpen} onOpenChange={setSubmissionOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Expression of Interest</DialogTitle>
+          </DialogHeader>
+          {selectedSubmission && (
+            <div className="space-y-2 text-sm">
+              <div><span className="font-medium">Tier interest: </span>{selectedSubmission.selected_tier ?? '—'}</div>
+              <div><span className="font-medium">Company: </span>{selectedSubmission.company_name ?? '—'}</div>
+              <div><span className="font-medium">Contact: </span>{selectedSubmission.contact_name ?? '—'}</div>
+              <div><span className="font-medium">Email: </span>{selectedSubmission.contact_email ?? '—'}</div>
+              <div><span className="font-medium">Phone: </span>{selectedSubmission.contact_phone ?? '—'}</div>
+              <div><span className="font-medium">Monthly volume: </span>{selectedSubmission.estimated_monthly_kg ? `${selectedSubmission.estimated_monthly_kg} kg/month` : '—'}</div>
+              {(selectedSubmission.billing_address_line1 || selectedSubmission.billing_city) && (
+                <div>
+                  <span className="font-medium">Address: </span>
+                  {[
+                    selectedSubmission.billing_address_line1,
+                    selectedSubmission.billing_address_line2,
+                    selectedSubmission.billing_city,
+                    selectedSubmission.billing_province,
+                    selectedSubmission.billing_postal_code,
+                  ].filter(Boolean).join(', ')}
+                </div>
+              )}
+              {selectedSubmission.notes && (
+                <div>
+                  <p className="font-medium mb-1">Notes:</p>
+                  <p className="bg-muted/40 rounded p-2 whitespace-pre-wrap">{selectedSubmission.notes}</p>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground pt-1">
+                Submitted {format(new Date(selectedSubmission.submitted_at), 'MMM d, yyyy h:mm a')}
+                {' · '}Status: {selectedSubmission.status}
+              </p>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

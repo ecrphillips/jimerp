@@ -63,6 +63,7 @@ import MemberBilling from "@/pages/member/MemberBilling";
 import MemberAccount from "@/pages/member/MemberAccount";
 import MyNumbers from "@/pages/member/MyNumbers";
 import NotFound from "@/pages/NotFound";
+import ExplorePage from "@/pages/public/ExplorePage";
 
 const queryClient = new QueryClient();
 
@@ -75,10 +76,11 @@ const App = () => (
         <PreviewProvider>
         <AuthProvider>
           <Routes>
-            {/* Public auth routes */}
+            {/* Public routes — no auth required */}
             <Route path="/auth" element={<Auth />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/auth/set-password" element={<SetPassword />} />
+            <Route path="/explore/:token" element={<ExplorePage />} />
             <Route path="/" element={<Navigate to="/auth" replace />} />
 
             {/* Internal (Admin/Ops) */}

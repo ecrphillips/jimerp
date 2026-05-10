@@ -30,6 +30,28 @@ export function CoRoastingTab({ enabled }: { enabled: boolean }) {
     },
   });
 
+  // Section A2 — Pending expressions of interest
+  const { data: pendingSubmissions, isLoading: loadingSubmissions } = useQuery({
+    queryKey: ['dashboard-coroast-submissions'],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('coroast_prospect_submissions' as any)
+        .select('id, selected_tier, submitted_at, prospect_id, prospects(business_name)')
+        .eq('status', 'PENDING')
+        .order('submitted_at', { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        id: string;
+        selected_tier: string | null;
+        submitted_at: string;
+        prospect_id: string;
+        prospects: { business_name: string } | null;
+      }>;
+    },
+  });
+
   // Section B — Members with incomplete certification
   const { data: incompleteChecklist, isLoading: loadingChecklist } = useQuery({
     queryKey: ['dashboard-coroast-checklist'],
@@ -162,6 +184,39 @@ export function CoRoastingTab({ enabled }: { enabled: boolean }) {
           )}
         </CardContent>
       </Card>
+
+      {/* Section A2 — Expressions of Interest */}
+      {(!!pendingSubmissions?.length || loadingSubmissions) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Pending Expressions of Interest</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingSubmissions ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <div className="space-y-2">
+                {pendingSubmissions!.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between text-sm border-b last:border-0 pb-2 last:pb-0">
+                    <div className="flex items-center gap-3">
+                      <span className="font-medium">{s.prospects?.business_name || 'Unknown'}</span>
+                      <span className="text-muted-foreground">{s.selected_tier}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground">
+                        {format(new Date(s.submitted_at), 'MMM d')}
+                      </span>
+                      <Link to={`/prospects/${s.prospect_id}`} className="text-primary hover:underline text-xs">
+                        View prospect
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Section B */}
       <Card>
