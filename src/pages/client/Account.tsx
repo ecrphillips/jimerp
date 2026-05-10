@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreview } from '@/contexts/PreviewContext';
 import { supabase } from '@/integrations/supabase/client';
 import { AccountInfoForm } from '@/components/account-management/AccountInfoForm';
 import { TeamMemberList } from '@/components/account-management/TeamMemberList';
@@ -9,7 +10,8 @@ import { LocationManagementSection } from '@/components/account-management/Locat
 
 export default function Account() {
   const { authUser } = useAuth();
-  const accountId = authUser?.accountId ?? null;
+  const { previewAccountId } = usePreview();
+  const accountId = previewAccountId ?? authUser?.accountId ?? null;
 
   const { data: account, isLoading } = useQuery({
     queryKey: ['client-account', accountId],

@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreview } from '@/contexts/PreviewContext';
 import { format } from 'date-fns';
 import { PlusCircle, Package, Truck, Clock, CheckCircle2 } from 'lucide-react';
 import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
@@ -24,14 +25,16 @@ interface Order {
 export default function Portal() {
   const navigate = useNavigate();
   const { authUser } = useAuth();
+  const { previewAccountId } = usePreview();
 
   const { data: orders, isLoading } = useQuery({
-    queryKey: ['client-portal-orders'],
+    queryKey: ['client-portal-orders', previewAccountId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('orders')
-        .select('id, order_number, status, requested_ship_date, delivery_method, created_at, location_id, shipped_or_ready, invoiced')
-        .order('created_at', { ascending: false });
+        .select('id, order_number, status, requested_ship_date, delivery_method, created_at, location_id, shipped_or_ready, invoiced');
+      if (previewAccountId) q = q.eq('account_id', previewAccountId);
+      const { data, error } = await q.order('created_at', { ascending: false });
 
       if (error) throw error;
       return (data ?? []) as Order[];
