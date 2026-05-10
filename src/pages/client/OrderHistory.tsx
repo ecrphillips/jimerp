@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
+import { usePreview } from '@/contexts/PreviewContext';
 import { format } from 'date-fns';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
@@ -29,15 +30,17 @@ interface LineItemSummary {
 
 export default function OrderHistory() {
   const queryClient = useQueryClient();
+  const { previewAccountId } = usePreview();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   const { data: orders, isLoading, error } = useQuery({
-    queryKey: ['client-orders'],
+    queryKey: ['client-orders', previewAccountId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('orders')
-        .select('id, order_number, status, requested_ship_date, work_deadline_at, delivery_method, client_po, client_notes, created_at, location_id')
-        .order('created_at', { ascending: false });
+        .select('id, order_number, status, requested_ship_date, work_deadline_at, delivery_method, client_po, client_notes, created_at, location_id');
+      if (previewAccountId) q = q.eq('account_id', previewAccountId);
+      const { data, error } = await q.order('created_at', { ascending: false });
 
       if (error) throw error;
       return (data ?? []) as Order[];

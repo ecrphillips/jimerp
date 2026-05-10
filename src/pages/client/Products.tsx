@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreview } from '@/contexts/PreviewContext';
 import { Package } from 'lucide-react';
 
 interface AllowedProduct {
@@ -19,6 +20,8 @@ interface AllowedProduct {
 
 export default function Products() {
   const { authUser } = useAuth();
+  const { previewAccountId } = usePreview();
+  const effectiveAccountId = previewAccountId ?? authUser?.accountId;
 
   // TODO: Wire this query once RLS is confirmed for client_allowed_products reads by account_id.
   // Fetches all products this account is allowed to order.
@@ -28,18 +31,18 @@ export default function Products() {
   //     .select('product_id, products(id, product_name, sku, bag_size_g, format, packaging_variant)')
   //     .eq('account_id', authUser?.accountId)
   const { data: allowedProducts, isLoading: productsLoading } = useQuery({
-    queryKey: ['client-allowed-products', authUser?.accountId],
+    queryKey: ['client-allowed-products', effectiveAccountId],
     queryFn: async () => {
       // account_id column was added via migration after types were generated,
       // so cast to any to avoid stale type error.
       const { data, error } = await (supabase as any)
         .from('client_allowed_products')
         .select('product_id, products(id, product_name, sku, bag_size_g, format, packaging_variant)')
-        .eq('account_id', authUser!.accountId!);
+        .eq('account_id', effectiveAccountId!);
       if (error) throw error;
       return (data ?? []) as AllowedProduct[];
     },
-    enabled: !!authUser?.accountId,
+    enabled: !!effectiveAccountId,
   });
 
   // TODO: Wire price lookup. Fetches latest price per product from price_list.

@@ -1518,19 +1518,35 @@ export default function AccountDetail() {
           {hasCoroasting && <Badge variant="outline" className="border-amber-500 text-amber-600">Co-Roasting</Badge>}
           {!account.is_active && <Badge variant="destructive">Inactive</Badge>}
         </div>
-        {hasCoroasting && authUser?.role === 'ADMIN' && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto"
-            onClick={() => {
-              enterPreview(account.id, account.account_name);
-              navigate('/member-portal');
-            }}
-          >
-            <Eye className="h-4 w-4 mr-1.5" />
-            Preview Portal
-          </Button>
+        {authUser?.role === 'ADMIN' && (hasManufacturing || hasCoroasting) && (
+          <div className="ml-auto flex items-center gap-2">
+            {hasManufacturing && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  enterPreview(account.id, account.account_name);
+                  navigate('/portal');
+                }}
+              >
+                <Eye className="h-4 w-4 mr-1.5" />
+                Preview Client Portal
+              </Button>
+            )}
+            {hasCoroasting && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  enterPreview(account.id, account.account_name);
+                  navigate('/member-portal');
+                }}
+              >
+                <Eye className="h-4 w-4 mr-1.5" />
+                Preview Member Portal
+              </Button>
+            )}
+          </div>
         )}
       </div>
 

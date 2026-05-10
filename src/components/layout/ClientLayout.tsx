@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreview } from '@/contexts/PreviewContext';
 import { Button } from '@/components/ui/button';
 import { AccountSheet } from '@/components/account/AccountSheet';
 import {
@@ -11,7 +12,8 @@ import {
   LogOut,
   Menu,
   X,
-  ShoppingBag
+  ShoppingBag,
+  Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import hiIcon from '@/assets/home-island-icon.png';
@@ -32,6 +34,7 @@ const navItems = [
 export function ClientLayout({ children }: ClientLayoutProps) {
   const { authUser, signOut } = useAuth();
   const navigate = useNavigate();
+  const { isPreviewMode, previewAccountName, previewAccountId, exitPreview } = usePreview();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = React.useState(false);
 
@@ -134,6 +137,28 @@ export function ClientLayout({ children }: ClientLayoutProps) {
             </div>
           </div>
         </header>
+
+        {/* Preview banner */}
+        {isPreviewMode && (
+          <div className="sticky top-0 z-[60] flex items-center justify-between gap-4 bg-amber-400 px-4 py-2 text-amber-950">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Eye className="h-4 w-4" />
+              Previewing as {previewAccountName}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 border-amber-600 bg-amber-300 text-amber-950 hover:bg-amber-200"
+              onClick={() => {
+                const id = previewAccountId;
+                exitPreview();
+                navigate(`/accounts/${id}`);
+              }}
+            >
+              Exit Preview
+            </Button>
+          </div>
+        )}
 
         {/* Page content - uses same page-container styling */}
         <main className="flex-1 overflow-y-auto">

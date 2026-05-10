@@ -12,8 +12,9 @@ import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreview } from '@/contexts/PreviewContext';
 import { toast } from 'sonner';
-import { Plus, Minus, Trash2, Package } from 'lucide-react';
+import { Plus, Minus, Trash2, Package, Eye } from 'lucide-react';
 import { GramPackagingBadge, formatGramsLabel } from '@/components/GramPackagingBadge';
 import { UnusualOrderModal, type FlaggedItem } from '@/components/client/UnusualOrderModal';
 import { LocationSelect } from '@/components/orders/LocationSelect';
@@ -57,6 +58,7 @@ function buildDisplayName(productName: string, packagingTypeName: string | null,
 
 export default function NewOrder() {
   const { authUser } = useAuth();
+  const { isPreviewMode } = usePreview();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -670,6 +672,13 @@ export default function NewOrder() {
         <h1 className="page-title">New Order</h1>
       </div>
 
+      {isPreviewMode && (
+        <Alert className="mb-4 border-amber-400 bg-amber-50 text-amber-900">
+          <Eye className="h-4 w-4" />
+          <AlertDescription>Preview mode — order submission is disabled.</AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[1fr,400px]">
         {/* Left: Product List */}
         <Card>
@@ -899,7 +908,7 @@ export default function NewOrder() {
               <Button
                 className="w-full"
                 onClick={handleSubmitClick}
-                disabled={submitting || lineItems.length === 0}
+                disabled={isPreviewMode || submitting || lineItems.length === 0}
               >
                 {submitting ? 'Submitting…' : 'Submit Order'}
               </Button>
