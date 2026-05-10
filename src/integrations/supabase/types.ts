@@ -4326,6 +4326,10 @@ export type Database = {
         Args: { _account_user_id: string }
         Returns: string
       }
+      account_user_is_on_my_account: {
+        Args: { _account_user_id: string }
+        Returns: boolean
+      }
       allocate_sourcing_sequence: {
         Args: { _count?: number; _key: string }
         Returns: number
@@ -4468,6 +4472,10 @@ export type Database = {
           p_location_access: string
         }
         Returns: undefined
+      }
+      profile_is_on_my_account: {
+        Args: { _profile_user_id: string }
+        Returns: boolean
       }
       read_email_batch: {
         Args: { batch_size: number; queue_name: string; vt: number }
