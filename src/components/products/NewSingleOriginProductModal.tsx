@@ -573,6 +573,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
             fgNameSuffix={finishedGoodName.trim()}
             variants={validVariants}
             existingSkus={existingSkus ?? new Set()}
+            roastGroupKey={roastGroupMode === 'existing' ? selectedRoastGroup || undefined : undefined}
           />
 
           {/* Step 5: Price */}

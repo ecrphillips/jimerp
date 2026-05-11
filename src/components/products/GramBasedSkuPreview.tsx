@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { AlertCircle, CheckCircle2, ExternalLink } from 'lucide-react';
 import { formatGramsSuffix, type PackagingVariantEntry } from './PackagingVariantsSection';
 import { 
   buildSku, 
@@ -29,6 +30,11 @@ interface GramBasedSkuPreviewProps {
   fgNameSuffix: string;
   variants: PackagingVariantEntry[];
   existingSkus: Set<string>;
+  /**
+   * Roast group key for the currently-selected roast group (e.g., "ETHIOPIA_YIRGACHEFFE").
+   * Used to build a link to the roast group detail page when the origin is unresolvable.
+   */
+  roastGroupKey?: string;
 }
 
 /**
@@ -99,6 +105,7 @@ export function GramBasedSkuPreview({
   fgNameSuffix,
   variants,
   existingSkus,
+  roastGroupKey,
 }: GramBasedSkuPreviewProps) {
   const { resolvedSkus, originError } = useMemo(() => {
     if (!clientCode || !fgNameSuffix || variants.length === 0) {
@@ -154,11 +161,23 @@ export function GramBasedSkuPreview({
 
   if (originError) {
     return (
-      <div className="mt-4 p-4 border border-destructive/40 rounded-lg bg-destructive/5">
-        <p className="text-sm text-destructive flex items-center gap-2">
-          <AlertCircle className="h-4 w-4" />
-          {originError}
+      <div className="mt-4 p-4 border border-destructive/40 rounded-lg bg-destructive/5 space-y-2">
+        <p className="text-sm text-destructive flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <span>
+            Product cannot be created until the selected roast group has an origin set.
+            Open the roast group and add an origin, or switch this product to a blend.
+          </span>
         </p>
+        {roastGroupKey && (
+          <Link
+            to={`/roast-groups/${encodeURIComponent(roastGroupKey)}`}
+            className="inline-flex items-center gap-1 text-xs font-medium text-destructive underline underline-offset-2 hover:no-underline ml-6"
+          >
+            Open roast group details
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+        )}
       </div>
     );
   }
