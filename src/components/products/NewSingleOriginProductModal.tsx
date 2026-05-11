@@ -8,7 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { COMMON_ORIGINS } from '@/lib/skuGenerator';
 import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
 import { RoastGroupPreview } from './RoastGroupPreview';
@@ -157,6 +159,11 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
   // Derive isBlend from selected roast group
   const selectedRoastGroupRecord = roastGroups?.find(g => g.roast_group === selectedRoastGroup);
   const isBlendSelected = selectedRoastGroupRecord?.is_blend === true;
+  const selectedRgMissingOrigin =
+    roastGroupMode === 'existing' &&
+    !!selectedRoastGroupRecord &&
+    !selectedRoastGroupRecord.is_blend &&
+    !(selectedRoastGroupRecord.origin?.trim());
   
   // Derived values
   const selectedClient = useMemo(() => 
@@ -240,6 +247,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
     if (!clientId) return false;
     if (!selectedClient?.account_code) return false;
     if (roastGroupMode === 'existing' && !selectedRoastGroup) return false;
+    if (selectedRgMissingOrigin) return false;
     if (roastGroupMode === 'new') {
       if (!origin) return false;
       if (origin === '__custom__' && !customOrigin.trim()) return false;
@@ -248,7 +256,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
     if (validVariants.length === 0) return false;
     if (!lifecycle) return false;
     return true;
-  }, [clientId, selectedClient, roastGroupMode, selectedRoastGroup, origin, customOrigin, finishedGoodName, validVariants, lifecycle]);
+  }, [clientId, selectedClient, roastGroupMode, selectedRoastGroup, selectedRgMissingOrigin, origin, customOrigin, finishedGoodName, validVariants, lifecycle]);
   
   // Reset form
   const resetForm = () => {
@@ -309,6 +317,10 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
         skuOrigin = selectedRg?.origin ?? '';
       }
       
+      if (roastGroupMode === 'existing' && !skuOrigin) {
+        throw new Error('Selected roast group is missing an origin. Open the roast group detail page and set the origin before creating products.');
+      }
+
       // Get resolved SKUs with collision handling
       // Use the user-entered suffix (finishedGoodName) for the FG name code
       let resolvedSkus;
@@ -506,17 +518,35 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
             </RadioGroup>
 
             {roastGroupMode === 'existing' && (
-              <Select value={selectedRoastGroup || 'NONE'} onValueChange={(v) => setSelectedRoastGroup(v === 'NONE' ? '' : v)}>
-                <SelectTrigger><SelectValue placeholder="Select roast group" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NONE">Select roast group...</SelectItem>
-                  {singleOriginRoastGroups.map(g => (
-                    <SelectItem key={g.roast_group} value={g.roast_group}>
-                      {g.display_name?.trim() || g.roast_group.replace(/_/g, ' ')} ({g.roast_group_code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <>
+                <Select value={selectedRoastGroup || 'NONE'} onValueChange={(v) => setSelectedRoastGroup(v === 'NONE' ? '' : v)}>
+                  <SelectTrigger><SelectValue placeholder="Select roast group" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE">Select roast group...</SelectItem>
+                    {singleOriginRoastGroups.map(g => (
+                      <SelectItem key={g.roast_group} value={g.roast_group}>
+                        {g.display_name?.trim() || g.roast_group.replace(/_/g, ' ')} ({g.roast_group_code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedRgMissingOrigin && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Origin missing on this roast group</AlertTitle>
+                    <AlertDescription>
+                      Products can't be created until this roast group has an origin set.{' '}
+                      <Link
+                        to={`/roast-groups/${encodeURIComponent(selectedRoastGroup)}`}
+                        className="underline font-medium"
+                        onClick={() => onOpenChange(false)}
+                      >
+                        Open roast group to fix
+                      </Link>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </>
             )}
 
             {roastGroupMode === 'new' && (
