@@ -269,7 +269,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
   
   // Save mutation
   const saveMutation = useMutation({
-    mutationFn: async (opts: { pricingIncomplete: boolean }) => {
+    mutationFn: async ({ pricingIncomplete }: { pricingIncomplete: boolean } = { pricingIncomplete: true }) => {
       const displayName = fullFinishedGoodName;
       if (!displayName) throw new Error('Product name is required');
       if (!selectedClient) throw new Error('Client is required');
@@ -331,7 +331,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
       const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
       const hasPrice = !isNaN(priceValue);
 
-      const cleanedOverrides = opts.pricingIncomplete
+      const cleanedOverrides = pricingIncomplete
         ? {}
         : stripRedundantOverrides(overrides, consoleVariants, FALLBACK_PRESET, PKG_DEFAULTS);
 
@@ -363,7 +363,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
           grind_options: ['WHOLE_BEAN'] as const,
           is_active: true,
           is_perennial: lifecycle === 'perennial',
-          pricing_incomplete: opts.pricingIncomplete,
+          pricing_incomplete: pricingIncomplete,
           ...overrideFor(skuData),
         };
         const { data: newProduct, error } = await supabase
@@ -430,7 +430,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
         count: createdProducts.length, 
         name: displayName, 
         adjustedCount,
-        pricingIncomplete: opts.pricingIncomplete,
+        pricingIncomplete,
       };
     },
     onSuccess: (result) => {
@@ -603,6 +603,13 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
 
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button variant="outline" onClick={() => { resetForm(); onOpenChange(false); }}>Cancel</Button>
+            <Button
+              variant="secondary"
+              onClick={() => saveMutation.mutate({ pricingIncomplete: true })}
+              disabled={!canSave || saveMutation.isPending}
+            >
+              Create without pricing
+            </Button>
             <Button
               onClick={() => {
                 setOverrides(buildEmptyMixingConsoleValue(consoleVariants));
