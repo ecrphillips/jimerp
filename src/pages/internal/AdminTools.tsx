@@ -142,10 +142,12 @@ export default function AdminTools() {
     
     setIsResetting(true);
     try {
-      const { error } = await supabase.rpc('dev_test_reset');
+      const { data, error } = await supabase.rpc('dev_test_reset');
       if (error) throw error;
-      
-      toast.success('Test data reset complete');
+
+      const counts = (data ?? {}) as Record<string, number>;
+      const totalCleared = Object.values(counts).reduce((sum, n) => sum + (n ?? 0), 0);
+      toast.success(`Test data reset complete. Cleared ${totalCleared} rows across ${Object.keys(counts).length} tables.`);
       setShowResetModal(false);
       setResetConfirmText('');
       setResetUnderstood(false);
@@ -186,14 +188,14 @@ export default function AdminTools() {
       const { data, error } = await supabase.rpc('dev_reset_test_day');
       if (error) throw error;
       
-      const counts = data as Record<string, number>;
-      const totalCleared = Object.values(counts).reduce((sum, count) => sum + count, 0);
-      
+      const counts = (data ?? {}) as Record<string, number>;
+      const totalCleared = Object.values(counts).reduce((sum, n) => sum + (n ?? 0), 0);
+
       toast.success(
         `Test day reset complete. Cleared ${totalCleared} rows: ` +
-        `${counts.orders} orders, ${counts.order_line_items} line items, ` +
-        `${counts.roasted_batches} batches, ${counts.packing_runs} packing runs, ` +
-        `${counts.inventory_transactions} inventory txns`
+        `${counts.orders ?? 0} orders, ${counts.order_line_items ?? 0} line items, ` +
+        `${counts.roasted_batches ?? 0} batches, ${counts.packing_runs ?? 0} packing runs, ` +
+        `${counts.inventory_transactions ?? 0} inventory txns`
       );
       
       setShowResetTestDayModal(false);
@@ -442,7 +444,7 @@ export default function AdminTools() {
             <CardTitle className="text-lg">Dev / Test Reset</CardTitle>
           </div>
           <CardDescription>
-            Clears all orders and production state while preserving products, clients, and configuration.
+            Clears ALL orders and all transactional data. Preserves master data (clients, products, roast groups, green coffee, pricing, packaging, accounts, co-roasting).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -450,20 +452,25 @@ export default function AdminTools() {
             <div className="text-sm text-muted-foreground">
               <p className="font-medium mb-2">This will delete:</p>
               <ul className="list-disc list-inside space-y-1 ml-2">
-                <li>All orders and line items</li>
-                <li>All roasted batches and packing runs</li>
+                <li>All orders, line items, ship picks, inventory transactions, order notifications, audit log</li>
+                <li>All roasted batches, packing runs, exceptions, andon picks, external demand</li>
                 <li>All production checkmarks and plan items</li>
-                <li>All andon picks and external demand</li>
-                <li>All WIP and FG inventory records</li>
+                <li>All WIP ledger / adjustments and FG inventory log (FG and roast group inventory zeroed)</li>
+                <li>All quotes, offer workspace sessions, standing offer sessions</li>
+                <li>All prospects, prospect notes, client notes</li>
+                <li>All email send log/state, unsubscribe tokens, suppressed emails, feedback submissions</li>
+                <li>All locked prices</li>
               </ul>
             </div>
             <div className="text-sm text-muted-foreground">
               <p className="font-medium mb-2">This will NOT delete:</p>
               <ul className="list-disc list-inside space-y-1 ml-2">
-                <li>Clients, products, roast groups</li>
-                <li>Board configuration</li>
-                <li>Price lists</li>
-                <li>Users and roles</li>
+                <li>Accounts, account users, clients, products, roast groups</li>
+                <li>Green coffee (vendors, samples, lots, contracts, purchases, releases)</li>
+                <li>Pricing rules/tiers/profiles, packaging costs/types, price list</li>
+                <li>Board config, sourcing sequences (PO/lot counters)</li>
+                <li>Co-roasting data (use the Clear All Co-Roasting Data button)</li>
+                <li>Users, roles, profiles, app settings</li>
               </ul>
             </div>
             <Button 
@@ -529,7 +536,7 @@ export default function AdminTools() {
                 <CardTitle className="text-lg">Reset Test Day (DEV ONLY)</CardTitle>
               </div>
               <CardDescription>
-                Complete reset of all transactional data. Returns inventory to zero state. Hidden in production.
+                Same as Dev / Test Reset above. Returns row counts for inspection. Hidden in production.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -537,19 +544,21 @@ export default function AdminTools() {
                 <div className="text-sm text-muted-foreground">
                   <p className="font-medium mb-2">This will delete (in FK-safe order):</p>
                   <ul className="list-disc list-inside space-y-1 ml-2">
-                    <li>All inventory_transactions (the ledger)</li>
-                    <li>All ship_picks, packing_runs, roasted_batches</li>
-                    <li>All order_line_items and orders (admin-created)</li>
-                    <li>All production checkmarks and plan items</li>
-                    <li>All andon picks and external demand</li>
+                    <li>ALL orders, line items, ship_picks, inventory_transactions, order_notifications, audit log</li>
+                    <li>All roasted_batches, packing_runs, exceptions, andon_picks, external_demand</li>
+                    <li>All production checkmarks and plan items, WIP ledger/adjustments, FG inventory log</li>
+                    <li>All quotes, offer_workspace_*, standing_offer_*</li>
+                    <li>All prospects, prospect_notes, client_notes</li>
+                    <li>All email_send_log/state, unsubscribe tokens, suppressed_emails, feedback_submissions, locked_prices</li>
                   </ul>
                 </div>
                 <div className="text-sm text-muted-foreground">
                   <p className="font-medium mb-2">Preserves:</p>
                   <ul className="list-disc list-inside space-y-1 ml-2">
-                    <li>Clients, products, roast groups</li>
-                    <li>Board configuration (source_board_products)</li>
-                    <li>Price lists, users, roles</li>
+                    <li>Accounts, clients, products, roast groups, green coffee</li>
+                    <li>Pricing/packaging config, price list, board config, sourcing sequences</li>
+                    <li>Co-roasting data (separate button)</li>
+                    <li>Users, roles, profiles, app settings</li>
                   </ul>
                 </div>
                 <Button 
@@ -575,7 +584,7 @@ export default function AdminTools() {
                 <CardTitle className="text-lg">Reset Master Data (DEV ONLY)</CardTitle>
               </div>
               <CardDescription>
-                <span className="font-bold text-red-600">NUCLEAR OPTION:</span> Clears ALL clients, products, roast groups, and their dependencies. Use to start fresh with real-world data entry.
+                <span className="font-bold text-red-600">NUCLEAR OPTION:</span> Runs Dev / Test Reset, then deletes ALL master data (accounts, clients, products, roast groups, green coffee, pricing, packaging, co-roasting). Use to start completely fresh.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -583,19 +592,21 @@ export default function AdminTools() {
                 <div className="text-sm text-muted-foreground">
                   <p className="font-medium mb-2">This will DELETE:</p>
                   <ul className="list-disc list-inside space-y-1 ml-2">
-                    <li>All clients and client locations</li>
-                    <li>All products and price lists</li>
-                    <li>All roast groups and inventory levels</li>
-                    <li>All orders, batches, packing runs</li>
-                    <li>All board configurations</li>
-                    <li>All green coffee lots</li>
+                    <li>Everything in Dev / Test Reset (orders, production, inventory, quotes/offers, CRM, comms)</li>
+                    <li>All accounts, account_users, account_locations, clients, client_locations</li>
+                    <li>All products, roast_groups, roast_group_components/notes/inventory_levels, fg_inventory rows</li>
+                    <li>All green coffee (vendors, samples, lots, contracts, purchases, releases, notes, snapshots)</li>
+                    <li>All pricing (rules, tiers, profiles, price_list), packaging (costs, types)</li>
+                    <li>All board configuration (source_board_products, client_allowed_products)</li>
+                    <li>All co-roasting (members, bookings, billing periods, hour ledger, invoices, storage, waivers, blocks, prospects)</li>
                   </ul>
                 </div>
                 <div className="text-sm text-muted-foreground">
                   <p className="font-medium mb-2">Preserves:</p>
                   <ul className="list-disc list-inside space-y-1 ml-2">
-                    <li>Schema, enums, constraints</li>
-                    <li>Auth users and roles</li>
+                    <li>Schema, enums, constraints, RLS policies</li>
+                    <li>Auth users, profiles, user_roles</li>
+                    <li>app_settings, sourcing_sequences (PO/lot counter monotonicity)</li>
                   </ul>
                 </div>
                 <Button 
@@ -652,7 +663,7 @@ export default function AdminTools() {
                 onCheckedChange={(checked) => setResetUnderstood(checked === true)}
               />
               <Label htmlFor="reset-understood" className="text-sm leading-relaxed cursor-pointer">
-                I understand this deletes all test orders and production data
+                I understand this deletes ALL orders, production, inventory, quotes/offers, prospects, CRM notes, comms, and locked prices
               </Label>
             </div>
           </div>
