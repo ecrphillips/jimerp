@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { usePreview } from '@/contexts/PreviewContext';
 import { format } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
@@ -154,7 +155,7 @@ export default function OrderHistory() {
               <div>
                 <strong>Requested Ship Date:</strong>{' '}
                 {selectedOrder.requested_ship_date
-                  ? format(new Date(selectedOrder.requested_ship_date), 'MMM d, yyyy')
+                  ? format(parseDateOnly(selectedOrder.requested_ship_date)!, 'MMM d, yyyy')
                   : '—'}
               </div>
               <div><strong>Created:</strong> {format(new Date(selectedOrder.created_at), 'MMM d, yyyy h:mm a')}</div>
@@ -292,7 +293,7 @@ export default function OrderHistory() {
                       </td>
                       <td className="py-3 pr-4 text-muted-foreground">
                         {o.requested_ship_date
-                          ? format(new Date(o.requested_ship_date), 'MMM d, yyyy')
+                          ? format(parseDateOnly(o.requested_ship_date)!, 'MMM d, yyyy')
                           : '—'}
                       </td>
                       <td className="py-3">

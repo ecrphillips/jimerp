@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { formatMoney, formatPerKg, formatPerLb } from '@/lib/formatMoney';
 import { format } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -976,7 +977,7 @@ function LotDetailPanel({
     lines.push(`Bags: ${lot.bags_released}`);
     lines.push(`Bag Size: ${lot.bag_size_kg} kg`);
     lines.push(`kg Received: ${kgReceived}`);
-    if (lot.received_date) lines.push(`Received: ${format(new Date(lot.received_date + 'T00:00:00'), 'MMM d, yyyy')}`);
+    if (lot.received_date) lines.push(`Received: ${format(parseDateOnly(lot.received_date)!, 'MMM d, yyyy')}`);
     if (lot.warehouse_location) lines.push(`Warehouse: ${lot.warehouse_location}`);
     if (lot.exceptions_noted) {
       lines.push(`Exceptions: Yes`);
@@ -1226,7 +1227,7 @@ function LotDetailPanel({
                     )}
                   </div>
                 )}
-                <div><span className="text-muted-foreground">Received:</span> {lot.received_date ? format(new Date(lot.received_date + 'T00:00:00'), 'MMM d, yyyy') : '—'}</div>
+                <div><span className="text-muted-foreground">Received:</span> {lot.received_date ? format(parseDateOnly(lot.received_date)!, 'MMM d, yyyy') : '—'}</div>
                 <div><span className="text-muted-foreground">Carrier:</span> {lot.carrier || '—'}</div>
               </div>
 

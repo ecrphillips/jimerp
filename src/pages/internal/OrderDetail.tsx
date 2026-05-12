@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock, FileText, Clock, Trash2 } from 'lucide-react';
 import { LocationBadge } from '@/components/orders/LocationSelect';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
@@ -582,7 +583,7 @@ export default function OrderDetail() {
             <div>
               <strong>Expected Ship Date:</strong>{' '}
               {order.requested_ship_date
-                ? format(new Date(order.requested_ship_date), 'MMM d, yyyy')
+                ? format(parseDateOnly(order.requested_ship_date)!, 'MMM d, yyyy')
                 : '—'}
               <span className="text-xs text-muted-foreground ml-1">(client intent)</span>
             </div>

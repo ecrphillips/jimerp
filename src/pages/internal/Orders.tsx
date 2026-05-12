@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subDays, startOfDay } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 import { 
   MessageSquare, 
   Plus,
@@ -82,7 +83,7 @@ export default function Orders() {
   // Helper to get the "age reference" date for an order
   const getAgeReference = (order: NonNullable<typeof data>[0]) => {
     if (order.work_deadline_at) return new Date(order.work_deadline_at);
-    if (order.requested_ship_date) return new Date(order.requested_ship_date);
+    if (order.requested_ship_date) return parseDateOnly(order.requested_ship_date)!;
     return new Date(order.created_at);
   };
 
@@ -183,8 +184,8 @@ export default function Orders() {
       if (aDeadline === null && bDeadline !== null) return 1;
       if (aDeadline !== null && bDeadline === null) return -1;
       if (aDeadline === null && bDeadline === null) {
-        const aShip = a.requested_ship_date ? new Date(a.requested_ship_date).getTime() : Infinity;
-        const bShip = b.requested_ship_date ? new Date(b.requested_ship_date).getTime() : Infinity;
+        const aShip = a.requested_ship_date ? parseDateOnly(a.requested_ship_date)!.getTime() : Infinity;
+        const bShip = b.requested_ship_date ? parseDateOnly(b.requested_ship_date)!.getTime() : Infinity;
         if (aShip !== bShip) return aShip - bShip;
         return a.order_number.localeCompare(b.order_number);
       }
@@ -193,8 +194,8 @@ export default function Orders() {
       const directedComparison = deadlineSortDir === 'asc' ? comparison : -comparison;
       if (directedComparison !== 0) return directedComparison;
       
-      const aShip = a.requested_ship_date ? new Date(a.requested_ship_date).getTime() : Infinity;
-      const bShip = b.requested_ship_date ? new Date(b.requested_ship_date).getTime() : Infinity;
+      const aShip = a.requested_ship_date ? parseDateOnly(a.requested_ship_date)!.getTime() : Infinity;
+      const bShip = b.requested_ship_date ? parseDateOnly(b.requested_ship_date)!.getTime() : Infinity;
       if (aShip !== bShip) return aShip - bShip;
       return a.order_number.localeCompare(b.order_number);
     });

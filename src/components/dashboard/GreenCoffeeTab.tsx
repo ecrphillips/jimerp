@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { CalendarDays, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { differenceInDays } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 
 export function GreenCoffeeTab({ enabled }: { enabled: boolean }) {
   const navigate = useNavigate();
@@ -49,9 +50,9 @@ export function GreenCoffeeTab({ enabled }: { enabled: boolean }) {
 
       for (const [rg, lots] of Object.entries(byRG)) {
         for (const lot of lots) {
-          const startDate = lot.green_lots.received_date 
-            ? new Date(lot.green_lots.received_date) 
-            : new Date(lot.green_lots.expected_delivery_date || today);
+          const startDate = parseDateOnly(lot.green_lots.received_date)
+            ?? parseDateOnly(lot.green_lots.expected_delivery_date)
+            ?? today;
           const daysRemaining = differenceInDays(
             new Date(startDate.getTime() + lot.green_lots.estimated_days_to_consume * 86400000),
             today

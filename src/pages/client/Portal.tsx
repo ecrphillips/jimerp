@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
 import { format } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 import { PlusCircle, Package, Truck, Clock, CheckCircle2 } from 'lucide-react';
 import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
 
@@ -126,7 +127,7 @@ export default function Portal() {
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {order.requested_ship_date 
-                            ? `Ship by ${format(new Date(order.requested_ship_date), 'MMM d')}`
+                            ? `Ship by ${format(parseDateOnly(order.requested_ship_date)!, 'MMM d')}`
                             : `Created ${format(new Date(order.created_at), 'MMM d')}`
                           }
                         </div>

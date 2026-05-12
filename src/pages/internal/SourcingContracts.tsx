@@ -6,6 +6,7 @@ import { CreateReleaseModal } from '@/components/sourcing/releases/CreateRelease
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 import { formatPerKg } from '@/lib/formatMoney';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -999,7 +1000,7 @@ function ContractDetailPanel({
                             {lot.status === 'EN_ROUTE' && lot.expected_delivery_date
                               ? `Arriving ${format(new Date(lot.expected_delivery_date + 'T00:00:00'), 'MMM d, yyyy')}`
                               : lot.received_date
-                              ? `Received ${format(new Date(lot.received_date + 'T00:00:00'), 'MMM d, yyyy')}`
+                              ? `Received ${format(parseDateOnly(lot.received_date)!, 'MMM d, yyyy')}`
                               : ''}
                           </p>
                         </div>

@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -272,7 +273,7 @@ export default function MemberStorageSection({ memberId, tier }: MemberStorageSe
                 <tbody>
                   {storageHistory.map((s: any) => {
                     const periodLabel = s.coroast_billing_periods?.period_start
-                      ? format(new Date(s.coroast_billing_periods.period_start + 'T00:00:00'), 'MMM yyyy')
+                      ? format(parseDateOnly(s.coroast_billing_periods.period_start)!, 'MMM yyyy')
                       : '—';
                     const charge = s.paid_pallets * Number(s.rate_per_add_pallet);
                     return (

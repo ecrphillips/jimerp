@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format, startOfYear, subMonths } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -791,7 +792,7 @@ function InvoiceHistorySection({ memberId }: { memberId: string }) {
         ) : (
           <div className="space-y-2">
             {invoiceHistory.map((inv) => {
-              const periodLabel = format(new Date(inv.period_start + 'T00:00:00'), 'MMMM yyyy');
+              const periodLabel = format(parseDateOnly(inv.period_start)!, 'MMMM yyyy');
               return (
                 <div key={inv.id} className="flex items-center justify-between border-b last:border-0 py-2">
                   <div>
