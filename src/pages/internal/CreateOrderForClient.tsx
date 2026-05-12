@@ -120,6 +120,22 @@ export default function CreateOrderForClient() {
     },
   });
 
+  // Fetch client locations (shared cache key with LocationSelect component)
+  const { data: clientLocations } = useQuery({
+    queryKey: ['client-locations', selectedClientId],
+    queryFn: async () => {
+      if (!selectedClientId) return [];
+      const { data, error } = await supabase
+        .from('client_locations')
+        .select('id')
+        .eq('client_id', selectedClientId)
+        .eq('is_active', true);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!selectedClientId,
+  });
+
   // Fetch products for selected client with packaging type join
   const { data: products, isLoading: productsLoading } = useQuery({
     queryKey: ['client-products-admin', selectedClientId],
@@ -292,6 +308,10 @@ export default function CreateOrderForClient() {
   const submitOrder = async () => {
     if (!selectedClientId) {
       toast.error('Select a client');
+      return;
+    }
+    if (clientLocations && clientLocations.length > 0 && !selectedLocationId) {
+      toast.error('Select a delivery location for this client');
       return;
     }
     if (lineItems.length === 0) {
@@ -573,6 +593,7 @@ export default function CreateOrderForClient() {
               clientId={selectedClientId}
               value={selectedLocationId}
               onChange={setSelectedLocationId}
+              required
             />
           )}
         </CardContent>

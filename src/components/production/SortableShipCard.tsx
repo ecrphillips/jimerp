@@ -12,7 +12,7 @@ import { OverdueBadge, isOrderOverdue } from './OverdueBadge';
 import { format, parseISO } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { TIMEZONE } from '@/lib/productionScheduling';
-import { Truck, Clock, ChevronDown, ChevronRight, MessageSquare, AlertTriangle, ExternalLink, Layers, CheckCircle2, GripVertical } from 'lucide-react';
+import { Truck, Clock, ChevronDown, ChevronRight, MessageSquare, AlertTriangle, ExternalLink, Layers, CheckCircle2, GripVertical, MapPin } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -50,6 +50,7 @@ interface ShippableOrder {
   missingUnitsTotal: number;
   ship_display_order: number | null;
   manually_deprioritized?: boolean;
+  location_name: string | null;
 }
 
 interface ShipPick {
@@ -297,6 +298,15 @@ export function SortableShipCard({
             </span>
             <span>•</span>
             <span>{order.delivery_method}</span>
+            {order.location_name && (
+              <>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <MapPin className="h-3 w-3" />
+                  {order.location_name}
+                </span>
+              </>
+            )}
             <span>•</span>
             <span className="flex items-center gap-1">
               <Layers className="h-3 w-3" />
