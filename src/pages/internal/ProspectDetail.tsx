@@ -221,7 +221,7 @@ export default function ProspectDetail() {
         .select('id, token, invited_at, expires_at, resent_at, retired_at')
         .eq('prospect_id', id!)
         .maybeSingle();
-      return (data ?? null) as InvitationRow | null;
+      return (data ?? null) as unknown as InvitationRow | null;
     },
   });
 
