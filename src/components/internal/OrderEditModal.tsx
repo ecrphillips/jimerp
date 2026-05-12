@@ -11,10 +11,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Plus, Trash2, Edit, UserPlus } from 'lucide-react';
+import { Plus, Trash2, Edit } from 'lucide-react';
+import { CreatedByBadge } from '@/components/orders/CreatedByBadge';
 import type { Database } from '@/integrations/supabase/types';
 
 type DeliveryMethod = Database['public']['Enums']['delivery_method'];
@@ -41,6 +41,7 @@ interface OrderData {
   account_id: string;
   updated_at?: string;
   created_by_admin?: boolean;
+  created_by_user_id?: string | null;
 }
 
 interface OrderEditModalProps {
@@ -257,10 +258,7 @@ export function OrderEditModal({
             <Edit className="h-5 w-5" />
             Edit Order {order.order_number}
             {order.created_by_admin && (
-              <Badge variant="outline" className="ml-2 text-xs">
-                <UserPlus className="h-3 w-3 mr-1" />
-                Admin Created
-              </Badge>
+              <CreatedByBadge userId={order.created_by_user_id} variant="modal" />
             )}
           </DialogTitle>
         </DialogHeader>
