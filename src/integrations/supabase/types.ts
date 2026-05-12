@@ -4407,6 +4407,14 @@ export type Database = {
         Args: { p_client_id: string }
         Returns: Json
       }
+      get_coroast_busy_slots: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          booking_date: string
+          start_time: string
+          end_time: string
+        }[]
+      }
       get_order_delete_preflight: {
         Args: { p_order_id: string }
         Returns: Json

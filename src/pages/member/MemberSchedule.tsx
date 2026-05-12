@@ -24,7 +24,7 @@ import { parseDateOnly } from '@/lib/dateOnly';
 import {
   checkOverlap, timeToMinutes, formatTime12, TIER_RATES,
   HOUR_START, HOUR_END, TOTAL_HOURS, ROW_HEIGHT,
-  type BookingRow, type BlockRow, type AvailabilityWindow,
+  type BookingRow, type BlockRow, type AvailabilityWindow, type BusySlot,
 } from '@/components/bookings/bookingUtils';
 import { AvailabilityTimeSelect } from '@/components/bookings/AvailabilityTimeSelect';
 import { DAYS_OF_WEEK, DAY_LABELS, JS_DAY_TO_STRING } from '@/components/coroast/types';
@@ -170,6 +170,25 @@ export default function MemberSchedule() {
     },
   });
 
+  // Other members' bookings on the shared roaster — redacted to (date, start, end) by the
+  // get_coroast_busy_slots SECURITY DEFINER RPC. Direct SELECT is RLS-restricted to the
+  // caller's own account, so we use the RPC to surface "this slot is taken" without
+  // leaking member names, notes, or account ids.
+  const { data: otherBusy = [] } = useQuery({
+    queryKey: ['member-portal-other-busy'],
+    queryFn: async () => {
+      const from = format(new Date(), 'yyyy-MM-dd');
+      const to = format(addWeeks(new Date(), 13), 'yyyy-MM-dd');
+      const { data, error } = await supabase.rpc('get_coroast_busy_slots', {
+        p_from: from,
+        p_to: to,
+      });
+      if (error) throw error;
+      return (data ?? []) as BusySlot[];
+    },
+    enabled: !!memberId,
+  });
+
   // Hours used this month
   const currentMonthStr = format(new Date(), 'yyyy-MM');
   const hoursUsedThisMonth = useMemo(() => {
@@ -217,8 +236,24 @@ export default function MemberSchedule() {
       });
     }
 
+    // Other-member bookings — redacted, render as non-clickable grey blocks.
+    otherBusy.forEach((s, idx) => {
+      result.push({
+        id: `obs-${idx}`,
+        dateStr: s.booking_date,
+        startMin: timeToMinutes(s.start_time),
+        endMin: timeToMinutes(s.end_time),
+        label: 'Unavailable',
+        tooltip: `Unavailable: ${formatTime12(s.start_time)} – ${formatTime12(s.end_time)}`,
+        bgColor: OTHER_COLOR.bg,
+        textColor: OTHER_COLOR.text,
+        isBlock: true,
+        isMine: false,
+      });
+    });
+
     return result;
-  }, [blocks, allBookings, memberId]);
+  }, [blocks, allBookings, otherBusy, memberId]);
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
@@ -321,7 +356,7 @@ export default function MemberSchedule() {
         // Client-side overlap pre-check for clearer per-date errors before hitting RPC
         for (const d of dates) {
           const ds = format(d, 'yyyy-MM-dd');
-          const overlap = checkOverlap(ds, formStartTime, formEndTime, blocks, allBookings as BookingRow[]);
+          const overlap = checkOverlap(ds, formStartTime, formEndTime, blocks, allBookings as BookingRow[], undefined, undefined, otherBusy);
           if (overlap) throw new Error(`${format(d, 'MMM d')}: ${overlap}`);
         }
 
@@ -353,7 +388,7 @@ export default function MemberSchedule() {
           toast.success(`Created ${created} recurring bookings`);
         }
       } else {
-        const overlap = checkOverlap(saveDateStr, formStartTime, formEndTime, blocks, allBookings as BookingRow[]);
+        const overlap = checkOverlap(saveDateStr, formStartTime, formEndTime, blocks, allBookings as BookingRow[], undefined, undefined, otherBusy);
         if (overlap) throw new Error(overlap);
 
         const { error } = await supabase.rpc('create_member_booking', {
@@ -371,6 +406,7 @@ export default function MemberSchedule() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['member-portal-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['member-portal-other-busy'] });
       setBookingOpen(false);
       setShowConfirm(false);
     },
@@ -387,6 +423,7 @@ export default function MemberSchedule() {
       toast.success('Booking cancelled');
       setSelectedBooking(null);
       queryClient.invalidateQueries({ queryKey: ['member-portal-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['member-portal-other-busy'] });
     },
     onError: (err: Error) => toast.error(err.message || 'Failed to cancel booking'),
   });
