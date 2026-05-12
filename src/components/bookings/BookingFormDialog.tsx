@@ -15,10 +15,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { DAYS_OF_WEEK, DAY_LABELS, JS_DAY_TO_STRING } from '@/components/coroast/types';
 import {
-  checkOverlap, TIER_RATES, timeToMinutes,
+  checkOverlap, timeToMinutes,
   type MemberRow, type BookingRow, type BlockRow,
 } from './bookingUtils';
-import { resolveAccountRates } from './resolveRates';
+import { resolveAccountPricing } from '@/lib/coroastPricing';
 import { AvailabilityTimeSelect } from './AvailabilityTimeSelect';
 import { PastBookingConfirmModal } from './PastBookingConfirmModal';
 
@@ -154,7 +154,7 @@ export function BookingFormDialog({
 
     const member = members.find(m => m.id === mId);
     const tier = member?.tier ?? 'MEMBER';
-    const rates = await resolveAccountRates(mId, tier);
+    const pricing = await resolveAccountPricing(mId);
 
     const { data: created, error } = await supabase
       .from('coroast_billing_periods')
@@ -163,9 +163,9 @@ export function BookingFormDialog({
         period_start: monthStart,
         period_end: monthEnd,
         tier_snapshot: tier,
-        included_hours: rates.includedHours,
-        overage_rate_per_hr: rates.overageRate,
-        base_fee: rates.base,
+        included_hours: pricing.includedHours.value,
+        overage_rate_per_hr: pricing.overageRate.value,
+        base_fee: pricing.monthlyFee.value,
       })
       .select('id')
       .single();

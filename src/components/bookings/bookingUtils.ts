@@ -151,12 +151,12 @@ export function checkOverlap(
   return null;
 }
 
-export const TIER_RATES: Record<string, { base: number; includedHours: number; overageRate: number; label: string }> = {
-  MEMBER:     { base: 399,   includedHours: 3,  overageRate: 160, label: 'Member' },
-  GROWTH:     { base: 859,   includedHours: 7,  overageRate: 145, label: 'Growth' },
-  PRODUCTION: { base: 1399,  includedHours: 12, overageRate: 130, label: 'Production' },
+export const TIER_RATES: Record<string, { base: number; includedHours: number; overageRate: number; packagingBlocksIncluded: number; packagingBlockRate: number; label: string }> = {
+  MEMBER:     { base: 399,   includedHours: 3,  overageRate: 160, packagingBlocksIncluded: 0, packagingBlockRate: 0, label: 'Member' },
+  GROWTH:     { base: 859,   includedHours: 7,  overageRate: 145, packagingBlocksIncluded: 0, packagingBlockRate: 0, label: 'Growth' },
+  PRODUCTION: { base: 1399,  includedHours: 12, overageRate: 130, packagingBlocksIncluded: 0, packagingBlockRate: 0, label: 'Production' },
   // Legacy — do not show in UI, kept for historical billing records only
-  ACCESS:     { base: 300,   includedHours: 3,  overageRate: 135, label: 'Access (Legacy)' },
+  ACCESS:     { base: 300,   includedHours: 3,  overageRate: 135, packagingBlocksIncluded: 0, packagingBlockRate: 0, label: 'Access (Legacy)' },
 };
 
 export const STORAGE_RATES: Record<string, { includedPallets: number; ratePerPallet: number }> = {

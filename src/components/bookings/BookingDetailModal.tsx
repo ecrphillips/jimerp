@@ -10,6 +10,7 @@ import { format, differenceInHours, parseISO } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatTime12, timeToMinutes, TIER_RATES, type BookingRow, type MemberRow } from './bookingUtils';
+import { useAccountPricing } from '@/hooks/useAccountPricing';
 
 interface BookingDetailModalProps {
   open: boolean;
@@ -37,7 +38,12 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
   const member = booking ? members.find(m => m.id === booking.member_id) : undefined;
   const durationHrs = booking ? (timeToMinutes(booking.end_time) - timeToMinutes(booking.start_time)) / 60 : 0;
   const tier = member?.tier ?? 'MEMBER';
-  const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
+  const tierDefaults = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
+  const { data: pricing } = useAccountPricing(booking?.member_id);
+  const rates = {
+    overageRate: pricing?.overageRate.value ?? tierDefaults.overageRate,
+    includedHours: pricing?.includedHours.value ?? tierDefaults.includedHours,
+  };
   const hourlyRate = rates.overageRate;
   const fullFee = durationHrs * hourlyRate;
 

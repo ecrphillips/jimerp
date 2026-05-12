@@ -26,6 +26,7 @@ import {
   HOUR_START, HOUR_END, TOTAL_HOURS, ROW_HEIGHT,
   type BookingRow, type BlockRow, type AvailabilityWindow,
 } from '@/components/bookings/bookingUtils';
+import { useAccountPricing } from '@/hooks/useAccountPricing';
 import { AvailabilityTimeSelect } from '@/components/bookings/AvailabilityTimeSelect';
 import { DAYS_OF_WEEK, DAY_LABELS, JS_DAY_TO_STRING } from '@/components/coroast/types';
 
@@ -109,7 +110,14 @@ export default function MemberSchedule() {
   const memberId = effectiveAccountId;
   const tier = member?.coroast_tier ?? 'MEMBER';
   const isGrowth = tier === 'GROWTH' || tier === 'PRODUCTION';
-  const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
+  const tierDefaults = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
+  const { data: pricing } = useAccountPricing(memberId);
+  const rates = {
+    includedHours: pricing?.includedHours.value ?? tierDefaults.includedHours,
+    overageRate: pricing?.overageRate.value ?? tierDefaults.overageRate,
+    label: tierDefaults.label,
+    base: pricing?.monthlyFee.value ?? tierDefaults.base,
+  };
 
   // Week state
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
