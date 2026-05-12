@@ -35,6 +35,7 @@ import {
   MessageSquarePlus,
   Megaphone,
   Truck,
+  Network,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -214,6 +215,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 <NavItem to="/inventory" icon={Warehouse} label="Inventory Levels" onClick={closeSidebar} end />
                 <NavItem to="/products" icon={Package} label="Products" onClick={closeSidebar} />
                 <NavItem to="/roast-groups" icon={Coffee} label="Roast Groups" onClick={closeSidebar} />
+                <NavItem to="/product-map" icon={Network} label="Product Map" onClick={closeSidebar} />
               </NavGroup>
 
               {/* Sourcing */}
