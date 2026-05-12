@@ -146,6 +146,18 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   const [addBatchSaving, setAddBatchSaving] = useState(false);
   const [addBatchNewName, setAddBatchNewName] = useState('');
 
+  const resetAddBatchModal = () => {
+    setShowAddBatchModal(false);
+    setAddBatchRgKey('');
+    setAddBatchNewName('');
+    setAddBatchKg('');
+    setAddBatchRoaster('');
+    setAddBatchDate(today);
+    setAddBatchCropster('');
+    setAddBatchMode('existing');
+    setAddBatchSaving(false);
+  };
+
   // Depletion warning modal state (Add Batch flow)
   const [depletionState, setDepletionState] = useState<{
     roastGroupKey: string;
@@ -1405,17 +1417,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       )}
       {/* Add Batch Modal */}
       <Dialog open={showAddBatchModal} onOpenChange={(open) => {
-        if (!open) {
-          setShowAddBatchModal(false);
-          setAddBatchRgKey('');
-          setAddBatchNewName('');
-          setAddBatchKg('');
-          setAddBatchRoaster('');
-          setAddBatchDate(today);
-          setAddBatchCropster('');
-          setAddBatchMode('existing');
-          setAddBatchSaving(false);
-        }
+        if (!open) resetAddBatchModal();
       }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -1531,7 +1533,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
           </div>
 
           <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setShowAddBatchModal(false)}>
+            <Button variant="outline" onClick={resetAddBatchModal}>
               Cancel
             </Button>
             <Button
@@ -1587,15 +1589,18 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
 
                     toast.success(swaps.length > 0 ? `Batch added — ${swaps.length} successor swap(s) applied` : 'Batch added');
                     queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
-                    setShowAddBatchModal(false);
-                    setAddBatchRgKey('');
-                    setAddBatchNewName('');
-                    setAddBatchKg('');
-                    setAddBatchRoaster('');
-                    setAddBatchDate(today);
-                    setAddBatchCropster('');
-                    setAddBatchMode('existing');
+                    resetAddBatchModal();
                   };
+
+                  // Guard: roastGroupKey must be a known group
+                  if (addBatchMode === 'existing') {
+                    const known = (roastGroupsConfig ?? []).some(rg => rg.roast_group === roastGroupKey);
+                    if (!known) {
+                      toast.error('Roast group selection is invalid — please re-select and try again.');
+                      setAddBatchSaving(false);
+                      return;
+                    }
+                  }
 
                   // Skip depletion check for brand-new groups (no links yet)
                   if (!isNewlyCreated) {
