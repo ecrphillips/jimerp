@@ -96,7 +96,7 @@ export default function OrderDetail() {
           grind,
           unit_price_locked,
           line_notes,
-          product:products(id, product_name, roast_group, bag_size_g, packaging_variant)
+          product:products(id, product_name, roast_group, bag_size_g, grams_per_unit, packaging_variant, packaging_type:packaging_types(name))
         `)
         .eq('order_id', id!)
         .order('created_at', { ascending: true });
