@@ -19,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -816,6 +817,15 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     // Calculate how many batches needed based on expected output per batch
     const expectedOutputPerBatch = standardBatch * (1 - yieldLossPct / 100);
     const batchCount = Math.ceil(remainingNeed / expectedOutputPerBatch);
+
+    const LARGE_BATCH_CONFIRM_THRESHOLD = 10;
+    if (batchCount >= LARGE_BATCH_CONFIRM_THRESHOLD) {
+      const ok = window.confirm(
+        `Add ${batchCount} planned batches for ${roastGroup}? This will create ${batchCount} rows in production planning.`
+      );
+      if (!ok) return;
+    }
+
     createSuggestedBatchesMutation.mutate({
       roastGroup,
       count: batchCount,
@@ -1096,18 +1106,35 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                               const suggestedBatches = remainingNeed > 0 ? Math.ceil(remainingNeed / expectedOutputPerBatch) : 0;
                               
                               if (suggestedBatches === 0) return null;
-                              
+
+                              const batchWord = suggestedBatches === 1 ? 'batch' : 'batches';
+                              const ariaLabel = `Click to add ${suggestedBatches} planned ${batchWord} for ${g.roast_group}`;
+
                               return (
-                                <Button
-                                  key={g.roast_group}
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-xs"
-                                  onClick={() => handleCreateSuggestedBatches(g.roast_group, g.total_kg)}
-                                >
-                                  <Plus className="h-3 w-3 mr-1" />
-                                  {g.roast_group} (+{suggestedBatches})
-                                </Button>
+                                <TooltipProvider key={g.roast_group} delayDuration={200}>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 text-xs"
+                                        aria-label={ariaLabel}
+                                        onClick={() => handleCreateSuggestedBatches(g.roast_group, g.total_kg)}
+                                      >
+                                        <Plus className="h-3 w-3 mr-1" />
+                                        {g.roast_group} (+{suggestedBatches})
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <div className="text-xs">
+                                        <div>{ariaLabel}</div>
+                                        <div className="text-muted-foreground">
+                                          {remainingNeed.toFixed(1)} kg remaining @ {expectedOutputPerBatch.toFixed(1)} kg/batch
+                                        </div>
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
                               );
                             })}
                           </div>
