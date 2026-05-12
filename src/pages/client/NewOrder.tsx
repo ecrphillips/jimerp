@@ -21,6 +21,7 @@ import { LocationSelect } from '@/components/orders/LocationSelect';
 import { CaseQuantityInput } from '@/components/orders/CaseQuantityInput';
 import { useClientOrderingConstraints, validateCaseQuantity } from '@/hooks/useClientOrderingConstraints';
 import { blockNonIntegerKeys } from '@/lib/numericInput';
+import { DatePicker } from '@/components/ui/date-picker';
 import type { GrindOption, DeliveryMethod } from '@/types/database';
 
 interface LineItem {
@@ -75,7 +76,7 @@ export default function NewOrder() {
   const minSpecificDate = useMemo(() => {
     const date = new Date();
     date.setDate(date.getDate() + 3);
-    return date.toISOString().split('T')[0];
+    return date;
   }, []);
 
   const todayIsoDate = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -881,12 +882,11 @@ export default function NewOrder() {
                     <Label htmlFor="shipDate" className="text-sm">
                       Select date (at least 3 days out)
                     </Label>
-                    <Input
+                    <DatePicker
                       id="shipDate"
-                      type="date"
-                      value={requestedShipDate}
-                      min={minSpecificDate}
-                      onChange={(e) => setRequestedShipDate(e.target.value)}
+                      value={requestedShipDate || null}
+                      onChange={(v) => setRequestedShipDate(v ?? '')}
+                      minDate={minSpecificDate}
                     />
                     {isShipDateInPast && (
                       <p className="text-xs text-amber-600 mt-1">
