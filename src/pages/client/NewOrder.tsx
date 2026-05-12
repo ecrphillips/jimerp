@@ -20,6 +20,7 @@ import { UnusualOrderModal, type FlaggedItem } from '@/components/client/Unusual
 import { LocationSelect } from '@/components/orders/LocationSelect';
 import { CaseQuantityInput } from '@/components/orders/CaseQuantityInput';
 import { useClientOrderingConstraints, validateCaseQuantity } from '@/hooks/useClientOrderingConstraints';
+import { blockNonIntegerKeys } from '@/lib/numericInput';
 import type { GrindOption, DeliveryMethod } from '@/types/database';
 
 interface LineItem {
@@ -538,6 +539,7 @@ export default function NewOrder() {
                 value={lineItem?.quantity ?? ''}
                 placeholder="0"
                 onChange={(e) => handleQuantityInputChange(p.id, e.target.value)}
+                onKeyDown={blockNonIntegerKeys}
               />
               <Button
                 size="icon"
@@ -629,6 +631,7 @@ export default function NewOrder() {
                         value={lineItem?.quantity ?? ''}
                         placeholder="0"
                         onChange={(e) => handleQuantityInputChange(variant.id, e.target.value)}
+                        onKeyDown={blockNonIntegerKeys}
                       />
                       <Button
                         size="icon"
@@ -771,6 +774,7 @@ export default function NewOrder() {
                                 className="w-12 h-6 text-center text-xs px-1"
                                 value={li.quantity}
                                 onChange={(e) => handleQuantityInputChange(li.productId, e.target.value)}
+                                onKeyDown={blockNonIntegerKeys}
                               />
                               <Button
                                 size="icon"

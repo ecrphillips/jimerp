@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Minus, Plus } from 'lucide-react';
+import { blockNonIntegerKeys } from '@/lib/numericInput';
 
 interface CaseQuantityInputProps {
   value: number;
@@ -68,7 +69,9 @@ export function CaseQuantityInput({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.currentTarget.blur();
+      return;
     }
+    blockNonIntegerKeys(e);
   };
 
   const buttonClass = size === 'sm' ? 'h-6 w-6' : 'h-7 w-7';
