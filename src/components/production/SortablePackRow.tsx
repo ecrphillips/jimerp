@@ -2,7 +2,7 @@ import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, ChevronRight, Check, AlertTriangle, Clock, ShoppingCart, CheckCircle, AlertCircle, GripVertical } from 'lucide-react';
+import { ChevronDown, ChevronRight, Check, AlertTriangle, Clock, ShoppingCart, CheckCircle, AlertCircle, GripVertical, Layers } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { InlinePackingControl } from './InlinePackingControl';
 import { PackRowDrawer } from './PackRowDrawer';
@@ -32,6 +32,8 @@ interface SortablePackRowProps {
   unblocksOrders: number;
   wipAvailableKg: number;
   requiredKg: number;
+  plannedKg: number;
+  plannedCount: number;
   packingRun: PackingRun | undefined;
   isExpanded: boolean;
   onToggleExpand: () => void;
@@ -53,6 +55,8 @@ export function SortablePackRow({
   unblocksOrders,
   wipAvailableKg,
   requiredKg,
+  plannedKg,
+  plannedCount,
   packingRun,
   isExpanded,
   onToggleExpand,
@@ -163,6 +167,12 @@ export function SortablePackRow({
                 WIP partial
               </Badge>
             )}
+            {wipStatus !== 'full' && plannedCount > 0 && (
+              <Badge variant="outline" className="text-xs">
+                <Layers className="h-3 w-3 mr-1" />
+                {plannedCount} planned (~{plannedKg.toFixed(1)} kg)
+              </Badge>
+            )}
           </div>
           <div className="text-xs text-muted-foreground">
             {bagSizeG}g • {sku || 'No SKU'}
@@ -215,6 +225,8 @@ export function SortablePackRow({
           unblocksOrders={unblocksOrders}
           wipAvailableKg={wipAvailableKg}
           requiredKg={requiredKg}
+          plannedKg={plannedKg}
+          plannedCount={plannedCount}
           wipStatus={wipStatus}
         />
       )}
