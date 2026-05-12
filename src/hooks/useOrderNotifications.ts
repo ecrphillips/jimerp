@@ -11,6 +11,8 @@ interface OrderNotification {
   order_number: string;
   work_deadline: string | null;
   created_at: string;
+  submitted_by_name: string | null;
+  submitted_by_admin: boolean;
 }
 
 /**
@@ -42,18 +44,25 @@ export function useOrderNotifications() {
           const notification = payload.new as OrderNotification;
           console.log('[useOrderNotifications] New notification:', notification);
           
-          // Show toast with action to view order
-          toast.info(
-            `New order submitted by ${notification.client_name}`,
-            {
-              description: `Order ${notification.order_number}`,
-              duration: 10000,
-              action: {
-                label: 'View',
-                onClick: () => navigate(`/orders/${notification.order_id}`),
-              },
-            }
-          );
+          const isAdminCreated = notification.submitted_by_admin;
+          const submitter = notification.submitted_by_name;
+
+          const title = isAdminCreated
+            ? `New order for ${notification.client_name}`
+            : `New order submitted by ${notification.client_name}`;
+
+          const description = isAdminCreated && submitter
+            ? `Submitted by ${submitter} · Order ${notification.order_number}`
+            : `Order ${notification.order_number}`;
+
+          toast.info(title, {
+            description,
+            duration: 10000,
+            action: {
+              label: 'View',
+              onClick: () => navigate(`/orders/${notification.order_id}`),
+            },
+          });
         }
       )
       .subscribe((status) => {
