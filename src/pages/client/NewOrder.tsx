@@ -77,6 +77,9 @@ export default function NewOrder() {
     return date.toISOString().split('T')[0];
   }, []);
 
+  const todayIsoDate = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const isShipDateInPast = shipPreference === 'SPECIFIC' && !!requestedShipDate && requestedShipDate < todayIsoDate;
+
   const [showUnusualModal, setShowUnusualModal] = useState(false);
   const [flaggedItems, setFlaggedItems] = useState<FlaggedItem[]>([]);
   const [totalFlag, setTotalFlag] = useState<{
@@ -359,6 +362,11 @@ export default function NewOrder() {
         toast.error(`"${invalidItem.displayName}" quantity must be a multiple of ${constraints.caseSize} (case size).`);
         return;
       }
+    }
+
+    if (isShipDateInPast) {
+      const ok = window.confirm('Requested Ship Date is in the past. Submit order anyway?');
+      if (!ok) return;
     }
 
     const isUnusual = await checkUnusualOrderSize();
@@ -876,6 +884,11 @@ export default function NewOrder() {
                       min={minSpecificDate}
                       onChange={(e) => setRequestedShipDate(e.target.value)}
                     />
+                    {isShipDateInPast && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        ⚠ That date has already passed. Confirm this is intentional.
+                      </p>
+                    )}
                   </div>
                 )}
                 
