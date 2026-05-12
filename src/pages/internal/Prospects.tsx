@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Plus, CheckCircle2, Trash2 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
+import { PronounsField } from '@/components/contacts/PronounsField';
 
 type ProspectStream = Database['public']['Enums']['prospect_stream'];
 type ProspectStage = Database['public']['Enums']['prospect_stage'];
@@ -62,6 +63,7 @@ export default function Prospects() {
   // Form state
   const [formName, setFormName] = useState('');
   const [formContact, setFormContact] = useState('');
+  const [formPronouns, setFormPronouns] = useState<string | null>(null);
   const [formEmail, setFormEmail] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formStream, setFormStream] = useState<ProspectStream>('CO_ROAST');
@@ -84,6 +86,7 @@ export default function Prospects() {
       const { error } = await supabase.from('prospects').insert({
         business_name: formName.trim(),
         contact_name: formContact.trim() || null,
+        pronouns: formPronouns ? formPronouns.trim() || null : null,
         contact_info: contactInfo,
         stream: formStream,
         created_by: authUser!.id,
@@ -102,6 +105,7 @@ export default function Prospects() {
     setShowDialog(false);
     setFormName('');
     setFormContact('');
+    setFormPronouns(null);
     setFormEmail('');
     setFormPhone('');
     setFormStream('CO_ROAST');
@@ -201,6 +205,7 @@ export default function Prospects() {
                 placeholder="Jane Smith"
               />
             </div>
+            <PronounsField value={formPronouns} onChange={setFormPronouns} />
             <div>
               <Label htmlFor="email">Email</Label>
               <Input

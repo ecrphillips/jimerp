@@ -82,6 +82,7 @@ interface ShippableOrder {
   missingUnitsTotal: number;
   ship_display_order: number | null;
   manually_deprioritized?: boolean;
+  location_name: string | null;
 }
 
 // ShortListItem type now comes from useAuthoritativeShortList hook
@@ -184,6 +185,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           manually_deprioritized,
           client:clients(name),
           account:accounts(account_name),
+          location:client_locations(name, location_code),
           line_items:order_line_items(
             id,
             product_id,
@@ -338,6 +340,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         missingUnitsTotal,
         ship_display_order: order.ship_display_order ?? null,
         manually_deprioritized: order.manually_deprioritized ?? false,
+        location_name: (order as any).location?.name ?? null,
       });
     }
 

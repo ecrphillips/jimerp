@@ -17,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Plus, Search, Info, CalendarIcon, Building2, CheckCircle2, Trash2 } from 'lucide-react';
+import { PronounsField } from '@/components/contacts/PronounsField';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
@@ -67,6 +68,7 @@ export default function Accounts() {
   // Form state
   const [formName, setFormName] = useState('');
   const [formContact, setFormContact] = useState('');
+  const [formPronouns, setFormPronouns] = useState<string | null>(null);
   const [formEmail, setFormEmail] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formAddress, setFormAddress] = useState('');
@@ -116,6 +118,7 @@ export default function Accounts() {
       const payload: Record<string, unknown> = {
         account_name: formName.trim(),
         billing_contact_name: formContact || null,
+        pronouns: formPronouns ? formPronouns.trim() || null : null,
         billing_email: formEmail || null,
         billing_phone: formPhone || null,
         billing_address: formAddress || null,
@@ -157,6 +160,7 @@ export default function Accounts() {
   const resetForm = () => {
     setFormName('');
     setFormContact('');
+    setFormPronouns(null);
     setFormEmail('');
     setFormPhone('');
     setFormAddress('');
@@ -304,6 +308,9 @@ export default function Accounts() {
                   <Label htmlFor="acct-contact">Billing contact</Label>
                   <Input id="acct-contact" value={formContact} onChange={e => setFormContact(e.target.value)} />
                 </div>
+                <PronounsField value={formPronouns} onChange={setFormPronouns} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="acct-email">Billing email</Label>
                   <Input id="acct-email" type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} />
