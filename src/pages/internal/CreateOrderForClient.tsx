@@ -291,6 +291,17 @@ export default function CreateOrderForClient() {
     return lineItems.reduce((sum, li) => sum + (li.price ?? 0) * li.quantity, 0);
   }, [lineItems]);
 
+  const missingRequirements = useMemo(() => {
+    const missing: string[] = [];
+    if (!selectedClientId) missing.push('client');
+    if (clientLocations && clientLocations.length > 0 && !selectedLocationId) missing.push('delivery location');
+    if (lineItems.length === 0) missing.push('at least one product (set quantity > 0)');
+    if (!workDeadlineAt) missing.push('work deadline');
+    const missingPrice = lineItems.find((li) => li.price === null);
+    if (missingPrice) missing.push(`price for "${missingPrice.displayName}"`);
+    return missing;
+  }, [selectedClientId, clientLocations, selectedLocationId, lineItems, workDeadlineAt]);
+
   const handleQuantityInputChange = (productId: string, value: string) => {
     const numericValue = value.replace(/[^0-9]/g, '');
     const qty = numericValue === '' ? 0 : parseInt(numericValue, 10);
@@ -802,10 +813,16 @@ export default function CreateOrderForClient() {
                 <Button
                   className="w-full"
                   onClick={submitOrder}
-                  disabled={submitting || lineItems.length === 0}
+                  disabled={submitting}
                 >
                   {submitting ? 'Creating…' : confirmOnCreate ? 'Create & Confirm Order' : 'Create Order'}
                 </Button>
+                {missingRequirements.length > 0 && (
+                  <div className="flex items-start gap-1 text-xs text-amber-600">
+                    <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                    <span>Missing: {missingRequirements.join(', ')}</span>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
