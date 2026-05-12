@@ -359,6 +359,38 @@ export function useAuthoritativeWip() {
 }
 
 /**
+ * Planned-batch summary by roast_group.
+ * Informational only — does NOT count toward WIP.
+ * Skips batches earmarked for a blend (planned_for_blend_roast_group set)
+ * and batches already consumed by a blend (consumed_by_blend_at set).
+ */
+export interface PlannedWipByGroup {
+  count: number;
+  planned_kg: number;
+}
+
+export function useAuthoritativePlannedWip() {
+  const { data: batches, isLoading } = useRoastedBatches();
+
+  const planned = useMemo((): Record<string, PlannedWipByGroup> => {
+    const result: Record<string, PlannedWipByGroup> = {};
+    for (const b of batches ?? []) {
+      if (b.status !== 'PLANNED') continue;
+      if (b.planned_for_blend_roast_group) continue;
+      if (b.consumed_by_blend_at) continue;
+      if (!b.roast_group) continue;
+      const entry = result[b.roast_group] ?? { count: 0, planned_kg: 0 };
+      entry.count += 1;
+      entry.planned_kg += Number(b.planned_output_kg ?? 0);
+      result[b.roast_group] = entry;
+    }
+    return result;
+  }, [batches]);
+
+  return { data: planned, isLoading };
+}
+
+/**
  * Authoritative FG by product
  * FG = sum(units_packed) - sum(units_picked for OPEN orders)
  */
