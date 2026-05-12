@@ -776,10 +776,10 @@ export default function OrderDetail() {
                 <thead>
                   <tr className="border-b text-left">
                     <th className="pb-2">Product</th>
+                    <th className="pb-2">Variant</th>
                     <th className="pb-2">Demanded</th>
                     <th className="pb-2">Packed</th>
                     <th className="pb-2">Status</th>
-                    <th className="pb-2">Grind</th>
                     <th className="pb-2">Unit Price</th>
                     <th className="pb-2 text-right">Subtotal</th>
                   </tr>
@@ -787,11 +787,9 @@ export default function OrderDetail() {
                 <tbody>
                   {lineItemsWithPackedStatus.map((li) => (
                     <tr key={li.id} className="border-b last:border-0">
+                      <td className="py-2">{li.product?.product_name ?? 'Unknown'}</td>
                       <td className="py-2">
-                        <div className="flex flex-col gap-1">
-                          <span>{li.product?.product_name ?? 'Unknown'}</span>
-                          <PackagingBadge variant={(li.product as { packaging_variant?: PackagingVariant | null } | null)?.packaging_variant ?? null} />
-                        </div>
+                        <PackagingBadge variant={(li.product as { packaging_variant?: PackagingVariant | null } | null)?.packaging_variant ?? null} />
                       </td>
                       <td className="py-2">{li.quantity_units}</td>
                       <td className="py-2">{li.packedUnits}</td>
@@ -807,7 +805,6 @@ export default function OrderDetail() {
                           </Badge>
                         )}
                       </td>
-                      <td className="py-2">{li.grind ?? '—'}</td>
                       <td className="py-2">${li.unit_price_locked.toFixed(2)}</td>
                       <td className="py-2 text-right">${(li.quantity_units * li.unit_price_locked).toFixed(2)}</td>
                     </tr>
