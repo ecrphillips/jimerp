@@ -9,6 +9,7 @@ import { toast } from '@/hooks/use-toast';
 
 const CATEGORIES = [
   { value: 'BUG', label: 'Bug Report' },
+  { value: 'WORKFLOW', label: 'Workflow' },
   { value: 'UX_IMPROVEMENT', label: 'UX Improvement' },
   { value: 'FEATURE_REQUEST', label: 'Feature Request' },
   { value: 'OTHER', label: 'Other' },
