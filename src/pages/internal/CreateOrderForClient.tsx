@@ -105,6 +105,9 @@ export default function CreateOrderForClient() {
   const [internalNotes, setInternalNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const todayIsoDate = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const isShipDateInPast = !!requestedShipDate && requestedShipDate < todayIsoDate;
+
   // Fetch all accounts (replaces legacy clients query)
   const { data: clients } = useQuery({
     queryKey: ['all-accounts-for-orders'],
@@ -327,6 +330,11 @@ export default function CreateOrderForClient() {
     if (missingPrice) {
       toast.error(`"${missingPrice.displayName}" has no price set.`);
       return;
+    }
+
+    if (isShipDateInPast) {
+      const ok = window.confirm('Requested Ship Date is in the past. Create order anyway?');
+      if (!ok) return;
     }
 
     setSubmitting(true);
@@ -704,6 +712,11 @@ export default function CreateOrderForClient() {
                     value={requestedShipDate}
                     onChange={(e) => setRequestedShipDate(e.target.value)}
                   />
+                  {isShipDateInPast && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      ⚠ That date has already passed. Confirm this is intentional.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Label>Work Deadline <span className="text-destructive">*</span></Label>
