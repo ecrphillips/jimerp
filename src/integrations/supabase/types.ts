@@ -2898,6 +2898,8 @@ export type Database = {
           order_id: string
           order_number: string
           read_by: string[] | null
+          submitted_by_admin: boolean
+          submitted_by_name: string | null
           work_deadline: string | null
         }
         Insert: {
@@ -2907,6 +2909,8 @@ export type Database = {
           order_id: string
           order_number: string
           read_by?: string[] | null
+          submitted_by_admin?: boolean
+          submitted_by_name?: string | null
           work_deadline?: string | null
         }
         Update: {
@@ -2916,6 +2920,8 @@ export type Database = {
           order_id?: string
           order_number?: string
           read_by?: string[] | null
+          submitted_by_admin?: boolean
+          submitted_by_name?: string | null
           work_deadline?: string | null
         }
         Relationships: [

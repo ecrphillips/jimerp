@@ -79,7 +79,11 @@ serve(async (req: Request) => {
         order_number,
         work_deadline,
         client_id,
-        client:clients(id, name)
+        account_id,
+        created_by_admin,
+        created_by_user_id,
+        client:clients(id, name),
+        account:accounts(id, account_name)
       `)
       .eq("id", order_id)
       .maybeSingle();
@@ -110,10 +114,27 @@ serve(async (req: Request) => {
       }
     }
 
-    // order.client from a select with join returns an object (not array) when single-relation
+    // Resolve display name. Internal orders set account_id only (no client_id),
+    // client-submitted orders set client_id. Prefer whichever resolves.
     // deno-lint-ignore no-explicit-any
     const clientData = order.client as any;
-    const clientName = clientData?.name || "Unknown Client";
+    // deno-lint-ignore no-explicit-any
+    const accountData = order.account as any;
+    const clientName =
+      clientData?.name ||
+      accountData?.account_name ||
+      "Unknown Client";
+
+    // Resolve submitter display name from profiles
+    let submittedByName: string | null = null;
+    if (order.created_by_user_id) {
+      const { data: profile } = await adminClient
+        .from("profiles")
+        .select("name")
+        .eq("user_id", order.created_by_user_id)
+        .maybeSingle();
+      submittedByName = profile?.name ?? null;
+    }
 
     // Insert notification record (this triggers realtime for OPS/ADMIN users)
     const { error: notifError } = await adminClient
@@ -123,6 +144,8 @@ serve(async (req: Request) => {
         client_name: clientName,
         order_number: order.order_number,
         work_deadline: order.work_deadline,
+        submitted_by_name: submittedByName,
+        submitted_by_admin: order.created_by_admin === true,
       });
 
     if (notifError) {
