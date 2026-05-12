@@ -102,7 +102,7 @@ export default function ProductMap() {
         .from('roast_groups')
         .select(`
           roast_group, display_name, is_blend, blend_type, origin,
-          components:roast_group_components(component_roast_group, pct)
+          components:roast_group_components!roast_group_components_parent_roast_group_fkey(component_roast_group, pct)
         `)
         .eq('is_active', true)
         .order('display_name');
