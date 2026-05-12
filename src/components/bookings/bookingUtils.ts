@@ -110,6 +110,8 @@ export function checkAvailabilityWindow(
   return null;
 }
 
+export type BusySlot = { booking_date: string; start_time: string; end_time: string };
+
 export function checkOverlap(
   date: string,
   startTime: string,
@@ -118,6 +120,7 @@ export function checkOverlap(
   bookings: BookingRow[],
   excludeBookingId?: string,
   windows?: AvailabilityWindow[],
+  busySlots?: BusySlot[],
 ): string | null {
   // Check availability window first
   if (windows) {
@@ -145,6 +148,17 @@ export function checkOverlap(
     const bEnd = timeToMinutes(bk.end_time);
     if (startMin < bEnd && endMin > bStart) {
       return `Conflicts with existing booking for ${bk.accounts?.account_name ?? 'a member'} (${formatTime12(bk.start_time)} – ${formatTime12(bk.end_time)})`;
+    }
+  }
+
+  if (busySlots) {
+    for (const s of busySlots) {
+      if (s.booking_date !== date) continue;
+      const bStart = timeToMinutes(s.start_time);
+      const bEnd = timeToMinutes(s.end_time);
+      if (startMin < bEnd && endMin > bStart) {
+        return `Time slot is already booked (${formatTime12(s.start_time)} – ${formatTime12(s.end_time)})`;
+      }
     }
   }
 
