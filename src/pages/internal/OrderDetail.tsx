@@ -13,6 +13,7 @@ import { format } from 'date-fns';
 import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock, FileText, Clock, Trash2 } from 'lucide-react';
 import { LocationBadge } from '@/components/orders/LocationSelect';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
+import { GramPackagingBadge } from '@/components/GramPackagingBadge';
 import { toast } from 'sonner';
 import { HistoricalEditWarningModal } from '@/components/internal/HistoricalEditWarningModal';
 import { IncompleteFulfillmentModal } from '@/components/internal/IncompleteFulfillmentModal';
@@ -96,7 +97,7 @@ export default function OrderDetail() {
           grind,
           unit_price_locked,
           line_notes,
-          product:products(id, product_name, roast_group, bag_size_g, packaging_variant)
+          product:products(id, product_name, roast_group, bag_size_g, grams_per_unit, packaging_variant, packaging_type:packaging_types(name))
         `)
         .eq('order_id', id!)
         .order('created_at', { ascending: true });
@@ -790,7 +791,15 @@ export default function OrderDetail() {
                       <td className="py-2">
                         <div className="flex flex-col gap-1">
                           <span>{li.product?.product_name ?? 'Unknown'}</span>
-                          <PackagingBadge variant={(li.product as { packaging_variant?: PackagingVariant | null } | null)?.packaging_variant ?? null} />
+                          {(() => {
+                            const prod = li.product as { packaging_variant?: PackagingVariant | null; packaging_type?: { name: string } | null; grams_per_unit?: number | null; bag_size_g?: number | null } | null;
+                            const typeName = prod?.packaging_type?.name ?? null;
+                            const grams = prod?.grams_per_unit ?? prod?.bag_size_g ?? null;
+                            if (typeName && grams) {
+                              return <GramPackagingBadge packagingTypeName={typeName} gramsPerUnit={grams} />;
+                            }
+                            return <PackagingBadge variant={prod?.packaging_variant ?? null} />;
+                          })()}
                         </div>
                       </td>
                       <td className="py-2">{li.quantity_units}</td>
