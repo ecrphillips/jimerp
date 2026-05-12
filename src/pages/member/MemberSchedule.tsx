@@ -20,6 +20,7 @@ import {
   startOfToday, differenceInHours, parseISO, addDays, getDay,
   isBefore, startOfDay, isAfter,
 } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 import {
   checkOverlap, timeToMinutes, formatTime12, TIER_RATES,
   HOUR_START, HOUR_END, TOTAL_HOURS, ROW_HEIGHT,
@@ -732,7 +733,7 @@ export default function MemberSchedule() {
             return (
               <div className="space-y-4">
                 <div className="space-y-2 text-sm">
-                  <p><strong>Date:</strong> {format(new Date(selectedBooking.booking_date + 'T00:00:00'), 'EEEE, MMMM d, yyyy')}</p>
+                  <p><strong>Date:</strong> {format(parseDateOnly(selectedBooking.booking_date)!, 'EEEE, MMMM d, yyyy')}</p>
                   <p><strong>Time:</strong> {formatTime12(selectedBooking.start_time)} – {formatTime12(selectedBooking.end_time)}</p>
                   <p><strong>Duration:</strong> {Number(selectedBooking.duration_hours || 0).toFixed(1)}h</p>
                   {(selectedBooking as any).notes_member && (

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, subYears, subMonths } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 
 export function CoRoastingTab({ enabled }: { enabled: boolean }) {
   const today = new Date();
@@ -171,7 +172,7 @@ export function CoRoastingTab({ enabled }: { enabled: boolean }) {
               {weekBookings.map((b: any) => (
                 <div key={b.id} className="flex items-center justify-between text-sm border-b last:border-0 pb-2 last:pb-0">
                   <div className="flex items-center gap-3">
-                    <span className="text-muted-foreground">{format(new Date(b.booking_date + 'T00:00:00'), 'EEE MMM d')}</span>
+                    <span className="text-muted-foreground">{format(parseDateOnly(b.booking_date)!, 'EEE MMM d')}</span>
                     <span className="font-medium">{b.accounts?.account_name || 'Unknown'}</span>
                   </div>
                   <div className="flex items-center gap-3 text-muted-foreground">

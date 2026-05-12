@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 import { TIER_RATES, timeToMinutes } from '@/components/bookings/bookingUtils';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -217,7 +218,7 @@ export default function MemberBilling() {
                 <tbody>
                   {billingHistory.map(inv => (
                     <tr key={inv.id} className="border-b last:border-0">
-                      <td className="py-2">{format(new Date(inv.period_start + 'T00:00:00'), 'MMM yyyy')}</td>
+                      <td className="py-2">{format(parseDateOnly(inv.period_start)!, 'MMM yyyy')}</td>
                       <td className="py-2 text-right">{Number(inv.used_hours).toFixed(1)}h</td>
                       <td className="py-2 text-right">${fmt(Number(inv.base_fee))}</td>
                       <td className="py-2 text-right">{Number(inv.overage_charge) > 0 ? `$${fmt(Number(inv.overage_charge))}` : '—'}</td>
