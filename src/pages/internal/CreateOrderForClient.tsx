@@ -17,6 +17,7 @@ import { Plus, Minus, Trash2, ArrowLeft, ShieldAlert, AlertCircle } from 'lucide
 import { GramPackagingBadge, formatGramsLabel } from '@/components/GramPackagingBadge';
 import { useClientOrderingConstraints } from '@/hooks/useClientOrderingConstraints';
 import { WorkDeadlinePicker } from '@/components/orders/WorkDeadlinePicker';
+import { DatePicker } from '@/components/ui/date-picker';
 import type { GrindOption } from '@/types/database';
 import type { Database } from '@/integrations/supabase/types';
 import { LocationSelect } from '@/components/orders/LocationSelect';
@@ -720,11 +721,10 @@ export default function CreateOrderForClient() {
               <CardContent className="space-y-4">
                 <div>
                   <Label htmlFor="shipDate">Requested Ship Date</Label>
-                  <Input
+                  <DatePicker
                     id="shipDate"
-                    type="date"
-                    value={requestedShipDate}
-                    onChange={(e) => setRequestedShipDate(e.target.value)}
+                    value={requestedShipDate || null}
+                    onChange={(v) => setRequestedShipDate(v ?? '')}
                   />
                   {isShipDateInPast && (
                     <p className="text-xs text-amber-600 mt-1">
