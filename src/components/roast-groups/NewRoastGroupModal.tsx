@@ -13,6 +13,8 @@ import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
 import { RoastGroupPreview } from '@/components/products/RoastGroupPreview';
+import { OriginSelect } from '@/components/products/OriginSelect';
+import { ORIGIN_CUSTOM_SENTINEL } from '@/lib/originOptions';
 
 interface Props {
   open: boolean;
@@ -27,6 +29,7 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
   const [isBlend, setIsBlend] = useState(false);
   const [blendType, setBlendType] = useState<string | null>(null);
   const [origin, setOrigin] = useState('');
+  const [originCustom, setOriginCustom] = useState('');
   const [isSeasonal, setIsSeasonal] = useState(false);
   const [defaultRoaster, setDefaultRoaster] = useState<string>('EITHER');
   const [batchKg, setBatchKg] = useState(20);
@@ -58,6 +61,7 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
     setIsBlend(false);
     setBlendType(null);
     setOrigin('');
+    setOriginCustom('');
     setIsSeasonal(false);
     setDefaultRoaster('EITHER');
     setBatchKg(20);
@@ -66,16 +70,22 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
     setNotes('');
   };
 
+  const effectiveOrigin = origin === ORIGIN_CUSTOM_SENTINEL ? originCustom.trim() : origin;
+
   const handleSave = async () => {
     const trimmed = displayName.trim();
     if (!trimmed) { toast.error('Display name is required'); return; }
+    if (!isBlend && !effectiveOrigin) {
+      toast.error('Origin is required for single-origin roast groups');
+      return;
+    }
 
     setSaving(true);
     try {
       const result = await createOrReuseRoastGroup({
         displayName: trimmed,
         isBlend,
-        origin: isBlend ? null : origin || null,
+        origin: isBlend ? null : effectiveOrigin || null,
         cropsterProfileRef: cropsterRef || null,
         notes: notes || null,
       });
@@ -176,8 +186,15 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
           {/* Origin (single origin only) */}
           {!isBlend && (
             <div>
-              <Label>Origin Country</Label>
-              <Input value={origin} onChange={e => setOrigin(e.target.value)} placeholder="e.g. Guatemala" />
+              <Label>Origin Country *</Label>
+              <OriginSelect
+                value={origin}
+                customValue={originCustom}
+                onChange={({ value, customValue }) => {
+                  setOrigin(value);
+                  setOriginCustom(customValue);
+                }}
+              />
             </div>
           )}
 
@@ -239,7 +256,7 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving || !displayName.trim()}>
+            <Button onClick={handleSave} disabled={saving || !displayName.trim() || (!isBlend && !effectiveOrigin)}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Create
             </Button>

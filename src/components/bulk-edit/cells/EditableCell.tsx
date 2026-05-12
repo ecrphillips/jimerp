@@ -2,7 +2,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { ColumnDef, SaveResult } from '../types';
 
@@ -18,11 +27,13 @@ export function EditableCell<TRow>({ row, column, isHighlighted, onSave }: Props
   const [value, setValue] = useState<unknown>(initial);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [forceCustom, setForceCustom] = useState(false);
   const lastSavedRef = useRef<unknown>(initial);
 
   useEffect(() => {
     setValue(initial);
     lastSavedRef.current = initial;
+    setForceCustom(false);
   }, [initial]);
 
   const formatted = column.format ? column.format(value, row) : (value ?? '');
@@ -100,25 +111,78 @@ export function EditableCell<TRow>({ row, column, isHighlighted, onSave }: Props
           disabled={saving}
         />
       )}
-      {column.type === 'select' && (
-        <Select
-          value={value === null || value === undefined ? '__none__' : String(value)}
-          onValueChange={(v) => {
-            const next = v === '__none__' ? null : v;
-            setValue(next);
-            commit(next);
-          }}
-          disabled={saving}
-        >
-          <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {column.allowEmpty && <SelectItem value="__none__">—</SelectItem>}
-            {(column.options ?? []).map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
+      {column.type === 'select' && (() => {
+        const CUSTOM = '__custom__';
+        const strValue = value === null || value === undefined ? '' : String(value);
+        const knownValues = new Set<string>([
+          ...(column.options ?? []).map((o) => o.value),
+          ...(column.groups ?? []).flatMap((g) => g.options.map((o) => o.value)),
+        ]);
+        const isUnknownExisting = column.allowCustom && strValue !== '' && !knownValues.has(strValue);
+        const inCustomMode = column.allowCustom && (forceCustom || isUnknownExisting);
+        const selectValue = inCustomMode ? CUSTOM : strValue === '' ? '__none__' : strValue;
+
+        if (inCustomMode) {
+          return (
+            <div className="flex items-center gap-1">
+              <Input
+                className="h-7 text-xs flex-1"
+                value={(value as string) ?? ''}
+                onChange={(e) => setValue(e.target.value)}
+                onBlur={() => commit(value)}
+                disabled={saving}
+              />
+              <button
+                type="button"
+                className="text-[10px] text-muted-foreground underline px-1"
+                onClick={() => { setForceCustom(false); setValue(null); commit(null); }}
+                disabled={saving}
+              >
+                clear
+              </button>
+            </div>
+          );
+        }
+
+        return (
+          <Select
+            value={selectValue}
+            onValueChange={(v) => {
+              if (v === '__none__') { setForceCustom(false); setValue(null); commit(null); return; }
+              if (v === CUSTOM) { setForceCustom(true); setValue(''); return; }
+              setForceCustom(false);
+              setValue(v);
+              commit(v);
+            }}
+            disabled={saving}
+          >
+            <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {column.allowEmpty && <SelectItem value="__none__">—</SelectItem>}
+              {(column.options ?? []).map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+              {(column.groups ?? []).map((group, idx) => (
+                <React.Fragment key={group.label ?? `g-${idx}`}>
+                  <SelectSeparator />
+                  <SelectGroup>
+                    {group.label && <SelectLabel>{group.label}</SelectLabel>}
+                    {group.options.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </React.Fragment>
+              ))}
+              {column.allowCustom && (
+                <>
+                  <SelectSeparator />
+                  <SelectItem value={CUSTOM}>Other…</SelectItem>
+                </>
+              )}
+            </SelectContent>
+          </Select>
+        );
+      })()}
       {column.type === 'boolean' && (
         <div className="flex items-center justify-center h-7">
           <Checkbox

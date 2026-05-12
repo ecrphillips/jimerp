@@ -5,6 +5,11 @@ export interface SelectOption {
   label: string;
 }
 
+export interface SelectOptionGroup {
+  label?: string;
+  options: SelectOption[];
+}
+
 export interface ColumnDef<TRow = any> {
   key: string;
   header: string;
@@ -12,6 +17,8 @@ export interface ColumnDef<TRow = any> {
   readOnly?: boolean;
   width?: string;
   options?: SelectOption[];
+  groups?: SelectOptionGroup[];
+  allowCustom?: boolean;
   getValue: (row: TRow) => unknown;
   format?: (value: unknown, row: TRow) => string;
   allowEmpty?: boolean;

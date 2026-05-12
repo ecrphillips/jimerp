@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format as formatDate } from 'date-fns';
 import type { ColumnDef, SaveResult } from '../types';
+import { ORIGIN_TOP, ORIGIN_SECONDARY } from '@/lib/originOptions';
 
 interface RoastGroupRow {
   roast_group: string;
@@ -12,6 +13,7 @@ interface RoastGroupRow {
   is_active: boolean;
   is_blend: boolean;
   blend_type: string | null;
+  origin: string | null;
   notes: string | null;
   created_at: string;
 }
@@ -36,7 +38,7 @@ export function useRoastGroupsBulkEdit(enabled = true) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roast_groups')
-        .select('roast_group, roast_group_code, display_name, default_roaster, is_active, is_blend, blend_type, notes, created_at')
+        .select('roast_group, roast_group_code, display_name, default_roaster, is_active, is_blend, blend_type, origin, notes, created_at')
         .order('display_name');
       if (error) throw error;
       return (data ?? []) as unknown as RoastGroupRow[];
@@ -51,6 +53,15 @@ export function useRoastGroupsBulkEdit(enabled = true) {
     {
       key: 'display_name', header: 'Name', type: 'text', width: '220px',
       getValue: (r) => r.display_name,
+    },
+    {
+      key: 'origin', header: 'Origin', type: 'select', width: '160px',
+      allowEmpty: true, allowCustom: true,
+      groups: [
+        { label: 'Common', options: ORIGIN_TOP.map((o) => ({ value: o, label: o })) },
+        { label: 'Other origins', options: ORIGIN_SECONDARY.map((o) => ({ value: o, label: o })) },
+      ],
+      getValue: (r) => r.origin ?? '',
     },
     {
       key: 'default_roaster', header: 'Default Roaster', type: 'select', width: '140px',
