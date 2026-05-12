@@ -11,8 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { parseDateOnly } from '@/lib/dateOnly';
-import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock, FileText, Clock, Trash2 } from 'lucide-react';
+import { ArrowLeft, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock, FileText, Clock, Trash2 } from 'lucide-react';
 import { LocationBadge } from '@/components/orders/LocationSelect';
+import { CreatedByBadge } from '@/components/orders/CreatedByBadge';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { GramPackagingBadge } from '@/components/GramPackagingBadge';
 import { toast } from 'sonner';
@@ -66,6 +67,7 @@ export default function OrderDetail() {
           shipped_or_ready,
           invoiced,
           created_by_admin,
+          created_by_user_id,
           account_id,
           location_id,
           updated_at,
@@ -514,10 +516,7 @@ export default function OrderDetail() {
             {order.status}
           </span>
           {order.created_by_admin && (
-            <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-              <UserPlus className="h-3 w-3" />
-              Admin Created
-            </span>
+            <CreatedByBadge userId={order.created_by_user_id} />
           )}
           <LocationBadge locationId={(order as any).location_id} />
         </div>
@@ -882,6 +881,7 @@ export default function OrderDetail() {
             status: order.status,
             account_id: (order as any).account_id,
             created_by_admin: order.created_by_admin,
+            created_by_user_id: order.created_by_user_id,
           }}
           lineItems={lineItemsWithPackedStatus.map(li => ({
             id: li.id,
