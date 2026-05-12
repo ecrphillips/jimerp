@@ -86,7 +86,7 @@ export default function ProductMap() {
         .select(`
           id, lot_number, status, kg_on_hand,
           contract:green_contracts(origin, origin_country, producer, variety),
-          links:green_lot_roast_group_links(roast_group, pct_of_lot)
+          links:green_lot_roast_group_links!green_lot_roast_group_links_lot_id_fkey(roast_group, pct_of_lot)
         `)
         .in('status', ['EN_ROUTE', 'RECEIVED'])
         .order('lot_number');
