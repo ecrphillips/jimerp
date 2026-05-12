@@ -221,7 +221,7 @@ export default function ProspectDetail() {
         .select('id, token, invited_at, expires_at, resent_at, retired_at')
         .eq('prospect_id', id!)
         .maybeSingle();
-      return (data ?? null) as InvitationRow | null;
+      return (data ?? null) as unknown as InvitationRow | null;
     },
   });
 
@@ -234,7 +234,7 @@ export default function ProspectDetail() {
         .select('id, selected_tier, company_name, contact_name, contact_email, contact_phone, billing_address_line1, billing_address_line2, billing_city, billing_province, billing_postal_code, estimated_monthly_kg, notes, submitted_at, status')
         .eq('prospect_id', id!)
         .order('submitted_at', { ascending: false });
-      return (data ?? []) as SubmissionRow[];
+      return (data ?? []) as unknown as SubmissionRow[];
     },
   });
 
