@@ -20,6 +20,7 @@ import { WorkDeadlinePicker } from '@/components/orders/WorkDeadlinePicker';
 import type { GrindOption } from '@/types/database';
 import type { Database } from '@/integrations/supabase/types';
 import { LocationSelect } from '@/components/orders/LocationSelect';
+import { blockNonIntegerKeys } from '@/lib/numericInput';
 
 type DeliveryMethod = Database['public']['Enums']['delivery_method'];
 import { Link } from 'react-router-dom';
@@ -440,6 +441,7 @@ export default function CreateOrderForClient() {
             value={lineItem?.quantity ?? ''}
             placeholder="0"
             onChange={(e) => handleQuantityInputChange(p.id, e.target.value)}
+            onKeyDown={blockNonIntegerKeys}
           />
           <Button
             size="icon"
@@ -505,6 +507,7 @@ export default function CreateOrderForClient() {
                     value={lineItem?.quantity ?? ''}
                     placeholder="0"
                     onChange={(e) => handleQuantityInputChange(variant.id, e.target.value)}
+                    onKeyDown={blockNonIntegerKeys}
                   />
                   <Button
                     size="icon"
