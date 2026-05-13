@@ -1173,6 +1173,128 @@ export type Database = {
           },
         ]
       }
+      coroast_prospect_invitations: {
+        Row: {
+          expires_at: string
+          id: string
+          invited_at: string
+          invited_by: string | null
+          prospect_id: string
+          resent_at: string | null
+          retired_at: string | null
+          token: string
+        }
+        Insert: {
+          expires_at?: string
+          id?: string
+          invited_at?: string
+          invited_by?: string | null
+          prospect_id: string
+          resent_at?: string | null
+          retired_at?: string | null
+          token?: string
+        }
+        Update: {
+          expires_at?: string
+          id?: string
+          invited_at?: string
+          invited_by?: string | null
+          prospect_id?: string
+          resent_at?: string | null
+          retired_at?: string | null
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_prospect_invitations_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: true
+            referencedRelation: "prospects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coroast_prospect_submissions: {
+        Row: {
+          billing_address_line1: string | null
+          billing_address_line2: string | null
+          billing_city: string | null
+          billing_postal_code: string | null
+          billing_province: string | null
+          company_name: string | null
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          estimated_monthly_kg: number | null
+          id: string
+          invitation_id: string
+          notes: string | null
+          prospect_id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          selected_tier: string | null
+          status: string
+          submitted_at: string
+        }
+        Insert: {
+          billing_address_line1?: string | null
+          billing_address_line2?: string | null
+          billing_city?: string | null
+          billing_postal_code?: string | null
+          billing_province?: string | null
+          company_name?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          estimated_monthly_kg?: number | null
+          id?: string
+          invitation_id: string
+          notes?: string | null
+          prospect_id: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          selected_tier?: string | null
+          status?: string
+          submitted_at?: string
+        }
+        Update: {
+          billing_address_line1?: string | null
+          billing_address_line2?: string | null
+          billing_city?: string | null
+          billing_postal_code?: string | null
+          billing_province?: string | null
+          company_name?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          estimated_monthly_kg?: number | null
+          id?: string
+          invitation_id?: string
+          notes?: string | null
+          prospect_id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          selected_tier?: string | null
+          status?: string
+          submitted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_prospect_submissions_invitation_id_fkey"
+            columns: ["invitation_id"]
+            isOneToOne: false
+            referencedRelation: "coroast_prospect_invitations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coroast_prospect_submissions_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "prospects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coroast_recurring_blocks: {
         Row: {
           created_at: string
@@ -3053,6 +3175,8 @@ export type Database = {
           order_id: string
           order_number: string
           read_by: string[] | null
+          submitted_by_admin: boolean
+          submitted_by_name: string | null
           work_deadline: string | null
         }
         Insert: {
@@ -3062,6 +3186,8 @@ export type Database = {
           order_id: string
           order_number: string
           read_by?: string[] | null
+          submitted_by_admin?: boolean
+          submitted_by_name?: string | null
           work_deadline?: string | null
         }
         Update: {
@@ -3071,6 +3197,8 @@ export type Database = {
           order_id?: string
           order_number?: string
           read_by?: string[] | null
+          submitted_by_admin?: boolean
+          submitted_by_name?: string | null
           work_deadline?: string | null
         }
         Relationships: [
@@ -3687,6 +3815,7 @@ export type Database = {
           created_by: string
           id: string
           pronouns: string | null
+          prospect_email: string | null
           stage: Database["public"]["Enums"]["prospect_stage"]
           stream: Database["public"]["Enums"]["prospect_stream"]
           updated_at: string
@@ -3703,6 +3832,7 @@ export type Database = {
           created_by: string
           id?: string
           pronouns?: string | null
+          prospect_email?: string | null
           stage?: Database["public"]["Enums"]["prospect_stage"]
           stream?: Database["public"]["Enums"]["prospect_stream"]
           updated_at?: string
@@ -3719,6 +3849,7 @@ export type Database = {
           created_by?: string
           id?: string
           pronouns?: string | null
+          prospect_email?: string | null
           stage?: Database["public"]["Enums"]["prospect_stage"]
           stream?: Database["public"]["Enums"]["prospect_stream"]
           updated_at?: string
@@ -4546,7 +4677,7 @@ export type Database = {
       }
       dev_reset_master_data: { Args: never; Returns: Json }
       dev_reset_test_day: { Args: never; Returns: Json }
-      dev_test_reset: { Args: never; Returns: undefined }
+      dev_test_reset: { Args: never; Returns: Json }
       dev_test_seed_minimal: { Args: never; Returns: undefined }
       enqueue_email: {
         Args: { payload: Json; queue_name: string }
@@ -4564,6 +4695,7 @@ export type Database = {
           start_time: string
         }[]
       }
+      get_invitation_by_token: { Args: { p_token: string }; Returns: Json }
       get_order_delete_preflight: {
         Args: { p_order_id: string }
         Returns: Json
@@ -4648,6 +4780,24 @@ export type Database = {
         }[]
       }
       reverse_quote_to_sent: { Args: { p_quote_id: string }; Returns: Json }
+      submit_prospect_interest: {
+        Args: {
+          p_billing_address_line1?: string
+          p_billing_address_line2?: string
+          p_billing_city?: string
+          p_billing_postal_code?: string
+          p_billing_province?: string
+          p_company_name?: string
+          p_contact_email?: string
+          p_contact_name?: string
+          p_contact_phone?: string
+          p_estimated_monthly_kg?: number
+          p_notes?: string
+          p_selected_tier: string
+          p_token: string
+        }
+        Returns: Json
+      }
       sync_locked_price_for_quote_line: {
         Args: { p_line_id: string }
         Returns: undefined

@@ -22,7 +22,7 @@ export default function Production() {
   const today = getVancouverDateString(0);
   
   // Date filter: 'today', 'tomorrow', or 'all'
-  const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('today');
+  const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('all');
   
   // Filter configuration is now simpler - actual filtering happens client-side
   // based on computed work_start_at
