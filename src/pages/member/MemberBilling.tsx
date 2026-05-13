@@ -157,10 +157,15 @@ export default function MemberBilling() {
   }
 
   if (memberError || pricingError || !member || !pricing) {
-    const message =
-      (memberError instanceof Error && memberError.message) ||
-      (pricingError instanceof Error && pricingError.message) ||
-      'Unable to load billing.';
+    const errMsg = (e: unknown): string | null => {
+      if (!e) return null;
+      if (typeof e === 'string') return e;
+      if (typeof e === 'object' && 'message' in (e as Record<string, unknown>)) {
+        return String((e as { message: unknown }).message);
+      }
+      return null;
+    };
+    const message = errMsg(memberError) || errMsg(pricingError) || 'Unable to load billing.';
     return (
       <div className="p-6 max-w-3xl mx-auto">
         <Card>
