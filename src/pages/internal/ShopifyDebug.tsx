@@ -118,7 +118,7 @@ export default function ShopifyDebug() {
       const fallback = await orders().eq('source_channel', 'shopify_manual_fallback');
       if (fallback.error) throw fallback.error;
 
-      const linked = await orders().not('source_id', 'is', null);
+      const linked = await orders().not('shopify_source_id', 'is', null);
       if (linked.error) throw linked.error;
 
       return {
