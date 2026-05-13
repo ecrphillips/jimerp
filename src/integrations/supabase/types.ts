@@ -349,24 +349,34 @@ export type Database = {
       }
       client_allowed_products: {
         Row: {
+          account_id: string | null
           client_id: string
           created_at: string
           id: string
           product_id: string
         }
         Insert: {
+          account_id?: string | null
           client_id: string
           created_at?: string
           id?: string
           product_id: string
         }
         Update: {
+          account_id?: string | null
           client_id?: string
           created_at?: string
           id?: string
           product_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "client_allowed_products_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "client_allowed_products_client_id_fkey"
             columns: ["client_id"]
@@ -4546,6 +4556,14 @@ export type Database = {
         Args: { p_client_id: string }
         Returns: Json
       }
+      get_coroast_busy_slots: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          booking_date: string
+          end_time: string
+          start_time: string
+        }[]
+      }
       get_order_delete_preflight: {
         Args: { p_order_id: string }
         Returns: Json
@@ -4558,7 +4576,6 @@ export type Database = {
         Args: { p_roast_group: string }
         Returns: Json
       }
-      get_user_client_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
