@@ -39,7 +39,7 @@ interface SourceRow {
 
 interface PullLogRow {
   id: string;
-  shopify_source_id: string;
+  source_id: string;
   result: string;
   trigger_type: string;
   orders_retrieved: number;
@@ -69,7 +69,7 @@ export default function ShopifyDebug() {
       const recent = await sb
         .from('shopify_pull_log')
         .select(
-          'id, shopify_source_id, result, trigger_type, orders_retrieved, orders_included, orders_quarantined, created_at',
+          'id, source_id, result, trigger_type, orders_retrieved, orders_included, orders_quarantined, created_at',
         )
         .order('created_at', { ascending: false })
         .limit(5);
@@ -234,7 +234,7 @@ export default function ShopifyDebug() {
       if (!latest?.id) throw new Error('Insert a TEST source first');
 
       const { error } = await sb.from('shopify_pull_log').insert({
-        shopify_source_id: (latest as { id: string }).id,
+        source_id: (latest as { id: string }).id,
         result: 'success',
         trigger_type: 'manual',
         orders_retrieved: 5,
@@ -337,7 +337,7 @@ export default function ShopifyDebug() {
                 <TableRow key={r.id}>
                   <TableCell className="font-mono text-xs">{r.id.slice(0, 8)}…</TableCell>
                   <TableCell className="font-mono text-xs">
-                    {r.shopify_source_id.slice(0, 8)}…
+                    {r.source_id.slice(0, 8)}…
                   </TableCell>
                   <TableCell>{r.result}</TableCell>
                   <TableCell>{r.trigger_type}</TableCell>
@@ -370,7 +370,7 @@ export default function ShopifyDebug() {
             source_channel = shopify_manual_fallback:{' '}
             <strong>{orderStats?.fallback ?? '—'}</strong>
           </div>
-          <div>shopify_source_id IS NOT NULL: <strong>{orderStats?.linked ?? '—'}</strong></div>
+          <div>source_id IS NOT NULL: <strong>{orderStats?.linked ?? '—'}</strong></div>
           <p className="text-muted-foreground pt-2">
             This confirms the new orders columns are queryable. Should show all manual right
             now.
