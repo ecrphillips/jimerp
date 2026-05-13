@@ -3128,6 +3128,10 @@ export type Database = {
           order_id: string
           product_id: string
           quantity_units: number
+          shipped_quantity: number | null
+          short_ship_reason: string | null
+          short_ship_recorded_at: string | null
+          short_ship_recorded_by: string | null
           unit_price_locked: number
         }
         Insert: {
@@ -3138,6 +3142,10 @@ export type Database = {
           order_id: string
           product_id: string
           quantity_units: number
+          shipped_quantity?: number | null
+          short_ship_reason?: string | null
+          short_ship_recorded_at?: string | null
+          short_ship_recorded_by?: string | null
           unit_price_locked: number
         }
         Update: {
@@ -3148,6 +3156,10 @@ export type Database = {
           order_id?: string
           product_id?: string
           quantity_units?: number
+          shipped_quantity?: number | null
+          short_ship_reason?: string | null
+          short_ship_recorded_at?: string | null
+          short_ship_recorded_by?: string | null
           unit_price_locked?: number
         }
         Relationships: [
@@ -3235,6 +3247,9 @@ export type Database = {
           roasted: boolean
           ship_display_order: number | null
           shipped_or_ready: boolean
+          shopify_pull_log_id: string | null
+          shopify_source_id: string | null
+          source_channel: string
           status: Database["public"]["Enums"]["order_status"]
           updated_at: string
           work_deadline: string | null
@@ -3263,6 +3278,9 @@ export type Database = {
           roasted?: boolean
           ship_display_order?: number | null
           shipped_or_ready?: boolean
+          shopify_pull_log_id?: string | null
+          shopify_source_id?: string | null
+          source_channel?: string
           status?: Database["public"]["Enums"]["order_status"]
           updated_at?: string
           work_deadline?: string | null
@@ -3291,6 +3309,9 @@ export type Database = {
           roasted?: boolean
           ship_display_order?: number | null
           shipped_or_ready?: boolean
+          shopify_pull_log_id?: string | null
+          shopify_source_id?: string | null
+          source_channel?: string
           status?: Database["public"]["Enums"]["order_status"]
           updated_at?: string
           work_deadline?: string | null
