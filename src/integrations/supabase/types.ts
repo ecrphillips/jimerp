@@ -159,10 +159,17 @@ export type Database = {
           coroast_certified: boolean
           coroast_certified_by: string | null
           coroast_certified_date: string | null
+          coroast_custom_allow_recurring_bookings: boolean | null
           coroast_custom_base_fee: number | null
+          coroast_custom_booking_horizon_days: number | null
+          coroast_custom_cancellation_free_hours: number | null
           coroast_custom_included_hours: number | null
           coroast_custom_included_pallets: number | null
+          coroast_custom_max_booking_duration_hours: number | null
+          coroast_custom_min_booking_duration_hours: number | null
           coroast_custom_overage_rate: number | null
+          coroast_custom_packaging_block_rate: number | null
+          coroast_custom_packaging_blocks_included: number | null
           coroast_custom_storage_rate: number | null
           coroast_joined_date: string | null
           coroast_tier: string | null
@@ -192,10 +199,17 @@ export type Database = {
           coroast_certified?: boolean
           coroast_certified_by?: string | null
           coroast_certified_date?: string | null
+          coroast_custom_allow_recurring_bookings?: boolean | null
           coroast_custom_base_fee?: number | null
+          coroast_custom_booking_horizon_days?: number | null
+          coroast_custom_cancellation_free_hours?: number | null
           coroast_custom_included_hours?: number | null
           coroast_custom_included_pallets?: number | null
+          coroast_custom_max_booking_duration_hours?: number | null
+          coroast_custom_min_booking_duration_hours?: number | null
           coroast_custom_overage_rate?: number | null
+          coroast_custom_packaging_block_rate?: number | null
+          coroast_custom_packaging_blocks_included?: number | null
           coroast_custom_storage_rate?: number | null
           coroast_joined_date?: string | null
           coroast_tier?: string | null
@@ -225,10 +239,17 @@ export type Database = {
           coroast_certified?: boolean
           coroast_certified_by?: string | null
           coroast_certified_date?: string | null
+          coroast_custom_allow_recurring_bookings?: boolean | null
           coroast_custom_base_fee?: number | null
+          coroast_custom_booking_horizon_days?: number | null
+          coroast_custom_cancellation_free_hours?: number | null
           coroast_custom_included_hours?: number | null
           coroast_custom_included_pallets?: number | null
+          coroast_custom_max_booking_duration_hours?: number | null
+          coroast_custom_min_booking_duration_hours?: number | null
           coroast_custom_overage_rate?: number | null
+          coroast_custom_packaging_block_rate?: number | null
+          coroast_custom_packaging_blocks_included?: number | null
           coroast_custom_storage_rate?: number | null
           coroast_joined_date?: string | null
           coroast_tier?: string | null
@@ -480,6 +501,44 @@ export type Database = {
         }
         Relationships: []
       }
+      coroast_account_pricing_audit: {
+        Row: {
+          account_id: string
+          changed_at: string
+          changed_by: string | null
+          changed_field: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+        }
+        Insert: {
+          account_id: string
+          changed_at?: string
+          changed_by?: string | null
+          changed_field: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+        }
+        Update: {
+          account_id?: string
+          changed_at?: string
+          changed_by?: string | null
+          changed_field?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_account_pricing_audit_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coroast_availability_windows: {
         Row: {
           close_time: string
@@ -612,6 +671,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "coroast_billing_periods_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coroast_booking_rules_audit: {
+        Row: {
+          account_id: string | null
+          changed_at: string
+          changed_by: string | null
+          changed_field: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+          source: string
+          tier: Database["public"]["Enums"]["coroast_tier"] | null
+        }
+        Insert: {
+          account_id?: string | null
+          changed_at?: string
+          changed_by?: string | null
+          changed_field: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          source: string
+          tier?: Database["public"]["Enums"]["coroast_tier"] | null
+        }
+        Update: {
+          account_id?: string | null
+          changed_at?: string
+          changed_by?: string | null
+          changed_field?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          source?: string
+          tier?: Database["public"]["Enums"]["coroast_tier"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_booking_rules_audit_account_id_fkey"
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
@@ -1167,6 +1270,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      coroast_tier_booking_rules: {
+        Row: {
+          allow_past_dated_bookings: boolean
+          allow_recurring_bookings: boolean
+          booking_horizon_days: number
+          cancellation_free_hours: number
+          created_at: string
+          id: string
+          max_booking_duration_hours: number
+          min_booking_duration_hours: number
+          tier: Database["public"]["Enums"]["coroast_tier"]
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          allow_past_dated_bookings?: boolean
+          allow_recurring_bookings: boolean
+          booking_horizon_days: number
+          cancellation_free_hours: number
+          created_at?: string
+          id?: string
+          max_booking_duration_hours?: number
+          min_booking_duration_hours?: number
+          tier: Database["public"]["Enums"]["coroast_tier"]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          allow_past_dated_bookings?: boolean
+          allow_recurring_bookings?: boolean
+          booking_horizon_days?: number
+          cancellation_free_hours?: number
+          created_at?: string
+          id?: string
+          max_booking_duration_hours?: number
+          min_booking_duration_hours?: number
+          tier?: Database["public"]["Enums"]["coroast_tier"]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
       }
       coroast_unit_economics_scenarios: {
         Row: {
