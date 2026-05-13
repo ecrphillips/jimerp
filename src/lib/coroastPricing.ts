@@ -110,17 +110,20 @@ export function buildResolvedPricing(
 
   for (const meta of PRICING_FIELDS) {
     const overrideRaw = (account as unknown as Record<string, number | null>)[meta.accountColumn];
+    const tierDefault = tierDefaultValue(tier, meta.key);
     if (overrideRaw != null) {
       const audit = latestAuditByField[meta.auditField];
       fields[meta.key] = {
         value: Number(overrideRaw),
+        tierDefault,
         source: 'ACCOUNT_OVERRIDE',
         updatedAt: audit?.changed_at,
         updatedBy: audit?.changed_by ?? null,
       };
     } else {
       fields[meta.key] = {
-        value: tierDefaultValue(tier, meta.key),
+        value: tierDefault,
+        tierDefault,
         source: 'TIER_DEFAULT',
       };
     }
