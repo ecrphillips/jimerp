@@ -99,8 +99,9 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     }
   }
 
-  // CLIENT user on standard portal routes but is coroast-only — redirect to member portal
-  if (authUser.role === 'CLIENT' && isCoroastMember && !authUser.canPlaceOrders && location.pathname.startsWith('/portal')) {
+  // CLIENT coroast members default to /member-portal on the bare /portal landing.
+  // Exact match preserves access to /portal/* sub-routes for hybrid users.
+  if (authUser.role === 'CLIENT' && isCoroastMember && location.pathname === '/portal') {
     return <Navigate to="/member-portal" replace />;
   }
 
