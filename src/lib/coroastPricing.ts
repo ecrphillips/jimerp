@@ -14,6 +14,8 @@ export type PricingFieldSource = 'TIER_DEFAULT' | 'ACCOUNT_OVERRIDE';
 
 export interface PricingField {
   value: number;
+  /** The standard tier-default value for this field, regardless of source. */
+  tierDefault: number;
   source: PricingFieldSource;
   updatedAt?: string;
   updatedBy?: string | null;
