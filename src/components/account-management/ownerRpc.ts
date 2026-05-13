@@ -10,5 +10,5 @@ type OwnerRpcName =
 
 export function ownerRpc(fn: OwnerRpcName, args: Record<string, unknown>) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return supabase.rpc(fn as never, args as any);
+  return (supabase.rpc as any)(fn, args);
 }
