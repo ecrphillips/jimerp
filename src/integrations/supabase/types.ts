@@ -3128,6 +3128,10 @@ export type Database = {
           order_id: string
           product_id: string
           quantity_units: number
+          shipped_quantity: number | null
+          short_ship_reason: string | null
+          short_ship_recorded_at: string | null
+          short_ship_recorded_by: string | null
           unit_price_locked: number
         }
         Insert: {
@@ -3138,6 +3142,10 @@ export type Database = {
           order_id: string
           product_id: string
           quantity_units: number
+          shipped_quantity?: number | null
+          short_ship_reason?: string | null
+          short_ship_recorded_at?: string | null
+          short_ship_recorded_by?: string | null
           unit_price_locked: number
         }
         Update: {
@@ -3148,6 +3156,10 @@ export type Database = {
           order_id?: string
           product_id?: string
           quantity_units?: number
+          shipped_quantity?: number | null
+          short_ship_reason?: string | null
+          short_ship_recorded_at?: string | null
+          short_ship_recorded_by?: string | null
           unit_price_locked?: number
         }
         Relationships: [
@@ -3235,6 +3247,9 @@ export type Database = {
           roasted: boolean
           ship_display_order: number | null
           shipped_or_ready: boolean
+          shopify_pull_log_id: string | null
+          shopify_source_id: string | null
+          source_channel: string
           status: Database["public"]["Enums"]["order_status"]
           updated_at: string
           work_deadline: string | null
@@ -3263,6 +3278,9 @@ export type Database = {
           roasted?: boolean
           ship_display_order?: number | null
           shipped_or_ready?: boolean
+          shopify_pull_log_id?: string | null
+          shopify_source_id?: string | null
+          source_channel?: string
           status?: Database["public"]["Enums"]["order_status"]
           updated_at?: string
           work_deadline?: string | null
@@ -3291,6 +3309,9 @@ export type Database = {
           roasted?: boolean
           ship_display_order?: number | null
           shipped_or_ready?: boolean
+          shopify_pull_log_id?: string | null
+          shopify_source_id?: string | null
+          source_channel?: string
           status?: Database["public"]["Enums"]["order_status"]
           updated_at?: string
           work_deadline?: string | null
@@ -3323,6 +3344,20 @@ export type Database = {
             columns: ["location_id"]
             isOneToOne: false
             referencedRelation: "client_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_shopify_pull_log_id_fkey"
+            columns: ["shopify_pull_log_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_pull_log"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_shopify_source_id_fkey"
+            columns: ["shopify_source_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_sources"
             referencedColumns: ["id"]
           },
         ]
@@ -4380,6 +4415,270 @@ export type Database = {
             columns: ["order_line_item_id"]
             isOneToOne: true
             referencedRelation: "order_line_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopify_bundle_source_orders: {
+        Row: {
+          bundle_order_id: string
+          customer_name: string | null
+          id: string
+          line_items: Json
+          pull_log_id: string | null
+          raw_payload: Json | null
+          recorded_at: string
+          shopify_created_at: string | null
+          shopify_order_id: string
+          shopify_order_number: string | null
+          shopify_status: string | null
+          source_id: string
+        }
+        Insert: {
+          bundle_order_id: string
+          customer_name?: string | null
+          id?: string
+          line_items?: Json
+          pull_log_id?: string | null
+          raw_payload?: Json | null
+          recorded_at?: string
+          shopify_created_at?: string | null
+          shopify_order_id: string
+          shopify_order_number?: string | null
+          shopify_status?: string | null
+          source_id: string
+        }
+        Update: {
+          bundle_order_id?: string
+          customer_name?: string | null
+          id?: string
+          line_items?: Json
+          pull_log_id?: string | null
+          raw_payload?: Json | null
+          recorded_at?: string
+          shopify_created_at?: string | null
+          shopify_order_id?: string
+          shopify_order_number?: string | null
+          shopify_status?: string | null
+          source_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_bundle_source_orders_bundle_order_id_fkey"
+            columns: ["bundle_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopify_bundle_source_orders_pull_log_id_fkey"
+            columns: ["pull_log_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_pull_log"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopify_bundle_source_orders_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopify_product_mappings: {
+        Row: {
+          created_at: string
+          do_not_produce: boolean
+          first_seen_at: string
+          id: string
+          jim_product_id: string | null
+          last_seen_at: string
+          mapped_at: string | null
+          mapped_by: string | null
+          notes: string | null
+          shopify_product_id: string
+          shopify_product_title: string | null
+          shopify_sku: string | null
+          shopify_variant_id: string | null
+          source_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          do_not_produce?: boolean
+          first_seen_at?: string
+          id?: string
+          jim_product_id?: string | null
+          last_seen_at?: string
+          mapped_at?: string | null
+          mapped_by?: string | null
+          notes?: string | null
+          shopify_product_id: string
+          shopify_product_title?: string | null
+          shopify_sku?: string | null
+          shopify_variant_id?: string | null
+          source_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          do_not_produce?: boolean
+          first_seen_at?: string
+          id?: string
+          jim_product_id?: string | null
+          last_seen_at?: string
+          mapped_at?: string | null
+          mapped_by?: string | null
+          notes?: string | null
+          shopify_product_id?: string
+          shopify_product_title?: string | null
+          shopify_sku?: string | null
+          shopify_variant_id?: string | null
+          source_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_product_mappings_jim_product_id_fkey"
+            columns: ["jim_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopify_product_mappings_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopify_pull_log: {
+        Row: {
+          attempted_at: string
+          completed_at: string | null
+          details: Json
+          error_message: string | null
+          generated_order_id: string | null
+          id: string
+          orders_included: number
+          orders_quarantined: number
+          orders_retrieved: number
+          orders_skipped: number
+          result: string
+          source_id: string
+          trigger_type: string
+          triggered_by: string | null
+        }
+        Insert: {
+          attempted_at?: string
+          completed_at?: string | null
+          details?: Json
+          error_message?: string | null
+          generated_order_id?: string | null
+          id?: string
+          orders_included?: number
+          orders_quarantined?: number
+          orders_retrieved?: number
+          orders_skipped?: number
+          result: string
+          source_id: string
+          trigger_type: string
+          triggered_by?: string | null
+        }
+        Update: {
+          attempted_at?: string
+          completed_at?: string | null
+          details?: Json
+          error_message?: string | null
+          generated_order_id?: string | null
+          id?: string
+          orders_included?: number
+          orders_quarantined?: number
+          orders_retrieved?: number
+          orders_skipped?: number
+          result?: string
+          source_id?: string
+          trigger_type?: string
+          triggered_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_pull_log_generated_order_id_fkey"
+            columns: ["generated_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopify_pull_log_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopify_sources: {
+        Row: {
+          api_access_token: string | null
+          api_scopes: string | null
+          created_at: string
+          default_short_ship_reason: string
+          id: string
+          is_active: boolean
+          linked_account_id: string
+          owner_notes: string | null
+          pull_cadence: string
+          pull_schedule_cron: string | null
+          store_name: string
+          store_slug: string
+          store_url: string
+          token_expires_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          api_access_token?: string | null
+          api_scopes?: string | null
+          created_at?: string
+          default_short_ship_reason?: string
+          id?: string
+          is_active?: boolean
+          linked_account_id: string
+          owner_notes?: string | null
+          pull_cadence?: string
+          pull_schedule_cron?: string | null
+          store_name: string
+          store_slug: string
+          store_url: string
+          token_expires_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          api_access_token?: string | null
+          api_scopes?: string | null
+          created_at?: string
+          default_short_ship_reason?: string
+          id?: string
+          is_active?: boolean
+          linked_account_id?: string
+          owner_notes?: string | null
+          pull_cadence?: string
+          pull_schedule_cron?: string | null
+          store_name?: string
+          store_slug?: string
+          store_url?: string
+          token_expires_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_sources_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
