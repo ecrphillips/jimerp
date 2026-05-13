@@ -338,30 +338,25 @@ function MyPricingCard({
                       {formatPricingValue(meta, field.value)}
                     </td>
                     <td className="py-2 text-right">
-                      {isCustom ? (
-                        (() => {
-                          const discount = field.tierDefault - field.value;
-                          const isDiscount = discount > 0;
-                          const label = isDiscount
-                            ? `${meta.isCurrency ? `$${discount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : discount.toLocaleString()} off`
-                            : 'Custom rate';
-                          return (
-                            <span className="inline-flex items-center gap-1">
-                              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">{label}</Badge>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="text-xs">
-                                    Standard {meta.label.toLowerCase()}: {formatPricingValue(meta, field.tierDefault)}
-                                    {customDate ? ` · set ${customDate}` : ''}
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </span>
-                          );
-                        })()
+                      {isCustom && field.tierDefault - field.value > 0 ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+                            {meta.isCurrency
+                              ? `$${(field.tierDefault - field.value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+                              : (field.tierDefault - field.value).toLocaleString()} off
+                          </Badge>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">
+                                Standard {meta.label.toLowerCase()}: {formatPricingValue(meta, field.tierDefault)}
+                                {customDate ? ` · set ${customDate}` : ''}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </span>
                       ) : null}
                     </td>
 
