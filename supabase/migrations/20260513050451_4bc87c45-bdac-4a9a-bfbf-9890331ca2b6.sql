@@ -1,0 +1,1 @@
+COMMENT ON SCHEMA public IS 'Home Island Coffee Partners — Lite ERP. Types refresh trigger.';
