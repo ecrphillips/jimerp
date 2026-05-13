@@ -339,23 +339,32 @@ function MyPricingCard({
                     </td>
                     <td className="py-2 text-right">
                       {isCustom ? (
-                        <span className="inline-flex items-center gap-1">
-                          <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Custom rate</Badge>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="text-xs">
-                                Custom rate{customDate ? ` set ${customDate}` : ''} — contact Home Island Coffee Partners with questions.
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </span>
-                      ) : (
-                        <Badge variant="secondary">Standard rate</Badge>
-                      )}
+                        (() => {
+                          const discount = field.tierDefault - field.value;
+                          const isDiscount = discount > 0;
+                          const label = isDiscount
+                            ? `${meta.isCurrency ? `$${discount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : discount.toLocaleString()} off`
+                            : 'Custom rate';
+                          return (
+                            <span className="inline-flex items-center gap-1">
+                              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">{label}</Badge>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-xs">
+                                    Standard {meta.label.toLowerCase()}: {formatPricingValue(meta, field.tierDefault)}
+                                    {customDate ? ` · set ${customDate}` : ''}
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </span>
+                          );
+                        })()
+                      ) : null}
                     </td>
+
                   </tr>
                 );
               })}
