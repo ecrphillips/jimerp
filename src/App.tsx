@@ -54,6 +54,7 @@ import InventoryLedger from "@/pages/internal/InventoryLedger";
 import AdminTools from "@/pages/internal/AdminTools";
 import UsersAccess from "@/pages/internal/UsersAccess";
 import AdminFeedback from "@/pages/internal/AdminFeedback";
+import ShopifyDebug from "@/pages/internal/ShopifyDebug";
 import Portal from "@/pages/client/Portal";
 import NewOrder from "@/pages/client/NewOrder";
 import OrderHistory from "@/pages/client/OrderHistory";
@@ -295,6 +296,11 @@ const App = () => (
             <Route path="/admin/feedback" element={
               <ProtectedRoute allowedRoles={['ADMIN']}>
                 <InternalLayout><AdminFeedback /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/shopify-debug" element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <InternalLayout><ShopifyDebug /></InternalLayout>
               </ProtectedRoute>
             } />
 
