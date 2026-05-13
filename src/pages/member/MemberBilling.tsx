@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Info } from 'lucide-react';
@@ -30,7 +31,12 @@ export default function MemberBilling() {
   const effectiveAccountId = previewAccountId ?? authUser?.accountId;
   const accountId = effectiveAccountId;
 
-  const { data: member } = useQuery({
+  const {
+    data: member,
+    isLoading: memberLoading,
+    error: memberError,
+    refetch: refetchMember,
+  } = useQuery({
     queryKey: ['my-account-billing', accountId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -39,12 +45,18 @@ export default function MemberBilling() {
         .eq('id', accountId!)
         .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error('Account row not found or not accessible');
       return data;
     },
     enabled: !!accountId,
   });
 
-  const { data: pricing } = useQuery({
+  const {
+    data: pricing,
+    isLoading: pricingLoading,
+    error: pricingError,
+    refetch: refetchPricing,
+  } = useQuery({
     queryKey: ['coroast-resolved-pricing', accountId],
     queryFn: () => resolveAccountPricing(accountId!),
     enabled: !!accountId,
@@ -123,8 +135,51 @@ export default function MemberBilling() {
     enabled: !!accountId,
   });
 
-  if (!member || !pricing) {
+  if (!accountId) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">No account linked</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Your user is not linked to a co-roasting account. Please contact an administrator.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (memberLoading || pricingLoading) {
     return <div className="p-6"><p className="text-muted-foreground">Loading…</p></div>;
+  }
+
+  if (memberError || pricingError || !member || !pricing) {
+    const message =
+      (memberError instanceof Error && memberError.message) ||
+      (pricingError instanceof Error && pricingError.message) ||
+      'Unable to load billing.';
+    return (
+      <div className="p-6 max-w-3xl mx-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg text-destructive">Couldn't load billing</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">{message}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => { refetchMember(); refetchPricing(); }}
+            >
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });

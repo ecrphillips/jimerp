@@ -148,10 +148,11 @@ export async function resolveAccountPricing(accountId: string): Promise<Resolved
     .from('accounts')
     .select(ACCOUNT_PRICING_COLUMNS)
     .eq('id', accountId)
-    .single();
+    .maybeSingle();
 
-  if (error || !account) {
-    throw error ?? new Error('Account not found');
+  if (error) throw error;
+  if (!account) {
+    throw new Error('Account row not found or not accessible');
   }
 
   const accountRow = account as unknown as AccountPricingRow;
