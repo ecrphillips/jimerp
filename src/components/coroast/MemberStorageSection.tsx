@@ -211,7 +211,7 @@ export default function MemberStorageSection({ memberId, tier }: MemberStorageSe
               </p>
               {paidPallets > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  @ ${Number(currentStorage?.rate_per_add_pallet ?? sRates.ratePerPallet)}/pallet
+                  @ ${Number(currentStorage?.rate_per_add_pallet ?? fallbackRatePerPallet)}/pallet
                 </p>
               )}
             </div>
