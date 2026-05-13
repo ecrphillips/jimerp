@@ -163,8 +163,6 @@ export type Database = {
           coroast_custom_included_hours: number | null
           coroast_custom_included_pallets: number | null
           coroast_custom_overage_rate: number | null
-          coroast_custom_packaging_block_rate: number | null
-          coroast_custom_packaging_blocks_included: number | null
           coroast_custom_storage_rate: number | null
           coroast_joined_date: string | null
           coroast_tier: string | null
@@ -198,8 +196,6 @@ export type Database = {
           coroast_custom_included_hours?: number | null
           coroast_custom_included_pallets?: number | null
           coroast_custom_overage_rate?: number | null
-          coroast_custom_packaging_block_rate?: number | null
-          coroast_custom_packaging_blocks_included?: number | null
           coroast_custom_storage_rate?: number | null
           coroast_joined_date?: string | null
           coroast_tier?: string | null
@@ -233,8 +229,6 @@ export type Database = {
           coroast_custom_included_hours?: number | null
           coroast_custom_included_pallets?: number | null
           coroast_custom_overage_rate?: number | null
-          coroast_custom_packaging_block_rate?: number | null
-          coroast_custom_packaging_blocks_included?: number | null
           coroast_custom_storage_rate?: number | null
           coroast_joined_date?: string | null
           coroast_tier?: string | null
@@ -559,44 +553,6 @@ export type Database = {
             columns: ["billing_period_id"]
             isOneToOne: false
             referencedRelation: "coroast_billing_periods"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      coroast_account_pricing_audit: {
-        Row: {
-          account_id: string
-          changed_at: string
-          changed_by: string | null
-          changed_field: string
-          id: string
-          new_value: string | null
-          old_value: string | null
-        }
-        Insert: {
-          account_id: string
-          changed_at?: string
-          changed_by?: string | null
-          changed_field: string
-          id?: string
-          new_value?: string | null
-          old_value?: string | null
-        }
-        Update: {
-          account_id?: string
-          changed_at?: string
-          changed_by?: string | null
-          changed_field?: string
-          id?: string
-          new_value?: string | null
-          old_value?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "coroast_account_pricing_audit_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -2942,8 +2898,6 @@ export type Database = {
           order_id: string
           order_number: string
           read_by: string[] | null
-          submitted_by_admin: boolean
-          submitted_by_name: string | null
           work_deadline: string | null
         }
         Insert: {
@@ -2953,8 +2907,6 @@ export type Database = {
           order_id: string
           order_number: string
           read_by?: string[] | null
-          submitted_by_admin?: boolean
-          submitted_by_name?: string | null
           work_deadline?: string | null
         }
         Update: {
@@ -2964,8 +2916,6 @@ export type Database = {
           order_id?: string
           order_number?: string
           read_by?: string[] | null
-          submitted_by_admin?: boolean
-          submitted_by_name?: string | null
           work_deadline?: string | null
         }
         Relationships: [
@@ -4450,14 +4400,6 @@ export type Database = {
       get_client_delete_preflight: {
         Args: { p_client_id: string }
         Returns: Json
-      }
-      get_coroast_busy_slots: {
-        Args: { p_from: string; p_to: string }
-        Returns: {
-          booking_date: string
-          start_time: string
-          end_time: string
-        }[]
       }
       get_order_delete_preflight: {
         Args: { p_order_id: string }
