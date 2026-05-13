@@ -187,7 +187,7 @@ export default function MemberSchedule() {
     queryFn: async () => {
       const from = format(new Date(), 'yyyy-MM-dd');
       const to = format(addWeeks(new Date(), 13), 'yyyy-MM-dd');
-      const { data, error } = await supabase.rpc('get_coroast_busy_slots', {
+      const { data, error } = await (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>)('get_coroast_busy_slots', {
         p_from: from,
         p_to: to,
       });
