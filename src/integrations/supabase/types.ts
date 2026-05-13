@@ -163,6 +163,8 @@ export type Database = {
           coroast_custom_included_hours: number | null
           coroast_custom_included_pallets: number | null
           coroast_custom_overage_rate: number | null
+          coroast_custom_packaging_block_rate: number | null
+          coroast_custom_packaging_blocks_included: number | null
           coroast_custom_storage_rate: number | null
           coroast_joined_date: string | null
           coroast_tier: string | null
@@ -196,6 +198,8 @@ export type Database = {
           coroast_custom_included_hours?: number | null
           coroast_custom_included_pallets?: number | null
           coroast_custom_overage_rate?: number | null
+          coroast_custom_packaging_block_rate?: number | null
+          coroast_custom_packaging_blocks_included?: number | null
           coroast_custom_storage_rate?: number | null
           coroast_joined_date?: string | null
           coroast_tier?: string | null
@@ -229,6 +233,8 @@ export type Database = {
           coroast_custom_included_hours?: number | null
           coroast_custom_included_pallets?: number | null
           coroast_custom_overage_rate?: number | null
+          coroast_custom_packaging_block_rate?: number | null
+          coroast_custom_packaging_blocks_included?: number | null
           coroast_custom_storage_rate?: number | null
           coroast_joined_date?: string | null
           coroast_tier?: string | null
@@ -553,6 +559,44 @@ export type Database = {
             columns: ["billing_period_id"]
             isOneToOne: false
             referencedRelation: "coroast_billing_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coroast_account_pricing_audit: {
+        Row: {
+          account_id: string
+          changed_at: string
+          changed_by: string | null
+          changed_field: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+        }
+        Insert: {
+          account_id: string
+          changed_at?: string
+          changed_by?: string | null
+          changed_field: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+        }
+        Update: {
+          account_id?: string
+          changed_at?: string
+          changed_by?: string | null
+          changed_field?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_account_pricing_audit_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]

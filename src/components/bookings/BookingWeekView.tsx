@@ -10,6 +10,7 @@ import {
   HOUR_START, HOUR_END, TOTAL_HOURS, ROW_HEIGHT,
   type MemberRow, type BookingRow, type BlockRow, type AvailabilityWindow,
 } from './bookingUtils';
+import { useAccountsPricing } from '@/hooks/useAccountPricing';
 
 interface BookingWeekViewProps {
   blocks: BlockRow[];
@@ -72,6 +73,7 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
   const todayStr = format(startOfToday(), 'yyyy-MM-dd');
 
   const allMemberIds = useMemo(() => members.map(m => m.id), [members]);
+  const { data: pricingMap } = useAccountsPricing(allMemberIds);
 
   // Compute overage set
   const bookingOverageSet = useMemo(() => {
@@ -89,7 +91,10 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
       const memberId = key.split(':')[0];
       const member = members.find(m => m.id === memberId);
       const tier = member?.tier ?? 'MEMBER';
-      const included = TIER_RATES[tier]?.includedHours ?? 3;
+      const included =
+        pricingMap?.get(memberId)?.includedHours.value
+        ?? TIER_RATES[tier]?.includedHours
+        ?? 3;
       let running = 0;
       for (const bk of bks) {
         const dur = bk.duration_hours ?? 0;
@@ -98,7 +103,7 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
       }
     }
     return set;
-  }, [bookings, members]);
+  }, [bookings, members, pricingMap]);
 
   const events = useMemo(() => {
     const result: CalendarEvent[] = [];

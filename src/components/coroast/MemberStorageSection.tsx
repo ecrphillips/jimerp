@@ -13,6 +13,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Package, AlertCircle } from 'lucide-react';
 import { STORAGE_RATES } from '@/components/bookings/bookingUtils';
+import { useAccountPricing } from '@/hooks/useAccountPricing';
 
 interface MemberStorageSectionProps {
   memberId: string;
@@ -21,6 +22,7 @@ interface MemberStorageSectionProps {
 
 export default function MemberStorageSection({ memberId, tier }: MemberStorageSectionProps) {
   const queryClient = useQueryClient();
+  const { data: pricing } = useAccountPricing(memberId);
   const now = new Date();
   const currentMonthStart = format(startOfMonth(now), 'yyyy-MM-dd');
   const currentMonthEnd = format(endOfMonth(now), 'yyyy-MM-dd');
@@ -62,15 +64,17 @@ export default function MemberStorageSection({ memberId, tier }: MemberStorageSe
   useEffect(() => {
     if (!currentBp || currentStorage !== null || currentStorage === undefined) return;
     // currentStorage is null means query ran and found nothing
-    const sRates = STORAGE_RATES[tier] ?? STORAGE_RATES.MEMBER;
+    const tierStorage = STORAGE_RATES[tier] ?? STORAGE_RATES.MEMBER;
+    const includedPallets = pricing?.storageIncludedPallets.value ?? tierStorage.includedPallets;
+    const ratePerPallet = pricing?.storageOverageRate.value ?? tierStorage.ratePerPallet;
     const create = async () => {
       const { error } = await supabase.from('coroast_storage_allocations').insert({
         member_id: memberId,
         billing_period_id: currentBp.id,
-        included_pallets: sRates.includedPallets,
+        included_pallets: includedPallets,
         paid_pallets: 0,
         pallets_in_use: 0,
-        rate_per_add_pallet: sRates.ratePerPallet,
+        rate_per_add_pallet: ratePerPallet,
       });
       if (error) {
         console.error('Failed to auto-create storage allocation:', error);
@@ -79,7 +83,7 @@ export default function MemberStorageSection({ memberId, tier }: MemberStorageSe
       refetchStorage();
     };
     create();
-  }, [currentBp, currentStorage, memberId, tier]);
+  }, [currentBp, currentStorage, memberId, tier, pricing]);
 
   // Storage history
   const { data: storageHistory = [] } = useQuery({
@@ -142,12 +146,14 @@ export default function MemberStorageSection({ memberId, tier }: MemberStorageSe
     onError: () => toast.error('Failed to request release'),
   });
 
-  const sRates = STORAGE_RATES[tier] ?? STORAGE_RATES.MEMBER;
-  const includedPallets = currentStorage?.included_pallets ?? sRates.includedPallets;
+  const tierStorage = STORAGE_RATES[tier] ?? STORAGE_RATES.MEMBER;
+  const fallbackIncludedPallets = pricing?.storageIncludedPallets.value ?? tierStorage.includedPallets;
+  const fallbackRatePerPallet = pricing?.storageOverageRate.value ?? tierStorage.ratePerPallet;
+  const includedPallets = currentStorage?.included_pallets ?? fallbackIncludedPallets;
   const paidPallets = editPaidPallets ?? currentStorage?.paid_pallets ?? 0;
   const palletsInUse = editPalletsInUse ?? currentStorage?.pallets_in_use ?? 0;
   const totalAllocated = includedPallets + paidPallets;
-  const storageCharge = paidPallets * (currentStorage?.rate_per_add_pallet ?? sRates.ratePerPallet);
+  const storageCharge = paidPallets * (currentStorage?.rate_per_add_pallet ?? fallbackRatePerPallet);
   const usagePct = totalAllocated > 0 ? Math.min(100, (palletsInUse / totalAllocated) * 100) : 0;
 
   const canRelease = currentStorage && !currentStorage.release_requested

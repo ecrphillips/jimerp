@@ -28,6 +28,7 @@ import { formatPronounsSuffix } from '@/lib/pronounOptions';
 
 import PricingAnalysisTab from '@/components/account/PricingAnalysisTab';
 import OfferWorkspaceTab from '@/components/account/OfferWorkspaceTab';
+import { formatAuditEntry, type PricingAuditRow } from '@/lib/coroastPricing';
 
 // PricingTierCard removed — pricing tiers are no longer in the data model.
 function PricingTierCard(_props: { accountId: string; pricingTierId: string | null }) {
@@ -1346,7 +1347,52 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
       </Card>
 
       <CustomRateOverrides account={account} refetch={refetch} />
+      <CustomRateAuditLog accountId={account.id} programs={account.programs ?? []} />
     </div>
+  );
+}
+
+function CustomRateAuditLog({ accountId, programs }: { accountId: string; programs: string[] }) {
+  const { authUser } = useAuth();
+  const isAdminOrOps = authUser?.role === 'ADMIN' || authUser?.role === 'OPS';
+  const hasCoroasting = programs.includes('COROASTING');
+
+  const { data: rows } = useQuery({
+    queryKey: ['coroast-pricing-audit', accountId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('coroast_account_pricing_audit')
+        .select('*')
+        .eq('account_id', accountId)
+        .order('changed_at', { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: isAdminOrOps && hasCoroasting,
+  });
+
+  if (!isAdminOrOps || !hasCoroasting) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Recent Pricing Changes</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {!rows || rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No pricing changes recorded.</p>
+        ) : (
+          <ul className="space-y-1 text-sm">
+            {rows.map((r: any) => (
+              <li key={r.id} className="text-muted-foreground">
+                {formatAuditEntry(r as PricingAuditRow)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1357,12 +1403,14 @@ const OVERRIDE_FIELDS = [
   { key: 'coroast_custom_overage_rate', label: 'Overage Rate ($/hr)', tierKey: 'overageRate', isDollar: true },
   { key: 'coroast_custom_included_pallets', label: 'Included Pallets', tierKey: 'includedPallets', isDollar: false },
   { key: 'coroast_custom_storage_rate', label: 'Storage Rate ($/pallet/mo)', tierKey: 'storageRate', isDollar: true },
+  { key: 'coroast_custom_packaging_blocks_included', label: 'Packaging Blocks Included', tierKey: 'packagingBlocksIncluded', isDollar: false },
+  { key: 'coroast_custom_packaging_block_rate', label: 'Packaging Block Rate ($/2-hr block)', tierKey: 'packagingBlockRate', isDollar: true },
 ] as const;
 
 const TIER_DEFAULTS: Record<string, Record<string, number>> = {
-  MEMBER: { base: 399, includedHours: 3, overageRate: 160, includedPallets: 0, storageRate: 175 },
-  GROWTH: { base: 859, includedHours: 7, overageRate: 145, includedPallets: 1, storageRate: 175 },
-  PRODUCTION: { base: 1399, includedHours: 12, overageRate: 130, includedPallets: 2, storageRate: 175 },
+  MEMBER:     { base: 399,  includedHours: 3,  overageRate: 160, includedPallets: 0, storageRate: 175, packagingBlocksIncluded: 0, packagingBlockRate: 0 },
+  GROWTH:     { base: 859,  includedHours: 7,  overageRate: 145, includedPallets: 1, storageRate: 175, packagingBlocksIncluded: 0, packagingBlockRate: 0 },
+  PRODUCTION: { base: 1399, includedHours: 12, overageRate: 130, includedPallets: 2, storageRate: 175, packagingBlocksIncluded: 0, packagingBlockRate: 0 },
 };
 
 function CustomRateOverrides({ account, refetch }: { account: any; refetch: () => void }) {

@@ -12,8 +12,9 @@ import { CheckCircle2, TrendingUp, Lock, Trash2, Plus, RotateCcw } from 'lucide-
 import { format, endOfMonth, subMonths, addMonths, startOfMonth, getDaysInMonth, isAfter } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { TIER_RATES, STORAGE_RATES, timeToMinutes } from '@/components/bookings/bookingUtils';
-import { resolveAccountRates } from '@/components/bookings/resolveRates';
+import { TIER_RATES, timeToMinutes } from '@/components/bookings/bookingUtils';
+import { resolveAccountPricing } from '@/lib/coroastPricing';
+import { useAccountsPricing } from '@/hooks/useAccountPricing';
 import { useAuth } from '@/contexts/AuthContext';
 import QuickBooksInstructionsModal from '@/components/coroast/QuickBooksInstructionsModal';
 
@@ -93,6 +94,9 @@ export default function CoRoastBilling() {
     },
   });
 
+  const memberIds = useMemo(() => members.map((m) => m.id), [members]);
+  const { data: pricingMap } = useAccountsPricing(memberIds);
+
   const { data: billingPeriods = [], refetch: refetchPeriods } = useQuery({
     queryKey: ['coroast-billing-periods', selectedMonth],
     queryFn: async () => {
@@ -128,7 +132,12 @@ export default function CoRoastBilling() {
       const inserts = [];
       for (const m of membersWithoutPeriod) {
         const tier = m.tier ?? 'MEMBER';
-        const rates = await resolveAccountRates(m.id, tier);
+        const pricing = await resolveAccountPricing(m.id);
+        const rates = {
+          base: pricing.monthlyFee.value,
+          includedHours: pricing.includedHours.value,
+          overageRate: pricing.overageRate.value,
+        };
 
         // Proration logic
         let baseFee = rates.base;
@@ -251,16 +260,15 @@ export default function CoRoastBilling() {
     const createMissingStorage = async () => {
       const inserts = [];
       for (const m of membersWithoutStorage) {
-        const tier = m.tier ?? 'MEMBER';
-        const rates = await resolveAccountRates(m.id, tier);
+        const pricing = await resolveAccountPricing(m.id);
         const bp = billingPeriods.find((bp) => ((bp as any).account_id === m.id || bp.member_id === m.id))!;
         inserts.push({
           account_id: m.id,
           billing_period_id: bp.id,
-          included_pallets: rates.includedPallets,
+          included_pallets: pricing.storageIncludedPallets.value,
           paid_pallets: 0,
           pallets_in_use: 0,
-          rate_per_add_pallet: rates.storageRate,
+          rate_per_add_pallet: pricing.storageOverageRate.value,
         });
       }
 
@@ -335,7 +343,19 @@ export default function CoRoastBilling() {
   const memberBillingData = useMemo(() => {
     return members.map((m) => {
       const tier = m.tier ?? 'MEMBER';
-      const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
+      const tierDefaults = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
+      const pricing = pricingMap?.get(m.id);
+      const rates = pricing
+        ? {
+            base: pricing.monthlyFee.value,
+            includedHours: pricing.includedHours.value,
+            overageRate: pricing.overageRate.value,
+          }
+        : {
+            base: tierDefaults.base,
+            includedHours: tierDefaults.includedHours,
+            overageRate: tierDefaults.overageRate,
+          };
       const bp = billingPeriods.find((bp) => ((bp as any).account_id === m.id || bp.member_id === m.id));
 
       // Use prorated base fee if available, otherwise full rate
@@ -423,7 +443,7 @@ export default function CoRoastBilling() {
         contactEmail: (m as any).contact_email ?? null,
       };
     });
-  }, [members, billingPeriods, memberHoursUsed, prevMemberHoursUsed, storageAllocations, invoices, periodIsClosed, allExtras]);
+  }, [members, billingPeriods, memberHoursUsed, prevMemberHoursUsed, storageAllocations, invoices, periodIsClosed, allExtras, pricingMap]);
 
   const totals = useMemo(() => {
     let baseFees = 0, overageCharges = 0, storageCharges = 0, extrasTotal = 0, subtotal = 0, gst = 0, grandTotal = 0;
