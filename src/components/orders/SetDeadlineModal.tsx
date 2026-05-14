@@ -11,6 +11,9 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { WorkDeadlinePicker } from './WorkDeadlinePicker';
+import type { Database } from '@/integrations/supabase/types';
+
+type OrderStatus = Database['public']['Enums']['order_status'];
 
 interface SetDeadlineModalProps {
   open: boolean;
@@ -41,18 +44,15 @@ export function SetDeadlineModal({
 
     setSaving(true);
     try {
-      const updates: Record<string, unknown> = {
-        work_deadline_at: deadlineAt,
-      };
+      const shouldConfirm = confirmOrder && currentStatus === 'SUBMITTED';
 
-      if (confirmOrder && currentStatus === 'SUBMITTED') {
-        updates.status = 'CONFIRMED';
-      }
-
-      const { error } = await supabase
-        .from('orders')
-        .update(updates)
-        .eq('id', orderId);
+      // Atomic deadline + (optional) status update via state-machine RPC.
+      const { error } = await supabase.rpc('update_order_status', {
+        p_order_id: orderId,
+        p_target_status: (shouldConfirm ? 'CONFIRMED' : currentStatus) as OrderStatus,
+        p_work_deadline_at: deadlineAt,
+        p_set_deadline: true,
+      });
 
       if (error) throw error;
 
