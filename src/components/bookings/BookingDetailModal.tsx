@@ -6,7 +6,9 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Lock, Unlock, AlertTriangle, Clock } from 'lucide-react';
-import { format, differenceInHours, parseISO } from 'date-fns';
+import { format, differenceInHours } from 'date-fns';
+import { fromZonedTime } from 'date-fns-tz';
+import { DEFAULT_TZ } from '@/lib/timezone';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatTime12, timeToMinutes, TIER_RATES, type BookingRow, type MemberRow } from './bookingUtils';
@@ -48,7 +50,15 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
   const hourlyRate = rates.overageRate;
   const fullFee = durationHrs * hourlyRate;
 
-  const bookingStart = booking ? parseISO(`${booking.booking_date}T${booking.start_time}`) : new Date();
+  // Interpret booking_date + start_time as a wall-clock moment in the business
+  // timezone (DEFAULT_TZ), then materialise the UTC instant. Avoids the
+  // previous parseISO() call which silently used the runtime's local tz.
+  const bookingStart = booking
+    ? fromZonedTime(
+        `${booking.booking_date}T${booking.start_time.length === 5 ? booking.start_time + ':00' : booking.start_time}`,
+        DEFAULT_TZ,
+      )
+    : new Date();
   const hoursUntil = differenceInHours(bookingStart, new Date());
   const cancellationTier = getCancellationTier(hoursUntil);
   const cancellationFee = cancellationTier === '50pct' ? fullFee * 0.5 : fullFee;

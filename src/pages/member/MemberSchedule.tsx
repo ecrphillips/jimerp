@@ -21,6 +21,8 @@ import {
   isBefore, startOfDay, isAfter,
 } from 'date-fns';
 import { parseDateOnly } from '@/lib/dateOnly';
+import { DEFAULT_TZ, isoDateInTz, todayInTz } from '@/lib/timezone';
+import { formatInTimeZone } from 'date-fns-tz';
 import {
   checkOverlap, timeToMinutes, formatTime12, TIER_RATES,
   HOUR_START, HOUR_END, TOTAL_HOURS, ROW_HEIGHT,
@@ -185,8 +187,9 @@ export default function MemberSchedule() {
   const { data: otherBusy = [] } = useQuery({
     queryKey: ['member-portal-other-busy'],
     queryFn: async () => {
-      const from = format(new Date(), 'yyyy-MM-dd');
-      const to = format(addWeeks(new Date(), 13), 'yyyy-MM-dd');
+      const now = new Date();
+      const from = isoDateInTz(now);
+      const to = isoDateInTz(addWeeks(now, 13));
       const { data, error } = await supabase.rpc('get_coroast_busy_slots', {
         p_from: from,
         p_to: to,
@@ -198,7 +201,7 @@ export default function MemberSchedule() {
   });
 
   // Hours used this month
-  const currentMonthStr = format(new Date(), 'yyyy-MM');
+  const currentMonthStr = formatInTimeZone(new Date(), DEFAULT_TZ, 'yyyy-MM');
   const hoursUsedThisMonth = useMemo(() => {
     if (!memberId) return 0;
     return allBookings
