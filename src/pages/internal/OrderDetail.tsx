@@ -313,10 +313,10 @@ export default function OrderDetail() {
 
   const confirmMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: 'CONFIRMED' })
-        .eq('id', id!);
+      const { error } = await supabase.rpc('update_order_status', {
+        p_order_id: id!,
+        p_target_status: 'CONFIRMED',
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -391,13 +391,13 @@ export default function OrderDetail() {
     },
   });
 
-  // Mark order as shipped (sets status and shipped_or_ready flag)
+  // Mark order as shipped via RPC (status + shipped_or_ready set atomically by RPC)
   const markAsShippedMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: 'SHIPPED', shipped_or_ready: true })
-        .eq('id', id!);
+      const { error } = await supabase.rpc('update_order_status', {
+        p_order_id: id!,
+        p_target_status: 'SHIPPED',
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -431,21 +431,13 @@ export default function OrderDetail() {
     },
   });
 
-  // Change order status (for undo/status changes)
-  // When reverting from SHIPPED, also clear shipped_or_ready to keep checklist consistent
+  // Change order status via RPC (validates transition, clears shipped_or_ready on revert).
   const changeStatusMutation = useMutation({
     mutationFn: async (newStatus: OrderStatus) => {
-      const updates: { status: OrderStatus; shipped_or_ready?: boolean } = { status: newStatus };
-      
-      // If reverting from SHIPPED, also clear the shipped_or_ready checkbox
-      if (order?.status === 'SHIPPED' && newStatus !== 'SHIPPED') {
-        updates.shipped_or_ready = false;
-      }
-      
-      const { error } = await supabase
-        .from('orders')
-        .update(updates)
-        .eq('id', id!);
+      const { error } = await supabase.rpc('update_order_status', {
+        p_order_id: id!,
+        p_target_status: newStatus,
+      });
       if (error) throw error;
     },
     onSuccess: () => {

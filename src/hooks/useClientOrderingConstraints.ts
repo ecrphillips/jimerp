@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 type AllowedProductRow = { product_id: string };
@@ -15,9 +16,51 @@ export interface ClientOrderingConstraints {
  * @returns Constraints object with loading/error states
  */
 export function useClientOrderingConstraints(clientId: string | null | undefined) {
+  const queryClient = useQueryClient();
+
   // case_only/case_size live on the clients table which is now denied to CLIENT role via RLS.
   // These columns need to migrate to accounts before they can be enforced here.
   // TODO: add case_only/case_size to accounts table and re-enable this constraint.
+
+  // Realtime: invalidate when account_users permissions change for this account.
+  // A revoked seat or role change must immediately re-evaluate allowed products.
+  useEffect(() => {
+    if (!clientId) return;
+
+    const channel = supabase
+      .channel(`account-users-${clientId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'account_users',
+          filter: `account_id=eq.${clientId}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['client-allowed-products', clientId] });
+          queryClient.invalidateQueries({ queryKey: ['client-products', clientId] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'client_allowed_products',
+          filter: `account_id=eq.${clientId}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['client-allowed-products', clientId] });
+          queryClient.invalidateQueries({ queryKey: ['client-products', clientId] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [clientId, queryClient]);
 
   // Fetch allowed products for this account (if any)
   const { data: allowedProducts, isLoading: productsLoading } = useQuery({

@@ -29,7 +29,7 @@ import {
   isWeekend,
   nextMonday,
 } from 'date-fns';
-import { toZonedTime, fromZonedTime } from 'date-fns-tz';
+import { toZonedTime, fromZonedTime, formatInTimeZone } from 'date-fns-tz';
 
 // ========== CENTRALIZED CONFIG ==========
 export const TIMEZONE = 'America/Vancouver';
@@ -460,9 +460,9 @@ export function computeNudgedDeadline(
     }
     targetHour = DEFAULT_NUDGE_HOUR; // 10:00
   } else {
-    // Nudge earlier
-    const currentHour = now.getHours();
-    
+    // Nudge earlier — use timezone-safe Vancouver hour, not native system-tz Date.getHours().
+    const currentHour = parseInt(formatInTimeZone(new Date(), TIMEZONE, 'H'), 10);
+
     if (isBusinessDay(today) && currentHour < PRODUCTION_WINDOW_END) {
       // Still within today's window - set to today at 15:00
       targetDate = today;
