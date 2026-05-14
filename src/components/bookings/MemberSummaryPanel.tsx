@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { getMemberColor, TIER_RATES, type MemberRow, type BookingRow } from './bookingUtils';
 import { useAccountsPricing } from '@/hooks/useAccountPricing';
+import { todayInTz } from '@/lib/timezone';
 
 interface MemberSummaryPanelProps {
   members: MemberRow[];
@@ -20,7 +21,7 @@ function getMonthBookings(bookings: BookingRow[], memberId: string, month: strin
 export function MemberSummaryPanel({ members, bookings, currentMonth }: MemberSummaryPanelProps) {
   const navigate = useNavigate();
   const activeMembers = members.filter(m => m.is_active);
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayInTz();
   const allMemberIds = members.map(m => m.id);
   const { data: pricingMap } = useAccountsPricing(allMemberIds);
 
