@@ -284,6 +284,11 @@ export function BookingFormDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['booking-calendar'] });
+      if (memberId) {
+        const periodKey = (formDate ? format(formDate, 'yyyy-MM') : new Date().toISOString().slice(0, 7));
+        queryClient.invalidateQueries({ queryKey: ['coroast-hour-ledger', memberId] });
+        queryClient.invalidateQueries({ queryKey: ['coroast-billing-period', memberId, periodKey] });
+      }
       onSuccess();
       onOpenChange(false);
     },
