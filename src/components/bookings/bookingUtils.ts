@@ -209,7 +209,7 @@ export function useTierRates() {
     queryKey: ['coroast_tier_rates'],
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_coroast_tier_rates');
+      const { data, error } = await (supabase.rpc as any)('get_coroast_tier_rates');
       if (error) throw error;
       return (data ?? []) as TierRateRow[];
     },
