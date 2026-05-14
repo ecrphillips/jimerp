@@ -313,7 +313,7 @@ export default function OrderDetail() {
 
   const confirmMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.rpc('update_order_status', {
+      const { error } = await (supabase.rpc as any)('update_order_status', {
         p_order_id: id!,
         p_target_status: 'CONFIRMED',
       });
@@ -394,7 +394,7 @@ export default function OrderDetail() {
   // Mark order as shipped via RPC (status + shipped_or_ready set atomically by RPC)
   const markAsShippedMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.rpc('update_order_status', {
+      const { error } = await (supabase.rpc as any)('update_order_status', {
         p_order_id: id!,
         p_target_status: 'SHIPPED',
       });
@@ -434,7 +434,7 @@ export default function OrderDetail() {
   // Change order status via RPC (validates transition, clears shipped_or_ready on revert).
   const changeStatusMutation = useMutation({
     mutationFn: async (newStatus: OrderStatus) => {
-      const { error } = await supabase.rpc('update_order_status', {
+      const { error } = await (supabase.rpc as any)('update_order_status', {
         p_order_id: id!,
         p_target_status: newStatus,
       });
