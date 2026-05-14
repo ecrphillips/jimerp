@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatTime12, timeToMinutes, TIER_RATES, type BookingRow, type MemberRow } from './bookingUtils';
 import { useAccountPricing } from '@/hooks/useAccountPricing';
+import { refundedHoursFiftyPercent } from '@/lib/coroastHoursLedger';
 
 interface BookingDetailModalProps {
   open: boolean;
@@ -102,7 +103,12 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
         cancelled_at: new Date().toISOString(),
       }).eq('id', booking.id);
       if (error) throw error;
-      // 50% fee — hours not returned
+      await supabase.from('coroast_hour_ledger').insert({
+        member_id: booking.member_id, billing_period_id: booking.billing_period_id,
+        booking_id: booking.id, entry_type: 'BOOKING_RETURNED' as any,
+        hours_delta: refundedHoursFiftyPercent(durationHrs),
+        notes: `50% cancellation for ${booking.booking_date}`,
+      });
     },
     onSuccess: () => { toast.success(`Booking cancelled (50% fee: $${(fullFee * 0.5).toFixed(0)})`); invalidateAll(); onOpenChange(false); },
     onError: () => toast.error('Failed to cancel booking'),
