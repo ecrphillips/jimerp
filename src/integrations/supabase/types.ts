@@ -4994,17 +4994,6 @@ export type Database = {
           start_time: string
         }[]
       }
-      get_coroast_tier_rates: {
-        Args: Record<string, never>
-        Returns: {
-          tier: Database["public"]["Enums"]["coroast_tier"]
-          base_fee: number
-          included_hours: number
-          overage_rate_per_hr: number
-          label: string
-          is_legacy: boolean
-        }[]
-      }
       get_invitation_by_token: { Args: { p_token: string }; Returns: Json }
       get_order_delete_preflight: {
         Args: { p_order_id: string }
