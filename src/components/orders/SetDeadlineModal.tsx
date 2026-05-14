@@ -47,7 +47,7 @@ export function SetDeadlineModal({
       const shouldConfirm = confirmOrder && currentStatus === 'SUBMITTED';
 
       // Atomic deadline + (optional) status update via state-machine RPC.
-      const { error } = await supabase.rpc('update_order_status', {
+      const { error } = await (supabase.rpc as any)('update_order_status', {
         p_order_id: orderId,
         p_target_status: (shouldConfirm ? 'CONFIRMED' : currentStatus) as OrderStatus,
         p_work_deadline_at: deadlineAt,
