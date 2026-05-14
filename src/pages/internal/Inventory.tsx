@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { usePaginatedQuery } from '@/hooks/usePaginatedQuery';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -321,13 +322,21 @@ export default function Inventory() {
 
   // ===== Finished Goods Tab =====
   
-  // Fetch FG inventory with product details
-  const { data: fgInventory } = useQuery({
+  // Fetch FG inventory with product details (paginated).
+  const {
+    rows: fgInventory,
+    hasMore: fgHasMore,
+    loadMore: loadMoreFg,
+    isFetching: fgIsFetching,
+    total: fgTotal,
+  } = usePaginatedQuery<FgInventoryRow>({
     queryKey: ['fg-inventory'],
-    queryFn: async () => {
-      const { data, error } = await supabase
+    pageSize: 50,
+    fetchPage: async ({ offset, limit }) => {
+      const { data, error, count } = await supabase
         .from('fg_inventory')
-        .select(`
+        .select(
+          `
           id,
           product_id,
           units_on_hand,
@@ -340,10 +349,13 @@ export default function Inventory() {
             packaging_variant,
             client:clients(name)
           )
-        `)
-        .order('updated_at', { ascending: false });
+        `,
+          { count: 'exact' }
+        )
+        .order('updated_at', { ascending: false })
+        .range(offset, offset + limit - 1);
       if (error) throw error;
-      return (data ?? []) as unknown as FgInventoryRow[];
+      return { rows: (data ?? []) as unknown as FgInventoryRow[], count };
     },
   });
 
@@ -650,6 +662,21 @@ export default function Inventory() {
                       ))}
                   </tbody>
                 </table>
+              )}
+              {fgHasMore && (
+                <div className="pt-4 flex justify-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={loadMoreFg}
+                    disabled={fgIsFetching}
+                  >
+                    {fgIsFetching
+                      ? 'Loading…'
+                      : `Load more${fgTotal ? ` (${fgInventory.length} of ${fgTotal})` : ''}`}
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
