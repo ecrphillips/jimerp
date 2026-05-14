@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { calculatePrice } from '@/lib/pricing';
 import { cn } from '@/lib/utils';
+import { formatCurrency } from '@/lib/currency';
 
 export interface MixingConsoleVariant {
   key: string;
@@ -148,7 +149,7 @@ const num = (v: unknown, fallback = 0): number => {
 };
 
 function fmtMoney(n: number): string {
-  return `$${n.toFixed(2)}`;
+  return formatCurrency(n);
 }
 
 function fmtDelta(delta: number, decimals = 2): string {

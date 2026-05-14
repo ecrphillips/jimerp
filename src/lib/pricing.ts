@@ -1,17 +1,9 @@
 /**
  * Pricing engine — pure function.
  *
- * No database calls. All inputs are passed in by the caller (CalculatorTab,
- * MixingConsole, etc.). Same inputs always produce same outputs.
- *
- * Formula:
- *   green_consumed_per_unit  = bag_size_g / 1000 / (1 - yield_loss_pct/100)
- *   roasted_coffee_cost      = green_market_per_kg * green_consumed_per_unit
- *   process_per_unit         = process_per_kg_green * green_consumed_per_unit
- *   price_per_unit           = roasted_coffee_cost + process_per_unit + pkg_material + pkg_labour + adjustment
- *   cost_per_unit            = roasted_coffee_cost + pkg_material
- *   margin_pct               = (price - cost) / price
+ * Currency arithmetic uses decimal.js to avoid binary-float precision drift.
  */
+import Decimal from 'decimal.js';
 
 export type PricingInputs = {
   green_market_per_kg: number;
@@ -42,6 +34,15 @@ const num = (v: unknown, fallback = 0): number => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+const dec = (v: unknown, fallback = 0): Decimal => {
+  try {
+    const d = new Decimal(v as Decimal.Value);
+    return d.isFinite() ? d : new Decimal(fallback);
+  } catch {
+    return new Decimal(fallback);
+  }
+};
+
 export function calculatePrice(inputs: PricingInputs): PricingResult {
   const bag_size_g = num(inputs.bag_size_g);
   if (bag_size_g <= 0) {
@@ -52,33 +53,54 @@ export function calculatePrice(inputs: PricingInputs): PricingResult {
     throw new Error('Pricing: yield_loss_pct must be < 100.');
   }
 
-  const green_consumed_per_unit =
-    bag_size_g / 1000 / (1 - Math.max(0, yieldLoss) / 100);
+  const yieldLossClamped = Math.max(0, yieldLoss);
+  const green_consumed_per_unit_d = dec(bag_size_g)
+    .div(1000)
+    .div(new Decimal(1).minus(dec(yieldLossClamped).div(100)));
 
-  const greenMarket = Math.max(0, num(inputs.green_market_per_kg));
-  const processRate = Math.max(0, num(inputs.process_per_kg_green));
-  const pkgMaterial = Math.max(0, num(inputs.pkg_material_per_unit));
-  const pkgLabour = Math.max(0, num(inputs.pkg_labour_per_unit));
-  const adjustment = num(inputs.adjustment_per_unit);
+  const greenMarket = dec(Math.max(0, num(inputs.green_market_per_kg)));
+  const processRate = dec(Math.max(0, num(inputs.process_per_kg_green)));
+  const pkgMaterial = dec(Math.max(0, num(inputs.pkg_material_per_unit)));
+  const pkgLabour = dec(Math.max(0, num(inputs.pkg_labour_per_unit)));
+  const adjustment = dec(num(inputs.adjustment_per_unit));
 
-  const roasted_coffee_cost_per_unit = greenMarket * green_consumed_per_unit;
-  const process_per_unit = processRate * green_consumed_per_unit;
+  const roasted_coffee_cost_d = greenMarket.times(green_consumed_per_unit_d);
+  const process_per_unit_d = processRate.times(green_consumed_per_unit_d);
 
-  const price_per_unit =
-    roasted_coffee_cost_per_unit + process_per_unit + pkgMaterial + pkgLabour + adjustment;
-  const cost_per_unit = roasted_coffee_cost_per_unit + pkgMaterial;
-  const margin_pct = price_per_unit > 0 ? (price_per_unit - cost_per_unit) / price_per_unit : 0;
+  const price_per_unit_d = roasted_coffee_cost_d
+    .plus(process_per_unit_d)
+    .plus(pkgMaterial)
+    .plus(pkgLabour)
+    .plus(adjustment);
+  const cost_per_unit_d = roasted_coffee_cost_d.plus(pkgMaterial);
+
+  let margin_pct_d = new Decimal(0);
+  if (price_per_unit_d.gt(0)) {
+    margin_pct_d = price_per_unit_d.minus(cost_per_unit_d).div(price_per_unit_d);
+  } else {
+    console.warn('[pricing] zero or negative price_per_unit — margin defaulted to 0', {
+      price_per_unit: price_per_unit_d.toNumber(),
+      cost_per_unit: cost_per_unit_d.toNumber(),
+      bag_size_g,
+      green_market_per_kg: greenMarket.toNumber(),
+      yield_loss_pct: yieldLossClamped,
+      process_per_kg_green: processRate.toNumber(),
+      pkg_material_per_unit: pkgMaterial.toNumber(),
+      pkg_labour_per_unit: pkgLabour.toNumber(),
+      adjustment_per_unit: adjustment.toNumber(),
+    });
+  }
 
   return {
     inputs,
-    green_consumed_per_unit,
-    roasted_coffee_cost_per_unit,
-    process_per_unit,
-    pkg_material_per_unit: pkgMaterial,
-    pkg_labour_per_unit: pkgLabour,
-    adjustment_per_unit: adjustment,
-    price_per_unit,
-    cost_per_unit,
-    margin_pct,
+    green_consumed_per_unit: green_consumed_per_unit_d.toNumber(),
+    roasted_coffee_cost_per_unit: roasted_coffee_cost_d.toNumber(),
+    process_per_unit: process_per_unit_d.toNumber(),
+    pkg_material_per_unit: pkgMaterial.toNumber(),
+    pkg_labour_per_unit: pkgLabour.toNumber(),
+    adjustment_per_unit: adjustment.toNumber(),
+    price_per_unit: price_per_unit_d.toNumber(),
+    cost_per_unit: cost_per_unit_d.toNumber(),
+    margin_pct: margin_pct_d.toNumber(),
   };
 }

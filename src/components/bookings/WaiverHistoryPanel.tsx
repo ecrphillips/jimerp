@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { parseDateOnly } from '@/lib/dateOnly';
+import { formatCurrency } from '@/lib/currency';
 
 interface WaiverHistoryPanelProps {
   open: boolean;
@@ -55,7 +56,7 @@ export function WaiverHistoryPanel({ open, onOpenChange, memberId, memberName }:
                       ? format(parseDateOnly(w.coroast_bookings.booking_date)!, 'MMM d, yyyy')
                       : 'Unknown date'}
                   </span>
-                  <span className="text-destructive font-medium">${Number(w.fee_amount_waived).toFixed(2)}</span>
+                  <span className="text-destructive font-medium">{formatCurrency(w.fee_amount_waived)}</span>
                 </div>
                 {w.waive_reason && (
                   <p className="text-xs text-muted-foreground mt-0.5">{w.waive_reason}</p>

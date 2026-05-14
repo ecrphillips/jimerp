@@ -4,6 +4,7 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { getMemberColor, TIER_RATES, type MemberRow, type BookingRow } from './bookingUtils';
 import { useAccountsPricing } from '@/hooks/useAccountPricing';
 import { todayInTz } from '@/lib/timezone';
+import { formatCurrency } from '@/lib/currency';
 
 interface MemberSummaryPanelProps {
   members: MemberRow[];
@@ -70,7 +71,7 @@ export function MemberSummaryPanel({ members, bookings, currentMonth }: MemberSu
                   <div className="text-muted-foreground">{hoursRemaining.toFixed(1)}h remaining</div>
                 ) : (
                   <div className="text-destructive font-medium">
-                    +{overageHours.toFixed(1)}h overage (${overageCharge.toFixed(0)})
+                    +{overageHours.toFixed(1)}h overage ({formatCurrency(overageCharge, { decimals: 0 })})
                   </div>
                 )}
               </div>

@@ -23,6 +23,7 @@ import {
 import { parseDateOnly } from '@/lib/dateOnly';
 import { DEFAULT_TZ, isoDateInTz, todayInTz } from '@/lib/timezone';
 import { formatInTimeZone } from 'date-fns-tz';
+import { formatCurrency } from '@/lib/currency';
 import {
   checkOverlap, timeToMinutes, formatTime12, TIER_RATES,
   HOUR_START, HOUR_END, TOTAL_HOURS, ROW_HEIGHT,
@@ -418,6 +419,11 @@ export default function MemberSchedule() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['member-portal-bookings'] });
       queryClient.invalidateQueries({ queryKey: ['member-portal-other-busy'] });
+      if (memberId) {
+        const periodKey = formDate ? format(formDate, 'yyyy-MM') : new Date().toISOString().slice(0, 7);
+        queryClient.invalidateQueries({ queryKey: ['coroast-hour-ledger', memberId] });
+        queryClient.invalidateQueries({ queryKey: ['coroast-billing-period', memberId, periodKey] });
+      }
       setBookingOpen(false);
       setShowConfirm(false);
     },
@@ -430,11 +436,17 @@ export default function MemberSchedule() {
       const { error } = await supabase.rpc('cancel_member_booking', { p_booking_id: bookingId });
       if (error) throw new Error(error.message);
     },
-    onSuccess: () => {
+    onSuccess: (_data, bookingId) => {
       toast.success('Booking cancelled');
+      const cancelled = (allBookings as BookingRow[]).find(b => b.id === bookingId);
       setSelectedBooking(null);
       queryClient.invalidateQueries({ queryKey: ['member-portal-bookings'] });
       queryClient.invalidateQueries({ queryKey: ['member-portal-other-busy'] });
+      if (memberId) {
+        const periodKey = cancelled?.booking_date?.slice(0, 7) ?? new Date().toISOString().slice(0, 7);
+        queryClient.invalidateQueries({ queryKey: ['coroast-hour-ledger', memberId] });
+        queryClient.invalidateQueries({ queryKey: ['coroast-billing-period', memberId, periodKey] });
+      }
     },
     onError: (err: Error) => toast.error(err.message || 'Failed to cancel booking'),
   });
@@ -810,7 +822,7 @@ export default function MemberSchedule() {
                       Cancellation locked
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      This booking is within 48 hours. A cancellation fee of <strong>${cancellationFee.toFixed(2)}</strong> would apply.
+                      This booking is within 48 hours. A cancellation fee of <strong>{formatCurrency(cancellationFee)}</strong> would apply.
                     </p>
                     <p className="text-xs text-muted-foreground">
                       To request a cancellation, please contact Home Island Coffee Partners directly.
