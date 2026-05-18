@@ -14,6 +14,7 @@ import {
   X,
   ShoppingBag,
   Eye,
+  Calculator,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import hiIcon from '@/assets/home-island-icon.png';
@@ -23,18 +24,25 @@ interface ClientLayoutProps {
 }
 
 // Client-only navigation items
-const navItems = [
+const baseNavItems = [
   { to: '/portal', label: 'Home', icon: Home, end: true },
   { to: '/portal/new-order', label: 'New Order', icon: PlusCircle },
   { to: '/portal/orders', label: 'My Orders', icon: ClipboardList },
   { to: '/portal/products', label: 'My Products', icon: ShoppingBag },
-  { to: '/portal/account', label: 'Account', icon: User },
 ];
+const numbersNavItem = { to: '/client/numbers', label: 'My Numbers', icon: Calculator };
+const accountNavItem = { to: '/portal/account', label: 'Account', icon: User };
 
 export function ClientLayout({ children }: ClientLayoutProps) {
   const { authUser, signOut } = useAuth();
   const navigate = useNavigate();
   const { isPreviewMode, previewAccountName, previewAccountId, exitPreview } = usePreview();
+  const showNumbers = !!authUser?.canPlaceOrders && !authUser?.canBookRoaster;
+  const navItems = [
+    ...baseNavItems,
+    ...(showNumbers ? [numbersNavItem] : []),
+    accountNavItem,
+  ];
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = React.useState(false);
 

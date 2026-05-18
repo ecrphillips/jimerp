@@ -64,6 +64,7 @@ import MemberSchedule from "@/pages/member/MemberSchedule";
 import MemberBilling from "@/pages/member/MemberBilling";
 import MemberAccount from "@/pages/member/MemberAccount";
 import MyNumbers from "@/pages/member/MyNumbers";
+import ClientMyNumbers from "@/pages/client/MyNumbers";
 import NotFound from "@/pages/NotFound";
 import ExplorePage from "@/pages/public/ExplorePage";
 
@@ -328,6 +329,16 @@ const App = () => (
             <Route path="/portal/account" element={
               <ProtectedRoute allowedRoles={['CLIENT']}>
                 <ClientLayout><Account /></ClientLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/portal/numbers" element={
+              <ProtectedRoute allowedRoles={['CLIENT']}>
+                <ClientLayout><ClientMyNumbers /></ClientLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/client/numbers" element={
+              <ProtectedRoute allowedRoles={['CLIENT']}>
+                <ClientLayout><ClientMyNumbers /></ClientLayout>
               </ProtectedRoute>
             } />
 
