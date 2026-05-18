@@ -1445,6 +1445,50 @@ export type Database = {
         }
         Relationships: []
       }
+      client_unit_economics_scenarios: {
+        Row: {
+          account_id: string
+          created_at: string
+          created_by: string
+          id: string
+          inputs: Json
+          name: string
+          notes: string | null
+          outputs: Json | null
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          inputs?: Json
+          name?: string
+          notes?: string | null
+          outputs?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          inputs?: Json
+          name?: string
+          notes?: string | null
+          outputs?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_unit_economics_scenarios_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coroast_unit_economics_scenarios: {
         Row: {
           account_id: string | null

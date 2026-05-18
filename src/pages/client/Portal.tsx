@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
 import { format } from 'date-fns';
 import { parseDateOnly } from '@/lib/dateOnly';
-import { PlusCircle, Package, Truck, Clock, CheckCircle2 } from 'lucide-react';
+import { PlusCircle, Package, Truck, Clock, CheckCircle2, Calculator } from 'lucide-react';
 import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
 
 interface Order {
@@ -27,6 +27,7 @@ export default function Portal() {
   const navigate = useNavigate();
   const { authUser } = useAuth();
   const { previewAccountId } = usePreview();
+  const showNumbers = !!authUser?.canPlaceOrders && !authUser?.canBookRoaster;
 
   const { data: orders, isLoading } = useQuery({
     queryKey: ['client-portal-orders', previewAccountId],
@@ -81,6 +82,33 @@ export default function Portal() {
       </div>
 
       <div className="grid gap-6">
+        {showNumbers && (
+          <Card
+            className="cursor-pointer transition-colors hover:bg-muted/50"
+            onClick={() => navigate('/client/numbers')}
+          >
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calculator className="h-5 w-5" style={{ color: '#1B5E8C' }} />
+                My Numbers
+              </CardTitle>
+              <CardDescription>
+                Model your unit economics on the coffee you buy from us. We'll pre-fill your latest
+                volume and cost — adjust pricing to see margins, break-even, and a suggested MSRP.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onClick={(e) => { e.stopPropagation(); navigate('/client/numbers'); }}
+                style={{ backgroundColor: '#1B5E8C' }}
+                className="text-white hover:opacity-90"
+              >
+                Open My Numbers
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Open Orders */}
         <Card>
           <CardHeader>
