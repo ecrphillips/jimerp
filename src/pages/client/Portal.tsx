@@ -26,8 +26,10 @@ interface Order {
 export default function Portal() {
   const navigate = useNavigate();
   const { authUser } = useAuth();
-  const { previewAccountId } = usePreview();
-  const showNumbers = !!authUser?.canPlaceOrders && !authUser?.canBookRoaster;
+  const { previewAccountId, isPreviewMode, effectivePermissions } = usePreview();
+  const canPlaceOrders = isPreviewMode ? !!effectivePermissions?.canPlaceOrders : !!authUser?.canPlaceOrders;
+  const canBookRoaster = isPreviewMode ? !!effectivePermissions?.canBookRoaster : !!authUser?.canBookRoaster;
+  const showNumbers = canPlaceOrders && !canBookRoaster;
 
   const { data: orders, isLoading } = useQuery({
     queryKey: ['client-portal-orders', previewAccountId],

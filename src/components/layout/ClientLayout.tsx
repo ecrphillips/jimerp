@@ -36,8 +36,10 @@ const accountNavItem = { to: '/portal/account', label: 'Account', icon: User };
 export function ClientLayout({ children }: ClientLayoutProps) {
   const { authUser, signOut } = useAuth();
   const navigate = useNavigate();
-  const { isPreviewMode, previewAccountName, previewAccountId, exitPreview } = usePreview();
-  const showNumbers = !!authUser?.canPlaceOrders && !authUser?.canBookRoaster;
+  const { isPreviewMode, previewAccountName, previewAccountId, exitPreview, effectivePermissions } = usePreview();
+  const canPlaceOrders = isPreviewMode ? !!effectivePermissions?.canPlaceOrders : !!authUser?.canPlaceOrders;
+  const canBookRoaster = isPreviewMode ? !!effectivePermissions?.canBookRoaster : !!authUser?.canBookRoaster;
+  const showNumbers = canPlaceOrders && !canBookRoaster;
   const navItems = [
     ...baseNavItems,
     ...(showNumbers ? [numbersNavItem] : []),
