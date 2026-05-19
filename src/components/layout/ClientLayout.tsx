@@ -83,7 +83,7 @@ export function ClientLayout({ children }: ClientLayoutProps) {
                 <li key={item.to}>
                   <NavLink
                     to={item.to}
-                    end={'end' in item ? item.end : false}
+                    end={'end' in item ? Boolean(item.end) : false}
                     onClick={() => setSidebarOpen(false)}
                     className={({ isActive }) => cn(
                       "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
