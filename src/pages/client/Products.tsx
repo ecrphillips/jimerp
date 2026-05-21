@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
+import { usePricingVisibility } from '@/hooks/usePricingVisibility';
 import { Package } from 'lucide-react';
 
 interface AllowedProduct {
@@ -21,6 +22,7 @@ interface AllowedProduct {
 export default function Products() {
   const { authUser } = useAuth();
   const { previewAccountId } = usePreview();
+  const { hidePricing } = usePricingVisibility();
   const effectiveAccountId = previewAccountId ?? authUser?.accountId;
 
   // TODO: Wire this query once RLS is confirmed for client_allowed_products reads by account_id.
@@ -129,7 +131,7 @@ export default function Products() {
                   <th className="pb-2 pr-4">Bag Size</th>
                   <th className="pb-2 pr-4">Format</th>
                   <th className="pb-2 pr-4">Packaging</th>
-                  <th className="pb-2 text-right">Current Price</th>
+                  {!hidePricing && <th className="pb-2 text-right">Current Price</th>}
                 </tr>
               </thead>
               <tbody>
@@ -142,12 +144,14 @@ export default function Products() {
                       <td className="py-3 pr-4 text-muted-foreground">{formatBagSize(p.bag_size_g)}</td>
                       <td className="py-3 pr-4 text-muted-foreground">{formatFormat(p.format)}</td>
                       <td className="py-3 pr-4 text-muted-foreground">{formatVariant(p.packaging_variant)}</td>
-                      <td className="py-3 text-right">
-                        {price != null
-                          ? `$${price.toFixed(2)}`
-                          : <span className="text-muted-foreground">—</span>
-                        }
-                      </td>
+                      {!hidePricing && (
+                        <td className="py-3 text-right">
+                          {price != null
+                            ? `$${price.toFixed(2)}`
+                            : <span className="text-muted-foreground">—</span>
+                          }
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
