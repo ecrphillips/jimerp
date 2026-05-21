@@ -627,7 +627,12 @@ export default function NewOrder() {
       <li key={p.id} className="flex items-center justify-between py-2 border-b last:border-0">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className="font-medium truncate">{p.product_name}</span>
-          <GramPackagingBadge packagingTypeName={packagingTypeName} gramsPerUnit={gramsPerUnit} />
+          <span className="text-sm font-medium">
+            {gramsPerUnit ? formatGramsLabel(gramsPerUnit) : `${p.bag_size_g}g`}
+          </span>
+          {packagingTypeName && (
+            <span className="text-xs text-muted-foreground">{packagingTypeName}</span>
+          )}
           {hasPrice ? (
             <span className="text-sm text-muted-foreground">${price!.toFixed(2)}</span>
           ) : (
@@ -719,9 +724,14 @@ export default function NewOrder() {
             return (
               <li key={variant.id} className="flex items-center justify-between py-1.5 border-b last:border-0">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <GramPackagingBadge packagingTypeName={packagingTypeName} gramsPerUnit={gramsPerUnit} />
+                  <span className="text-sm font-medium">
+                    {gramsPerUnit ? formatGramsLabel(gramsPerUnit) : `${variant.bag_size_g}g`}
+                  </span>
+                  {packagingTypeName && (
+                    <span className="text-xs text-muted-foreground">{packagingTypeName}</span>
+                  )}
                   {hasPrice ? (
-                    <span className="text-sm text-muted-foreground">${price!.toFixed(2)}</span>
+                    <span className="text-sm text-muted-foreground ml-1">${price!.toFixed(2)}</span>
                   ) : (
                     <span className="text-xs text-destructive">No price</span>
                   )}
@@ -919,23 +929,6 @@ export default function NewOrder() {
                                 <Plus className="h-3 w-3" />
                               </Button>
                             </div>
-                          )}
-                          {li.grindOptions.length > 0 && (
-                            <Select
-                              value={li.grind ?? ''}
-                              onValueChange={(v) => updateGrind(li.productId, v as GrindOption)}
-                            >
-                              <SelectTrigger className="h-6 w-24 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {li.grindOptions.map((g) => (
-                                  <SelectItem key={g} value={g}>
-                                    {g}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
                           )}
                           {hasMultiShipTo && (
                             <Select
