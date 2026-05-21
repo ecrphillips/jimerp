@@ -339,7 +339,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
 
     for (const order of ordersForShipping) {
       const allLines: RawLine[] = (order.line_items ?? []) as RawLine[];
-      const shipments: RawShipment[] = ((order as { shipments?: RawShipment[] }).shipments ?? [])
+      const shipments: RawShipment[] = ((order as unknown as { shipments?: RawShipment[] }).shipments ?? [])
         .slice()
         .sort((a, b) => a.shipment_number - b.shipment_number);
 
