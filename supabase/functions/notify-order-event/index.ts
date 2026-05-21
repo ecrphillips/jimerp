@@ -104,6 +104,7 @@ async function enqueueEmail(adminClient: any, recipient: string, label: string, 
     queue_name: "transactional_emails",
     payload: {
       message_id: messageId,
+      idempotency_key: messageId,
       to: recipient,
       from: FROM_DISPLAY,
       sender_domain: FROM_DOMAIN,
