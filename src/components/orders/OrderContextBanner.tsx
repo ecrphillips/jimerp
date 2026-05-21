@@ -28,12 +28,12 @@ export function OrderContextBanner({ accountId, locationId, className }: OrderCo
   });
 
   const { data: location } = useQuery({
-    queryKey: ['client-location', locationId],
+    queryKey: ['account-location', locationId],
     queryFn: async () => {
       if (!locationId) return null;
       const { data, error } = await supabase
-        .from('client_locations')
-        .select('id, name, location_code')
+        .from('account_locations')
+        .select('id, location_name, location_code')
         .eq('id', locationId)
         .maybeSingle();
       if (error) throw error;
