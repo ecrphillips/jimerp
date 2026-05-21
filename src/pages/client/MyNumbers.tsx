@@ -274,7 +274,7 @@ export default function ClientMyNumbers() {
       {/* Market pricing link */}
       <Link
         to="/portal/market-pricing"
-        className="block rounded-lg border bg-card p-4 hover:border-primary hover:bg-accent/30 transition-colors"
+        className="block rounded-lg border border-primary/50 bg-card p-4 hover:border-primary hover:bg-accent/30 transition-colors"
       >
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -282,6 +282,9 @@ export default function ClientMyNumbers() {
             <div className="text-xs text-muted-foreground">
               Where your $/g sits in the Canadian specialty-coffee spectrum, updated monthly.
             </div>
+            <p className="text-xs text-muted-foreground italic mt-1">
+              Retail price data shown here is what is publicly available from each retailers own web store.
+            </p>
           </div>
           <div className="text-primary text-sm font-medium">View market →</div>
         </div>
