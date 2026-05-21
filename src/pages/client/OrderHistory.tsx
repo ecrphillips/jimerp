@@ -9,6 +9,7 @@ import { parseDateOnly } from '@/lib/dateOnly';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
+import { usePricingVisibility } from '@/hooks/usePricingVisibility';
 
 interface Order {
   id: string;
@@ -32,6 +33,7 @@ interface LineItemSummary {
 export default function OrderHistory() {
   const queryClient = useQueryClient();
   const { previewAccountId } = usePreview();
+  const { hidePricing } = usePricingVisibility();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   const { data: orders, isLoading, error } = useQuery({
@@ -208,8 +210,8 @@ export default function OrderHistory() {
                     <th className="pb-2">Product</th>
                     <th className="pb-2">Qty</th>
                     <th className="pb-2">Grind</th>
-                    <th className="pb-2">Unit Price</th>
-                    <th className="pb-2 text-right">Subtotal</th>
+                    {!hidePricing && <th className="pb-2">Unit Price</th>}
+                    {!hidePricing && <th className="pb-2 text-right">Subtotal</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -218,17 +220,19 @@ export default function OrderHistory() {
                       <td className="py-2">{li.product?.product_name ?? 'Unknown'}</td>
                       <td className="py-2">{li.quantity_units}</td>
                       <td className="py-2">{li.grind ?? '—'}</td>
-                      <td className="py-2">${li.unit_price_locked.toFixed(2)}</td>
-                      <td className="py-2 text-right">${(li.quantity_units * li.unit_price_locked).toFixed(2)}</td>
+                      {!hidePricing && <td className="py-2">${li.unit_price_locked.toFixed(2)}</td>}
+                      {!hidePricing && <td className="py-2 text-right">${(li.quantity_units * li.unit_price_locked).toFixed(2)}</td>}
                     </tr>
                   ))}
                 </tbody>
-                <tfoot>
-                  <tr>
-                    <td colSpan={4} className="pt-4 text-right font-medium">Total:</td>
-                    <td className="pt-4 text-right font-medium">${lineTotal.toFixed(2)}</td>
-                  </tr>
-                </tfoot>
+                {!hidePricing && (
+                  <tfoot>
+                    <tr>
+                      <td colSpan={4} className="pt-4 text-right font-medium">Total:</td>
+                      <td className="pt-4 text-right font-medium">${lineTotal.toFixed(2)}</td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             )}
           </CardContent>
