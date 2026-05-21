@@ -60,12 +60,12 @@ export function NotificationRoutingSettings() {
       const { data: user } = await supabase.auth.getUser();
       const { error } = await supabase
         .from('app_settings')
-        .upsert({
+        .upsert([{
           key: `notification_routes.${event}`,
           value_json: value as unknown as Record<string, unknown>,
           updated_at: new Date().toISOString(),
           updated_by: user.user?.id || null,
-        });
+        }]);
       if (error) throw error;
     },
     onSuccess: () => {
