@@ -732,7 +732,7 @@ export default function NewOrder() {
                   {packagingTypeName && (
                     <span className="text-xs text-muted-foreground">{packagingTypeName}</span>
                   )}
-                  {hasPrice ? (
+                  {hidePricing ? null : hasPrice ? (
                     <span className="text-sm text-muted-foreground ml-1">${price!.toFixed(2)}</span>
                   ) : (
                     <span className="text-xs text-destructive">No price</span>
