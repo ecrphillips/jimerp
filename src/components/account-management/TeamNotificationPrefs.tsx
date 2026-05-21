@@ -46,11 +46,12 @@ export function TeamNotificationPrefs({ accountId, currentUserId }: Props) {
     mutationFn: async (input: { userId: string; eventType: EventKey; enabled: boolean }) => {
       const { error } = await ownerRpc('owner_set_user_notification_pref', {
         p_account_id: accountId,
-        p_user_id: input.userId,
+        p_target_user_id: input.userId,
         p_event_type: input.eventType,
         p_channel: 'EMAIL',
         p_enabled: input.enabled,
       });
+
       if (error) throw error;
     },
     onSuccess: () => {
