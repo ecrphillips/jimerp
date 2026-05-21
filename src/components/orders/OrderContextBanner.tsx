@@ -28,12 +28,12 @@ export function OrderContextBanner({ accountId, locationId, className }: OrderCo
   });
 
   const { data: location } = useQuery({
-    queryKey: ['client-location', locationId],
+    queryKey: ['account-location', locationId],
     queryFn: async () => {
       if (!locationId) return null;
       const { data, error } = await supabase
-        .from('client_locations')
-        .select('id, name, location_code')
+        .from('account_locations')
+        .select('id, location_name, location_code')
         .eq('id', locationId)
         .maybeSingle();
       if (error) throw error;
@@ -66,7 +66,7 @@ export function OrderContextBanner({ accountId, locationId, className }: OrderCo
           <Badge variant="outline" className="gap-1">
             <MapPin className="h-3 w-3" />
             <span className="font-mono text-xs">{location.location_code}</span>
-            <span>{location.name}</span>
+            <span>{location.location_name}</span>
           </Badge>
         ) : (
           <span className="flex items-center gap-1 text-xs text-amber-700">

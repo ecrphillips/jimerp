@@ -3373,8 +3373,8 @@ export type Database = {
           ship_to_city: string | null
           ship_to_country: string | null
           ship_to_name: string | null
-          ship_to_postal_code: string | null
-          ship_to_province: string | null
+          ship_to_postal: string | null
+          ship_to_region: string | null
           shipment_number: number
           updated_at: string
         }
@@ -3395,8 +3395,8 @@ export type Database = {
           ship_to_city?: string | null
           ship_to_country?: string | null
           ship_to_name?: string | null
-          ship_to_postal_code?: string | null
-          ship_to_province?: string | null
+          ship_to_postal?: string | null
+          ship_to_region?: string | null
           shipment_number?: number
           updated_at?: string
         }
@@ -3417,8 +3417,8 @@ export type Database = {
           ship_to_city?: string | null
           ship_to_country?: string | null
           ship_to_name?: string | null
-          ship_to_postal_code?: string | null
-          ship_to_province?: string | null
+          ship_to_postal?: string | null
+          ship_to_region?: string | null
           shipment_number?: number
           updated_at?: string
         }

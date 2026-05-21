@@ -800,6 +800,19 @@ export default function NewOrder() {
         locationId={selectedLocationId || null}
       />
 
+      {authUser?.accountId && (
+        <Card className="mb-4">
+          <CardContent className="pt-4">
+            <LocationSelect
+              clientId={authUser.accountId}
+              value={selectedLocationId}
+              onChange={setSelectedLocationId}
+              required
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {isPreviewMode && (
         <Alert className="mb-4 border-amber-400 bg-amber-50 text-amber-900">
           <Eye className="h-4 w-4" />
@@ -869,11 +882,7 @@ export default function NewOrder() {
                     <li key={li.productId} className="flex items-start justify-between gap-2 text-sm border-b pb-3 last:border-0">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium">{li.productName}</span>
-                          <GramPackagingBadge 
-                            packagingTypeName={li.packagingTypeName} 
-                            gramsPerUnit={li.gramsPerUnit} 
-                          />
+                          <span className="font-medium">{li.displayName}</span>
                         </div>
                         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                           {constraints.caseOnly && constraints.caseSize ? (
@@ -991,14 +1000,6 @@ export default function NewOrder() {
               <CardTitle>Order Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {authUser?.accountId && (
-                <LocationSelect
-                  clientId={authUser.accountId}
-                  value={selectedLocationId}
-                  onChange={setSelectedLocationId}
-                  required
-                />
-              )}
               <div className="space-y-2">
                 <Label>When do you need this order?</Label>
                 <div className="flex gap-2">
