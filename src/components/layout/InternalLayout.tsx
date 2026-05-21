@@ -35,6 +35,7 @@ import {
   MessageSquarePlus,
   Megaphone,
   Truck,
+  LineChart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -242,6 +243,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 <NavGroup label="Admin" icon={Settings} open={adminOpen} onOpenChange={setAdminOpen}>
                   <NavItem to="/admin/users" icon={Users2} label="Users & Access" onClick={closeSidebar} />
                   <NavItem to="/admin-tools" icon={Wrench} label="Admin Tools" onClick={closeSidebar} />
+                  <NavItem to="/admin/market-audit" icon={LineChart} label="Market Price Audit" onClick={closeSidebar} />
                   <NavItem to="/inventory/ledger" icon={BookOpen} label="Ledger" onClick={closeSidebar} />
                   <NavLink
                     to="/admin/feedback"

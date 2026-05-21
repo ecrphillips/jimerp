@@ -50,6 +50,8 @@ import BulkProducts from "@/pages/internal/BulkProducts";
 import Inventory from "@/pages/internal/Inventory";
 import InventoryLedger from "@/pages/internal/InventoryLedger";
 import AdminTools from "@/pages/internal/AdminTools";
+import MarketPriceAudit from "@/pages/internal/MarketPriceAudit";
+import MarketPricingAnalysis from "@/pages/shared/MarketPricingAnalysis";
 import UsersAccess from "@/pages/internal/UsersAccess";
 import AdminFeedback from "@/pages/internal/AdminFeedback";
 import Portal from "@/pages/client/Portal";
@@ -282,6 +284,11 @@ const App = () => (
                 <InternalLayout><UsersAccess /></InternalLayout>
               </ProtectedRoute>
             } />
+            <Route path="/admin/market-audit" element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <InternalLayout><MarketPriceAudit /></InternalLayout>
+              </ProtectedRoute>
+            } />
             <Route path="/admin/feedback" element={
               <ProtectedRoute allowedRoles={['ADMIN']}>
                 <InternalLayout><AdminFeedback /></InternalLayout>
@@ -309,6 +316,11 @@ const App = () => (
                 <ClientLayout><Account /></ClientLayout>
               </ProtectedRoute>
             } />
+            <Route path="/portal/market-pricing" element={
+              <ProtectedRoute allowedRoles={['CLIENT']}>
+                <ClientLayout><MarketPricingAnalysis /></ClientLayout>
+              </ProtectedRoute>
+            } />
 
             {/* Member Portal (CLIENT users linked to coroast_members) */}
             <Route path="/member-portal" element={
@@ -329,6 +341,11 @@ const App = () => (
             <Route path="/member-portal/numbers" element={
               <ProtectedRoute allowedRoles={['CLIENT']}>
                 <MemberPortalLayout><MyNumbers /></MemberPortalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/member-portal/market-pricing" element={
+              <ProtectedRoute allowedRoles={['CLIENT']}>
+                <MemberPortalLayout><MarketPricingAnalysis /></MemberPortalLayout>
               </ProtectedRoute>
             } />
 
