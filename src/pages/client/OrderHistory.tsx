@@ -218,7 +218,9 @@ export default function OrderHistory() {
                 </thead>
                 <tbody>
                   {lineItems.map((li) => {
-                    const typeName = li.product?.packaging_type?.name ?? null;
+                    const ptRaw = li.product?.packaging_type as { name: string } | { name: string }[] | null | undefined;
+                    const pt = Array.isArray(ptRaw) ? ptRaw[0] : ptRaw;
+                    const typeName = pt?.name ?? null;
                     const grams = li.product?.grams_per_unit ?? li.product?.bag_size_g ?? null;
                     return (
                     <tr key={li.id} className="border-b last:border-0">
