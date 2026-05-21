@@ -58,22 +58,33 @@ interface LineItem {
   packaging_variant: PackagingVariant | null;
   product_id: string;
   roast_group: string | null;
+  shipment_id: string | null;
 }
 
-interface ShippableOrder {
-  id: string;
+// One card per shipment. `orderAllPicked` is true iff every line item across
+// every shipment of the parent order is fully picked — needed to enable
+// "Mark Shipped" (still an order-level state transition for now).
+interface ShippableShipment {
+  cardId: string;            // composite `${order_id}:${shipment_id}` for DnD
+  order_id: string;
+  shipment_id: string;
+  shipment_number: number;
+  shipmentCountForOrder: number;
+  isFirstShipmentInOrder: boolean;
+  shipToLabel: string;       // location code + name, or city, or fallback
   order_number: string;
   client_name: string;
   requested_ship_date: string | null;
   work_deadline: string | null;
-  delivery_method: string;
+  delivery_method: string;   // shipment's delivery method
   client_notes: string | null;
   internal_ops_notes: string | null;
   roasted: boolean;
   packed: boolean;
   invoiced: boolean;
-  lineItems: LineItem[];
+  lineItems: LineItem[];     // only lines where shipment_id === this.shipment_id
   allLineItemsPacked: boolean;
+  orderAllPicked: boolean;   // populated after picks are loaded (in card)
   priority: ShipPriority;
   hasContention: boolean;
   skuCount: number;
@@ -82,7 +93,6 @@ interface ShippableOrder {
   missingUnitsTotal: number;
   ship_display_order: number | null;
   manually_deprioritized?: boolean;
-  location_name: string | null;
 }
 
 // ShortListItem type now comes from useAuthoritativeShortList hook
@@ -91,8 +101,8 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   
-  // Local order state for optimistic DnD updates
-  const [localOrders, setLocalOrders] = useState<ShippableOrder[]>([]);
+  // Local order state for optimistic DnD updates (one entry per shipment)
+  const [localOrders, setLocalOrders] = useState<ShippableShipment[]>([]);
   const hasUserReorderedRef = useRef(false);
 
   // Fetch checkmarks for priority tracking
@@ -186,17 +196,27 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           client:clients(name),
           account:accounts(account_name),
           location:client_locations(name, location_code),
+          shipments:order_shipments(
+            id,
+            shipment_number,
+            delivery_method,
+            location_id,
+            ship_to_name,
+            ship_to_city,
+            location:client_locations(name, location_code)
+          ),
           line_items:order_line_items(
             id,
             product_id,
             quantity_units,
+            shipment_id,
             product:products(product_name, bag_size_g, packaging_variant, roast_group)
           )
         `)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY'])
         .order('ship_display_order', { ascending: true, nullsFirst: false })
         .order('order_number', { ascending: true });
-      
+
       if (error) throw error;
       return data ?? [];
     },
@@ -264,95 +284,191 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     return map;
   }, [orderLineItems]);
 
-  // Compute ALL orders with complexity metrics (shippable and not-yet-shippable)
-  const allOrdersWithMetrics = useMemo((): ShippableOrder[] => {
+  // Fetch ship picks early so order-wide "all picked" state is available
+  // when building shipment cards.
+  const { data: shipPicksForGating } = useQuery({
+    queryKey: ['ship-picks-gating'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ship_picks')
+        .select('order_line_item_id, units_picked');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const fullyPickedOrderIds = useMemo(() => {
+    const picksByLi = new Map<string, number>();
+    for (const p of shipPicksForGating ?? []) picksByLi.set(p.order_line_item_id, p.units_picked);
+    const set = new Set<string>();
+    for (const o of ordersForShipping ?? []) {
+      const lines = (o as { line_items?: { id: string; quantity_units: number }[] }).line_items ?? [];
+      if (lines.length === 0) continue;
+      if (lines.every((l) => (picksByLi.get(l.id) ?? 0) >= l.quantity_units)) set.add(o.id);
+    }
+    return set;
+  }, [ordersForShipping, shipPicksForGating]);
+
+  // Compute one card per shipment (flattened across all orders in view).
+  const allOrdersWithMetrics = useMemo((): ShippableShipment[] => {
     if (!ordersForShipping) return [];
 
-    const orders: ShippableOrder[] = [];
-    
-    for (const order of ordersForShipping) {
-      const lineItems: LineItem[] = (order.line_items ?? []).map((li: { id: string; product_id: string; quantity_units: number; product: { product_name: string; bag_size_g: number; packaging_variant: PackagingVariant | null; roast_group: string | null } | null }) => ({
-        id: li.id,
-        product_name: li.product?.product_name ?? 'Unknown',
-        quantity_units: li.quantity_units,
-        bag_size_g: li.product?.bag_size_g ?? 0,
-        packaging_variant: li.product?.packaging_variant ?? null,
-        product_id: li.product_id,
-        roast_group: li.product?.roast_group ?? null,
-      }));
+    type RawLine = {
+      id: string;
+      product_id: string;
+      quantity_units: number;
+      shipment_id: string | null;
+      product: {
+        product_name: string;
+        bag_size_g: number;
+        packaging_variant: PackagingVariant | null;
+        roast_group: string | null;
+      } | null;
+    };
+    type RawShipment = {
+      id: string;
+      shipment_number: number;
+      delivery_method: string;
+      location_id: string | null;
+      ship_to_name: string | null;
+      ship_to_city: string | null;
+      location: { name: string | null; location_code: string | null } | null;
+    };
 
-      // Complexity metrics
-      const skuCount = lineItems.length;
-      const totalUnits = lineItems.reduce((sum, li) => sum + li.quantity_units, 0);
-      
-      // Calculate missing SKUs and units based on FG inventory
-      let missingSkuCount = 0;
-      let missingUnitsTotal = 0;
-      for (const li of lineItems) {
-        const fgAvailable = fgInventoryMap[li.product_id] ?? 0;
-        if (fgAvailable < li.quantity_units) {
-          missingSkuCount++;
-          missingUnitsTotal += Math.max(0, li.quantity_units - fgAvailable);
+    const cards: ShippableShipment[] = [];
+
+    for (const order of ordersForShipping) {
+      const allLines: RawLine[] = (order.line_items ?? []) as RawLine[];
+      const shipments: RawShipment[] = ((order as { shipments?: RawShipment[] }).shipments ?? [])
+        .slice()
+        .sort((a, b) => a.shipment_number - b.shipment_number);
+
+      // Fallback: if backfill missed this order, render a synthetic single shipment
+      // so the order still appears in the queue.
+      const renderShipments: RawShipment[] = shipments.length
+        ? shipments
+        : [
+            {
+              id: `synthetic-${order.id}`,
+              shipment_number: 1,
+              delivery_method: order.delivery_method,
+              location_id: null,
+              ship_to_name: null,
+              ship_to_city: null,
+              location: (order as { location?: { name: string | null; location_code: string | null } | null }).location ?? null,
+            },
+          ];
+
+      const clientName =
+        (order as { account?: { account_name?: string } }).account?.account_name ??
+        order.client?.name ??
+        'Unknown';
+
+      // Order-level priority lookup
+      let orderPriority: ShipPriority = 'NORMAL';
+      for (const li of allLines) {
+        const bag = li.product?.bag_size_g ?? 0;
+        const cm = checkmarks?.find((c) => c.product_id === li.product_id && c.bag_size_g === bag);
+        if (cm?.ship_priority === 'TIME_SENSITIVE') {
+          orderPriority = 'TIME_SENSITIVE';
+          break;
         }
       }
 
-      // Order is shippable if ALL its line items have sufficient FG inventory
-      const allLineItemsPacked = lineItems.length > 0 && missingSkuCount === 0;
-
-      // Check for contention: any SKU in this order where FG < total demand
-      const hasContention = lineItems.some((li: { product_id: string }) => {
+      // Order-level contention (any shared SKU short)
+      const hasContention = allLines.some((li) => {
         const totalDemanded = demandByProduct[li.product_id] ?? 0;
         const totalFg = fgInventoryMap[li.product_id] ?? 0;
         return totalFg < totalDemanded;
       });
 
-      // Priority from checkmarks
-      let priority: ShipPriority = 'NORMAL';
-      for (const li of lineItems) {
-        const cm = checkmarks?.find(
-          (c) => c.product_id === li.product_id && c.bag_size_g === li.bag_size_g
-        );
-        if (cm?.ship_priority === 'TIME_SENSITIVE') {
-          priority = 'TIME_SENSITIVE';
-          break;
-        }
-      }
+      renderShipments.forEach((s, idx) => {
+        // Filter lines for this shipment. When there's only one shipment, also
+        // pick up any lines whose shipment_id is still null (legacy / not-yet-backfilled).
+        const linesForShipment = allLines.filter((l) => {
+          if (renderShipments.length === 1) return l.shipment_id === s.id || l.shipment_id === null;
+          return l.shipment_id === s.id;
+        });
 
-      orders.push({
-        id: order.id,
-        order_number: order.order_number,
-        client_name: (order as any).account?.account_name ?? order.client?.name ?? 'Unknown',
-        requested_ship_date: order.requested_ship_date,
-        work_deadline: order.work_deadline_at ?? null, // Map work_deadline_at to work_deadline for display
-        delivery_method: order.delivery_method,
-        client_notes: order.client_notes,
-        internal_ops_notes: order.internal_ops_notes,
-        roasted: order.roasted,
-        packed: order.packed,
-        invoiced: order.invoiced,
-        lineItems,
-        allLineItemsPacked,
-        priority,
-        hasContention,
-        skuCount,
-        totalUnits,
-        missingSkuCount,
-        missingUnitsTotal,
-        ship_display_order: order.ship_display_order ?? null,
-        manually_deprioritized: order.manually_deprioritized ?? false,
-        location_name: (order as any).location?.name ?? null,
+        const lineItems: LineItem[] = linesForShipment.map((li) => ({
+          id: li.id,
+          product_name: li.product?.product_name ?? 'Unknown',
+          quantity_units: li.quantity_units,
+          bag_size_g: li.product?.bag_size_g ?? 0,
+          packaging_variant: li.product?.packaging_variant ?? null,
+          product_id: li.product_id,
+          roast_group: li.product?.roast_group ?? null,
+          shipment_id: li.shipment_id,
+        }));
+
+        const skuCount = lineItems.length;
+        const totalUnits = lineItems.reduce((sum, li) => sum + li.quantity_units, 0);
+
+        let missingSkuCount = 0;
+        let missingUnitsTotal = 0;
+        for (const li of lineItems) {
+          const fgAvailable = fgInventoryMap[li.product_id] ?? 0;
+          if (fgAvailable < li.quantity_units) {
+            missingSkuCount++;
+            missingUnitsTotal += Math.max(0, li.quantity_units - fgAvailable);
+          }
+        }
+        const allLineItemsPacked = lineItems.length > 0 && missingSkuCount === 0;
+
+        // Build ship-to label
+        let shipToLabel: string;
+        if (s.location?.location_code || s.location?.name) {
+          shipToLabel = [s.location.location_code, s.location.name].filter(Boolean).join(' · ');
+        } else if (s.ship_to_name || s.ship_to_city) {
+          shipToLabel = [s.ship_to_name, s.ship_to_city].filter(Boolean).join(', ');
+        } else {
+          shipToLabel = `Shipment ${s.shipment_number}`;
+        }
+
+        cards.push({
+          cardId: `${order.id}:${s.id}`,
+          order_id: order.id,
+          shipment_id: s.id,
+          shipment_number: s.shipment_number,
+          shipmentCountForOrder: renderShipments.length,
+          isFirstShipmentInOrder: idx === 0,
+          shipToLabel,
+          order_number: order.order_number,
+          client_name: clientName,
+          requested_ship_date: order.requested_ship_date,
+          work_deadline: order.work_deadline_at ?? null,
+          delivery_method: s.delivery_method ?? order.delivery_method,
+          client_notes: order.client_notes,
+          internal_ops_notes: order.internal_ops_notes,
+          roasted: order.roasted,
+          packed: order.packed,
+          invoiced: order.invoiced,
+          lineItems,
+          allLineItemsPacked,
+          orderAllPicked: fullyPickedOrderIds.has(order.id),
+          priority: orderPriority,
+          hasContention,
+          skuCount,
+          totalUnits,
+          missingSkuCount,
+          missingUnitsTotal,
+          ship_display_order: order.ship_display_order ?? null,
+          manually_deprioritized: order.manually_deprioritized ?? false,
+        });
       });
     }
 
-    // Sort ONLY by ship_display_order (manual ordering) - NO automatic sorting
-    return orders.sort((a, b) => {
+    // Sort by parent order's display order, then shipment_number so an order's
+    // shipments stay adjacent.
+    return cards.sort((a, b) => {
       const orderA = a.ship_display_order ?? 999999;
       const orderB = b.ship_display_order ?? 999999;
-      
       if (orderA !== orderB) return orderA - orderB;
-      return a.order_number.localeCompare(b.order_number);
+      const oncmp = a.order_number.localeCompare(b.order_number);
+      if (oncmp !== 0) return oncmp;
+      return a.shipment_number - b.shipment_number;
     });
-  }, [ordersForShipping, checkmarks, fgInventoryMap, demandByProduct]);
+  }, [ordersForShipping, checkmarks, fgInventoryMap, demandByProduct, fullyPickedOrderIds]);
 
   // Sync local state from server data, but only when not actively reordering
   useEffect(() => {
@@ -497,33 +613,36 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     })
   );
 
-  // Handle drag end for reordering - use local state for optimistic updates
+  // Handle drag end. Reorder is by parent order — multiple shipments of the
+  // same order move together since they share ship_display_order and sort by
+  // shipment_number afterward.
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
-    
     if (!over || active.id === over.id) return;
-    
-    const oldIndex = localOrders.findIndex(o => o.id === active.id);
-    const newIndex = localOrders.findIndex(o => o.id === over.id);
-    
+
+    const oldIndex = localOrders.findIndex((o) => o.cardId === active.id);
+    const newIndex = localOrders.findIndex((o) => o.cardId === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
-    
-    // Mark that user has reordered to prevent server sync from overriding
+
     hasUserReorderedRef.current = true;
-    
-    // Optimistically update local state immediately
+
     const reordered = arrayMove(localOrders, oldIndex, newIndex);
     setLocalOrders(reordered);
-    
-    // Persist new order to DB
-    reordered.forEach((order, index) => {
-      updateDisplayOrderMutation.mutate({ orderId: order.id, newOrder: (index + 1) * 10 });
+
+    // Assign display order per unique parent order based on first occurrence
+    const seen = new Set<string>();
+    let rank = 0;
+    reordered.forEach((card) => {
+      if (seen.has(card.order_id)) return;
+      seen.add(card.order_id);
+      rank += 1;
+      updateDisplayOrderMutation.mutate({ orderId: card.order_id, newOrder: rank * 10 });
     });
   }, [localOrders, updateDisplayOrderMutation]);
 
-  const toggleOrderPriority = (order: ShippableOrder) => {
+  const toggleOrderPriority = (order: ShippableShipment) => {
     const newPriority: ShipPriority = order.priority === 'NORMAL' ? 'TIME_SENSITIVE' : 'NORMAL';
-    
+
     const updates = order.lineItems.map((li) => {
       const existingCheckmark = checkmarks?.find(
         (cm) => cm.product_id === li.product_id && cm.bag_size_g === li.bag_size_g
@@ -548,17 +667,17 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
 
   // "Do this later" - increment work_deadline by 1 day and set manually_deprioritized = true
   const doThisLaterMutation = useMutation({
-    mutationFn: async (order: ShippableOrder) => {
+    mutationFn: async (order: ShippableShipment) => {
       const currentDate = order.work_deadline ? parseISO(order.work_deadline) : new Date();
       const newDate = format(addDays(currentDate, 1), 'yyyy-MM-dd');
       
       const { error } = await supabase
         .from('orders')
-        .update({ 
+        .update({
           work_deadline: newDate,
           manually_deprioritized: true,
         })
-        .eq('id', order.id);
+        .eq('id', order.order_id);
       
       if (error) throw error;
     },
@@ -575,14 +694,14 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
 
   // "Do this today" - set work_deadline to today+1 and clear manually_deprioritized
   const doThisTodayMutation = useMutation({
-    mutationFn: async (order: ShippableOrder) => {
+    mutationFn: async (order: ShippableShipment) => {
       const { error } = await supabase
         .from('orders')
-        .update({ 
+        .update({
           work_deadline: todayPlusOne,
           manually_deprioritized: false,
         })
-        .eq('id', order.id);
+        .eq('id', order.order_id);
       
       if (error) throw error;
     },
@@ -597,17 +716,17 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     },
   });
 
-  const handleDoThisLater = useCallback((order: ShippableOrder) => {
+  const handleDoThisLater = useCallback((order: ShippableShipment) => {
     doThisLaterMutation.mutate(order);
   }, [doThisLaterMutation]);
 
-  const handleDoThisToday = useCallback((order: ShippableOrder) => {
+  const handleDoThisToday = useCallback((order: ShippableShipment) => {
     doThisTodayMutation.mutate(order);
   }, [doThisTodayMutation]);
 
-  // Mark shipped directly - no decrement modal needed (picking already deducted FG)
-  const handleMarkOrderShipped = useCallback((order: ShippableOrder) => {
-    markOrderShippedMutation.mutate(order.id);
+  // Mark shipped (whole-order transition; only fired from one shipment's card).
+  const handleMarkOrderShipped = useCallback((order: ShippableShipment) => {
+    markOrderShippedMutation.mutate(order.order_id);
   }, [markOrderShippedMutation]);
 
   // Mark invoiced handler
@@ -664,13 +783,13 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
               onDragEnd={handleDragEnd}
             >
               <SortableContext
-                items={displayOrders.map(o => o.id)}
+                items={displayOrders.map((o) => o.cardId)}
                 strategy={verticalListSortingStrategy}
               >
                 <div className="space-y-3">
                 {displayOrders.map((order) => (
                     <SortableShipCard
-                      key={order.id}
+                      key={order.cardId}
                       order={order}
                       fgInventory={fgInventoryMap}
                       onTogglePriority={toggleOrderPriority}

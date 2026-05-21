@@ -26,10 +26,17 @@ interface LineItem {
   packaging_variant: PackagingVariant | null;
   product_id: string;
   roast_group: string | null;
+  shipment_id: string | null;
 }
 
-interface ShippableOrder {
-  id: string;
+interface ShippableShipment {
+  cardId: string;
+  order_id: string;
+  shipment_id: string;
+  shipment_number: number;
+  shipmentCountForOrder: number;
+  isFirstShipmentInOrder: boolean;
+  shipToLabel: string;
   order_number: string;
   client_name: string;
   requested_ship_date: string | null;
@@ -42,6 +49,7 @@ interface ShippableOrder {
   invoiced: boolean;
   lineItems: LineItem[];
   allLineItemsPacked: boolean;
+  orderAllPicked: boolean;
   priority: 'NORMAL' | 'TIME_SENSITIVE';
   hasContention: boolean;
   skuCount: number;
@@ -50,7 +58,6 @@ interface ShippableOrder {
   missingUnitsTotal: number;
   ship_display_order: number | null;
   manually_deprioritized?: boolean;
-  location_name: string | null;
 }
 
 interface ShipPick {
@@ -61,10 +68,10 @@ interface ShipPick {
 }
 
 interface SortableShipCardProps {
-  order: ShippableOrder;
+  order: ShippableShipment;
   fgInventory: Record<string, number>; // FG inventory from ledger by product_id
-  onTogglePriority: (order: ShippableOrder) => void;
-  onMarkShipped: (order: ShippableOrder) => void;
+  onTogglePriority: (order: ShippableShipment) => void;
+  onMarkShipped: (order: ShippableShipment) => void;
   isShipping: boolean;
 }
 
@@ -86,21 +93,21 @@ export function SortableShipCard({
     setNodeRef,
     transform,
     transition,
-  } = useSortable({ id: order.id });
+  } = useSortable({ id: order.cardId });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
 
-  // Fetch ship picks for this order
+  // Fetch ship picks for this order (shared across the order's shipments)
   const { data: shipPicks } = useQuery({
-    queryKey: ['ship-picks', order.id],
+    queryKey: ['ship-picks', order.order_id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('ship_picks')
         .select('*')
-        .eq('order_id', order.id);
+        .eq('order_id', order.order_id);
       if (error) throw error;
       return (data ?? []) as ShipPick[];
     },
@@ -132,7 +139,7 @@ export function SortableShipCard({
       const { error: pickError } = await supabase
         .from('ship_picks')
         .upsert({
-          order_id: order.id,
+          order_id: order.order_id,
           order_line_item_id: lineItemId,
           units_picked: unitsPicked,
           updated_by: user?.id,
@@ -150,7 +157,7 @@ export function SortableShipCard({
           .insert({
             transaction_type: 'SHIP_CONSUME_FG',
             product_id: productId,
-            order_id: order.id,
+            order_id: order.order_id,
             quantity_units: -delta, // negative for consumption, positive for return
             notes: delta > 0 
               ? `Picked ${delta} units for order ${order.order_number}` 
@@ -166,7 +173,8 @@ export function SortableShipCard({
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['ship-picks', order.id] });
+      queryClient.invalidateQueries({ queryKey: ['ship-picks', order.order_id] });
+      queryClient.invalidateQueries({ queryKey: ['ship-picks-gating'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-ship-picks'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-ledger-fg'] });
     },
@@ -241,9 +249,19 @@ export function SortableShipCard({
         <div className="flex-1">
           <div className="flex items-center gap-3 flex-wrap">
             <span className="font-semibold text-lg">{order.order_number}</span>
+            {order.shipmentCountForOrder > 1 && (
+              <Badge variant="secondary" className="text-xs">
+                Shipment {order.shipment_number}/{order.shipmentCountForOrder}
+              </Badge>
+            )}
             <span className="text-muted-foreground">•</span>
             <span className="font-medium">{order.client_name}</span>
-            
+            <span className="text-muted-foreground">•</span>
+            <span className="flex items-center gap-1 text-sm">
+              <MapPin className="h-3 w-3" />
+              {order.shipToLabel}
+            </span>
+
             {/* Overdue badge - highest priority, always visible */}
             {isOverdue && (
               <OverdueBadge workDeadlineAt={order.work_deadline} />
@@ -298,15 +316,6 @@ export function SortableShipCard({
             </span>
             <span>•</span>
             <span>{order.delivery_method}</span>
-            {order.location_name && (
-              <>
-                <span>•</span>
-                <span className="flex items-center gap-1">
-                  <MapPin className="h-3 w-3" />
-                  {order.location_name}
-                </span>
-              </>
-            )}
             <span>•</span>
             <span className="flex items-center gap-1">
               <Layers className="h-3 w-3" />
@@ -325,7 +334,7 @@ export function SortableShipCard({
             
             {/* Nudge controls - inline compact version */}
             <NudgeScheduleButtons
-              orderId={order.id}
+              orderId={order.order_id}
               currentDeadline={order.work_deadline}
               compact
             />
@@ -336,7 +345,7 @@ export function SortableShipCard({
           <Button
             size="sm"
             variant="outline"
-            onClick={() => navigate(`/orders/${order.id}`)}
+            onClick={() => navigate(`/orders/${order.order_id}`)}
           >
             <ExternalLink className="h-4 w-4 mr-1" />
             Open
@@ -349,16 +358,24 @@ export function SortableShipCard({
             <Clock className="h-4 w-4 mr-1" />
             {isTimeSensitive ? 'Urgent' : 'Normal'}
           </Button>
-          <Button
-            size="sm"
-            onClick={() => onMarkShipped(order)}
-            disabled={isShipping || !allItemsFullyPicked}
-            className={allItemsFullyPicked ? 'bg-green-600 hover:bg-green-700' : ''}
-            title={!allItemsFullyPicked ? `${remainingSkus} SKUs / ${remainingUnits} units remaining to pick` : ''}
-          >
-            <Truck className="h-4 w-4 mr-1" />
-            Ship
-          </Button>
+          {order.isFirstShipmentInOrder && (
+            <Button
+              size="sm"
+              onClick={() => onMarkShipped(order)}
+              disabled={isShipping || !order.orderAllPicked}
+              className={order.orderAllPicked ? 'bg-green-600 hover:bg-green-700' : ''}
+              title={
+                !order.orderAllPicked
+                  ? order.shipmentCountForOrder > 1
+                    ? 'All shipments must be fully picked before shipping the order'
+                    : `${remainingSkus} SKUs / ${remainingUnits} units remaining to pick`
+                  : ''
+              }
+            >
+              <Truck className="h-4 w-4 mr-1" />
+              Ship Order
+            </Button>
+          )}
         </div>
       </div>
 

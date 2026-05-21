@@ -3252,6 +3252,7 @@ export type Database = {
           order_id: string
           product_id: string
           quantity_units: number
+          shipment_id: string | null
           shipped_quantity: number | null
           short_ship_reason: string | null
           short_ship_recorded_at: string | null
@@ -3266,6 +3267,7 @@ export type Database = {
           order_id: string
           product_id: string
           quantity_units: number
+          shipment_id?: string | null
           shipped_quantity?: number | null
           short_ship_reason?: string | null
           short_ship_recorded_at?: string | null
@@ -3280,6 +3282,7 @@ export type Database = {
           order_id?: string
           product_id?: string
           quantity_units?: number
+          shipment_id?: string | null
           shipped_quantity?: number | null
           short_ship_reason?: string | null
           short_ship_recorded_at?: string | null
@@ -3299,6 +3302,91 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_line_items_shipment_id_fkey"
+            columns: ["shipment_id"]
+            isOneToOne: false
+            referencedRelation: "order_shipments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_shipments: {
+        Row: {
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          delivery_method: Database["public"]["Enums"]["delivery_method"]
+          id: string
+          location_id: string | null
+          notes: string | null
+          order_id: string
+          ship_to_address_line1: string | null
+          ship_to_address_line2: string | null
+          ship_to_city: string | null
+          ship_to_country: string
+          ship_to_name: string | null
+          ship_to_postal: string | null
+          ship_to_region: string | null
+          shipment_number: number
+          updated_at: string
+        }
+        Insert: {
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          delivery_method?: Database["public"]["Enums"]["delivery_method"]
+          id?: string
+          location_id?: string | null
+          notes?: string | null
+          order_id: string
+          ship_to_address_line1?: string | null
+          ship_to_address_line2?: string | null
+          ship_to_city?: string | null
+          ship_to_country?: string
+          ship_to_name?: string | null
+          ship_to_postal?: string | null
+          ship_to_region?: string | null
+          shipment_number: number
+          updated_at?: string
+        }
+        Update: {
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          delivery_method?: Database["public"]["Enums"]["delivery_method"]
+          id?: string
+          location_id?: string | null
+          notes?: string | null
+          order_id?: string
+          ship_to_address_line1?: string | null
+          ship_to_address_line2?: string | null
+          ship_to_city?: string | null
+          ship_to_country?: string
+          ship_to_name?: string | null
+          ship_to_postal?: string | null
+          ship_to_region?: string | null
+          shipment_number?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_shipments_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "client_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_shipments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]

@@ -28,7 +28,7 @@ export function OrderShipmentsCard({ orderId }: OrderShipmentsCardProps) {
   const { data: shipments, isLoading } = useQuery({
     queryKey: ['order-shipments', orderId],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('order_shipments')
         .select(`
           id, shipment_number, delivery_method, location_id,

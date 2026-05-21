@@ -383,7 +383,7 @@ export default function CreateOrderForClient() {
       // Always insert one default shipment so order_shipments stays consistent
       // with the multi-ship-to model. UI for adding more shipments lives in the
       // client portal NewOrder; admin-created orders get a single shipment here.
-      const { data: defaultShipment, error: shipError } = await (supabase as any)
+      const { data: defaultShipment, error: shipError } = await supabase
         .from('order_shipments')
         .insert({
           order_id: order.id,
@@ -404,7 +404,7 @@ export default function CreateOrderForClient() {
         shipment_id: defaultShipment?.id ?? null,
       }));
 
-      const { error: lineError } = await (supabase as any).from('order_line_items').insert(lineItemsData);
+      const { error: lineError } = await supabase.from('order_line_items').insert(lineItemsData);
       if (lineError) throw lineError;
 
       // Trigger notification email (fire-and-forget for admin-created orders too)
