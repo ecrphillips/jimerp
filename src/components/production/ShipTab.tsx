@@ -195,7 +195,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           manually_deprioritized,
           client:clients(name),
           account:accounts(account_name),
-          location:client_locations(name, location_code),
+          location:account_locations(name:location_name, location_code),
           shipments:order_shipments(
             id,
             shipment_number,
@@ -203,7 +203,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
             location_id,
             ship_to_name,
             ship_to_city,
-            location:client_locations(name, location_code)
+            location:account_locations(name:location_name, location_code)
           ),
           line_items:order_line_items(
             id,
