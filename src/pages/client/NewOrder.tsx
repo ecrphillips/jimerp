@@ -892,7 +892,13 @@ export default function NewOrder() {
                     <li key={li.productId} className="flex items-start justify-between gap-2 text-sm border-b pb-3 last:border-0">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium">{li.displayName}</span>
+                          <span className="font-medium">{li.productName}</span>
+                          <span className="text-sm font-medium">
+                            {li.gramsPerUnit ? formatGramsLabel(li.gramsPerUnit) : ''}
+                          </span>
+                          {li.packagingTypeName && (
+                            <span className="text-xs text-muted-foreground">{li.packagingTypeName}</span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                           {constraints.caseOnly && constraints.caseSize ? (
