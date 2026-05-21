@@ -3435,6 +3435,88 @@ export type Database = {
           },
         ]
       }
+      order_shipments: {
+        Row: {
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          delivery_method: Database["public"]["Enums"]["delivery_method"] | null
+          id: string
+          location_id: string | null
+          notes: string | null
+          order_id: string
+          ship_to_address_line1: string | null
+          ship_to_address_line2: string | null
+          ship_to_city: string | null
+          ship_to_country: string | null
+          ship_to_name: string | null
+          ship_to_postal_code: string | null
+          ship_to_province: string | null
+          shipment_number: number
+          updated_at: string
+        }
+        Insert: {
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          delivery_method?:
+            | Database["public"]["Enums"]["delivery_method"]
+            | null
+          id?: string
+          location_id?: string | null
+          notes?: string | null
+          order_id: string
+          ship_to_address_line1?: string | null
+          ship_to_address_line2?: string | null
+          ship_to_city?: string | null
+          ship_to_country?: string | null
+          ship_to_name?: string | null
+          ship_to_postal_code?: string | null
+          ship_to_province?: string | null
+          shipment_number?: number
+          updated_at?: string
+        }
+        Update: {
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          delivery_method?:
+            | Database["public"]["Enums"]["delivery_method"]
+            | null
+          id?: string
+          location_id?: string | null
+          notes?: string | null
+          order_id?: string
+          ship_to_address_line1?: string | null
+          ship_to_address_line2?: string | null
+          ship_to_city?: string | null
+          ship_to_country?: string | null
+          ship_to_name?: string | null
+          ship_to_postal_code?: string | null
+          ship_to_province?: string | null
+          shipment_number?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_shipments_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "client_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_shipments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           account_id: string | null
@@ -4978,6 +5060,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_notification_preferences: {
+        Row: {
+          channel: Database["public"]["Enums"]["notification_channel"]
+          created_at: string
+          enabled: boolean
+          event_type: Database["public"]["Enums"]["notification_event_type"]
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          enabled?: boolean
+          event_type: Database["public"]["Enums"]["notification_event_type"]
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          enabled?: boolean
+          event_type?: Database["public"]["Enums"]["notification_event_type"]
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           client_id: string | null
@@ -5393,6 +5505,12 @@ export type Database = {
         | "RECEIVED"
         | "COSTING_INCOMPLETE"
         | "COSTING_COMPLETE"
+      notification_channel: "IN_APP" | "EMAIL"
+      notification_event_type:
+        | "ORDER_SUBMITTED"
+        | "ORDER_CONFIRMED"
+        | "BOOKING_CREATED"
+        | "BOOKING_CANCELLED"
       order_status:
         | "DRAFT"
         | "SUBMITTED"
@@ -5630,6 +5748,13 @@ export const Constants = {
         "RECEIVED",
         "COSTING_INCOMPLETE",
         "COSTING_COMPLETE",
+      ],
+      notification_channel: ["IN_APP", "EMAIL"],
+      notification_event_type: [
+        "ORDER_SUBMITTED",
+        "ORDER_CONFIRMED",
+        "BOOKING_CREATED",
+        "BOOKING_CANCELLED",
       ],
       order_status: [
         "DRAFT",

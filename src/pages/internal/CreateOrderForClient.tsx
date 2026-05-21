@@ -404,7 +404,7 @@ export default function CreateOrderForClient() {
         shipment_id: defaultShipment?.id ?? null,
       }));
 
-      const { error: lineError } = await supabase.from('order_line_items').insert(lineItemsData);
+      const { error: lineError } = await (supabase as any).from('order_line_items').insert(lineItemsData);
       if (lineError) throw lineError;
 
       // Trigger notification email (fire-and-forget for admin-created orders too)
