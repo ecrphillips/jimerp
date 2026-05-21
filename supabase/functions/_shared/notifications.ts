@@ -64,6 +64,7 @@ async function enqueueOne(
     queue_name: 'transactional_emails',
     payload: {
       message_id: messageId,
+      idempotency_key: messageId,
       to: recipient,
       from: FROM_DISPLAY,
       sender_domain: FROM_DOMAIN,
