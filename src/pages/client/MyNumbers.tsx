@@ -18,7 +18,7 @@ import { Plus, Copy, Pencil, Trash2, Printer, Check, Loader2 } from 'lucide-reac
 import { OutputsPanel } from '@/components/unit-economics/OutputsPanel';
 import { CostBreakdownChart } from '@/components/unit-economics/CostBreakdownChart';
 import { ClientInputsPanel } from '@/components/client/numbers/ClientInputsPanel';
-import { MSRPCard } from '@/components/client/numbers/MSRPCard';
+import { RetailPriceBuilder } from '@/components/client/numbers/RetailPriceBuilder';
 import {
   DEFAULT_CLIENT_INPUTS, calculateClientUnitEconomics,
   type ClientUnitEconomicsInputs,
@@ -296,12 +296,10 @@ export default function ClientMyNumbers() {
           <ClientInputsPanel inputs={inputs} onChange={setInputs} prefills={prefills} />
         </div>
         <div className="lg:col-span-3 space-y-4">
-          <MSRPCard
+          <RetailPriceBuilder
             inputs={inputs}
-            suggestedRetailPrice={calc.suggestedRetailPrice}
             totalCost={calc.perUnit.total}
-            onTargetMarginChange={(v) => setInputs({ ...inputs, targetRetailMarginPct: v })}
-            onApply={() => setInputs({ ...inputs, retailPrice: Number(calc.suggestedRetailPrice.toFixed(2)) })}
+            onChange={(retail, wholesale) => setInputs({ ...inputs, retailPrice: retail, wholesalePrice: wholesale })}
           />
           <OutputsPanel
             inputs={calc.engineInputs}
