@@ -3025,6 +3025,86 @@ export type Database = {
           },
         ]
       }
+      market_price_audit_rows: {
+        Row: {
+          bag_size_g: number | null
+          brand: string
+          created_at: string
+          id: string
+          notes: string | null
+          price_cad: number | null
+          price_per_g_cad: number | null
+          product_name: string
+          product_url: string | null
+          run_id: string
+          status: string
+        }
+        Insert: {
+          bag_size_g?: number | null
+          brand: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          price_cad?: number | null
+          price_per_g_cad?: number | null
+          product_name: string
+          product_url?: string | null
+          run_id: string
+          status?: string
+        }
+        Update: {
+          bag_size_g?: number | null
+          brand?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          price_cad?: number | null
+          price_per_g_cad?: number | null
+          product_name?: string
+          product_url?: string | null
+          run_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_price_audit_rows_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "market_price_audit_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      market_price_audit_runs: {
+        Row: {
+          id: string
+          is_published: boolean
+          notes: string | null
+          run_date: string
+          source_filename: string | null
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          id?: string
+          is_published?: boolean
+          notes?: string | null
+          run_date: string
+          source_filename?: string | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          id?: string
+          is_published?: boolean
+          notes?: string | null
+          run_date?: string
+          source_filename?: string | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
       offer_workspace_lines: {
         Row: {
           account_id: string
@@ -5006,6 +5086,10 @@ export type Database = {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
       }
+      delete_market_price_audit: {
+        Args: { _run_id: string }
+        Returns: undefined
+      }
       delete_order_safe: {
         Args: { p_force?: boolean; p_order_id: string }
         Returns: Json
@@ -5057,6 +5141,15 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      import_market_price_audit: {
+        Args: {
+          _notes: string
+          _rows: Json
+          _run_date: string
+          _source_filename: string
+        }
+        Returns: string
       }
       is_account_member: { Args: { _account_id: string }; Returns: boolean }
       mark_quote_accepted: { Args: { p_quote_id: string }; Returns: Json }
@@ -5114,6 +5207,10 @@ export type Database = {
         Args: { _profile_user_id: string }
         Returns: boolean
       }
+      publish_market_price_audit: {
+        Args: { _run_id: string }
+        Returns: undefined
+      }
       read_email_batch: {
         Args: { batch_size: number; queue_name: string; vt: number }
         Returns: {
@@ -5143,6 +5240,10 @@ export type Database = {
       }
       sync_locked_price_for_quote_line: {
         Args: { p_line_id: string }
+        Returns: undefined
+      }
+      unpublish_market_price_audit: {
+        Args: { _run_id: string }
         Returns: undefined
       }
     }

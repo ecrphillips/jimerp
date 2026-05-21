@@ -17,7 +17,7 @@ export function MSRPCard({ inputs, suggestedRetailPrice, totalCost, onTargetMarg
   const valid = totalCost > 0 && suggestedRetailPrice > 0 && Number.isFinite(suggestedRetailPrice);
 
   return (
-    <Card className="border-[hsl(207_67%_33%)] bg-[hsl(207_67%_33%/0.04)]">
+    <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Suggested MSRP — per {unitLabel(inputs.displayUnit)}
@@ -25,14 +25,14 @@ export function MSRPCard({ inputs, suggestedRetailPrice, totalCost, onTargetMarg
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex items-baseline justify-between gap-3">
-          <span className="text-3xl font-bold tabular-nums text-[hsl(207_67%_33%)]">
+          <span className="text-3xl font-bold tabular-nums">
             {valid ? fmt(suggestedRetailPrice) : '—'}
           </span>
           {valid && (
             <button
               type="button"
               onClick={onApply}
-              className="text-xs text-[hsl(207_67%_33%)] hover:underline"
+              className="text-xs text-primary hover:underline"
             >
               Use this as my retail price
             </button>
