@@ -34,7 +34,7 @@ export function OrderShipmentsCard({ orderId }: OrderShipmentsCardProps) {
           id, shipment_number, delivery_method, location_id,
           ship_to_name, ship_to_address_line1, ship_to_address_line2,
           ship_to_city, ship_to_region, ship_to_postal, notes,
-          location:client_locations(name, location_code)
+          location:account_locations(name:location_name, location_code)
         `)
         .eq('order_id', orderId)
         .order('shipment_number');

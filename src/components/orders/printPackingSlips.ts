@@ -200,7 +200,7 @@ export async function printPackingSlips(orderId: string): Promise<void> {
   const { data: shipments, error: shipErr } = await supabase
     .from('order_shipments')
     .select(
-      'id, shipment_number, delivery_method, location_id, ship_to_name, ship_to_address_line1, ship_to_address_line2, ship_to_city, ship_to_region, ship_to_postal, contact_name, contact_phone, contact_email, notes, location:client_locations(name, location_code)',
+      'id, shipment_number, delivery_method, location_id, ship_to_name, ship_to_address_line1, ship_to_address_line2, ship_to_city, ship_to_region, ship_to_postal, contact_name, contact_phone, contact_email, notes, location:account_locations(name:location_name, location_code)',
     )
     .eq('order_id', orderId)
     .order('shipment_number');
