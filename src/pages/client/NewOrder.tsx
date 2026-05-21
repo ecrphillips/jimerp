@@ -930,23 +930,6 @@ export default function NewOrder() {
                               </Button>
                             </div>
                           )}
-                          {li.grindOptions.length > 0 && (
-                            <Select
-                              value={li.grind ?? ''}
-                              onValueChange={(v) => updateGrind(li.productId, v as GrindOption)}
-                            >
-                              <SelectTrigger className="h-6 w-24 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {li.grindOptions.map((g) => (
-                                  <SelectItem key={g} value={g}>
-                                    {g}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
                           {hasMultiShipTo && (
                             <Select
                               value={li.shipmentLocalId ?? PRIMARY_SHIPMENT_LOCAL_ID}
