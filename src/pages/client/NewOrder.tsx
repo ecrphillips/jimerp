@@ -627,7 +627,12 @@ export default function NewOrder() {
       <li key={p.id} className="flex items-center justify-between py-2 border-b last:border-0">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className="font-medium truncate">{p.product_name}</span>
-          <GramPackagingBadge packagingTypeName={packagingTypeName} gramsPerUnit={gramsPerUnit} />
+          <span className="text-sm font-medium">
+            {gramsPerUnit ? formatGramsLabel(gramsPerUnit) : `${p.bag_size_g}g`}
+          </span>
+          {packagingTypeName && (
+            <span className="text-xs text-muted-foreground">{packagingTypeName}</span>
+          )}
           {hasPrice ? (
             <span className="text-sm text-muted-foreground">${price!.toFixed(2)}</span>
           ) : (
