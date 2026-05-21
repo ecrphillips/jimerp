@@ -99,14 +99,31 @@ serve(async (req: Request) => {
 
     // ========== ROLE-BASED ACCESS CHECK ==========
     const isInternal = roleData.role === "ADMIN" || roleData.role === "OPS";
-    
-    // If CLIENT role, verify they own this order
+
+    // If CLIENT role, verify they own this order.
+    // New-style orders (submitted via account portal) set account_id only — no client_id.
+    // Legacy orders set client_id. We accept either proof of ownership.
     if (roleData.role === "CLIENT") {
-      if (order.client_id !== roleData.client_id) {
+      const legacyMatch = roleData.client_id && order.client_id === roleData.client_id;
+      let authorized = legacyMatch;
+
+      if (!authorized && order.account_id) {
+        const { data: accountUser } = await adminClient
+          .from("account_users")
+          .select("id")
+          .eq("account_id", order.account_id)
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .maybeSingle();
+        authorized = !!accountUser;
+      }
+
+      if (!authorized) {
         console.error("[notify-new-order] CLIENT user attempted to access order from different client:", {
           user_id: user.id,
           user_client_id: roleData.client_id,
-          order_client_id: order.client_id
+          order_client_id: order.client_id,
+          order_account_id: order.account_id,
         });
         return new Response(
           JSON.stringify({ ok: false, error: "Forbidden - you can only notify for your own orders" }),
