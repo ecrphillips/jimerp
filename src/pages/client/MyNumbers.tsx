@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
@@ -270,6 +270,22 @@ export default function ClientMyNumbers() {
         )}
         {saveStatus === 'error' && <span className="text-destructive">Couldn't save — try again</span>}
       </div>
+
+      {/* Market pricing link */}
+      <Link
+        to="/portal/market-pricing"
+        className="block rounded-lg border bg-card p-4 hover:border-primary hover:bg-accent/30 transition-colors"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="font-medium">See how your retail price compares to the regional market</div>
+            <div className="text-xs text-muted-foreground">
+              Where your $/g sits in the Canadian specialty-coffee spectrum, updated monthly.
+            </div>
+          </div>
+          <div className="text-primary text-sm font-medium">View market →</div>
+        </div>
+      </Link>
 
       {/* Two columns */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">

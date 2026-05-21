@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertTriangle, Trash2, Sparkles, RotateCcw, Bomb, Wand2 } from 'lucide-react';
+import { AlertTriangle, Trash2, Sparkles, RotateCcw, Bomb, Wand2, LineChart } from 'lucide-react';
 import { GenericLaneConversion } from '@/components/admin/GenericLaneConversion';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -347,6 +347,26 @@ export default function AdminTools() {
 
       {/* Build Info Panel - DEV diagnostics */}
       <BuildInfoPanel />
+
+      {/* Market Price Audit */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <LineChart className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Market Price Audit</CardTitle>
+          </div>
+          <CardDescription>
+            Upload the monthly competitor pricing CSV. Clients and members see the latest published
+            run on their Market Pricing page.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={() => navigate('/admin/market-audit')} className="gap-2">
+            <LineChart className="h-4 w-4" />
+            Open Market Price Audit
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Packaging Types Manager */}
       <PackagingTypesManager />
