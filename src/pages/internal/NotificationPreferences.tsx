@@ -64,7 +64,7 @@ export default function NotificationPreferences() {
             event_type: input.event_type,
             channel: input.channel,
             enabled: input.enabled,
-          },
+          } as never,
           { onConflict: 'user_id,event_type,channel' },
         );
       if (error) throw error;
