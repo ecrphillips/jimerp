@@ -82,12 +82,12 @@ export default function OrderHistory() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('order_line_items')
-        .select('id, quantity_units, grind, unit_price_locked, product:products(product_name)')
+        .select('id, quantity_units, unit_price_locked, product:products(product_name, packaging_variant, grams_per_unit, bag_size_g, packaging_type:packaging_types(name))')
         .eq('order_id', selectedOrderId!)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      return (data ?? []) as { id: string; quantity_units: number; grind: string | null; unit_price_locked: number; product: { product_name: string } | null }[];
+      return (data ?? []) as { id: string; quantity_units: number; unit_price_locked: number; product: { product_name: string; packaging_variant: string | null; grams_per_unit: number | null; bag_size_g: number | null; packaging_type: { name: string } | null } | null }[];
     },
     enabled: !!selectedOrderId,
   });
