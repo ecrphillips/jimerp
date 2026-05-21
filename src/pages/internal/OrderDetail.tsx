@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { parseDateOnly } from '@/lib/dateOnly';
-import { ArrowLeft, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock, FileText, Clock, Trash2 } from 'lucide-react';
+import { ArrowLeft, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock, FileText, Clock, Trash2, Printer } from 'lucide-react';
+import { printPackingSlips } from '@/components/orders/printPackingSlips';
 import { LocationBadge } from '@/components/orders/LocationSelect';
 import { OrderShipmentsCard } from '@/components/orders/OrderShipmentsCard';
 import { CreatedByBadge } from '@/components/orders/CreatedByBadge';
@@ -101,6 +102,7 @@ export default function OrderDetail() {
           grind,
           unit_price_locked,
           line_notes,
+          shipment_id,
           product:products(id, product_name, roast_group, bag_size_g, grams_per_unit, packaging_variant, packaging_type:packaging_types(name))
         `)
         .eq('order_id', id!)
@@ -524,6 +526,21 @@ export default function OrderDetail() {
             Delete
           </Button>
           
+          {/* Print Packing Slips - one slip per shipment */}
+          <Button
+            variant="outline"
+            onClick={() => {
+              printPackingSlips(order.id).catch((err) => {
+                console.error(err);
+                toast.error(err instanceof Error ? err.message : 'Failed to print packing slips');
+              });
+            }}
+            className="gap-2"
+          >
+            <Printer className="h-4 w-4" />
+            Print Packing Slips
+          </Button>
+
           {/* Edit Order button */}
           <Button variant="outline" onClick={() => setShowEditModal(true)} className="gap-2">
             <PenSquare className="h-4 w-4" />
@@ -885,6 +902,7 @@ export default function OrderDetail() {
             quantity_units: li.quantity_units,
             grind: li.grind,
             unit_price_locked: li.unit_price_locked,
+            shipment_id: (li as { shipment_id?: string | null }).shipment_id ?? null,
           }))}
           clientId={(order as any).account_id}
         />

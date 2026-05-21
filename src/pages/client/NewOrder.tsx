@@ -526,7 +526,7 @@ export default function NewOrder() {
         notes: s.notes || null,
       }));
 
-      const { data: insertedShipments, error: shipError } = await (supabase as any)
+      const { data: insertedShipments, error: shipError } = await supabase
         .from('order_shipments')
         .insert([primaryRow, ...additionalRows])
         .select('id, shipment_number');
@@ -552,7 +552,7 @@ export default function NewOrder() {
         };
       });
 
-      const { error: lineError } = await (supabase as any).from('order_line_items').insert(lineItemsData);
+      const { error: lineError } = await supabase.from('order_line_items').insert(lineItemsData);
       if (lineError) throw lineError;
 
       supabase.functions.invoke('notify-new-order', {
