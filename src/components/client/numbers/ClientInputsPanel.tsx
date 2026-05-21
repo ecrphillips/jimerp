@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Slider } from '@/components/ui/slider';
+
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -194,6 +194,10 @@ export function ClientInputsPanel({ inputs, onChange, prefills }: Props) {
         )}
       </Section>
 
+      <Section title="Pricing">
+        <PricingTargets inputs={inputs} onChange={onChange} />
+      </Section>
+
       <Section title="Volume">
         <div className="space-y-2">
           <Label className="text-xs">Pace assumption</Label>
@@ -307,48 +311,96 @@ export function ClientInputsPanel({ inputs, onChange, prefills }: Props) {
           />
         </div>
       </Section>
-
-      <Section title="Pricing">
-        <PriceWithSlider
-          label={`Wholesale price per ${unitLabel(inputs.displayUnit)}`}
-          value={inputs.wholesalePrice}
-          onChange={(v) => set('wholesalePrice', v)}
-          maxRef={inputs.retailPrice ?? 30}
-        />
-        <PriceWithSlider
-          label={`Retail price per ${unitLabel(inputs.displayUnit)}`}
-          value={inputs.retailPrice}
-          onChange={(v) => set('retailPrice', v)}
-          maxRef={inputs.retailPrice ?? 30}
-        />
-      </Section>
     </div>
   );
 }
 
-function PriceWithSlider({
-  label, value, onChange, maxRef,
+/**
+ * Pricing targets editor: target wholesale + target retail, with the wholesaler's
+ * gross margin shown (and editable) between them.
+ *   Wholesaler margin = (retail - wholesale) / retail * 100
+ * Editing the margin re-solves wholesale = retail * (1 - margin/100).
+ */
+function PricingTargets({
+  inputs, onChange,
 }: {
-  label: string;
-  value: number | null;
-  onChange: (v: number | null) => void;
-  maxRef: number;
+  inputs: ClientUnitEconomicsInputs;
+  onChange: (next: ClientUnitEconomicsInputs) => void;
 }) {
-  const max = Math.max(20, maxRef * 2);
+  const unit = unitLabel(inputs.displayUnit);
+  const wholesale = inputs.wholesalePrice ?? 0;
+  const retail = inputs.retailPrice ?? 0;
+  const diff = retail - wholesale;
+  const wholesalerMarginPct =
+    retail > 0 ? ((retail - wholesale) / retail) * 100 : 0;
+
+  const setWholesale = (v: number | null) =>
+    onChange({ ...inputs, wholesalePrice: v });
+  const setRetail = (v: number | null) =>
+    onChange({ ...inputs, retailPrice: v });
+  const setMarginPct = (pct: number) => {
+    if (!(retail > 0)) return;
+    const clamped = Math.min(99, Math.max(0, pct));
+    const nextWholesale = Math.max(0, retail * (1 - clamped / 100));
+    onChange({ ...inputs, wholesalePrice: Number(nextWholesale.toFixed(2)) });
+  };
+
+  const unitSuffix = unit === 'bag' ? 'Bag' : unit === 'kg' ? 'Kilogram' : 'Pound';
+
   return (
-    <div className="space-y-1.5">
-      <Label className="text-xs">{label}</Label>
-      <div className="flex items-center gap-3">
-        <div className="w-24">
-          <NumberField value={value} onChange={onChange} step="0.25" min={0} placeholder="0.00" />
-        </div>
-        <Slider
-          value={[value ?? 0]}
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        <Label className="text-xs">Target Wholesale Price per {unitSuffix}</Label>
+        <NumberField
+          value={inputs.wholesalePrice}
+          onChange={setWholesale}
+          step="0.25"
           min={0}
-          max={max}
-          step={0.25}
-          onValueChange={([v]) => onChange(v)}
-          className="flex-1"
+          placeholder="0.00"
+        />
+      </div>
+
+      {/* Gap + wholesaler margin */}
+      <div className="rounded-md border bg-muted/30 px-3 py-2 space-y-2">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Retail – Wholesale</span>
+          <span className="font-semibold tabular-nums">${diff.toFixed(2)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+            Wholesaler gross margin
+            <HelpHint text="The margin your wholesale customer keeps: (Retail − Wholesale) ÷ Retail. Edit to set a target — we'll adjust the wholesale price to match." />
+          </Label>
+          <div className="flex items-center gap-1">
+            <Input
+              type="number"
+              inputMode="decimal"
+              step="0.5"
+              min={0}
+              max={99}
+              value={Number.isFinite(wholesalerMarginPct) ? wholesalerMarginPct.toFixed(1) : ''}
+              onChange={(e) => setMarginPct(Number(e.target.value))}
+              disabled={!(retail > 0)}
+              className="h-8 w-20 text-right tabular-nums"
+            />
+            <span className="text-xs text-muted-foreground">%</span>
+          </div>
+        </div>
+        {!(retail > 0) && (
+          <p className="text-[11px] text-muted-foreground">
+            Set a retail price to enable margin targeting.
+          </p>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">Target Retail Price per {unitSuffix}</Label>
+        <NumberField
+          value={inputs.retailPrice}
+          onChange={setRetail}
+          step="0.25"
+          min={0}
+          placeholder="0.00"
         />
       </div>
     </div>
