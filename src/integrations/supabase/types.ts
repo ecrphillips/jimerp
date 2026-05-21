@@ -5552,6 +5552,9 @@ export type Database = {
         | "ORDER_CONFIRMED"
         | "BOOKING_CREATED"
         | "BOOKING_CANCELLED"
+        | "ORDER_SHIPPED"
+        | "ORDER_CANCELLED"
+        | "ORDER_CLIENT_EDITED"
       order_status:
         | "DRAFT"
         | "SUBMITTED"
@@ -5796,6 +5799,9 @@ export const Constants = {
         "ORDER_CONFIRMED",
         "BOOKING_CREATED",
         "BOOKING_CANCELLED",
+        "ORDER_SHIPPED",
+        "ORDER_CANCELLED",
+        "ORDER_CLIENT_EDITED",
       ],
       order_status: [
         "DRAFT",
