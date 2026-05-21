@@ -12,6 +12,9 @@ import { toast } from 'sonner';
 const EVENT_TYPES = [
   { key: 'ORDER_SUBMITTED', label: 'New client order submitted' },
   { key: 'ORDER_CONFIRMED', label: 'Order confirmed' },
+  { key: 'ORDER_SHIPPED', label: 'Order shipped' },
+  { key: 'ORDER_CANCELLED', label: 'Order cancelled' },
+  { key: 'ORDER_CLIENT_EDITED', label: 'Order edited by client' },
   { key: 'BOOKING_CREATED', label: 'Co-roast booking created' },
   { key: 'BOOKING_CANCELLED', label: 'Co-roast booking cancelled' },
 ] as const;
