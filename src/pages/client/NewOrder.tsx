@@ -21,6 +21,7 @@ import { LocationSelect } from '@/components/orders/LocationSelect';
 import { OrderContextBanner } from '@/components/orders/OrderContextBanner';
 import { CaseQuantityInput } from '@/components/orders/CaseQuantityInput';
 import { useClientOrderingConstraints, validateCaseQuantity } from '@/hooks/useClientOrderingConstraints';
+import { usePricingVisibility } from '@/hooks/usePricingVisibility';
 import { blockNonIntegerKeys } from '@/lib/numericInput';
 import { DatePicker } from '@/components/ui/date-picker';
 import type { GrindOption, DeliveryMethod } from '@/types/database';
