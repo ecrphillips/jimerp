@@ -31,7 +31,8 @@ interface PrefRow {
 }
 
 export default function NotificationPreferences() {
-  const { authUser, role } = useAuth();
+  const { authUser } = useAuth();
+  const role = authUser?.role;
   const queryClient = useQueryClient();
   const isAdmin = role === 'ADMIN';
 
