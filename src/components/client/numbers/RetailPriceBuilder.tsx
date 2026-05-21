@@ -49,26 +49,40 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
   const unit = unitLabel(inputs.displayUnit);
   const targetRetail = inputs.retailPrice ?? 0;
   const targetWholesale = inputs.wholesalePrice ?? 0;
-  const targetGap = Math.max(0, targetRetail - targetWholesale);
+
+  // Margin gap (in margin %-points) between target retail and target wholesale.
+  const marginPct = (price: number) => (price > 0 && totalCost >= 0 ? ((price - totalCost) / price) * 100 : 0);
+  const targetGapPct = Math.max(0, marginPct(targetRetail) - marginPct(targetWholesale));
 
   // Working retail price — seeded from the target retail price.
   const [retail, setRetail] = useState<number>(targetRetail);
   const [lockGap, setLockGap] = useState<boolean>(true);
-  const [lockedGap, setLockedGap] = useState<number>(targetGap);
+  const [lockedGapPct, setLockedGapPct] = useState<number>(targetGapPct);
 
   // Re-seed working values when the underlying target changes (scenario switch, edit).
   useEffect(() => {
     setRetail(targetRetail);
-    setLockedGap(targetGap);
+    setLockedGapPct(targetGapPct);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetRetail, targetWholesale]);
+  }, [targetRetail, targetWholesale, totalCost]);
 
-  const wholesale = lockGap
-    ? Math.max(0, retail - lockedGap)
-    : targetWholesale;
+  /** Solve wholesale price so that its margin% = retailMargin% - lockedGapPct. */
+  const wholesaleFromGap = (r: number): number => {
+    if (r <= 0 || totalCost <= 0) return targetWholesale;
+    const retailM = (r - totalCost) / r;                // fraction
+    const wholesaleM = retailM - lockedGapPct / 100;    // fraction
+    if (wholesaleM >= 0.99) return r;                   // degenerate
+    if (wholesaleM <= -10) return 0;
+    // price = cost / (1 - margin); guard against div-by-zero / negative
+    const denom = 1 - wholesaleM;
+    if (denom <= 0) return r;
+    return Math.max(0, totalCost / denom);
+  };
 
-  const retailMargin = retail > 0 ? ((retail - totalCost) / retail) * 100 : null;
-  const wholesaleMargin = wholesale > 0 ? ((wholesale - totalCost) / wholesale) * 100 : null;
+  const wholesale = lockGap ? wholesaleFromGap(retail) : targetWholesale;
+
+  const retailMargin = retail > 0 ? marginPct(retail) : null;
+  const wholesaleMargin = wholesale > 0 ? marginPct(wholesale) : null;
   const retailVsTarget = retail - targetRetail;
   const wholesaleVsTarget = wholesale - targetWholesale;
 
@@ -90,9 +104,10 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
   const step = inputs.displayUnit === 'BAG' ? 0.25 : 0.10;
 
   const commit = (nextRetail: number) => {
-    const nextWholesale = lockGap ? Math.max(0, nextRetail - lockedGap) : targetWholesale;
+    const nextWholesale = lockGap ? wholesaleFromGap(nextRetail) : targetWholesale;
     onChange(Number(nextRetail.toFixed(2)), Number(nextWholesale.toFixed(2)));
   };
+
 
   const fmt = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
   const fmtPct = (n: number | null) => (n == null ? '—' : `${n.toFixed(1)}%`);
@@ -180,14 +195,17 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
               <div className="flex items-center gap-2">
                 {lockGap ? <Lock className="h-3.5 w-3.5 text-primary" /> : <Unlock className="h-3.5 w-3.5 text-muted-foreground" />}
                 <Label htmlFor="lock-gap" className="text-xs cursor-pointer">
-                  Lock retail – wholesale gap at {fmt(lockedGap)}
+                  Lock retail – wholesale margin gap at {lockedGapPct.toFixed(1)}pp
                 </Label>
               </div>
               <Switch
                 id="lock-gap"
                 checked={lockGap}
                 onCheckedChange={(v) => {
-                  if (v) setLockedGap(Math.max(0, retail - wholesale));
+                  if (v) {
+                    const gap = Math.max(0, (retailMargin ?? 0) - (wholesaleMargin ?? 0));
+                    setLockedGapPct(gap);
+                  }
                   setLockGap(v);
                 }}
               />
