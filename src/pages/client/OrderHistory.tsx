@@ -111,9 +111,15 @@ export default function OrderHistory() {
 
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success('Order cancelled');
       queryClient.invalidateQueries({ queryKey: ['client-orders'] });
+      const orderId = (data?.[0] as { id?: string } | undefined)?.id;
+      if (orderId) {
+        supabase.functions.invoke('notify-order-event', {
+          body: { order_id: orderId, event_type: 'ORDER_CANCELLED', details: 'Cancelled by client' },
+        }).catch((e) => console.warn('[notify-order-event] cancel failed:', e));
+      }
       setSelectedOrderId(null);
     },
     onError: (err) => {
