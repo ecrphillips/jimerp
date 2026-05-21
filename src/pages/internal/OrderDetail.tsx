@@ -813,7 +813,6 @@ export default function OrderDetail() {
                     <th className="pb-2">Demanded</th>
                     <th className="pb-2">Packed</th>
                     <th className="pb-2">Status</th>
-                    <th className="pb-2">Grind</th>
                     <th className="pb-2">Unit Price</th>
                     <th className="pb-2 text-right">Subtotal</th>
                   </tr>
@@ -849,7 +848,7 @@ export default function OrderDetail() {
                           </Badge>
                         )}
                       </td>
-                      <td className="py-2">{li.grind ?? '—'}</td>
+                      
                       <td className="py-2">${li.unit_price_locked.toFixed(2)}</td>
                       <td className="py-2 text-right">${(li.quantity_units * li.unit_price_locked).toFixed(2)}</td>
                     </tr>
@@ -857,7 +856,7 @@ export default function OrderDetail() {
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={6} className="pt-4 text-right font-medium">Total:</td>
+                    <td colSpan={5} className="pt-4 text-right font-medium">Total:</td>
                     <td className="pt-4 text-right font-medium">${lineTotal.toFixed(2)}</td>
                   </tr>
                 </tfoot>

@@ -10,6 +10,8 @@ import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
 import { usePricingVisibility } from '@/hooks/usePricingVisibility';
+import { GramPackagingBadge } from '@/components/GramPackagingBadge';
+import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 
 interface Order {
   id: string;
@@ -82,12 +84,12 @@ export default function OrderHistory() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('order_line_items')
-        .select('id, quantity_units, grind, unit_price_locked, product:products(product_name)')
+        .select('id, quantity_units, unit_price_locked, product:products(product_name, packaging_variant, grams_per_unit, bag_size_g, packaging_type:packaging_types(name))')
         .eq('order_id', selectedOrderId!)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      return (data ?? []) as { id: string; quantity_units: number; grind: string | null; unit_price_locked: number; product: { product_name: string } | null }[];
+      return (data ?? []) as { id: string; quantity_units: number; unit_price_locked: number; product: { product_name: string; packaging_variant: string | null; grams_per_unit: number | null; bag_size_g: number | null; packaging_type: { name: string } | null } | null }[];
     },
     enabled: !!selectedOrderId,
   });
@@ -208,27 +210,37 @@ export default function OrderHistory() {
                 <thead>
                   <tr className="border-b text-left">
                     <th className="pb-2">Product</th>
+                    <th className="pb-2">Packaging</th>
                     <th className="pb-2">Qty</th>
-                    <th className="pb-2">Grind</th>
                     {!hidePricing && <th className="pb-2">Unit Price</th>}
                     {!hidePricing && <th className="pb-2 text-right">Subtotal</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {lineItems.map((li) => (
+                  {lineItems.map((li) => {
+                    const typeName = li.product?.packaging_type?.name ?? null;
+                    const grams = li.product?.grams_per_unit ?? li.product?.bag_size_g ?? null;
+                    return (
                     <tr key={li.id} className="border-b last:border-0">
                       <td className="py-2">{li.product?.product_name ?? 'Unknown'}</td>
+                      <td className="py-2">
+                        {typeName && grams ? (
+                          <GramPackagingBadge packagingTypeName={typeName} gramsPerUnit={grams} />
+                        ) : (
+                          <PackagingBadge variant={(li.product?.packaging_variant ?? null) as PackagingVariant | null} />
+                        )}
+                      </td>
                       <td className="py-2">{li.quantity_units}</td>
-                      <td className="py-2">{li.grind ?? '—'}</td>
                       {!hidePricing && <td className="py-2">${li.unit_price_locked.toFixed(2)}</td>}
                       {!hidePricing && <td className="py-2 text-right">${(li.quantity_units * li.unit_price_locked).toFixed(2)}</td>}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
                 {!hidePricing && (
                   <tfoot>
                     <tr>
-                      <td colSpan={4} className="pt-4 text-right font-medium">Total:</td>
+                      <td colSpan={3} className="pt-4 text-right font-medium">Total:</td>
                       <td className="pt-4 text-right font-medium">${lineTotal.toFixed(2)}</td>
                     </tr>
                   </tfoot>

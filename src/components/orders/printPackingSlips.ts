@@ -93,7 +93,7 @@ const slipHtml = (
         <tr>
           <td>${esc(l.product?.product_name ?? 'Unknown')}</td>
           <td class="num">${esc(l.product?.bag_size_g ?? '')}g</td>
-          <td>${esc(l.grind ?? l.product?.packaging_variant ?? '')}</td>
+          <td>${esc(l.product?.packaging_variant ?? '')}</td>
           <td class="num">${esc(l.quantity_units)}</td>
         </tr>`,
         )
@@ -132,7 +132,7 @@ const slipHtml = (
         <tr>
           <th>Product</th>
           <th class="num">Size</th>
-          <th>Grind / Packaging</th>
+          <th>Packaging</th>
           <th class="num">Qty</th>
         </tr>
       </thead>
