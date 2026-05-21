@@ -134,6 +134,7 @@ export default function NewOrder() {
   } | null>(null);
 
   const { constraints, isLoading: constraintsLoading } = useClientOrderingConstraints(authUser?.accountId);
+  const { hidePricing } = usePricingVisibility();
 
   // Fetch allowed products with packaging type join
   const { data: products, isLoading: productsLoading } = useQuery({
