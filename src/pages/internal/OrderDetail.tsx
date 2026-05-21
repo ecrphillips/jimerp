@@ -326,6 +326,9 @@ export default function OrderDetail() {
       toast.success('Order confirmed');
       queryClient.invalidateQueries({ queryKey: ['order', id] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      supabase.functions.invoke('notify-order-event', {
+        body: { order_id: id, event_type: 'ORDER_CONFIRMED' },
+      }).catch((e) => console.warn('[notify-order-event] CONFIRMED failed:', e));
     },
     onError: (err) => {
       console.error(err);
