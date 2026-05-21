@@ -174,6 +174,7 @@ export type Database = {
           coroast_joined_date: string | null
           coroast_tier: string | null
           created_at: string
+          hide_pricing_from_non_owners: boolean
           id: string
           is_active: boolean
           managed_sku_count: number | null
@@ -214,6 +215,7 @@ export type Database = {
           coroast_joined_date?: string | null
           coroast_tier?: string | null
           created_at?: string
+          hide_pricing_from_non_owners?: boolean
           id?: string
           is_active?: boolean
           managed_sku_count?: number | null
@@ -254,6 +256,7 @@ export type Database = {
           coroast_joined_date?: string | null
           coroast_tier?: string | null
           created_at?: string
+          hide_pricing_from_non_owners?: boolean
           id?: string
           is_active?: boolean
           managed_sku_count?: number | null
