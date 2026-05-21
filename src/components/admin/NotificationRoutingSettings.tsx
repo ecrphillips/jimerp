@@ -62,7 +62,7 @@ export function NotificationRoutingSettings() {
         .from('app_settings')
         .upsert([{
           key: `notification_routes.${event}`,
-          value_json: value as unknown as Record<string, unknown>,
+          value_json: value as unknown as never,
           updated_at: new Date().toISOString(),
           updated_by: user.user?.id || null,
         }]);
