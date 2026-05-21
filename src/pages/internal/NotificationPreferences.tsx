@@ -54,7 +54,7 @@ export default function NotificationPreferences() {
     mutationFn: async (input: { event_type: EventKey; channel: ChannelKey; enabled: boolean }) => {
       if (!authUser?.id) throw new Error('Not signed in');
       const { error } = await supabase
-        .from('user_notification_preferences' as never)
+        .from('user_notification_preferences')
         .upsert(
           {
             user_id: authUser.id,
