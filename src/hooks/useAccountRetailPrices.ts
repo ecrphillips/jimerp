@@ -2,17 +2,40 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface AccountRetailProduct {
-  productId: string;
+  productId: string;            // synthetic id when sourced from a manual scenario
   productName: string;
   bagSizeG: number;
-  unitPrice: number;        // latest effective_date entry
+  unitPrice: number;            // retail price per bag, sourced from My Numbers
   pricePerG: number;
   effectiveDate: string;
+  source: 'scenario';
+  scenarioId: string;
+  scenarioName: string;
+}
+
+interface ScenarioRow {
+  id: string;
+  name: string;
+  updated_at: string;
+  inputs: {
+    productId?: string | null;
+    productName?: string | null;
+    bagSizeG?: number | null;
+    retailPrice?: number | null;
+  } | null;
 }
 
 /**
- * For the given account, return each active product's latest unit_price from price_list,
- * already normalized to $/g for direct comparison against the market audit distribution.
+ * For the given account, return one comparable retail price per product, sourced from the
+ * client's own My Numbers scenarios (their target retail price + bag size). Home Island ->
+ * client wholesale pricing is out of scope for this build, so we deliberately do NOT pull
+ * from `price_list`, which is still seeded at 0.00.
+ *
+ * Strategy:
+ *   - Pull all scenarios for the account with a positive retailPrice and bagSizeG.
+ *   - For each productId, keep the most recently updated scenario.
+ *   - Scenarios without a productId are still surfaced (labeled by scenario name) so
+ *     a client can compare a manual retail price.
  */
 export function useAccountRetailPrices(accountId: string | null | undefined) {
   return useQuery({
@@ -21,50 +44,40 @@ export function useAccountRetailPrices(accountId: string | null | undefined) {
     queryFn: async (): Promise<AccountRetailProduct[]> => {
       if (!accountId) return [];
 
-      const { data: products, error: pErr } = await supabase
-        .from('products')
-        .select('id, product_name, bag_size_g, is_active, account_id')
+      const { data, error } = await supabase
+        .from('client_unit_economics_scenarios')
+        .select('id, name, updated_at, inputs')
         .eq('account_id', accountId)
-        .eq('is_active', true);
-      if (pErr) throw pErr;
-      const list = products ?? [];
-      if (list.length === 0) return [];
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
 
-      const productIds = list.map(p => p.id);
-      const { data: prices, error: prErr } = await supabase
-        .from('price_list')
-        .select('id, product_id, unit_price, effective_date')
-        .in('product_id', productIds)
-        .order('effective_date', { ascending: false });
-      if (prErr) throw prErr;
+      const rows = (data ?? []) as unknown as ScenarioRow[];
+      const byKey = new Map<string, AccountRetailProduct>();
 
-      // Pick the newest price per product
-      const latest = new Map<string, { unit_price: number; effective_date: string }>();
-      for (const row of prices ?? []) {
-        if (!latest.has(row.product_id)) {
-          latest.set(row.product_id, {
-            unit_price: Number(row.unit_price),
-            effective_date: row.effective_date,
-          });
-        }
-      }
+      for (const s of rows) {
+        const i = s.inputs ?? {};
+        const bag = Number(i.bagSizeG ?? 0);
+        const retail = Number(i.retailPrice ?? 0);
+        if (!bag || bag <= 0 || !retail || retail <= 0) continue;
 
-      const out: AccountRetailProduct[] = [];
-      for (const p of list) {
-        const price = latest.get(p.id);
-        if (!price || !p.bag_size_g || p.bag_size_g <= 0) continue;
-        out.push({
-          productId: p.id,
-          productName: p.product_name,
-          bagSizeG: p.bag_size_g,
-          unitPrice: price.unit_price,
-          pricePerG: price.unit_price / p.bag_size_g,
-          effectiveDate: price.effective_date,
+        const key = i.productId ?? `scenario:${s.id}`;
+        if (byKey.has(key)) continue; // newest wins (we ordered desc)
+
+        const name = (i.productName?.trim() || s.name?.trim() || 'Untitled').toString();
+        byKey.set(key, {
+          productId: key,
+          productName: name,
+          bagSizeG: bag,
+          unitPrice: retail,
+          pricePerG: retail / bag,
+          effectiveDate: s.updated_at,
+          source: 'scenario',
+          scenarioId: s.id,
+          scenarioName: s.name,
         });
       }
-      // sort highest $/g first so the user sees premium products first
-      out.sort((a, b) => b.pricePerG - a.pricePerG);
-      return out;
+
+      return Array.from(byKey.values()).sort((a, b) => b.pricePerG - a.pricePerG);
     },
   });
 }
