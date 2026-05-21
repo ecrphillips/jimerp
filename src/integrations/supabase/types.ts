@@ -5352,13 +5352,11 @@ export type Database = {
       owner_list_team_notification_prefs: {
         Args: { p_account_id: string }
         Returns: {
-          channel: string
-          enabled: boolean
-          event_type: string
+          email: string
           is_owner: boolean
-          user_email: string
+          name: string
+          prefs: Json
           user_id: string
-          user_name: string
         }[]
       }
       owner_set_account_pricing_visibility: {
