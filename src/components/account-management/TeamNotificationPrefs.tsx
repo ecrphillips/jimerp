@@ -80,9 +80,12 @@ export function TeamNotificationPrefs({ accountId, currentUserId }: Props) {
           <div className="flex justify-center py-6">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : !team || team.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No team members yet.</p>
-        ) : (
+        ) : (() => {
+          const others = (team ?? []).filter(r => r.user_id !== currentUserId);
+          if (others.length === 0) {
+            return <p className="text-sm text-muted-foreground">No other team members yet.</p>;
+          }
+          return (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -96,14 +99,11 @@ export function TeamNotificationPrefs({ accountId, currentUserId }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {team.map(row => (
+                {others.map(row => (
                   <tr key={row.user_id} className="border-b last:border-0">
                     <td className="py-3 pr-4">
                       <div className="font-medium">
                         {row.name || row.email}
-                        {row.user_id === currentUserId && (
-                          <span className="ml-1 text-xs text-muted-foreground">(you)</span>
-                        )}
                         {row.is_owner && (
                           <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs">Owner</span>
                         )}
@@ -135,8 +135,10 @@ export function TeamNotificationPrefs({ accountId, currentUserId }: Props) {
               </tbody>
             </table>
           </div>
-        )}
+          );
+        })()}
       </CardContent>
+
     </Card>
   );
 }
