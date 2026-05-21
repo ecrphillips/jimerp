@@ -25,24 +25,34 @@ export default function Products() {
   const { hidePricing } = usePricingVisibility();
   const effectiveAccountId = previewAccountId ?? authUser?.accountId;
 
-  // TODO: Wire this query once RLS is confirmed for client_allowed_products reads by account_id.
-  // Fetches all products this account is allowed to order.
-  // Query pattern:
-  //   supabase
-  //     .from('client_allowed_products')
-  //     .select('product_id, products(id, product_name, sku, bag_size_g, format, packaging_variant)')
-  //     .eq('account_id', authUser?.accountId)
+  // Allowed-products list for this account. If no rows exist, the account is
+  // unrestricted and can order all active products (same convention as
+  // useClientOrderingConstraints).
   const { data: allowedProducts, isLoading: productsLoading } = useQuery({
-    queryKey: ['client-allowed-products', effectiveAccountId],
+    queryKey: ['client-allowed-products-list', effectiveAccountId],
     queryFn: async () => {
-      // account_id column was added via migration after types were generated,
-      // so cast to any to avoid stale type error.
-      const { data, error } = await (supabase as any)
+      const { data: allowed, error: allowedErr } = await (supabase as any)
         .from('client_allowed_products')
         .select('product_id, products(id, product_name, sku, bag_size_g, format, packaging_variant)')
         .eq('account_id', effectiveAccountId!);
-      if (error) throw error;
-      return (data ?? []) as AllowedProduct[];
+      if (allowedErr) throw allowedErr;
+
+      if (allowed && allowed.length > 0) {
+        return (allowed as AllowedProduct[]);
+      }
+
+      // Fallback: unrestricted — show all active products for this account.
+      const { data: all, error: allErr } = await supabase
+        .from('products')
+        .select('id, product_name, sku, bag_size_g, format, packaging_variant')
+        .eq('account_id', effectiveAccountId!)
+        .eq('is_active', true)
+        .order('product_name', { ascending: true });
+      if (allErr) throw allErr;
+      return ((all ?? []) as NonNullable<AllowedProduct['products']>[]).map(p => ({
+        product_id: p.id,
+        products: p,
+      })) as AllowedProduct[];
     },
     enabled: !!effectiveAccountId,
   });
