@@ -31,7 +31,8 @@ interface PrefRow {
 }
 
 export default function NotificationPreferences() {
-  const { authUser, role } = useAuth();
+  const { authUser } = useAuth();
+  const role = authUser?.role;
   const queryClient = useQueryClient();
   const isAdmin = role === 'ADMIN';
 
@@ -40,7 +41,7 @@ export default function NotificationPreferences() {
     queryFn: async () => {
       if (!authUser?.id) return [];
       const { data, error } = await supabase
-        .from('user_notification_preferences' as never)
+        .from('user_notification_preferences')
         .select('id, event_type, channel, enabled')
         .eq('user_id', authUser.id);
       if (error) throw error;
@@ -53,7 +54,7 @@ export default function NotificationPreferences() {
     mutationFn: async (input: { event_type: EventKey; channel: ChannelKey; enabled: boolean }) => {
       if (!authUser?.id) throw new Error('Not signed in');
       const { error } = await supabase
-        .from('user_notification_preferences' as never)
+        .from('user_notification_preferences')
         .upsert(
           {
             user_id: authUser.id,
