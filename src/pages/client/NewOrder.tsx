@@ -800,6 +800,19 @@ export default function NewOrder() {
         locationId={selectedLocationId || null}
       />
 
+      {authUser?.accountId && (
+        <Card className="mb-4">
+          <CardContent className="pt-4">
+            <LocationSelect
+              clientId={authUser.accountId}
+              value={selectedLocationId}
+              onChange={setSelectedLocationId}
+              required
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {isPreviewMode && (
         <Alert className="mb-4 border-amber-400 bg-amber-50 text-amber-900">
           <Eye className="h-4 w-4" />
