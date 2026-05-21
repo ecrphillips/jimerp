@@ -209,7 +209,7 @@ export default function OrderHistory() {
                 <thead>
                   <tr className="border-b text-left">
                     <th className="pb-2">Product</th>
-                    <th className="pb-2">Packaging</th>
+                    <th className="pb-2">Bag size</th>
                     <th className="pb-2">Qty</th>
                     {!hidePricing && <th className="pb-2">Unit Price</th>}
                     {!hidePricing && <th className="pb-2 text-right">Subtotal</th>}
@@ -217,20 +217,11 @@ export default function OrderHistory() {
                 </thead>
                 <tbody>
                   {lineItems.map((li) => {
-                    const ptRaw = li.product?.packaging_type as { name: string } | { name: string }[] | null | undefined;
-                    const pt = Array.isArray(ptRaw) ? ptRaw[0] : ptRaw;
-                    const typeName = pt?.name ?? null;
                     const grams = li.product?.grams_per_unit ?? li.product?.bag_size_g ?? null;
                     return (
                     <tr key={li.id} className="border-b last:border-0">
                       <td className="py-2">{li.product?.product_name ?? 'Unknown'}</td>
-                      <td className="py-2">
-                        {typeName && grams ? (
-                          <GramPackagingBadge packagingTypeName={typeName} gramsPerUnit={grams} />
-                        ) : (
-                          <PackagingBadge variant={(li.product?.packaging_variant ?? null) as PackagingVariant | null} />
-                        )}
-                      </td>
+                      <td className="py-2">{grams ? formatGramsLabel(grams) : '—'}</td>
                       <td className="py-2">{li.quantity_units}</td>
                       {!hidePricing && <td className="py-2">${li.unit_price_locked.toFixed(2)}</td>}
                       {!hidePricing && <td className="py-2 text-right">${(li.quantity_units * li.unit_price_locked).toFixed(2)}</td>}
