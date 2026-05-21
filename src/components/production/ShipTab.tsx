@@ -355,7 +355,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
               location_id: null,
               ship_to_name: null,
               ship_to_city: null,
-              location: (order as { location?: { name: string | null; location_code: string | null } | null }).location ?? null,
+              location: (order as unknown as { location?: { name: string | null; location_code: string | null } | null }).location ?? null,
             },
           ];
 
