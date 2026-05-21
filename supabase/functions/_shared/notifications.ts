@@ -49,12 +49,16 @@ async function enqueueOne(
 ): Promise<{ ok: boolean; error?: string }> {
   const messageId = crypto.randomUUID();
 
-  await adminClient.from('email_send_log').insert({
-    message_id: messageId,
-    template_name: label,
-    recipient_email: recipient,
-    status: 'pending',
-  });
+  const { data: logRow } = await adminClient
+    .from('email_send_log')
+    .insert({
+      message_id: messageId,
+      template_name: label,
+      recipient_email: recipient,
+      status: 'pending',
+    })
+    .select('id')
+    .single();
 
   const { error } = await adminClient.rpc('enqueue_email', {
     queue_name: 'transactional_emails',
@@ -73,13 +77,12 @@ async function enqueueOne(
   });
 
   if (error) {
-    await adminClient.from('email_send_log').insert({
-      message_id: messageId,
-      template_name: label,
-      recipient_email: recipient,
-      status: 'failed',
-      error_message: `Failed to enqueue: ${error.message}`,
-    });
+    if (logRow?.id) {
+      await adminClient
+        .from('email_send_log')
+        .update({ status: 'failed', error_message: `Failed to enqueue: ${error.message}` })
+        .eq('id', logRow.id);
+    }
     return { ok: false, error: error.message };
   }
   return { ok: true };
