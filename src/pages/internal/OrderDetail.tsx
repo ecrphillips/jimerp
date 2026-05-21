@@ -848,7 +848,7 @@ export default function OrderDetail() {
                           </Badge>
                         )}
                       </td>
-                      <td className="py-2">{li.grind ?? '—'}</td>
+                      
                       <td className="py-2">${li.unit_price_locked.toFixed(2)}</td>
                       <td className="py-2 text-right">${(li.quantity_units * li.unit_price_locked).toFixed(2)}</td>
                     </tr>
