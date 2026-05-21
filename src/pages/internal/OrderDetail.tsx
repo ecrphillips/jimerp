@@ -410,6 +410,9 @@ export default function OrderDetail() {
       toast.success('Order marked as shipped');
       queryClient.invalidateQueries({ queryKey: ['order', id] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      supabase.functions.invoke('notify-order-event', {
+        body: { order_id: id, event_type: 'ORDER_SHIPPED' },
+      }).catch((e) => console.warn('[notify-order-event] SHIPPED failed:', e));
     },
     onError: (err) => {
       console.error(err);
@@ -445,11 +448,26 @@ export default function OrderDetail() {
         p_target_status: newStatus,
       });
       if (error) throw error;
+      return newStatus;
     },
-    onSuccess: () => {
+    onSuccess: (newStatus) => {
       toast.success('Order status updated');
       queryClient.invalidateQueries({ queryKey: ['order', id] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      // Fan-out emails for landmark transitions. Admin-cancellation does NOT
+      // hit the shared mailbox (only client-cancels do); the edge function
+      // gates that. Here we still notify placer + owners.
+      const map: Partial<Record<OrderStatus, string>> = {
+        CONFIRMED: 'ORDER_CONFIRMED',
+        SHIPPED: 'ORDER_SHIPPED',
+        CANCELLED: 'ORDER_CANCELLED',
+      };
+      const evt = map[newStatus];
+      if (evt) {
+        supabase.functions.invoke('notify-order-event', {
+          body: { order_id: id, event_type: evt, details: 'Status changed by ops' },
+        }).catch((e) => console.warn('[notify-order-event] status change failed:', e));
+      }
     },
     onError: (err) => {
       console.error(err);
