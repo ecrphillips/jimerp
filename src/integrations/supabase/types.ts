@@ -3427,7 +3427,7 @@ export type Database = {
             foreignKeyName: "order_shipments_location_id_fkey"
             columns: ["location_id"]
             isOneToOne: false
-            referencedRelation: "client_locations"
+            referencedRelation: "account_locations"
             referencedColumns: ["id"]
           },
           {
@@ -3559,7 +3559,7 @@ export type Database = {
             foreignKeyName: "orders_location_id_fkey"
             columns: ["location_id"]
             isOneToOne: false
-            referencedRelation: "client_locations"
+            referencedRelation: "account_locations"
             referencedColumns: ["id"]
           },
           {
