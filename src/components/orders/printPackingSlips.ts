@@ -93,12 +93,11 @@ const slipHtml = (
         <tr>
           <td>${esc(l.product?.product_name ?? 'Unknown')}</td>
           <td class="num">${esc(l.product?.bag_size_g ?? '')}g</td>
-          <td>${esc(l.product?.packaging_variant ?? '')}</td>
           <td class="num">${esc(l.quantity_units)}</td>
         </tr>`,
         )
         .join('')
-    : `<tr><td colspan="4" class="muted">No line items assigned to this shipment.</td></tr>`;
+    : `<tr><td colspan="3" class="muted">No line items assigned to this shipment.</td></tr>`;
 
   return `
   <section class="slip">
