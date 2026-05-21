@@ -192,7 +192,7 @@ serve(async (req: Request) => {
             `Client: ${clientName}\n` +
             submitterLine +
             deadlineLine +
-            `\nOpen in JIM: /internal/orders/${order.id}\n`,
+            `\nOpen order: /internal/orders/${order.id}\n`,
         }),
       });
       if (emailFanOut.errors.length > 0) {

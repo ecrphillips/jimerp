@@ -21,6 +21,7 @@ import { LocationSelect } from '@/components/orders/LocationSelect';
 import { OrderContextBanner } from '@/components/orders/OrderContextBanner';
 import { CaseQuantityInput } from '@/components/orders/CaseQuantityInput';
 import { useClientOrderingConstraints, validateCaseQuantity } from '@/hooks/useClientOrderingConstraints';
+import { usePricingVisibility } from '@/hooks/usePricingVisibility';
 import { blockNonIntegerKeys } from '@/lib/numericInput';
 import { DatePicker } from '@/components/ui/date-picker';
 import type { GrindOption, DeliveryMethod } from '@/types/database';
@@ -133,6 +134,7 @@ export default function NewOrder() {
   } | null>(null);
 
   const { constraints, isLoading: constraintsLoading } = useClientOrderingConstraints(authUser?.accountId);
+  const { hidePricing } = usePricingVisibility();
 
   // Fetch allowed products with packaging type join
   const { data: products, isLoading: productsLoading } = useQuery({
@@ -633,7 +635,7 @@ export default function NewOrder() {
           {packagingTypeName && (
             <span className="text-xs text-muted-foreground">{packagingTypeName}</span>
           )}
-          {hasPrice ? (
+          {hidePricing ? null : hasPrice ? (
             <span className="text-sm text-muted-foreground">${price!.toFixed(2)}</span>
           ) : (
             <span className="text-xs text-destructive">No price</span>
@@ -730,7 +732,7 @@ export default function NewOrder() {
                   {packagingTypeName && (
                     <span className="text-xs text-muted-foreground">{packagingTypeName}</span>
                   )}
-                  {hasPrice ? (
+                  {hidePricing ? null : hasPrice ? (
                     <span className="text-sm text-muted-foreground ml-1">${price!.toFixed(2)}</span>
                   ) : (
                     <span className="text-xs text-destructive">No price</span>
@@ -985,7 +987,7 @@ export default function NewOrder() {
                   ))}
                 </ul>
               )}
-              {lineItems.length > 0 && (
+              {lineItems.length > 0 && !hidePricing && (
                 <div className="mt-4 pt-4 border-t flex justify-between font-medium">
                   <span>Total</span>
                   <span>${orderTotal.toFixed(2)}</span>

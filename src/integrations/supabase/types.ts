@@ -174,6 +174,7 @@ export type Database = {
           coroast_joined_date: string | null
           coroast_tier: string | null
           created_at: string
+          hide_pricing_from_non_owners: boolean
           id: string
           is_active: boolean
           managed_sku_count: number | null
@@ -214,6 +215,7 @@ export type Database = {
           coroast_joined_date?: string | null
           coroast_tier?: string | null
           created_at?: string
+          hide_pricing_from_non_owners?: boolean
           id?: string
           is_active?: boolean
           managed_sku_count?: number | null
@@ -254,6 +256,7 @@ export type Database = {
           coroast_joined_date?: string | null
           coroast_tier?: string | null
           created_at?: string
+          hide_pricing_from_non_owners?: boolean
           id?: string
           is_active?: boolean
           managed_sku_count?: number | null
@@ -5191,6 +5194,7 @@ export type Database = {
         Args: { _account_id: string; _booking_date: string }
         Returns: string
       }
+      _is_account_owner: { Args: { _account_id: string }; Returns: boolean }
       account_id_for_account_user: {
         Args: { _account_user_id: string }
         Returns: string
@@ -5343,6 +5347,32 @@ export type Database = {
       }
       owner_deactivate_user: {
         Args: { p_account_id: string; p_account_user_id: string }
+        Returns: undefined
+      }
+      owner_list_team_notification_prefs: {
+        Args: { p_account_id: string }
+        Returns: {
+          channel: string
+          enabled: boolean
+          event_type: string
+          is_owner: boolean
+          user_email: string
+          user_id: string
+          user_name: string
+        }[]
+      }
+      owner_set_account_pricing_visibility: {
+        Args: { p_account_id: string; p_hidden: boolean }
+        Returns: undefined
+      }
+      owner_set_user_notification_pref: {
+        Args: {
+          p_account_id: string
+          p_channel: string
+          p_enabled: boolean
+          p_event_type: string
+          p_target_user_id: string
+        }
         Returns: undefined
       }
       owner_update_account: {

@@ -6,7 +6,10 @@ type OwnerRpcName =
   | 'owner_update_account'
   | 'owner_update_user_permissions'
   | 'owner_deactivate_user'
-  | 'owner_create_location';
+  | 'owner_create_location'
+  | 'owner_set_account_pricing_visibility'
+  | 'owner_list_team_notification_prefs'
+  | 'owner_set_user_notification_pref';
 
 export function ownerRpc(fn: OwnerRpcName, args: Record<string, unknown>) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
