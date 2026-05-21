@@ -7,6 +7,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { AccountInfoForm } from '@/components/account-management/AccountInfoForm';
 import { TeamMemberList } from '@/components/account-management/TeamMemberList';
 import { LocationManagementSection } from '@/components/account-management/LocationManagementSection';
+import { ClientNotificationPreferences } from '@/components/account-management/ClientNotificationPreferences';
+import { TeamNotificationPrefs } from '@/components/account-management/TeamNotificationPrefs';
+import { PricingVisibilityCard } from '@/components/account-management/PricingVisibilityCard';
 
 export default function Account() {
   const { authUser } = useAuth();
@@ -76,9 +79,10 @@ export default function Account() {
             <TabsTrigger value="info">Account Info</TabsTrigger>
             <TabsTrigger value="team">Team</TabsTrigger>
             {showLocations && <TabsTrigger value="locations">Locations</TabsTrigger>}
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="info">
+          <TabsContent value="info" className="space-y-4">
             <AccountInfoForm
               accountId={accountId}
               initialValues={{
@@ -90,6 +94,7 @@ export default function Account() {
               }}
               canEdit={authUser.isOwner}
             />
+            {authUser.isOwner && <PricingVisibilityCard accountId={accountId} />}
           </TabsContent>
 
           <TabsContent value="team">
@@ -110,6 +115,13 @@ export default function Account() {
               />
             </TabsContent>
           )}
+
+          <TabsContent value="notifications" className="space-y-4">
+            <ClientNotificationPreferences userId={authUser.id} />
+            {authUser.isOwner && (
+              <TeamNotificationPrefs accountId={accountId} currentUserId={authUser.id} />
+            )}
+          </TabsContent>
         </Tabs>
       )}
     </div>
