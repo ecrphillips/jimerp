@@ -195,7 +195,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           manually_deprioritized,
           client:clients(name),
           account:accounts(account_name),
-          location:account_locations(name:location_name, location_code),
+          location:account_locations!orders_location_id_fkey(name:location_name, location_code),
           shipments:order_shipments(
             id,
             shipment_number,
@@ -339,7 +339,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
 
     for (const order of ordersForShipping) {
       const allLines: RawLine[] = (order.line_items ?? []) as RawLine[];
-      const shipments: RawShipment[] = ((order as { shipments?: RawShipment[] }).shipments ?? [])
+      const shipments: RawShipment[] = ((order as unknown as { shipments?: RawShipment[] }).shipments ?? [])
         .slice()
         .sort((a, b) => a.shipment_number - b.shipment_number);
 
@@ -355,7 +355,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
               location_id: null,
               ship_to_name: null,
               ship_to_city: null,
-              location: (order as { location?: { name: string | null; location_code: string | null } | null }).location ?? null,
+              location: (order as unknown as { location?: { name: string | null; location_code: string | null } | null }).location ?? null,
             },
           ];
 
