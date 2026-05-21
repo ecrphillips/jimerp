@@ -824,15 +824,11 @@ export default function OrderDetail() {
                         <div className="flex flex-col gap-1">
                           <span>{li.product?.product_name ?? 'Unknown'}</span>
                           {(() => {
-                            const prod = li.product as { packaging_variant?: PackagingVariant | null; packaging_type?: { name: string } | { name: string }[] | null; grams_per_unit?: number | null; bag_size_g?: number | null } | null;
-                            const ptRaw = prod?.packaging_type;
-                            const pt = Array.isArray(ptRaw) ? ptRaw[0] : ptRaw;
-                            const typeName = pt?.name ?? null;
+                            const prod = li.product as { grams_per_unit?: number | null; bag_size_g?: number | null } | null;
                             const grams = prod?.grams_per_unit ?? prod?.bag_size_g ?? null;
-                            if (typeName && grams) {
-                              return <GramPackagingBadge packagingTypeName={typeName} gramsPerUnit={grams} />;
-                            }
-                            return <PackagingBadge variant={prod?.packaging_variant ?? null} />;
+                            return grams ? (
+                              <span className="text-xs text-muted-foreground">{formatGramsLabel(grams)}</span>
+                            ) : null;
                           })()}
                         </div>
                       </td>
