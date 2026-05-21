@@ -10,8 +10,7 @@ import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
 import { usePricingVisibility } from '@/hooks/usePricingVisibility';
-import { GramPackagingBadge } from '@/components/GramPackagingBadge';
-import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
+import { formatGramsLabel } from '@/components/GramPackagingBadge';
 
 interface Order {
   id: string;
