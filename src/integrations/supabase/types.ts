@@ -3439,6 +3439,44 @@ export type Database = {
           },
         ]
       }
+      order_status_audit_log: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          from_status: Database["public"]["Enums"]["order_status"] | null
+          id: string
+          order_id: string
+          reason: string | null
+          to_status: Database["public"]["Enums"]["order_status"]
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          from_status?: Database["public"]["Enums"]["order_status"] | null
+          id?: string
+          order_id: string
+          reason?: string | null
+          to_status: Database["public"]["Enums"]["order_status"]
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          from_status?: Database["public"]["Enums"]["order_status"] | null
+          id?: string
+          order_id?: string
+          reason?: string | null
+          to_status?: Database["public"]["Enums"]["order_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_status_audit_log_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           account_id: string | null
@@ -5274,6 +5312,13 @@ export type Database = {
         Returns: string
       }
       is_account_member: { Args: { _account_id: string }; Returns: boolean }
+      is_allowed_order_transition: {
+        Args: {
+          p_from: Database["public"]["Enums"]["order_status"]
+          p_to: Database["public"]["Enums"]["order_status"]
+        }
+        Returns: boolean
+      }
       mark_quote_accepted: { Args: { p_quote_id: string }; Returns: Json }
       mark_quote_sent: { Args: { p_quote_id: string }; Returns: undefined }
       move_to_dlq: {
@@ -5367,6 +5412,52 @@ export type Database = {
       unpublish_market_price_audit: {
         Args: { _run_id: string }
         Returns: undefined
+      }
+      update_order_status: {
+        Args: {
+          p_order_id: string
+          p_reason?: string
+          p_set_deadline?: boolean
+          p_target_status: Database["public"]["Enums"]["order_status"]
+          p_work_deadline_at?: string
+        }
+        Returns: {
+          account_id: string | null
+          account_location_id: string | null
+          client_id: string | null
+          client_notes: string | null
+          client_po: string | null
+          created_at: string
+          created_by_admin: boolean
+          created_by_user_id: string | null
+          delivery_method: Database["public"]["Enums"]["delivery_method"]
+          id: string
+          internal_ops_notes: string | null
+          invoiced: boolean
+          location_id: string | null
+          manually_deprioritized: boolean
+          notify_email_error: string | null
+          notify_email_sent_at: string | null
+          order_number: string
+          packed: boolean
+          requested_ship_date: string | null
+          roasted: boolean
+          ship_display_order: number | null
+          shipped_or_ready: boolean
+          shopify_pull_log_id: string | null
+          shopify_source_id: string | null
+          source_channel: string
+          status: Database["public"]["Enums"]["order_status"]
+          updated_at: string
+          work_deadline: string | null
+          work_deadline_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
     }
     Enums: {
