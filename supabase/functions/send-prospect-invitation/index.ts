@@ -151,6 +151,7 @@ Deno.serve(async (req) => {
       queue_name: 'transactional_emails',
       payload: {
         message_id: messageId,
+        idempotency_key: messageId,
         to: prospect.prospect_email,
         from: FROM_ADDRESS,
         sender_domain: SENDER_DOMAIN,
