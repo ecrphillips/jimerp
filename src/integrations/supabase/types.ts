@@ -4890,6 +4890,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_notification_preferences: {
+        Row: {
+          channel: Database["public"]["Enums"]["notification_channel"]
+          created_at: string
+          enabled: boolean
+          event_type: Database["public"]["Enums"]["notification_event_type"]
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          enabled?: boolean
+          event_type: Database["public"]["Enums"]["notification_event_type"]
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          enabled?: boolean
+          event_type?: Database["public"]["Enums"]["notification_event_type"]
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           client_id: string | null
@@ -5305,6 +5335,12 @@ export type Database = {
         | "RECEIVED"
         | "COSTING_INCOMPLETE"
         | "COSTING_COMPLETE"
+      notification_channel: "IN_APP" | "EMAIL"
+      notification_event_type:
+        | "ORDER_SUBMITTED"
+        | "ORDER_CONFIRMED"
+        | "BOOKING_CREATED"
+        | "BOOKING_CANCELLED"
       order_status:
         | "DRAFT"
         | "SUBMITTED"
@@ -5542,6 +5578,13 @@ export const Constants = {
         "RECEIVED",
         "COSTING_INCOMPLETE",
         "COSTING_COMPLETE",
+      ],
+      notification_channel: ["IN_APP", "EMAIL"],
+      notification_event_type: [
+        "ORDER_SUBMITTED",
+        "ORDER_CONFIRMED",
+        "BOOKING_CREATED",
+        "BOOKING_CANCELLED",
       ],
       order_status: [
         "DRAFT",
