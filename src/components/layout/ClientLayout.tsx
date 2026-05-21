@@ -65,7 +65,7 @@ export function ClientLayout({ children }: ClientLayoutProps) {
 
       {/* Sidebar - same styling as InternalLayout */}
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-50 w-64 bg-sidebar text-sidebar-foreground transition-transform duration-200 lg:translate-x-0 lg:static",
+        "fixed inset-y-0 left-0 z-50 h-screen w-64 bg-sidebar text-sidebar-foreground transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="flex h-full flex-col">
