@@ -11,8 +11,7 @@ import { toast } from 'sonner';
 import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
 import { usePricingVisibility } from '@/hooks/usePricingVisibility';
 import { GramPackagingBadge } from '@/components/GramPackagingBadge';
-import { PackagingBadge } from '@/components/PackagingBadge';
-import type { PackagingVariant } from '@/lib/skuUtils';
+import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 
 interface Order {
   id: string;
