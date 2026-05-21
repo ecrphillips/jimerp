@@ -26,6 +26,7 @@ import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
 import { COMMON_ORIGINS, OTHER_ORIGINS, getCountryName } from '@/lib/coffeeOrigins';
 import { allocatePoNumber, poFromExisting, allocateSingleLotNumber } from '@/lib/lotNumberGenerator';
 import { useNavigate } from 'react-router-dom';
+import { useEffectiveFxRate } from '@/lib/fxRate';
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -827,6 +828,7 @@ function CreatePurchaseModal({
   const [invoiceDate, setInvoiceDate] = useState<Date | undefined>();
   const [dueDate, setDueDate] = useState<Date | undefined>();
   const [fxRate, setFxRate] = useState('');
+  const { effectiveRate: effectiveFxRate } = useEffectiveFxRate();
   const [sharedCosts, setSharedCosts] = useState<SharedCosts>(makeDefaultSharedCosts('CAD'));
   const [headerNotes, setHeaderNotes] = useState('');
 
@@ -908,17 +910,17 @@ function CreatePurchaseModal({
       setInvoiceNumber('');
       setInvoiceDate(undefined);
       setDueDate(undefined);
-      setFxRate('');
+      setFxRate(effectiveFxRate != null ? String(effectiveFxRate) : '');
       setSharedCosts(makeDefaultSharedCosts('CAD'));
       setHeaderNotes('');
       setLines([emptyLine()]);
-      prevFxRef.current = '';
+      prevFxRef.current = effectiveFxRate != null ? String(effectiveFxRate) : '';
     }
     // Reset confirmation state
     setConfirmCosting(true);
     setMarkPaid(false);
     setPaidDate(new Date());
-  }, [open, existingPurchase, existingLines]);
+  }, [open, existingPurchase, existingLines, effectiveFxRate]);
 
   const selectedVendor = vendors.find(v => v.id === vendorId);
 
@@ -1390,7 +1392,7 @@ function CreatePurchaseModal({
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button disabled={!vendorId} onClick={() => setStep(2)}>Next</Button>
+              <Button disabled={!vendorId} onClick={() => setStep(2)}>Advance to Coffee Lines</Button>
             </DialogFooter>
           </>
         ) : (

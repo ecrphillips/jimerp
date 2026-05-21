@@ -1,9 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeadersFor } from '../_shared/cors.ts';
+import { isOneOfRoles } from '../_shared/role.ts';
+import { isValidEmail, isNonEmptyString } from '../_shared/validation.ts';
 
 const SITE_URL = Deno.env.get('SITE_URL') || 'https://homeislandcoffeepartners.lovable.app';
 
@@ -20,6 +18,7 @@ interface InviteAccountUserRequest {
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = corsHeadersFor(req);
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -57,14 +56,22 @@ Deno.serve(async (req) => {
       .eq('user_id', callingUser.id)
       .single();
 
-    if (!roleData || !['ADMIN', 'OPS'].includes(roleData.role)) {
+    if (!roleData || !isOneOfRoles(roleData.role, ['ADMIN', 'OPS'])) {
       return new Response(
         JSON.stringify({ error: 'Only admins and ops can invite account users' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const body: InviteAccountUserRequest = await req.json();
+    let body: InviteAccountUserRequest;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON body' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     const {
       email, account_id, is_owner, can_place_orders, can_book_roaster,
       can_manage_locations, can_invite_users, location_access,
@@ -74,14 +81,28 @@ Deno.serve(async (req) => {
     if (!email || !account_id) {
       return new Response(
         JSON.stringify({ error: 'Email and account_id are required' }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!isValidEmail(email)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid email format' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!isNonEmptyString(account_id)) {
+      return new Response(
+        JSON.stringify({ error: 'account_id must be a non-empty string' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Verify account exists
     const { data: account, error: accountError } = await adminClient
       .from('accounts')
-      .select('id, account_name')
+      .select('id, account_name, programs')
       .eq('id', account_id)
       .single();
 
@@ -216,6 +237,11 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Program-aware permission guardrail: never grant flags for programs the account doesn't have.
+    const programs: string[] = (account as any).programs ?? [];
+    const effectiveCanPlaceOrders = programs.includes('MANUFACTURING') ? can_place_orders : false;
+    const effectiveCanBookRoaster = programs.includes('COROASTING') ? can_book_roaster : false;
+
     // Create account_users record
     const { data: accountUser, error: auError } = await adminClient
       .from('account_users')
@@ -223,8 +249,8 @@ Deno.serve(async (req) => {
         user_id: userId,
         account_id,
         is_owner,
-        can_place_orders,
-        can_book_roaster,
+        can_place_orders: effectiveCanPlaceOrders,
+        can_book_roaster: effectiveCanBookRoaster,
         can_manage_locations,
         can_invite_users,
         location_access,

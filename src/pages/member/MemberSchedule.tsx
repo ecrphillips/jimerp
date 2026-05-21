@@ -20,11 +20,16 @@ import {
   startOfToday, differenceInHours, parseISO, addDays, getDay,
   isBefore, startOfDay, isAfter,
 } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
+import { DEFAULT_TZ, isoDateInTz, todayInTz } from '@/lib/timezone';
+import { formatInTimeZone } from 'date-fns-tz';
+import { formatCurrency } from '@/lib/currency';
 import {
   checkOverlap, timeToMinutes, formatTime12, TIER_RATES,
   HOUR_START, HOUR_END, TOTAL_HOURS, ROW_HEIGHT,
-  type BookingRow, type BlockRow, type AvailabilityWindow,
+  type BookingRow, type BlockRow, type AvailabilityWindow, type BusySlot,
 } from '@/components/bookings/bookingUtils';
+import { useAccountPricing } from '@/hooks/useAccountPricing';
 import { AvailabilityTimeSelect } from '@/components/bookings/AvailabilityTimeSelect';
 import { DAYS_OF_WEEK, DAY_LABELS, JS_DAY_TO_STRING } from '@/components/coroast/types';
 
@@ -108,7 +113,14 @@ export default function MemberSchedule() {
   const memberId = effectiveAccountId;
   const tier = member?.coroast_tier ?? 'MEMBER';
   const isGrowth = tier === 'GROWTH' || tier === 'PRODUCTION';
-  const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
+  const tierDefaults = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
+  const { data: pricing } = useAccountPricing(memberId);
+  const rates = {
+    includedHours: pricing?.includedHours.value ?? tierDefaults.includedHours,
+    overageRate: pricing?.overageRate.value ?? tierDefaults.overageRate,
+    label: tierDefaults.label,
+    base: pricing?.monthlyFee.value ?? tierDefaults.base,
+  };
 
   // Week state
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
@@ -169,8 +181,28 @@ export default function MemberSchedule() {
     },
   });
 
+  // Other members' bookings on the shared roaster — redacted to (date, start, end) by the
+  // get_coroast_busy_slots SECURITY DEFINER RPC. Direct SELECT is RLS-restricted to the
+  // caller's own account, so we use the RPC to surface "this slot is taken" without
+  // leaking member names, notes, or account ids.
+  const { data: otherBusy = [] } = useQuery({
+    queryKey: ['member-portal-other-busy'],
+    queryFn: async () => {
+      const now = new Date();
+      const from = isoDateInTz(now);
+      const to = isoDateInTz(addWeeks(now, 13));
+      const { data, error } = await supabase.rpc('get_coroast_busy_slots', {
+        p_from: from,
+        p_to: to,
+      });
+      if (error) throw error;
+      return (data ?? []) as BusySlot[];
+    },
+    enabled: !!memberId,
+  });
+
   // Hours used this month
-  const currentMonthStr = format(new Date(), 'yyyy-MM');
+  const currentMonthStr = formatInTimeZone(new Date(), DEFAULT_TZ, 'yyyy-MM');
   const hoursUsedThisMonth = useMemo(() => {
     if (!memberId) return 0;
     return allBookings
@@ -216,8 +248,24 @@ export default function MemberSchedule() {
       });
     }
 
+    // Other-member bookings — redacted, render as non-clickable grey blocks.
+    otherBusy.forEach((s, idx) => {
+      result.push({
+        id: `obs-${idx}`,
+        dateStr: s.booking_date,
+        startMin: timeToMinutes(s.start_time),
+        endMin: timeToMinutes(s.end_time),
+        label: 'Unavailable',
+        tooltip: `Unavailable: ${formatTime12(s.start_time)} – ${formatTime12(s.end_time)}`,
+        bgColor: OTHER_COLOR.bg,
+        textColor: OTHER_COLOR.text,
+        isBlock: true,
+        isMine: false,
+      });
+    });
+
     return result;
-  }, [blocks, allBookings, memberId]);
+  }, [blocks, allBookings, otherBusy, memberId]);
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
@@ -320,7 +368,7 @@ export default function MemberSchedule() {
         // Client-side overlap pre-check for clearer per-date errors before hitting RPC
         for (const d of dates) {
           const ds = format(d, 'yyyy-MM-dd');
-          const overlap = checkOverlap(ds, formStartTime, formEndTime, blocks, allBookings as BookingRow[]);
+          const overlap = checkOverlap(ds, formStartTime, formEndTime, blocks, allBookings as BookingRow[], undefined, undefined, otherBusy);
           if (overlap) throw new Error(`${format(d, 'MMM d')}: ${overlap}`);
         }
 
@@ -352,7 +400,7 @@ export default function MemberSchedule() {
           toast.success(`Created ${created} recurring bookings`);
         }
       } else {
-        const overlap = checkOverlap(saveDateStr, formStartTime, formEndTime, blocks, allBookings as BookingRow[]);
+        const overlap = checkOverlap(saveDateStr, formStartTime, formEndTime, blocks, allBookings as BookingRow[], undefined, undefined, otherBusy);
         if (overlap) throw new Error(overlap);
 
         const { error } = await supabase.rpc('create_member_booking', {
@@ -370,6 +418,12 @@ export default function MemberSchedule() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['member-portal-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['member-portal-other-busy'] });
+      if (memberId) {
+        const periodKey = formDate ? format(formDate, 'yyyy-MM') : new Date().toISOString().slice(0, 7);
+        queryClient.invalidateQueries({ queryKey: ['coroast-hour-ledger', memberId] });
+        queryClient.invalidateQueries({ queryKey: ['coroast-billing-period', memberId, periodKey] });
+      }
       setBookingOpen(false);
       setShowConfirm(false);
     },
@@ -382,10 +436,17 @@ export default function MemberSchedule() {
       const { error } = await supabase.rpc('cancel_member_booking', { p_booking_id: bookingId });
       if (error) throw new Error(error.message);
     },
-    onSuccess: () => {
+    onSuccess: (_data, bookingId) => {
       toast.success('Booking cancelled');
+      const cancelled = (allBookings as BookingRow[]).find(b => b.id === bookingId);
       setSelectedBooking(null);
       queryClient.invalidateQueries({ queryKey: ['member-portal-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['member-portal-other-busy'] });
+      if (memberId) {
+        const periodKey = cancelled?.booking_date?.slice(0, 7) ?? new Date().toISOString().slice(0, 7);
+        queryClient.invalidateQueries({ queryKey: ['coroast-hour-ledger', memberId] });
+        queryClient.invalidateQueries({ queryKey: ['coroast-billing-period', memberId, periodKey] });
+      }
     },
     onError: (err: Error) => toast.error(err.message || 'Failed to cancel booking'),
   });
@@ -732,7 +793,7 @@ export default function MemberSchedule() {
             return (
               <div className="space-y-4">
                 <div className="space-y-2 text-sm">
-                  <p><strong>Date:</strong> {format(new Date(selectedBooking.booking_date + 'T00:00:00'), 'EEEE, MMMM d, yyyy')}</p>
+                  <p><strong>Date:</strong> {format(parseDateOnly(selectedBooking.booking_date)!, 'EEEE, MMMM d, yyyy')}</p>
                   <p><strong>Time:</strong> {formatTime12(selectedBooking.start_time)} – {formatTime12(selectedBooking.end_time)}</p>
                   <p><strong>Duration:</strong> {Number(selectedBooking.duration_hours || 0).toFixed(1)}h</p>
                   {(selectedBooking as any).notes_member && (
@@ -761,7 +822,7 @@ export default function MemberSchedule() {
                       Cancellation locked
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      This booking is within 48 hours. A cancellation fee of <strong>${cancellationFee.toFixed(2)}</strong> would apply.
+                      This booking is within 48 hours. A cancellation fee of <strong>{formatCurrency(cancellationFee)}</strong> would apply.
                     </p>
                     <p className="text-xs text-muted-foreground">
                       To request a cancellation, please contact Home Island Coffee Partners directly.

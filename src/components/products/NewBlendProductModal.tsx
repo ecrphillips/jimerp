@@ -10,11 +10,28 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { AlertCircle, Plus, Trash2, ExternalLink, Info, Loader2 } from 'lucide-react';
-import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
+import { AlertCircle, ExternalLink, Info, Loader2 } from 'lucide-react';
+
 import { RoastGroupPreview } from './RoastGroupPreview';
 import { PackagingVariantsSection, type PackagingVariantEntry } from './PackagingVariantsSection';
 import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
+import {
+  MixingConsole,
+  buildEmptyMixingConsoleValue,
+  stripRedundantOverrides,
+  hasMixingConsoleErrors,
+  type MixingConsoleValue,
+  type MixingConsoleVariant,
+  type PricingProfilePreset,
+} from '@/components/pricing/MixingConsole';
+import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
+
+const FALLBACK_PRESET: PricingProfilePreset = {
+  yield_loss_pct: 16,
+  process_per_kg_green: 0,
+  pkg_labour_per_unit: 0,
+};
+const PKG_DEFAULTS: Record<number, { material: number; labour: number }> = {};
 
 interface Client {
   id: string;
@@ -29,12 +46,7 @@ interface RoastGroup {
   origin: string | null;
   blend_name: string | null;
   display_name: string | null;
-}
-
-interface BlendComponent {
-  id: string;
-  roastGroup: string;
-  percentage: number;
+  blend_type: string | null;
 }
 
 interface NewBlendProductModalProps {
@@ -43,8 +55,6 @@ interface NewBlendProductModalProps {
 }
 
 type LifecycleType = 'perennial' | 'seasonal';
-
-let componentIdCounter = 0;
 
 export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModalProps) {
   const queryClient = useQueryClient();
@@ -56,11 +66,8 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   // Step 2: Finished Good Name
   const [finishedGoodName, setFinishedGoodName] = useState('');
   
-  // Blend components
-  const [components, setComponents] = useState<BlendComponent[]>([
-    { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
-    { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
-  ]);
+  // Selected blend roast group (post-roast blends are pre-defined)
+  const [selectedBlendRoastGroup, setSelectedBlendRoastGroup] = useState<string>('');
   
   // Optional Cropster ref
   const [cropsterProfileRef, setCropsterProfileRef] = useState('');
@@ -73,7 +80,13 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   
   // Step 5: Lifecycle
   const [lifecycle, setLifecycle] = useState<LifecycleType | null>(null);
-  
+
+  // Step 7: Pricing overrides per variant
+  const [overrides, setOverrides] = useState<MixingConsoleValue>({});
+
+  // Wizard step
+  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
+
   // Queries
   const { data: clients } = useQuery({
     queryKey: ['all-accounts-with-code'],
@@ -93,7 +106,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roast_groups')
-        .select('roast_group, roast_group_code, is_blend, origin, blend_name, display_name')
+        .select('roast_group, roast_group_code, is_blend, origin, blend_name, display_name, blend_type')
         .eq('is_active', true)
         .order('roast_group');
       if (error) throw error;
@@ -101,9 +114,9 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     },
   });
   
-  // Filter to only single origin roast groups for component selection
-  const componentRoastGroups = useMemo(() => 
-    roastGroups?.filter(g => !g.is_blend) ?? [],
+  // Post-roast blend roast groups (already created with their components defined)
+  const postRoastBlendRoastGroups = useMemo(
+    () => (roastGroups ?? []).filter(g => g.is_blend && g.blend_type === 'POST_ROAST'),
     [roastGroups]
   );
   
@@ -135,68 +148,59 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     [clients, clientId]
   );
   
-  // Component percentage total
-  const totalPercentage = useMemo(() => 
-    components.reduce((sum, c) => sum + (c.percentage || 0), 0),
-    [components]
-  );
-  
-  const percentageValid = totalPercentage === 100;
-  
-  // Check if all components have roast groups selected
-  const allComponentsSelected = useMemo(() => 
-    components.every(c => c.roastGroup),
-    [components]
-  );
-  
   // Valid variants (with grams > 0)
   const validVariants = useMemo(() => 
     packagingVariants.filter(v => v.grams > 0),
     [packagingVariants]
   );
+
+  const consoleVariants: MixingConsoleVariant[] = useMemo(
+    () => validVariants.map(v => ({
+      key: `${v.packagingTypeId}-${v.grams}`,
+      label: `${v.packagingTypeName} ${v.grams}g`,
+      bagSizeG: v.grams,
+      packagingVariant: null,
+    })),
+    [validVariants]
+  );
   
-  const hasNoComponents = componentRoastGroups.length === 0;
-  
+
+  // Resolve real green value for the selected post-roast blend roast group
+  const greenValueQuery = useRoastGroupGreenValue(selectedBlendRoastGroup || null);
+  const previewGreenValuePerKg =
+    greenValueQuery.data?.marketValuePerKg && greenValueQuery.data.marketValuePerKg > 0
+      ? greenValueQuery.data.marketValuePerKg
+      : 12;
+  const greenValueSource: 'lots' | 'placeholder' =
+    greenValueQuery.data?.source === 'lots' && greenValueQuery.data?.marketValuePerKg
+      ? 'lots'
+      : 'placeholder';
+  const selectedRgRecord = postRoastBlendRoastGroups.find(g => g.roast_group === selectedBlendRoastGroup);
+  const selectedRoastGroupLabel = selectedRgRecord
+    ? `${selectedRgRecord.display_name?.trim() || selectedRgRecord.roast_group.replace(/_/g, ' ')} (${selectedRgRecord.roast_group_code})`
+    : null;
+
   const canSave = useMemo(() => {
     if (!clientId) return false;
     if (!selectedClient?.account_code) return false;
     if (!finishedGoodName.trim()) return false;
-    if (hasNoComponents) return false;
-    if (!allComponentsSelected) return false;
-    if (!percentageValid) return false;
+    if (!selectedBlendRoastGroup) return false;
     if (validVariants.length === 0) return false;
     if (!lifecycle) return false;
     return true;
-  }, [clientId, selectedClient, finishedGoodName, hasNoComponents, allComponentsSelected, percentageValid, validVariants, lifecycle]);
+  }, [clientId, selectedClient, finishedGoodName, selectedBlendRoastGroup, validVariants, lifecycle]);
   
   // Reset form
   const resetForm = () => {
     setClientId('');
     setFinishedGoodName('');
     setCropsterProfileRef('');
-    setComponents([
-      { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
-      { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 50 },
-    ]);
+    setSelectedBlendRoastGroup('');
     setPackagingVariants([]);
     setPriceInput('');
     setLifecycle(null);
-  };
-  
-  // Component management
-  const addComponent = () => {
-    setComponents(prev => [...prev, { id: `comp-${++componentIdCounter}`, roastGroup: '', percentage: 0 }]);
-  };
-  
-  const removeComponent = (id: string) => {
-    if (components.length <= 2) return;
-    setComponents(prev => prev.filter(c => c.id !== id));
-  };
-  
-  const updateComponent = (id: string, field: 'roastGroup' | 'percentage', value: string | number) => {
-    setComponents(prev => prev.map(c => 
-      c.id === id ? { ...c, [field]: value } : c
-    ));
+    setOverrides({});
+    setWizardStep(1);
   };
   
   // Navigate to roast groups tab
@@ -207,54 +211,12 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   
   // Save mutation
   const saveMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ pricingIncomplete }: { pricingIncomplete: boolean } = { pricingIncomplete: true }) => {
       const trimmedName = finishedGoodName.trim();
       if (!selectedClient) throw new Error('Client is required');
       
-      // Build blend notes from components
-      const blendNotes = `Blend components: ${components.map(c => {
-        const rg = componentRoastGroups.find(g => g.roast_group === c.roastGroup);
-        return `${rg?.display_name || c.roastGroup} (${c.percentage}%)`;
-      }).join(', ')}`;
-      
-      // Create or reuse blend roast group (single attempt, no retries)
-      const result = await createOrReuseRoastGroup({
-        displayName: trimmedName,
-        isBlend: true,
-        blendName: trimmedName,
-        cropsterProfileRef: cropsterProfileRef.trim() || null,
-        notes: blendNotes,
-      });
-      
-      if (result.error) {
-        throw new Error(result.error);
-      }
-      
-      const finalRoastGroupKey = result.roastGroupKey;
-      
-      if (!result.created) {
-        console.log(`[Blend] Reusing existing roast group: ${finalRoastGroupKey}`);
-      }
-      
-      // Save blend components
-      const componentInserts = components
-        .filter(c => c.roastGroup)
-        .map((c, idx) => ({
-          parent_roast_group: finalRoastGroupKey,
-          component_roast_group: c.roastGroup,
-          pct: c.percentage,
-          display_order: idx,
-        }));
-      
-      if (componentInserts.length > 0) {
-        const { error: componentsError } = await supabase
-          .from('roast_group_components')
-          .insert(componentInserts);
-        
-        if (componentsError) {
-          console.error('Failed to save blend components:', componentsError);
-        }
-      }
+      const finalRoastGroupKey = selectedBlendRoastGroup;
+      if (!finalRoastGroupKey) throw new Error('Please select a blend roast group');
       
       // Get resolved SKUs - for blends, use 'BLD' as origin
       const resolvedSkus = getResolvedSkus(
@@ -269,57 +231,69 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
       // Create products
       const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
       const hasPrice = !isNaN(priceValue);
-      
+
+      const cleanedOverrides = pricingIncomplete
+        ? {}
+        : stripRedundantOverrides(overrides, consoleVariants, FALLBACK_PRESET, PKG_DEFAULTS);
+      const overrideFor = (skuData: typeof resolvedSkus[number]) => {
+        const ov = cleanedOverrides[`${skuData.packagingTypeId}-${skuData.grams}`];
+        if (!ov) return {};
+        return {
+          yield_loss_pct_override: ov.yield_loss_pct_override,
+          process_per_kg_green_override: ov.process_per_kg_green_override,
+          pkg_material_per_unit_override: ov.pkg_material_per_unit_override,
+          pkg_labour_per_unit_override: ov.pkg_labour_per_unit_override,
+          adjustment_per_unit: ov.adjustment_per_unit,
+          adjustment_note: ov.adjustment_note,
+        };
+      };
+
       const createdProducts: Array<{ id: string; sku: string; wasAdjusted: boolean }> = [];
-      
+
       for (const skuData of resolvedSkus) {
+        const basePayload = {
+          account_id: clientId,
+          product_name: trimmedName,
+          sku: skuData.sku,
+          roast_group: finalRoastGroupKey,
+          packaging_type_id: skuData.packagingTypeId,
+          grams_per_unit: skuData.grams,
+          bag_size_g: skuData.grams,
+          format: 'WHOLE_BEAN' as const,
+          grind_options: ['WHOLE_BEAN'] as const,
+          is_active: true,
+          is_perennial: lifecycle === 'perennial',
+          pricing_incomplete: pricingIncomplete,
+          ...overrideFor(skuData),
+        };
         const { data: newProduct, error } = await supabase
           .from('products')
-          .insert({
-            account_id: clientId,
-            product_name: trimmedName,
-            sku: skuData.sku,
-            roast_group: finalRoastGroupKey,
-            packaging_type_id: skuData.packagingTypeId,
-            grams_per_unit: skuData.grams,
-            bag_size_g: skuData.grams,
-            format: 'WHOLE_BEAN',
-            grind_options: ['WHOLE_BEAN'],
-            is_active: true,
-            is_perennial: lifecycle === 'perennial',
-          })
+          .insert(basePayload as any)
           .select('id, sku')
           .single();
-        
+
         if (error) {
           if (error.code === '23505' && error.message?.toLowerCase().includes('sku')) {
+            let resolved = false;
             for (let i = 2; i <= 50; i++) {
               const fallbackSku = `${skuData.sku}-${i}`;
               const { data: retryProduct, error: retryError } = await supabase
                 .from('products')
-                .insert({
-                  account_id: clientId,
-                  product_name: trimmedName,
-                  sku: fallbackSku,
-                  roast_group: finalRoastGroupKey,
-                  packaging_type_id: skuData.packagingTypeId,
-                  grams_per_unit: skuData.grams,
-                  bag_size_g: skuData.grams,
-                  format: 'WHOLE_BEAN',
-                  grind_options: ['WHOLE_BEAN'],
-                  is_active: true,
-                  is_perennial: lifecycle === 'perennial',
-                })
+                .insert({ ...basePayload, sku: fallbackSku } as any)
                 .select('id, sku')
                 .single();
-              
+
               if (!retryError) {
                 createdProducts.push({ id: retryProduct.id, sku: retryProduct.sku, wasAdjusted: true });
+                resolved = true;
                 break;
               }
               if (retryError.code !== '23505') {
                 throw retryError;
               }
+            }
+            if (!resolved) {
+              throw new Error(`Could not generate unique SKU for ${skuData.sku} after 50 attempts.`);
             }
           } else {
             throw error;
@@ -328,6 +302,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
           createdProducts.push({ id: newProduct.id, sku: newProduct.sku, wasAdjusted: skuData.wasAdjusted });
         }
       }
+
       
       const adjustedCount = createdProducts.filter(c => c.wasAdjusted).length;
       
@@ -346,7 +321,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
           .insert(priceInserts);
         
         if (priceError) {
-          console.error('Price insert failed:', priceError);
+          throw priceError;
         }
       }
       
@@ -354,14 +329,19 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
         count: createdProducts.length, 
         name: trimmedName, 
         adjustedCount,
+        pricingIncomplete,
       };
     },
     onSuccess: (result) => {
-      let message = `Created ${result.count} product${result.count > 1 ? 's' : ''} for ${result.name}`;
-      if (result.adjustedCount > 0) {
-        message += ` (${result.adjustedCount} SKU${result.adjustedCount > 1 ? 's' : ''} auto-adjusted for uniqueness)`;
+      if (result.pricingIncomplete) {
+        toast.success('Product created. Pricing marked as incomplete.');
+      } else {
+        let message = `Created ${result.count} product${result.count > 1 ? 's' : ''} for ${result.name}`;
+        if (result.adjustedCount > 0) {
+          message += ` (${result.adjustedCount} SKU${result.adjustedCount > 1 ? 's' : ''} auto-adjusted for uniqueness)`;
+        }
+        toast.success(message);
       }
-      toast.success(message);
       queryClient.invalidateQueries({ queryKey: ['all-products'] });
       queryClient.invalidateQueries({ queryKey: ['all-prices'] });
       queryClient.invalidateQueries({ queryKey: ['active-roast-groups-with-code'] });
@@ -379,29 +359,25 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     rg.display_name?.trim() || rg.roast_group.replace(/_/g, ' ');
   
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setWizardStep(1); }}>
+      <DialogContent className={wizardStep === 2 ? 'max-w-6xl max-h-[90vh] overflow-y-auto' : 'max-w-2xl max-h-[90vh] overflow-y-auto'}>
         <DialogHeader>
-          <DialogTitle>New Blend Product</DialogTitle>
+          <DialogTitle>{wizardStep === 1 ? 'New Blend Product — Details' : 'New Blend Product — Pricing'}</DialogTitle>
         </DialogHeader>
-        
+
+        {wizardStep === 1 && (
         <div className="space-y-6">
-          {/* Guidance message */}
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              Post-roast blends require roast groups for each component coffee. 
-              {hasNoComponents && ' Create component roast groups first, then return here to build the blend.'}
+              Post-roast blends link to a pre-defined blend roast group. Set up the blend's component recipe in Products → Roast Groups first.
             </AlertDescription>
           </Alert>
-          
-          {/* Step 1: Client */}
+
           <div>
             <Label htmlFor="client">1. Client</Label>
             <Select value={clientId} onValueChange={setClientId}>
-              <SelectTrigger id="client">
-                <SelectValue placeholder="Select client" />
-              </SelectTrigger>
+              <SelectTrigger id="client"><SelectValue placeholder="Select client" /></SelectTrigger>
               <SelectContent>
                 {clients?.map(c => (
                   <SelectItem key={c.id} value={c.id}>
@@ -414,208 +390,122 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
               <p className="text-xs text-amber-600 mt-1">⚠ This account has no account code — SKUs cannot be generated. Set an account code on the account profile first.</p>
             )}
           </div>
-          
-          {/* Step 2: Finished Good Name */}
+
           <div>
             <Label htmlFor="fgName">2. Finished Good Name</Label>
-            <Input
-              id="fgName"
-              placeholder="e.g. Technicolour Espresso, House Blend Filter"
-              value={finishedGoodName}
-              onChange={(e) => setFinishedGoodName(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              This name appears on orders, pack lists, and shipping.
-            </p>
+            <Input id="fgName" placeholder="e.g. Technicolour Espresso, House Blend Filter" value={finishedGoodName} onChange={(e) => setFinishedGoodName(e.target.value)} />
+            <p className="text-xs text-muted-foreground mt-1">This name appears on orders, pack lists, and shipping.</p>
           </div>
-          
-          {/* Step 3: Blend Components */}
+
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label>3. Blend Components</Label>
-              <div className={`text-xs font-medium ${percentageValid ? 'text-primary' : 'text-destructive'}`}>
-                Total: {totalPercentage}%
-              </div>
-            </div>
-            
-            {hasNoComponents ? (
-              <div className="border rounded-lg p-6 text-center space-y-3 bg-muted/20">
-                <p className="text-sm text-muted-foreground">
-                  No single origin roast groups available.
-                </p>
-                <Button variant="outline" size="sm" onClick={goToRoastGroups}>
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Go to Roast Groups
-                </Button>
-              </div>
+            <Label htmlFor="blendRg">3. Blend Roast Group</Label>
+            {postRoastBlendRoastGroups.length === 0 ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="space-y-3">
+                  <div>No post-roast blend roast groups found. Create one in Products → Roast Groups first.</div>
+                  <Button variant="outline" size="sm" onClick={goToRoastGroups}>
+                    <ExternalLink className="h-4 w-4 mr-2" />Go to Roast Groups
+                  </Button>
+                </AlertDescription>
+              </Alert>
             ) : (
               <>
-                <div className="space-y-2">
-                  {components.map((comp) => (
-                    <div key={comp.id} className="flex items-center gap-2">
-                      <Select 
-                        value={comp.roastGroup || 'NONE'} 
-                        onValueChange={(v) => updateComponent(comp.id, 'roastGroup', v === 'NONE' ? '' : v)}
-                      >
-                        <SelectTrigger className="flex-1">
-                          <SelectValue placeholder="Select component..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="NONE">Select component...</SelectItem>
-                          {componentRoastGroups.map(g => (
-                            <SelectItem key={g.roast_group} value={g.roast_group}>
-                              {getDisplayName(g)} ({g.roast_group_code})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <div className="flex items-center gap-1 w-24">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={comp.percentage}
-                          onChange={(e) => updateComponent(comp.id, 'percentage', parseInt(e.target.value) || 0)}
-                          className="w-16 text-center"
-                        />
-                        <span className="text-sm text-muted-foreground">%</span>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeComponent(comp.id)}
-                        disabled={components.length <= 2}
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-                
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addComponent}
-                  className="w-full"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Component
-                </Button>
-                
-                {!percentageValid && (
-                  <p className="text-xs text-destructive flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" />
-                    Percentages must total exactly 100%
-                  </p>
-                )}
+                <Select value={selectedBlendRoastGroup} onValueChange={setSelectedBlendRoastGroup}>
+                  <SelectTrigger id="blendRg"><SelectValue placeholder="Select blend roast group..." /></SelectTrigger>
+                  <SelectContent>
+                    {postRoastBlendRoastGroups.map(g => (
+                      <SelectItem key={g.roast_group} value={g.roast_group}>{getDisplayName(g)} ({g.roast_group_code})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Set up blend components in Products → Roast Groups before creating products.</p>
               </>
             )}
           </div>
-          
-          {/* Optional: Cropster Ref */}
+
           <div>
-            <Label htmlFor="cropsterRef" className="text-muted-foreground">
-              Cropster Profile Ref (optional)
-            </Label>
-            <Input
-              id="cropsterRef"
-              placeholder="e.g. R-1234 or profile name"
-              value={cropsterProfileRef}
-              onChange={(e) => setCropsterProfileRef(e.target.value)}
-            />
+            <Label htmlFor="cropsterRef" className="text-muted-foreground">Cropster Profile Ref (optional)</Label>
+            <Input id="cropsterRef" placeholder="e.g. R-1234 or profile name" value={cropsterProfileRef} onChange={(e) => setCropsterProfileRef(e.target.value)} />
           </div>
-          
-          {/* Step 4: Packaging Variants (new gram-based section) */}
-          <PackagingVariantsSection
-            selectedVariants={packagingVariants}
-            onVariantsChange={setPackagingVariants}
-            stepNumber={4}
-          />
-          
-          {/* Roast Group Preview */}
+
+          <PackagingVariantsSection selectedVariants={packagingVariants} onVariantsChange={setPackagingVariants} stepNumber={4} />
+
           {finishedGoodName.trim() && (
-            <RoastGroupPreview
-              displayName={finishedGoodName.trim()}
-              existingKeys={existingRoastGroupKeys}
-              existingCodes={existingRoastGroupCodes}
-            />
+            <RoastGroupPreview displayName={finishedGoodName.trim()} existingKeys={existingRoastGroupKeys} existingCodes={existingRoastGroupCodes} />
           )}
-          
-          {/* SKU Preview Section */}
-          <GramBasedSkuPreview
-            clientCode={selectedClient?.account_code ?? ''}
-            isBlend={true}
-            fgNameSuffix={finishedGoodName.trim()}
-            variants={validVariants}
-            existingSkus={existingSkus ?? new Set()}
-          />
-          
-          {/* Step 5: Price */}
+
+          <GramBasedSkuPreview clientCode={selectedClient?.account_code ?? ''} isBlend={true} fgNameSuffix={finishedGoodName.trim()} variants={validVariants} existingSkus={existingSkus ?? new Set()} />
+
           <div>
             <Label htmlFor="price">5. Initial Unit Price (CAD) — Optional</Label>
-            <Input
-              id="price"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="e.g. 12.50"
-              value={priceInput}
-              onChange={(e) => setPriceInput(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Applied to all variants. Leave blank to default to $0.00.
-            </p>
+            <Input id="price" type="number" step="0.01" min="0" placeholder="e.g. 12.50" value={priceInput} onChange={(e) => setPriceInput(e.target.value)} />
+            <p className="text-xs text-muted-foreground mt-1">Applied to all variants. Leave blank to default to $0.00.</p>
           </div>
-          
-          {/* Step 6: Lifecycle */}
+
           <div>
             <Label>6. Product Lifecycle</Label>
-            <RadioGroup 
-              value={lifecycle ?? ''} 
-              onValueChange={(v) => setLifecycle(v as LifecycleType)}
-              className="flex gap-6 mt-2"
-            >
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="perennial" id="lc-perennial" />
-                <Label htmlFor="lc-perennial" className="font-normal cursor-pointer">
-                  Perennial
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="seasonal" id="lc-seasonal" />
-                <Label htmlFor="lc-seasonal" className="font-normal cursor-pointer">
-                  Seasonal
-                </Label>
-              </div>
+            <RadioGroup value={lifecycle ?? ''} onValueChange={(v) => setLifecycle(v as LifecycleType)} className="flex gap-6 mt-2">
+              <div className="flex items-center gap-2"><RadioGroupItem value="perennial" id="lc-perennial" /><Label htmlFor="lc-perennial" className="font-normal cursor-pointer">Perennial</Label></div>
+              <div className="flex items-center gap-2"><RadioGroupItem value="seasonal" id="lc-seasonal" /><Label htmlFor="lc-seasonal" className="font-normal cursor-pointer">Seasonal</Label></div>
             </RadioGroup>
-            {!lifecycle && (
-              <p className="text-xs text-destructive mt-1">Please select a lifecycle</p>
-            )}
+            {!lifecycle && (<p className="text-xs text-destructive mt-1">Please select a lifecycle</p>)}
           </div>
-          
-          {/* Actions */}
+
           <div className="flex justify-end gap-2 pt-4 border-t">
-            <Button variant="outline" onClick={() => { resetForm(); onOpenChange(false); }}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => saveMutation.mutate()} 
+            <Button variant="outline" onClick={() => { resetForm(); onOpenChange(false); }}>Cancel</Button>
+            <Button
+              variant="secondary"
+              onClick={() => saveMutation.mutate({ pricingIncomplete: true })}
               disabled={!canSave || saveMutation.isPending}
             >
-              {saveMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating…
-                </>
-              ) : (
-                `Create ${validVariants.length} Product${validVariants.length !== 1 ? 's' : ''}`
-              )}
+              Create without pricing
+            </Button>
+            <Button
+              onClick={() => {
+                setOverrides(buildEmptyMixingConsoleValue(consoleVariants));
+                setWizardStep(2);
+              }}
+              disabled={!canSave}
+            >
+              Advance to Pricing
             </Button>
           </div>
         </div>
+        )}
+
+        {wizardStep === 2 && (
+        <div className="space-y-6">
+          <div>
+            <Label>Pricing Overrides</Label>
+            <p className="text-xs text-muted-foreground mb-2">Adjust per-variant cost levers. Leave at preset to inherit defaults.</p>
+            {greenValueSource === 'placeholder' && (
+              <p className="text-xs text-amber-600 mb-2">Pricing preview is using a placeholder green value (no confirmed-cost lot linked to this roast group yet).</p>
+            )}
+            <MixingConsole
+              variants={consoleVariants}
+              value={overrides}
+              onChange={setOverrides}
+              greenMarketPerKg={previewGreenValuePerKg}
+              roastGroupLabel={selectedRoastGroupLabel}
+              preset={FALLBACK_PRESET}
+              pkgDefaults={PKG_DEFAULTS}
+            />
+          </div>
+
+          <div className="flex justify-between gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={() => setWizardStep(1)}>Back</Button>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={() => saveMutation.mutate({ pricingIncomplete: true })} disabled={!canSave || saveMutation.isPending}>
+                Complete pricing later
+              </Button>
+              <Button onClick={() => saveMutation.mutate({ pricingIncomplete: false })} disabled={!canSave || saveMutation.isPending || hasMixingConsoleErrors(overrides)}>
+                {saveMutation.isPending ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating…</>) : (`Create ${validVariants.length} Product${validVariants.length !== 1 ? 's' : ''}`)}
+              </Button>
+            </div>
+          </div>
+        </div>
+        )}
       </DialogContent>
     </Dialog>
   );

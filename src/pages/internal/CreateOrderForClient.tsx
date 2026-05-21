@@ -17,9 +17,11 @@ import { Plus, Minus, Trash2, ArrowLeft, ShieldAlert, AlertCircle } from 'lucide
 import { GramPackagingBadge, formatGramsLabel } from '@/components/GramPackagingBadge';
 import { useClientOrderingConstraints } from '@/hooks/useClientOrderingConstraints';
 import { WorkDeadlinePicker } from '@/components/orders/WorkDeadlinePicker';
+import { DatePicker } from '@/components/ui/date-picker';
 import type { GrindOption } from '@/types/database';
 import type { Database } from '@/integrations/supabase/types';
 import { LocationSelect } from '@/components/orders/LocationSelect';
+import { blockNonIntegerKeys } from '@/lib/numericInput';
 
 type DeliveryMethod = Database['public']['Enums']['delivery_method'];
 import { Link } from 'react-router-dom';
@@ -105,6 +107,9 @@ export default function CreateOrderForClient() {
   const [internalNotes, setInternalNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const todayIsoDate = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const isShipDateInPast = !!requestedShipDate && requestedShipDate < todayIsoDate;
+
   // Fetch all accounts (replaces legacy clients query)
   const { data: clients } = useQuery({
     queryKey: ['all-accounts-for-orders'],
@@ -118,6 +123,22 @@ export default function CreateOrderForClient() {
       if (error) throw error;
       return (data ?? []) as Client[];
     },
+  });
+
+  // Fetch client locations (shared cache key with LocationSelect component)
+  const { data: clientLocations } = useQuery({
+    queryKey: ['client-locations', selectedClientId],
+    queryFn: async () => {
+      if (!selectedClientId) return [];
+      const { data, error } = await supabase
+        .from('client_locations')
+        .select('id')
+        .eq('client_id', selectedClientId)
+        .eq('is_active', true);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!selectedClientId,
   });
 
   // Fetch products for selected client with packaging type join
@@ -161,6 +182,37 @@ export default function CreateOrderForClient() {
     enabled: !!selectedClientId,
   });
 
+  // Fetch active locked prices for this account; layered over price_list.
+  const { data: lockedPrices } = useQuery({
+    queryKey: ['order-locked-prices', selectedClientId],
+    queryFn: async () => {
+      if (!selectedClientId) return {};
+      const today = new Date().toISOString().slice(0, 10);
+      const { data, error } = await (supabase as any)
+        .from('locked_prices')
+        .select('product_id, locked_price, effective_from, expires_at')
+        .eq('account_id', selectedClientId)
+        .eq('is_archived', false)
+        .order('effective_from', { ascending: false });
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      for (const r of data ?? []) {
+        if (r.expires_at && r.expires_at < today) continue;
+        if (!(r.product_id in map)) map[r.product_id] = Number(r.locked_price);
+      }
+      return map;
+    },
+    enabled: !!selectedClientId,
+  });
+
+  const effectivePrice = (productId: string): { price: number | null; locked: boolean } => {
+    if (lockedPrices && productId in lockedPrices) {
+      return { price: lockedPrices[productId], locked: true };
+    }
+    const p = prices?.[productId];
+    return { price: p ?? null, locked: false };
+  };
+
   // Reset line items, location, deadline, and confirm flag when client changes
   React.useEffect(() => {
     setLineItems([]);
@@ -197,7 +249,7 @@ export default function CreateOrderForClient() {
       quantity: qty,
       grind: grindOpts.length > 0 ? grindOpts[0] : null,
       grindOptions: grindOpts,
-      price: prices?.[product.id] ?? null,
+      price: effectivePrice(product.id).price,
       packagingTypeName,
       gramsPerUnit,
     };
@@ -240,6 +292,17 @@ export default function CreateOrderForClient() {
     return lineItems.reduce((sum, li) => sum + (li.price ?? 0) * li.quantity, 0);
   }, [lineItems]);
 
+  const missingRequirements = useMemo(() => {
+    const missing: string[] = [];
+    if (!selectedClientId) missing.push('client');
+    if (clientLocations && clientLocations.length > 0 && !selectedLocationId) missing.push('delivery location');
+    if (lineItems.length === 0) missing.push('at least one product (set quantity > 0)');
+    if (!workDeadlineAt) missing.push('work deadline');
+    const missingPrice = lineItems.find((li) => li.price === null);
+    if (missingPrice) missing.push(`price for "${missingPrice.displayName}"`);
+    return missing;
+  }, [selectedClientId, clientLocations, selectedLocationId, lineItems, workDeadlineAt]);
+
   const handleQuantityInputChange = (productId: string, value: string) => {
     const numericValue = value.replace(/[^0-9]/g, '');
     const qty = numericValue === '' ? 0 : parseInt(numericValue, 10);
@@ -263,6 +326,10 @@ export default function CreateOrderForClient() {
       toast.error('Select a client');
       return;
     }
+    if (clientLocations && clientLocations.length > 0 && !selectedLocationId) {
+      toast.error('Select a delivery location for this client');
+      return;
+    }
     if (lineItems.length === 0) {
       toast.error('Add at least one product');
       return;
@@ -276,6 +343,11 @@ export default function CreateOrderForClient() {
     if (missingPrice) {
       toast.error(`"${missingPrice.displayName}" has no price set.`);
       return;
+    }
+
+    if (isShipDateInPast) {
+      const ok = window.confirm('Requested Ship Date is in the past. Create order anyway?');
+      if (!ok) return;
     }
 
     setSubmitting(true);
@@ -381,6 +453,7 @@ export default function CreateOrderForClient() {
             value={lineItem?.quantity ?? ''}
             placeholder="0"
             onChange={(e) => handleQuantityInputChange(p.id, e.target.value)}
+            onKeyDown={blockNonIntegerKeys}
           />
           <Button
             size="icon"
@@ -446,6 +519,7 @@ export default function CreateOrderForClient() {
                     value={lineItem?.quantity ?? ''}
                     placeholder="0"
                     onChange={(e) => handleQuantityInputChange(variant.id, e.target.value)}
+                    onKeyDown={blockNonIntegerKeys}
                   />
                   <Button
                     size="icon"
@@ -542,6 +616,7 @@ export default function CreateOrderForClient() {
               clientId={selectedClientId}
               value={selectedLocationId}
               onChange={setSelectedLocationId}
+              required
             />
           )}
         </CardContent>
@@ -646,12 +721,16 @@ export default function CreateOrderForClient() {
               <CardContent className="space-y-4">
                 <div>
                   <Label htmlFor="shipDate">Requested Ship Date</Label>
-                  <Input
+                  <DatePicker
                     id="shipDate"
-                    type="date"
-                    value={requestedShipDate}
-                    onChange={(e) => setRequestedShipDate(e.target.value)}
+                    value={requestedShipDate || null}
+                    onChange={(v) => setRequestedShipDate(v ?? '')}
                   />
+                  {isShipDateInPast && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      ⚠ That date has already passed. Confirm this is intentional.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Label>Work Deadline <span className="text-destructive">*</span></Label>
@@ -734,10 +813,16 @@ export default function CreateOrderForClient() {
                 <Button
                   className="w-full"
                   onClick={submitOrder}
-                  disabled={submitting || lineItems.length === 0}
+                  disabled={submitting}
                 >
                   {submitting ? 'Creating…' : confirmOnCreate ? 'Create & Confirm Order' : 'Create Order'}
                 </Button>
+                {missingRequirements.length > 0 && (
+                  <div className="flex items-start gap-1 text-xs text-amber-600">
+                    <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                    <span>Missing: {missingRequirements.join(', ')}</span>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

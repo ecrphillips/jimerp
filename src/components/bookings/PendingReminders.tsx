@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Bell, Check } from 'lucide-react';
 import { format, addDays } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
+import { isoDateInTz } from '@/lib/timezone';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -26,8 +28,9 @@ function formatTime(t: string): string {
 
 export function PendingReminders() {
   const queryClient = useQueryClient();
-  const today = format(new Date(), 'yyyy-MM-dd');
-  const fourDaysOut = format(addDays(new Date(), 4), 'yyyy-MM-dd');
+  const now = new Date();
+  const today = isoDateInTz(now);
+  const fourDaysOut = isoDateInTz(addDays(now, 4));
 
   const { data: reminders = [], isLoading } = useQuery({
     queryKey: ['pending-reminders'],
@@ -77,7 +80,7 @@ export function PendingReminders() {
               <div>
                 <span className="font-medium">{r.coroast_members?.business_name ?? 'Unknown'}</span>
                 <span className="ml-2 text-muted-foreground">
-                  {format(new Date(r.booking_date + 'T00:00:00'), 'EEE, MMM d')}
+                  {format(parseDateOnly(r.booking_date)!, 'EEE, MMM d')}
                 </span>
                 <span className="ml-2 text-muted-foreground">
                   {formatTime(r.start_time)} – {formatTime(r.end_time)}

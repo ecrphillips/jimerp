@@ -5,8 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreview } from '@/contexts/PreviewContext';
 import { format } from 'date-fns';
-import { PlusCircle, Package, Truck, Clock, CheckCircle2 } from 'lucide-react';
+import { parseDateOnly } from '@/lib/dateOnly';
+import { PlusCircle, Package, Truck, Clock, CheckCircle2, Calculator } from 'lucide-react';
 import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
 
 interface Order {
@@ -24,14 +26,19 @@ interface Order {
 export default function Portal() {
   const navigate = useNavigate();
   const { authUser } = useAuth();
+  const { previewAccountId, isPreviewMode, effectivePermissions } = usePreview();
+  const canPlaceOrders = isPreviewMode ? !!effectivePermissions?.canPlaceOrders : !!authUser?.canPlaceOrders;
+  const canBookRoaster = isPreviewMode ? !!effectivePermissions?.canBookRoaster : !!authUser?.canBookRoaster;
+  const showNumbers = canPlaceOrders && !canBookRoaster;
 
   const { data: orders, isLoading } = useQuery({
-    queryKey: ['client-portal-orders'],
+    queryKey: ['client-portal-orders', previewAccountId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('orders')
-        .select('id, order_number, status, requested_ship_date, delivery_method, created_at, location_id, shipped_or_ready, invoiced')
-        .order('created_at', { ascending: false });
+        .select('id, order_number, status, requested_ship_date, delivery_method, created_at, location_id, shipped_or_ready, invoiced');
+      if (previewAccountId) q = q.eq('account_id', previewAccountId);
+      const { data, error } = await q.order('created_at', { ascending: false });
 
       if (error) throw error;
       return (data ?? []) as Order[];
@@ -77,6 +84,33 @@ export default function Portal() {
       </div>
 
       <div className="grid gap-6">
+        {showNumbers && (
+          <Card
+            className="cursor-pointer transition-colors hover:bg-muted/50"
+            onClick={() => navigate('/client/numbers')}
+          >
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calculator className="h-5 w-5" style={{ color: '#1B5E8C' }} />
+                My Numbers
+              </CardTitle>
+              <CardDescription>
+                Model your unit economics on the coffee you buy from us. We'll pre-fill your latest
+                volume and cost — adjust pricing to see margins, break-even, and a suggested MSRP.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onClick={(e) => { e.stopPropagation(); navigate('/client/numbers'); }}
+                style={{ backgroundColor: '#1B5E8C' }}
+                className="text-white hover:opacity-90"
+              >
+                Open My Numbers
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Open Orders */}
         <Card>
           <CardHeader>
@@ -123,7 +157,7 @@ export default function Portal() {
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {order.requested_ship_date 
-                            ? `Ship by ${format(new Date(order.requested_ship_date), 'MMM d')}`
+                            ? `Ship by ${format(parseDateOnly(order.requested_ship_date)!, 'MMM d')}`
                             : `Created ${format(new Date(order.created_at), 'MMM d')}`
                           }
                         </div>

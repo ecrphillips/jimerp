@@ -1,24 +1,21 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import { corsHeadersFor } from '../_shared/cors.ts';
+import { APP_ROLES, type AppRole, isAppRole } from '../_shared/role.ts';
+import { isValidEmail } from '../_shared/validation.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-// Canonical app URL - use environment variable with fallback to published URL
-// IMPORTANT: Set SITE_URL environment variable in production
 const SITE_URL = Deno.env.get('SITE_URL') || 'https://homeislandcoffeepartners.lovable.app';
 
 interface InviteRequest {
   email: string;
-  role: 'ADMIN' | 'OPS' | 'CLIENT';
+  role: AppRole;
   client_id?: string;
   coroast_member_id?: string;
   name?: string;
-  generate_link_only?: boolean; // DEV: return link instead of sending email
+  generate_link_only?: boolean;
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = corsHeadersFor(req);
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -58,7 +55,7 @@ Deno.serve(async (req) => {
       .eq('user_id', callingUser.id)
       .single();
 
-    if (roleError || roleData?.role !== 'ADMIN') {
+    if (roleError || !isAppRole(roleData?.role) || roleData.role !== 'ADMIN') {
       console.error('[invite-user] Not admin:', roleError?.message, roleData);
       return new Response(
         JSON.stringify({ error: 'Only admins can invite users' }),
@@ -67,7 +64,15 @@ Deno.serve(async (req) => {
     }
 
     // Parse request
-    const body: InviteRequest = await req.json();
+    let body: InviteRequest;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON body' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     const { email, role, client_id, coroast_member_id, name, generate_link_only = false } = body;
 
     console.log('[invite-user] Invite requested for:', email, 'role:', role, 'generate_link_only:', generate_link_only);
@@ -80,9 +85,16 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!['ADMIN', 'OPS', 'CLIENT'].includes(role)) {
+    if (!isValidEmail(email)) {
       return new Response(
-        JSON.stringify({ error: 'Invalid role. Must be ADMIN, OPS, or CLIENT' }),
+        JSON.stringify({ error: 'Invalid email format' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!isAppRole(role)) {
+      return new Response(
+        JSON.stringify({ error: `Invalid role. Must be one of ${APP_ROLES.join(', ')}` }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

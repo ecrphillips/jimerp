@@ -1,5 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { formatMoney } from '@/lib/formatMoney';
+import { formatCurrency } from '@/lib/currency';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
@@ -204,26 +205,26 @@ export default function QuickBooksInstructionsModal({
             <p className="text-muted-foreground">
               Confirm the invoice total matches:{' '}
               <span className="font-medium text-foreground">
-                ${subtotal.toFixed(2)}
+                {formatCurrency(subtotal)}
               </span>{' '}
               + GST{' '}
               <span className="font-medium text-foreground">
-                ${gst.toFixed(2)}
+                {formatCurrency(gst)}
               </span>
               {extrasGst > 0 && (
-                <> (incl. extras GST ${extrasGst.toFixed(2)})</>
+                <> (incl. extras GST {formatCurrency(extrasGst)})</>
               )}
               {extrasPst > 0 && (
                 <>
                   {' '}+ PST{' '}
                   <span className="font-medium text-foreground">
-                    ${extrasPst.toFixed(2)}
+                    {formatCurrency(extrasPst)}
                   </span>
                 </>
               )}
               {' '}={' '}
               <span className="font-medium text-foreground">
-                ${grandTotal.toFixed(2)}
+                {formatCurrency(grandTotal)}
               </span>
               . Save and send to{' '}
               <span className="font-medium text-foreground">

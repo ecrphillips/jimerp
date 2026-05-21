@@ -82,6 +82,7 @@ interface ShippableOrder {
   missingUnitsTotal: number;
   ship_display_order: number | null;
   manually_deprioritized?: boolean;
+  location_name: string | null;
 }
 
 // ShortListItem type now comes from useAuthoritativeShortList hook
@@ -184,6 +185,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           manually_deprioritized,
           client:clients(name),
           account:accounts(account_name),
+          location:client_locations(name, location_code),
           line_items:order_line_items(
             id,
             product_id,
@@ -338,6 +340,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         missingUnitsTotal,
         ship_display_order: order.ship_display_order ?? null,
         manually_deprioritized: order.manually_deprioritized ?? false,
+        location_name: (order as any).location?.name ?? null,
       });
     }
 
@@ -746,10 +749,12 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
             <div className="space-y-2">
               {authShortList.map((item) => (
                 <div key={item.product_id} className="flex items-center justify-between p-2 bg-background rounded border border-warning/30">
-                  <div className="flex items-center gap-2">
-                    <Package className="h-4 w-4 text-warning" />
-                    <span className="font-medium">{item.product_name}</span>
-                    <span className="text-xs text-muted-foreground">{item.bag_size_g}g</span>
+                  <div className="flex items-start gap-2">
+                    <Package className="h-4 w-4 text-warning mt-0.5" />
+                    <div className="flex flex-col gap-1">
+                      <span className="font-medium">{item.product_name}</span>
+                      <PackagingBadge variant={(item as { packaging_variant?: PackagingVariant | null }).packaging_variant ?? null} />
+                    </div>
                   </div>
                   <div className="text-sm font-mono">
                     <span className="text-warning font-medium">Short: {item.shortage}</span>

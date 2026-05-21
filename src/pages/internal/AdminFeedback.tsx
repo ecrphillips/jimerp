@@ -13,7 +13,7 @@ import { X, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 
 const STATUS_OPTIONS = ['NEW', 'ACKNOWLEDGED', 'BUILDING', 'DONE', 'WONT_DO'] as const;
-const CATEGORY_OPTIONS = ['BUG', 'UX_IMPROVEMENT', 'FEATURE_REQUEST', 'OTHER'] as const;
+const CATEGORY_OPTIONS = ['BUG', 'WORKFLOW', 'UX_IMPROVEMENT', 'FEATURE_REQUEST', 'OTHER'] as const;
 
 const STATUS_COLORS: Record<string, string> = {
   NEW: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
@@ -33,6 +33,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const CATEGORY_LABELS: Record<string, string> = {
   BUG: 'Bug',
+  WORKFLOW: 'Workflow',
   UX_IMPROVEMENT: 'UX',
   FEATURE_REQUEST: 'Feature',
   OTHER: 'Other',

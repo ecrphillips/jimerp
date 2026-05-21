@@ -10,8 +10,12 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { ArrowLeft, UserPlus, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock, FileText, Clock, Trash2 } from 'lucide-react';
+import { parseDateOnly } from '@/lib/dateOnly';
+import { ArrowLeft, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock, FileText, Clock, Trash2 } from 'lucide-react';
 import { LocationBadge } from '@/components/orders/LocationSelect';
+import { CreatedByBadge } from '@/components/orders/CreatedByBadge';
+import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
+import { GramPackagingBadge } from '@/components/GramPackagingBadge';
 import { toast } from 'sonner';
 import { HistoricalEditWarningModal } from '@/components/internal/HistoricalEditWarningModal';
 import { IncompleteFulfillmentModal } from '@/components/internal/IncompleteFulfillmentModal';
@@ -63,7 +67,8 @@ export default function OrderDetail() {
           shipped_or_ready,
           invoiced,
           created_by_admin,
-          client_id,
+          created_by_user_id,
+          account_id,
           location_id,
           updated_at,
            client:clients(name),
@@ -95,7 +100,7 @@ export default function OrderDetail() {
           grind,
           unit_price_locked,
           line_notes,
-          product:products(id, product_name, roast_group, bag_size_g)
+          product:products(id, product_name, roast_group, bag_size_g, grams_per_unit, packaging_variant, packaging_type:packaging_types(name))
         `)
         .eq('order_id', id!)
         .order('created_at', { ascending: true });
@@ -308,10 +313,10 @@ export default function OrderDetail() {
 
   const confirmMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: 'CONFIRMED' })
-        .eq('id', id!);
+      const { error } = await supabase.rpc('update_order_status' as any, {
+        p_order_id: id!,
+        p_target_status: 'CONFIRMED',
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -386,13 +391,13 @@ export default function OrderDetail() {
     },
   });
 
-  // Mark order as shipped (sets status and shipped_or_ready flag)
+  // Mark order as shipped via RPC (status + shipped_or_ready set atomically by RPC)
   const markAsShippedMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: 'SHIPPED', shipped_or_ready: true })
-        .eq('id', id!);
+      const { error } = await supabase.rpc('update_order_status' as any, {
+        p_order_id: id!,
+        p_target_status: 'SHIPPED',
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -426,21 +431,13 @@ export default function OrderDetail() {
     },
   });
 
-  // Change order status (for undo/status changes)
-  // When reverting from SHIPPED, also clear shipped_or_ready to keep checklist consistent
+  // Change order status via RPC (validates transition, clears shipped_or_ready on revert).
   const changeStatusMutation = useMutation({
     mutationFn: async (newStatus: OrderStatus) => {
-      const updates: { status: OrderStatus; shipped_or_ready?: boolean } = { status: newStatus };
-      
-      // If reverting from SHIPPED, also clear the shipped_or_ready checkbox
-      if (order?.status === 'SHIPPED' && newStatus !== 'SHIPPED') {
-        updates.shipped_or_ready = false;
-      }
-      
-      const { error } = await supabase
-        .from('orders')
-        .update(updates)
-        .eq('id', id!);
+      const { error } = await supabase.rpc('update_order_status' as any, {
+        p_order_id: id!,
+        p_target_status: newStatus,
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -511,10 +508,7 @@ export default function OrderDetail() {
             {order.status}
           </span>
           {order.created_by_admin && (
-            <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-              <UserPlus className="h-3 w-3" />
-              Admin Created
-            </span>
+            <CreatedByBadge userId={order.created_by_user_id} />
           )}
           <LocationBadge locationId={(order as any).location_id} />
         </div>
@@ -580,7 +574,7 @@ export default function OrderDetail() {
             <div>
               <strong>Expected Ship Date:</strong>{' '}
               {order.requested_ship_date
-                ? format(new Date(order.requested_ship_date), 'MMM d, yyyy')
+                ? format(parseDateOnly(order.requested_ship_date)!, 'MMM d, yyyy')
                 : '—'}
               <span className="text-xs text-muted-foreground ml-1">(client intent)</span>
             </div>
@@ -786,7 +780,20 @@ export default function OrderDetail() {
                 <tbody>
                   {lineItemsWithPackedStatus.map((li) => (
                     <tr key={li.id} className="border-b last:border-0">
-                      <td className="py-2">{li.product?.product_name ?? 'Unknown'}</td>
+                      <td className="py-2">
+                        <div className="flex flex-col gap-1">
+                          <span>{li.product?.product_name ?? 'Unknown'}</span>
+                          {(() => {
+                            const prod = li.product as { packaging_variant?: PackagingVariant | null; packaging_type?: { name: string } | null; grams_per_unit?: number | null; bag_size_g?: number | null } | null;
+                            const typeName = prod?.packaging_type?.name ?? null;
+                            const grams = prod?.grams_per_unit ?? prod?.bag_size_g ?? null;
+                            if (typeName && grams) {
+                              return <GramPackagingBadge packagingTypeName={typeName} gramsPerUnit={grams} />;
+                            }
+                            return <PackagingBadge variant={prod?.packaging_variant ?? null} />;
+                          })()}
+                        </div>
+                      </td>
                       <td className="py-2">{li.quantity_units}</td>
                       <td className="py-2">{li.packedUnits}</td>
                       <td className="py-2">
@@ -864,8 +871,9 @@ export default function OrderDetail() {
             requested_ship_date: order.requested_ship_date,
             delivery_method: order.delivery_method,
             status: order.status,
-            client_id: (order as any).client_id,
+            account_id: (order as any).account_id,
             created_by_admin: order.created_by_admin,
+            created_by_user_id: order.created_by_user_id,
           }}
           lineItems={lineItemsWithPackedStatus.map(li => ({
             id: li.id,
@@ -875,7 +883,7 @@ export default function OrderDetail() {
             grind: li.grind,
             unit_price_locked: li.unit_price_locked,
           }))}
-          clientId={(order as any).client_id}
+          clientId={(order as any).account_id}
         />
       )}
 

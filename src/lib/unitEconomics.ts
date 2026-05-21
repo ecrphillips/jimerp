@@ -1,8 +1,19 @@
 /**
  * Unit Economics calculator — pure helpers.
  * All money values are CAD. Weights are converted internally to grams for math.
+ * Currency arithmetic uses decimal.js to avoid float drift.
  */
+import Decimal from 'decimal.js';
 import { TIER_RATES } from '@/components/bookings/bookingUtils';
+
+const D = (v: Decimal.Value | null | undefined, fb = 0): Decimal => {
+  try {
+    const d = new Decimal((v ?? fb) as Decimal.Value);
+    return d.isFinite() ? d : new Decimal(fb);
+  } catch {
+    return new Decimal(fb);
+  }
+};
 
 export type DisplayUnit = 'BAG' | 'KG' | 'LB';
 export type GreenPriceUnit = 'KG' | 'LB';
@@ -81,7 +92,7 @@ export function gramsPerUnit(i: UnitEconomicsInputs): number {
 /** Convert green price to $/kg green regardless of which unit the user typed. */
 export function greenPricePerKg(i: UnitEconomicsInputs): number {
   if (i.greenPrice == null) return 0;
-  return i.greenPriceUnit === 'KG' ? i.greenPrice : i.greenPrice / KG_PER_LB;
+  return i.greenPriceUnit === 'KG' ? i.greenPrice : D(i.greenPrice).div(KG_PER_LB).toNumber();
 }
 
 /**
@@ -98,9 +109,8 @@ export function roastingCostPerKg(tier: CoroastTier | null): number {
   if (!tier) return 0;
   const t = TIER_RATES[tier];
   if (!t) return 0;
-  // monthly fee per included hour, then per kg at 40kg/hr
-  const perHour = t.base / Math.max(1, t.includedHours);
-  return perHour / ROASTER_THROUGHPUT_KG_PER_HR;
+  const perHour = D(t.base).div(Math.max(1, t.includedHours));
+  return perHour.div(ROASTER_THROUGHPUT_KG_PER_HR).toNumber();
 }
 
 /** Overage roasting $/kg (when over included hours). */
@@ -108,7 +118,7 @@ export function roastingOveragePerKg(tier: CoroastTier | null): number {
   if (!tier) return 0;
   const t = TIER_RATES[tier];
   if (!t) return 0;
-  return t.overageRate / ROASTER_THROUGHPUT_KG_PER_HR;
+  return D(t.overageRate).div(ROASTER_THROUGHPUT_KG_PER_HR).toNumber();
 }
 
 export interface CostBreakdown {
@@ -123,37 +133,44 @@ export interface CostBreakdown {
 /** All costs per user-selected unit (bag, kg, or lb of roasted coffee). */
 export function costPerUnit(i: UnitEconomicsInputs): CostBreakdown {
   const gPerUnit = gramsPerUnit(i);
-  const kgRoastedPerUnit = gPerUnit / G_PER_KG;
+  const kgRoastedPerUnit = D(gPerUnit).div(G_PER_KG);
 
   // Green: yield-loss adjusted
-  const greenKgNeeded = kgRoastedPerUnit * greenKgPerRoastedKg(i);
-  const green = greenKgNeeded * greenPricePerKg(i);
+  const greenKgNeeded = kgRoastedPerUnit.times(greenKgPerRoastedKg(i));
+  const green = greenKgNeeded.times(greenPricePerKg(i));
 
   // Packaging: only applies when the unit IS a bag
-  const packaging = i.displayUnit === 'BAG' ? (i.packagingPerBag ?? 0) : 0;
+  const packaging = i.displayUnit === 'BAG' ? D(i.packagingPerBag) : new Decimal(0);
 
   // Roasting (use overage rate if user flagged forecast overage)
   const roastRate = i.forecastOverage
     ? roastingOveragePerKg(i.tier)
     : roastingCostPerKg(i.tier);
-  const roasting = kgRoastedPerUnit * roastRate;
+  const roasting = kgRoastedPerUnit.times(roastRate);
 
   // Labour
-  let labour = 0;
+  let labour = new Decimal(0);
   if (i.includeLabour && i.labourHoursPerBatch > 0 && i.batchSizeKg > 0) {
-    const labourPerKg = (i.labourHoursPerBatch * i.labourRatePerHr) / i.batchSizeKg;
-    labour = kgRoastedPerUnit * labourPerKg;
+    const labourPerKg = D(i.labourHoursPerBatch).times(i.labourRatePerHr).div(i.batchSizeKg);
+    labour = kgRoastedPerUnit.times(labourPerKg);
   }
 
   // Overhead allocated per unit based on monthly volume
-  let overhead = 0;
+  let overhead = new Decimal(0);
   if (i.overheadMonthly && i.overheadMonthly > 0 && i.monthlyKg && i.monthlyKg > 0) {
-    const overheadPerKg = i.overheadMonthly / i.monthlyKg;
-    overhead = kgRoastedPerUnit * overheadPerKg;
+    const overheadPerKg = D(i.overheadMonthly).div(i.monthlyKg);
+    overhead = kgRoastedPerUnit.times(overheadPerKg);
   }
 
-  const total = green + packaging + roasting + labour + overhead;
-  return { green, packaging, roasting, labour, overhead, total };
+  const total = green.plus(packaging).plus(roasting).plus(labour).plus(overhead);
+  return {
+    green: green.toNumber(),
+    packaging: packaging.toNumber(),
+    roasting: roasting.toNumber(),
+    labour: labour.toNumber(),
+    overhead: overhead.toNumber(),
+    total: total.toNumber(),
+  };
 }
 
 export interface MarginRow {
@@ -164,13 +181,15 @@ export interface MarginRow {
 }
 
 export function marginAt(price: number | null, cost: number): MarginRow {
-  const p = price ?? 0;
-  const m = p - cost;
+  const p = D(price);
+  const c = D(cost);
+  const m = p.minus(c);
+  const marginPct = p.gt(0) ? m.div(p).times(100) : new Decimal(0);
   return {
-    price: p,
-    cost,
-    margin: m,
-    marginPct: p > 0 ? (m / p) * 100 : 0,
+    price: p.toNumber(),
+    cost: c.toNumber(),
+    margin: m.toNumber(),
+    marginPct: marginPct.toNumber(),
   };
 }
 
@@ -184,34 +203,37 @@ export interface MonthlyView {
 
 export function monthlyView(i: UnitEconomicsInputs, perUnit: CostBreakdown): MonthlyView {
   const gPerUnit = gramsPerUnit(i);
-  const monthlyG = (i.monthlyKg ?? 0) * G_PER_KG;
-  const unitsPerMonth = gPerUnit > 0 ? monthlyG / gPerUnit : 0;
+  const monthlyG = D(i.monthlyKg).times(G_PER_KG);
+  const unitsPerMonth = gPerUnit > 0 ? monthlyG.div(gPerUnit) : new Decimal(0);
 
   // Variable cost per unit excludes overhead (which is fixed monthly)
-  const variablePerUnit = perUnit.green + perUnit.packaging + perUnit.roasting + perUnit.labour;
-  const fixedMonthly = i.overheadMonthly ?? 0;
+  const variablePerUnit = D(perUnit.green).plus(perUnit.packaging).plus(perUnit.roasting).plus(perUnit.labour);
+  const fixedMonthly = D(i.overheadMonthly);
 
-  const productionCost = unitsPerMonth * variablePerUnit + fixedMonthly;
+  const productionCost = unitsPerMonth.times(variablePerUnit).plus(fixedMonthly);
 
-  const wsPct = Math.min(100, Math.max(0, i.wholesalePct)) / 100;
-  const blendedPrice =
-    (i.wholesalePrice ?? 0) * wsPct +
-    (i.retailPrice ?? 0) * (1 - wsPct);
+  const wsPct = D(Math.min(100, Math.max(0, i.wholesalePct))).div(100);
+  const blendedPrice = D(i.wholesalePrice).times(wsPct)
+    .plus(D(i.retailPrice).times(new Decimal(1).minus(wsPct)));
 
-  const revenue = unitsPerMonth * blendedPrice;
-  const grossProfit = revenue - productionCost;
+  const revenue = unitsPerMonth.times(blendedPrice);
+  const grossProfit = revenue.minus(productionCost);
 
-  // Break-even: blendedPrice * units = variablePerUnit * units + fixedMonthly
-  // units = fixedMonthly / (blendedPrice - variablePerUnit)
   let breakEvenUnits: number | null = null;
-  const contribution = blendedPrice - variablePerUnit;
-  if (contribution > 0 && fixedMonthly > 0) {
-    breakEvenUnits = fixedMonthly / contribution;
-  } else if (fixedMonthly === 0 && blendedPrice > variablePerUnit) {
+  const contribution = blendedPrice.minus(variablePerUnit);
+  if (contribution.gt(0) && fixedMonthly.gt(0)) {
+    breakEvenUnits = fixedMonthly.div(contribution).toNumber();
+  } else if (fixedMonthly.eq(0) && blendedPrice.gt(variablePerUnit)) {
     breakEvenUnits = 0;
   }
 
-  return { unitsPerMonth, productionCost, revenue, grossProfit, breakEvenUnits };
+  return {
+    unitsPerMonth: unitsPerMonth.toNumber(),
+    productionCost: productionCost.toNumber(),
+    revenue: revenue.toNumber(),
+    grossProfit: grossProfit.toNumber(),
+    breakEvenUnits,
+  };
 }
 
 export function unitLabel(u: DisplayUnit): string {

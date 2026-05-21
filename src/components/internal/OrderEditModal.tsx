@@ -11,10 +11,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Plus, Trash2, Edit, UserPlus } from 'lucide-react';
+import { Plus, Trash2, Edit } from 'lucide-react';
+import { CreatedByBadge } from '@/components/orders/CreatedByBadge';
 import type { Database } from '@/integrations/supabase/types';
 
 type DeliveryMethod = Database['public']['Enums']['delivery_method'];
@@ -38,9 +38,10 @@ interface OrderData {
   requested_ship_date: string | null;
   delivery_method: DeliveryMethod;
   status: OrderStatus;
-  client_id: string;
+  account_id: string;
   updated_at?: string;
   created_by_admin?: boolean;
+  created_by_user_id?: string | null;
 }
 
 interface OrderEditModalProps {
@@ -86,7 +87,7 @@ export function OrderEditModal({
       const { data, error } = await supabase
         .from('products')
         .select('id, product_name, bag_size_g')
-        .eq('client_id', clientId)
+        .eq('account_id', clientId)
         .eq('is_active', true)
         .order('product_name');
       if (error) throw error;
@@ -165,6 +166,19 @@ export function OrderEditModal({
       }
     },
     onSuccess: () => {
+      // Fire confirmation email when order transitions to CONFIRMED.
+      // Only triggers when the new status IS 'CONFIRMED' (covers any → CONFIRMED).
+      // TODO: Deploy supabase/functions/confirm-order-email before this goes live.
+      if (status === 'CONFIRMED') {
+        supabase.functions.invoke('confirm-order-email', {
+          body: { order_id: order.id },
+        }).then(({ error }) => {
+          if (error) console.warn('[confirm-order-email] Failed to invoke:', error);
+        }).catch((err) => {
+          console.warn('[confirm-order-email] Invocation error:', err);
+        });
+      }
+
       toast.success('Order updated successfully');
       queryClient.invalidateQueries({ queryKey: ['order', order.id] });
       queryClient.invalidateQueries({ queryKey: ['order-line-items', order.id] });
@@ -244,10 +258,7 @@ export function OrderEditModal({
             <Edit className="h-5 w-5" />
             Edit Order {order.order_number}
             {order.created_by_admin && (
-              <Badge variant="outline" className="ml-2 text-xs">
-                <UserPlus className="h-3 w-3 mr-1" />
-                Admin Created
-              </Badge>
+              <CreatedByBadge userId={order.created_by_user_id} variant="modal" />
             )}
           </DialogTitle>
         </DialogHeader>

@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Plus, Pencil, Trash2, Repeat, List, CalendarDays, Clock } from 'lucide-react';
 import { PendingReminders } from '@/components/bookings/PendingReminders';
 import { format } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 import { toast } from 'sonner';
 import {
   LoringBlock, BookingWithMember,
@@ -402,7 +403,7 @@ export default function CoRoastLoringSchedule() {
                           <div>
                             <span className="font-medium">{bk.coroast_members?.business_name ?? 'Unknown Member'}</span>
                             <span className="ml-2 text-sm text-muted-foreground">
-                              {format(new Date(bk.booking_date + 'T00:00:00'), 'EEE, MMM d')}
+                              {format(parseDateOnly(bk.booking_date)!, 'EEE, MMM d')}
                             </span>
                             <span className="ml-2 text-sm text-muted-foreground">
                               {formatTime(bk.start_time)} – {formatTime(bk.end_time)}

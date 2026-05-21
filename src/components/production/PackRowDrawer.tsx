@@ -24,6 +24,8 @@ interface PackRowDrawerProps {
   unblocksOrders: number;
   wipAvailableKg: number;
   requiredKg: number;
+  plannedKg: number;
+  plannedCount: number;
   wipStatus: WipStatus; // 'full' = green, 'partial' = amber, 'none' = no color
 }
 
@@ -36,6 +38,8 @@ export function PackRowDrawer({
   unblocksOrders,
   wipAvailableKg,
   requiredKg,
+  plannedKg,
+  plannedCount,
   wipStatus,
 }: PackRowDrawerProps) {
   const navigate = useNavigate();
@@ -82,6 +86,11 @@ export function PackRowDrawer({
               </span>
             ) : (
               <span>No remaining demand for this SKU</span>
+            )}
+            {plannedCount > 0 && wipStatus !== 'full' && (
+              <div className="mt-1 text-xs">
+                + {plannedCount} planned batch{plannedCount !== 1 ? 'es' : ''} scheduled (~{plannedKg.toFixed(2)} kg)
+              </div>
             )}
           </div>
         )}

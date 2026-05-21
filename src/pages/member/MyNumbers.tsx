@@ -24,6 +24,7 @@ import {
   DEFAULT_INPUTS, type UnitEconomicsInputs,
   costPerUnit, marginAt, monthlyView, unitLabel, unitLabelPlural,
 } from '@/lib/unitEconomics';
+import { formatCurrency } from '@/lib/currency';
 import {
   useScenarios, useScenarioAutoSave, useAccountPrefills, type ScenarioRow,
 } from '@/hooks/useUnitEconomicsScenarios';
@@ -354,7 +355,7 @@ function PrintLayout({
   const tier = inputs.tier ? TIER_RATES[inputs.tier] : null;
   const today = new Date().toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
 
-  const fmt = (n: number) => `$${n.toFixed(2)}`;
+  const fmt = (n: number) => formatCurrency(n);
   const fmtBig = (n: number) => `$${n.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const Row = ({ k, v }: { k: string; v: string }) => (

@@ -2,6 +2,9 @@ import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { getMemberColor, TIER_RATES, type MemberRow, type BookingRow } from './bookingUtils';
+import { useAccountsPricing } from '@/hooks/useAccountPricing';
+import { todayInTz } from '@/lib/timezone';
+import { formatCurrency } from '@/lib/currency';
 
 interface MemberSummaryPanelProps {
   members: MemberRow[];
@@ -19,16 +22,22 @@ function getMonthBookings(bookings: BookingRow[], memberId: string, month: strin
 export function MemberSummaryPanel({ members, bookings, currentMonth }: MemberSummaryPanelProps) {
   const navigate = useNavigate();
   const activeMembers = members.filter(m => m.is_active);
-  if (activeMembers.length === 0) return null;
-
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayInTz();
   const allMemberIds = members.map(m => m.id);
+  const { data: pricingMap } = useAccountsPricing(allMemberIds);
+
+  if (activeMembers.length === 0) return null;
 
   return (
     <ScrollArea className="w-full mb-4">
       <div className="flex gap-2 pb-2">
         {activeMembers.map(member => {
-          const rates = TIER_RATES[member.tier] ?? TIER_RATES.MEMBER;
+          const tierDefaults = TIER_RATES[member.tier] ?? TIER_RATES.MEMBER;
+          const pricing = pricingMap?.get(member.id);
+          const rates = {
+            includedHours: pricing?.includedHours.value ?? tierDefaults.includedHours,
+            overageRate: pricing?.overageRate.value ?? tierDefaults.overageRate,
+          };
           const monthBookings = getMonthBookings(bookings, member.id, currentMonth);
           const hoursUsed = monthBookings
             .filter(b => b.booking_date < today || b.status === 'COMPLETED')
@@ -62,7 +71,7 @@ export function MemberSummaryPanel({ members, bookings, currentMonth }: MemberSu
                   <div className="text-muted-foreground">{hoursRemaining.toFixed(1)}h remaining</div>
                 ) : (
                   <div className="text-destructive font-medium">
-                    +{overageHours.toFixed(1)}h overage (${overageCharge.toFixed(0)})
+                    +{overageHours.toFixed(1)}h overage ({formatCurrency(overageCharge, { decimals: 0 })})
                   </div>
                 )}
               </div>

@@ -100,6 +100,21 @@ export function AccountsTab({ enabled }: { enabled: boolean }) {
     },
   });
 
+  // Products needing pricing (pricing_incomplete = true)
+  const { data: pricingIncompleteProducts, isLoading: loadingPricingIncomplete } = useQuery({
+    queryKey: ['dashboard-products-pricing-incomplete'],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, product_name, sku, account_id, accounts:accounts!products_account_id_fkey(account_name)')
+        .eq('is_active', true)
+        .eq('pricing_incomplete', true)
+        .order('product_name');
+      if (error) throw error;
+      return (data ?? []) as Array<{ id: string; product_name: string; sku: string; account_id: string; accounts: { account_name: string } | null }>;
+    },
+  });
   // Prospects pipeline
   const { data: prospects, isLoading: loadingProspects } = useQuery({
     queryKey: ['dashboard-prospects-pipeline'],
@@ -230,6 +245,29 @@ export function AccountsTab({ enabled }: { enabled: boolean }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Products needing pricing */}
+      {!loadingPricingIncomplete && (pricingIncompleteProducts?.length ?? 0) > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Products needing pricing</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1">
+              {(pricingIncompleteProducts ?? []).map(p => (
+                <div key={p.id} className="flex items-center justify-between text-sm border-b last:border-0 pb-1 last:pb-0">
+                  <div className="flex items-center gap-3">
+                    <span className="font-medium">{p.product_name}</span>
+                    <span className="text-muted-foreground text-xs">{p.sku}</span>
+                    <span className="text-muted-foreground text-xs">{p.accounts?.account_name ?? '—'}</span>
+                  </div>
+                  <Link to={`/products?productId=${p.id}`} className="text-primary hover:underline text-xs">View</Link>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Section B — Prospects pipeline */}
       <Card>

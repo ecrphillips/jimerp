@@ -26,99 +26,143 @@ import { usePreview } from '@/contexts/PreviewContext';
 import { PronounsField } from '@/components/contacts/PronounsField';
 import { formatPronounsSuffix } from '@/lib/pronounOptions';
 
-// ─── Pricing Tier Card (internal-only) ─────────────────────────
-function formatTierMarkup(t: { markup_adjustment_type: string; markup_multiplier: number | null; per_kg_fee: number | null; target_margin_pct: number | null }): string {
-  switch (t.markup_adjustment_type) {
-    case 'MULTIPLIER':
-      return `× ${(t.markup_multiplier ?? 0).toFixed(2)} (Multiplier)`;
-    case 'PER_KG_FEE': {
-      const v = t.per_kg_fee ?? 0;
-      const sign = v >= 0 ? '+' : '−';
-      return `${sign}$${Math.abs(v).toFixed(2)}/kg (Per-kg fee)`;
-    }
-    case 'MARGIN_TARGET':
-      return `Target ${(t.target_margin_pct ?? 0).toFixed(1)}% (Margin)`;
-    default:
-      return '—';
-  }
+import PricingAnalysisTab from '@/components/account/PricingAnalysisTab';
+import OfferWorkspaceTab from '@/components/account/OfferWorkspaceTab';
+import { formatAuditEntry, type PricingAuditRow } from '@/lib/coroastPricing';
+
+// PricingTierCard removed — pricing tiers are no longer in the data model.
+function PricingTierCard(_props: { accountId: string; pricingTierId: string | null }) {
+  return null;
 }
 
-function PricingTierCard({ accountId, pricingTierId }: { accountId: string; pricingTierId: string | null }) {
+// ─── Service Fee Card (ADMIN/OPS only) ─────────────────────────
+function ServiceFeeCard({ account }: { account: any }) {
   const queryClient = useQueryClient();
-  const [selected, setSelected] = useState<string>(pricingTierId ?? '__DEFAULT__');
+  const [editing, setEditing] = useState(false);
+  const [fee, setFee] = useState<string>(account.monthly_service_fee != null ? String(account.monthly_service_fee) : '');
+  const [skuCount, setSkuCount] = useState<string>(account.managed_sku_count != null ? String(account.managed_sku_count) : '');
+  const [notes, setNotes] = useState<string>(account.service_fee_notes ?? '');
 
   useEffect(() => {
-    setSelected(pricingTierId ?? '__DEFAULT__');
-  }, [pricingTierId]);
+    setFee(account.monthly_service_fee != null ? String(account.monthly_service_fee) : '');
+    setSkuCount(account.managed_sku_count != null ? String(account.managed_sku_count) : '');
+    setNotes(account.service_fee_notes ?? '');
+  }, [account.monthly_service_fee, account.managed_sku_count, account.service_fee_notes]);
 
-  const { data: tiers } = useQuery({
-    queryKey: ['pricing_tiers', 'all'],
+  const { data: updatedByProfile } = useQuery({
+    queryKey: ['profile-name', account.service_fee_updated_by],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('pricing_tiers')
-        .select('id, name, is_default, markup_adjustment_type, markup_multiplier, per_kg_fee, target_margin_pct, display_order')
-        .order('display_order');
-      if (error) throw error;
-      return data ?? [];
+      if (!account.service_fee_updated_by) return null;
+      const { data } = await supabase
+        .from('profiles')
+        .select('name, email')
+        .eq('user_id', account.service_fee_updated_by)
+        .maybeSingle();
+      return data;
     },
+    enabled: !!account.service_fee_updated_by,
   });
 
-  const defaultTier = tiers?.find((t) => t.is_default) ?? null;
-  const selectedTier =
-    selected === '__DEFAULT__' ? defaultTier : tiers?.find((t) => t.id === selected) ?? null;
-
   const saveMutation = useMutation({
-    mutationFn: async (next: string | null) => {
+    mutationFn: async () => {
+      const feeNum = fee.trim() === '' ? null : Number(fee);
+      const skuNum = skuCount.trim() === '' ? null : Number(skuCount);
+      if (feeNum != null && (isNaN(feeNum) || feeNum < 0)) throw new Error('Monthly service fee must be ≥ 0');
+      if (skuNum != null && (isNaN(skuNum) || skuNum < 0 || !Number.isInteger(skuNum))) throw new Error('Managed SKU count must be a non-negative integer');
       const { error } = await supabase
         .from('accounts')
-        .update({ pricing_tier_id: next } as any)
-        .eq('id', accountId);
+        .update({
+          monthly_service_fee: feeNum,
+          managed_sku_count: skuNum,
+          service_fee_notes: notes.trim() === '' ? null : notes.trim(),
+        } as any)
+        .eq('id', account.id);
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success('Pricing tier updated');
-      queryClient.invalidateQueries({ queryKey: ['account', accountId] });
+      toast.success('Service fee updated');
+      queryClient.invalidateQueries({ queryKey: ['account-detail'] });
+      setEditing(false);
     },
-    onError: (err: any) => toast.error(err?.message ?? 'Failed to save pricing tier'),
+    onError: (err: any) => toast.error(err?.message ?? 'Failed to save service fee'),
   });
 
-  const handleChange = (v: string) => {
-    setSelected(v);
-    saveMutation.mutate(v === '__DEFAULT__' ? null : v);
-  };
+  const updatedLine = account.service_fee_updated_at
+    ? `Last updated by ${updatedByProfile?.name || updatedByProfile?.email || '—'} on ${format(new Date(account.service_fee_updated_at), 'PPP')}`
+    : 'Not yet set.';
 
   return (
     <Card>
-      <CardHeader><CardTitle className="text-sm">Pricing tier</CardTitle></CardHeader>
-      <CardContent className="space-y-2 text-sm">
-        <div className="flex items-center gap-3">
-          <Select value={selected} onValueChange={handleChange} disabled={!tiers}>
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="Select tier" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__DEFAULT__">
-                — Use default tier{defaultTier ? ` (${defaultTier.name})` : ''} —
-              </SelectItem>
-              {tiers?.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.name}
-                  {t.is_default ? '  •  default' : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {saveMutation.isPending && (
-            <span className="text-xs text-muted-foreground">Saving…</span>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {selectedTier ? (
-            <>Markup approach: <span className="font-mono">{formatTierMarkup(selectedTier)}</span></>
-          ) : (
-            <>No tiers configured.</>
-          )}
-        </p>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-sm">Monthly Service Fee</CardTitle>
+        {!editing && (
+          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+            <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        {editing ? (
+          <>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Monthly Service Fee ($)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={fee}
+                  onChange={(e) => setFee(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Managed SKU Count</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={skuCount}
+                  onChange={(e) => setSkuCount(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Notes</Label>
+              <Textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="e.g., covers green sourcing, menu curation, Shopify order fetch"
+                rows={3}
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={saveMutation.isPending}>Cancel</Button>
+              <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+              <div>
+                <span className="text-muted-foreground">Monthly Fee</span>
+                <p className="font-medium">{account.monthly_service_fee != null ? `$${Number(account.monthly_service_fee).toFixed(2)}` : '—'}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Managed SKUs</span>
+                <p className="font-medium">{account.managed_sku_count ?? '—'}</p>
+              </div>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Notes</span>
+              <p className="whitespace-pre-wrap">{account.service_fee_notes || '—'}</p>
+            </div>
+          </>
+        )}
+        <p className="text-xs text-muted-foreground pt-1 border-t">{updatedLine}</p>
       </CardContent>
     </Card>
   );
@@ -126,6 +170,8 @@ function PricingTierCard({ accountId, pricingTierId }: { accountId: string; pric
 
 // ─── Profile Tab ───────────────────────────────────────────────
 function ProfileTab({ account, refetch }: { account: any; refetch: () => void }) {
+  const { authUser } = useAuth();
+  const isInternal = authUser?.role === 'ADMIN' || authUser?.role === 'OPS';
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ ...account });
@@ -299,6 +345,8 @@ function ProfileTab({ account, refetch }: { account: any; refetch: () => void })
         </Card>
 
         <PricingTierCard accountId={account.id} pricingTierId={account.pricing_tier_id ?? null} />
+
+        {isInternal && <ServiceFeeCard account={account} />}
 
         {prospect && (
           <Card>
@@ -1299,7 +1347,52 @@ function CoRoastingTab({ account, refetch }: { account: any; refetch: () => void
       </Card>
 
       <CustomRateOverrides account={account} refetch={refetch} />
+      <CustomRateAuditLog accountId={account.id} programs={account.programs ?? []} />
     </div>
+  );
+}
+
+function CustomRateAuditLog({ accountId, programs }: { accountId: string; programs: string[] }) {
+  const { authUser } = useAuth();
+  const isAdminOrOps = authUser?.role === 'ADMIN' || authUser?.role === 'OPS';
+  const hasCoroasting = programs.includes('COROASTING');
+
+  const { data: rows } = useQuery({
+    queryKey: ['coroast-pricing-audit', accountId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('coroast_account_pricing_audit')
+        .select('*')
+        .eq('account_id', accountId)
+        .order('changed_at', { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: isAdminOrOps && hasCoroasting,
+  });
+
+  if (!isAdminOrOps || !hasCoroasting) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Recent Pricing Changes</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {!rows || rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No pricing changes recorded.</p>
+        ) : (
+          <ul className="space-y-1 text-sm">
+            {rows.map((r: any) => (
+              <li key={r.id} className="text-muted-foreground">
+                {formatAuditEntry(r as PricingAuditRow)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1310,12 +1403,14 @@ const OVERRIDE_FIELDS = [
   { key: 'coroast_custom_overage_rate', label: 'Overage Rate ($/hr)', tierKey: 'overageRate', isDollar: true },
   { key: 'coroast_custom_included_pallets', label: 'Included Pallets', tierKey: 'includedPallets', isDollar: false },
   { key: 'coroast_custom_storage_rate', label: 'Storage Rate ($/pallet/mo)', tierKey: 'storageRate', isDollar: true },
+  { key: 'coroast_custom_packaging_blocks_included', label: 'Packaging Blocks Included', tierKey: 'packagingBlocksIncluded', isDollar: false },
+  { key: 'coroast_custom_packaging_block_rate', label: 'Packaging Block Rate ($/2-hr block)', tierKey: 'packagingBlockRate', isDollar: true },
 ] as const;
 
 const TIER_DEFAULTS: Record<string, Record<string, number>> = {
-  MEMBER: { base: 399, includedHours: 3, overageRate: 160, includedPallets: 0, storageRate: 175 },
-  GROWTH: { base: 859, includedHours: 7, overageRate: 145, includedPallets: 1, storageRate: 175 },
-  PRODUCTION: { base: 1399, includedHours: 12, overageRate: 130, includedPallets: 2, storageRate: 175 },
+  MEMBER:     { base: 399,  includedHours: 3,  overageRate: 160, includedPallets: 0, storageRate: 175, packagingBlocksIncluded: 0, packagingBlockRate: 0 },
+  GROWTH:     { base: 859,  includedHours: 7,  overageRate: 145, includedPallets: 1, storageRate: 175, packagingBlocksIncluded: 0, packagingBlockRate: 0 },
+  PRODUCTION: { base: 1399, includedHours: 12, overageRate: 130, includedPallets: 2, storageRate: 175, packagingBlocksIncluded: 0, packagingBlockRate: 0 },
 };
 
 function CustomRateOverrides({ account, refetch }: { account: any; refetch: () => void }) {
@@ -1326,21 +1421,6 @@ function CustomRateOverrides({ account, refetch }: { account: any; refetch: () =
 
   const isAdmin = authUser?.role === 'ADMIN';
   const hasCoroasting = account.programs?.includes('COROASTING');
-
-  if (!isAdmin || !hasCoroasting) return null;
-
-  const tier = account.coroast_tier ?? 'MEMBER';
-  const tierDefaults = TIER_DEFAULTS[tier] ?? TIER_DEFAULTS.MEMBER;
-
-  const startEdit = () => {
-    const f: Record<string, string> = {};
-    for (const field of OVERRIDE_FIELDS) {
-      const val = account[field.key];
-      f[field.key] = val != null ? String(val) : '';
-    }
-    setForm(f);
-    setEditing(true);
-  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -1360,6 +1440,21 @@ function CustomRateOverrides({ account, refetch }: { account: any; refetch: () =
     },
     onError: (err: Error) => toast.error(err.message),
   });
+
+  if (!isAdmin || !hasCoroasting) return null;
+
+  const tier = account.coroast_tier ?? 'MEMBER';
+  const tierDefaults = TIER_DEFAULTS[tier] ?? TIER_DEFAULTS.MEMBER;
+
+  const startEdit = () => {
+    const f: Record<string, string> = {};
+    for (const field of OVERRIDE_FIELDS) {
+      const val = account[field.key];
+      f[field.key] = val != null ? String(val) : '';
+    }
+    setForm(f);
+    setEditing(true);
+  };
 
   return (
     <Card>
@@ -1471,19 +1566,35 @@ export default function AccountDetail() {
           {hasCoroasting && <Badge variant="outline" className="border-amber-500 text-amber-600">Co-Roasting</Badge>}
           {!account.is_active && <Badge variant="destructive">Inactive</Badge>}
         </div>
-        {hasCoroasting && authUser?.role === 'ADMIN' && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto"
-            onClick={() => {
-              enterPreview(account.id, account.account_name);
-              navigate('/member-portal');
-            }}
-          >
-            <Eye className="h-4 w-4 mr-1.5" />
-            Preview Portal
-          </Button>
+        {authUser?.role === 'ADMIN' && (hasManufacturing || hasCoroasting) && (
+          <div className="ml-auto flex items-center gap-2">
+            {hasManufacturing && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  enterPreview(account.id, account.account_name);
+                  navigate('/portal');
+                }}
+              >
+                <Eye className="h-4 w-4 mr-1.5" />
+                Preview Client Portal
+              </Button>
+            )}
+            {hasCoroasting && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  enterPreview(account.id, account.account_name);
+                  navigate('/member-portal');
+                }}
+              >
+                <Eye className="h-4 w-4 mr-1.5" />
+                Preview Member Portal
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
@@ -1493,6 +1604,12 @@ export default function AccountDetail() {
           {hasManufacturing && <TabsTrigger value="locations">Locations</TabsTrigger>}
           <TabsTrigger value="users">Users</TabsTrigger>
           {hasCoroasting && <TabsTrigger value="coroasting">Co-Roasting</TabsTrigger>}
+          {(authUser?.role === 'ADMIN' || authUser?.role === 'OPS') && (
+            <TabsTrigger value="pricing-analysis">Pricing Analysis</TabsTrigger>
+          )}
+          {(authUser?.role === 'ADMIN' || authUser?.role === 'OPS') && (
+            <TabsTrigger value="offer-workspace">Offer Workspace</TabsTrigger>
+          )}
           <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
 
@@ -1511,6 +1628,16 @@ export default function AccountDetail() {
           {hasCoroasting && (
             <TabsContent value="coroasting">
               <CoRoastingTab account={account} refetch={refetch} />
+            </TabsContent>
+          )}
+          {(authUser?.role === 'ADMIN' || authUser?.role === 'OPS') && (
+            <TabsContent value="pricing-analysis">
+              <PricingAnalysisTab account={account} />
+            </TabsContent>
+          )}
+          {(authUser?.role === 'ADMIN' || authUser?.role === 'OPS') && (
+            <TabsContent value="offer-workspace">
+              <OfferWorkspaceTab accountId={account.id} />
             </TabsContent>
           )}
           <TabsContent value="activity">

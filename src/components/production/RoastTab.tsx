@@ -19,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -50,7 +51,11 @@ import type { DateFilterConfig } from './types';
 import { useAuthoritativeWip, useAuthoritativeRoastDemand } from '@/hooks/useAuthoritativeInventory';
 import { useRoastGroupComponents, getComponentBreakdown, type ComponentDisplay } from '@/hooks/useRoastGroupComponents';
 import { AuthoritativeSummaryPanel } from './AuthoritativeTotals';
-import { filterOrderByWorkStart } from '@/lib/productionScheduling';
+import { filterOrderByWorkStart, getVancouverNow, getVancouverDateString, TIMEZONE } from '@/lib/productionScheduling';
+import { startOfWeek, endOfWeek, subWeeks, format, parseISO, startOfDay, endOfDay } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
+
+type CompletedDateFilter = 'today' | 'this_week' | 'last_week' | 'all';
 
 interface RoastTabProps {
   dateFilterConfig: DateFilterConfig;
@@ -82,6 +87,7 @@ interface RoastGroupConfig {
   expected_yield_loss_pct: number;
   is_active: boolean;
   is_blend: boolean;
+  blend_type: string | null;
   notes: string | null;
   display_order: number | null;
   display_name: string | null;
@@ -107,8 +113,9 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   // Roaster filter
   const [roasterFilter, setRoasterFilter] = useState<RoasterFilter>('ALL');
   
-  // Show completed toggle - default ON so completed groups remain visible
-  const [showCompleted, setShowCompleted] = useState(true);
+  // Show completed toggle - default OFF; reveal completed groups on demand
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [completedDateFilter, setCompletedDateFilter] = useState<CompletedDateFilter>('today');
   
   // Roast group config dialog
   const [showConfigDialog, setShowConfigDialog] = useState(false);
@@ -139,6 +146,18 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   const [addBatchMode, setAddBatchMode] = useState<'existing' | 'new'>('existing');
   const [addBatchSaving, setAddBatchSaving] = useState(false);
   const [addBatchNewName, setAddBatchNewName] = useState('');
+
+  const resetAddBatchModal = () => {
+    setShowAddBatchModal(false);
+    setAddBatchRgKey('');
+    setAddBatchNewName('');
+    setAddBatchKg('');
+    setAddBatchRoaster('');
+    setAddBatchDate(today);
+    setAddBatchCropster('');
+    setAddBatchMode('existing');
+    setAddBatchSaving(false);
+  };
 
   // Depletion warning modal state (Add Batch flow)
   const [depletionState, setDepletionState] = useState<{
@@ -488,6 +507,41 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     return groupBatches.some(b => b.assigned_roaster === roasterFilter);
   };
 
+  // Compute date range (in Vancouver time) for completed-group filter
+  const completedDateRange = useMemo(() => {
+    if (completedDateFilter === 'all') return null;
+    const now = getVancouverNow();
+    if (completedDateFilter === 'today') {
+      return { start: startOfDay(now), end: endOfDay(now) };
+    }
+    // weekStartsOn: 1 = Monday
+    if (completedDateFilter === 'this_week') {
+      return { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) };
+    }
+    // last_week
+    const lastWeekRef = subWeeks(now, 1);
+    return { start: startOfWeek(lastWeekRef, { weekStartsOn: 1 }), end: endOfWeek(lastWeekRef, { weekStartsOn: 1 }) };
+  }, [completedDateFilter]);
+
+  // Helper: does a completed group have any batch within the selected date range?
+  const completedGroupMatchesDateFilter = useCallback((roastGroup: string): boolean => {
+    if (!completedDateRange) return true; // 'all'
+    const groupBatches = (batches ?? []).filter(b => b.roast_group === roastGroup);
+    // Pass-through: if no batch timestamps, behave as 'all'
+    const stamped = groupBatches
+      .map(b => b.updated_at ?? b.created_at ?? null)
+      .filter((t): t is string => !!t);
+    if (stamped.length === 0) return true;
+    return stamped.some(ts => {
+      try {
+        const local = toZonedTime(parseISO(ts), TIMEZONE);
+        return local >= completedDateRange.start && local <= completedDateRange.end;
+      } catch {
+        return false;
+      }
+    });
+  }, [completedDateRange, batches]);
+
   // Computed sorted groups - use display_order from config (manual ordering only)
   // NO automatic reprioritization - order is strictly user-controlled
   // Apply showCompleted filter: if OFF, hide groups with isCompleted=true
@@ -497,6 +551,12 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     // Apply "show completed" filter
     if (!showCompleted) {
       filtered = filtered.filter(group => !group.isCompleted);
+    } else {
+      // When showing completed, apply the date filter to completed groups only
+      filtered = filtered.filter(group => {
+        if (!group.isCompleted) return true;
+        return completedGroupMatchesDateFilter(group.roast_group);
+      });
     }
     
     // Sort: active groups (with demand) first, then completed groups
@@ -515,7 +575,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       if (orderA !== orderB) return orderA - orderB;
       return a.roast_group.localeCompare(b.roast_group);
     });
-  }, [demandByRoastGroup, roasterFilter, configByGroup, showCompleted]);
+  }, [demandByRoastGroup, roasterFilter, configByGroup, showCompleted, completedGroupMatchesDateFilter]);
 
   // Handle editing state changes from drawer - freeze order by roast_group names
   const handleEditingChange = useCallback((groupId: string, isEditing: boolean) => {
@@ -757,6 +817,15 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     // Calculate how many batches needed based on expected output per batch
     const expectedOutputPerBatch = standardBatch * (1 - yieldLossPct / 100);
     const batchCount = Math.ceil(remainingNeed / expectedOutputPerBatch);
+
+    const LARGE_BATCH_CONFIRM_THRESHOLD = 10;
+    if (batchCount >= LARGE_BATCH_CONFIRM_THRESHOLD) {
+      const ok = window.confirm(
+        `Add ${batchCount} planned batches for ${roastGroup}? This will create ${batchCount} rows in production planning.`
+      );
+      if (!ok) return;
+    }
+
     createSuggestedBatchesMutation.mutate({
       roastGroup,
       count: batchCount,
@@ -813,11 +882,37 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                 <Checkbox 
                   id="show-completed" 
                   checked={showCompleted} 
-                  onCheckedChange={(checked) => setShowCompleted(checked === true)}
+                  onCheckedChange={(checked) => {
+                    const next = checked === true;
+                    setShowCompleted(next);
+                    // Reset date filter to 'today' whenever toggled back on
+                    if (next) setCompletedDateFilter('today');
+                  }}
                 />
                 <Label htmlFor="show-completed" className="text-sm text-muted-foreground cursor-pointer">
                   Show completed
                 </Label>
+                {showCompleted && (
+                  <ToggleGroup
+                    type="single"
+                    value={completedDateFilter}
+                    onValueChange={(val) => val && setCompletedDateFilter(val as CompletedDateFilter)}
+                    className="border rounded-md ml-1"
+                  >
+                    <ToggleGroupItem value="today" aria-label="Today" className="text-xs px-3">
+                      Today
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="this_week" aria-label="This week" className="text-xs px-3">
+                      This week
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="last_week" aria-label="Last week" className="text-xs px-3">
+                      Last week
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="all" aria-label="All" className="text-xs px-3">
+                      All
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                )}
               </div>
               
               <div className="flex items-center gap-2">
@@ -932,6 +1027,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                             onEditingChange={(isEditing) => handleEditingChange(group.roast_group, isEditing)}
                             onAdjustWipFg={(rg) => setWipFgModalGroup(rg)}
                             isBlend={config?.is_blend ?? false}
+                            isPreRoastBlend={config?.is_blend === true && config?.blend_type === 'PRE_ROAST'}
                             isCompleted={group.isCompleted}
                             onPlanBlendBatches={() => setBlendPlanModal({
                               roastGroup: group.roast_group,
@@ -939,6 +1035,10 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                               demandKg: group.total_kg,
                               netDemandKg: group.net_demand_kg,
                             })}
+                            onPlanDirectBatch={() => {
+                              setAddBatchRgKey(group.roast_group);
+                              setShowAddBatchModal(true);
+                            }}
                             onBlendBatches={() => setBlendExecuteModal({
                               roastGroup: group.roast_group,
                               displayName: config?.display_name?.trim() || group.roast_group.replace(/_/g, ' '),
@@ -1006,18 +1106,35 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                               const suggestedBatches = remainingNeed > 0 ? Math.ceil(remainingNeed / expectedOutputPerBatch) : 0;
                               
                               if (suggestedBatches === 0) return null;
-                              
+
+                              const batchWord = suggestedBatches === 1 ? 'batch' : 'batches';
+                              const ariaLabel = `Click to add ${suggestedBatches} planned ${batchWord} for ${g.roast_group}`;
+
                               return (
-                                <Button
-                                  key={g.roast_group}
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-xs"
-                                  onClick={() => handleCreateSuggestedBatches(g.roast_group, g.total_kg)}
-                                >
-                                  <Plus className="h-3 w-3 mr-1" />
-                                  {g.roast_group} (+{suggestedBatches})
-                                </Button>
+                                <TooltipProvider key={g.roast_group} delayDuration={200}>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 text-xs"
+                                        aria-label={ariaLabel}
+                                        onClick={() => handleCreateSuggestedBatches(g.roast_group, g.total_kg)}
+                                      >
+                                        <Plus className="h-3 w-3 mr-1" />
+                                        {g.roast_group} (+{suggestedBatches})
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <div className="text-xs">
+                                        <div>{ariaLabel}</div>
+                                        <div className="text-muted-foreground">
+                                          {remainingNeed.toFixed(1)} kg remaining @ {expectedOutputPerBatch.toFixed(1)} kg/batch
+                                        </div>
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
                               );
                             })}
                           </div>
@@ -1088,12 +1205,17 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                         onEditingChange={(isEditing) => handleEditingChange(roastGroup, isEditing)}
                         onAdjustWipFg={(rg) => setWipFgModalGroup(rg)}
                         isBlend={config?.is_blend ?? false}
+                        isPreRoastBlend={config?.is_blend === true && config?.blend_type === 'PRE_ROAST'}
                         onPlanBlendBatches={() => setBlendPlanModal({
                           roastGroup: roastGroup,
                           displayName: config?.display_name?.trim() || roastGroup.replace(/_/g, ' '),
                           demandKg: 0,
                           netDemandKg: 0,
                         })}
+                        onPlanDirectBatch={() => {
+                          setAddBatchRgKey(roastGroup);
+                          setShowAddBatchModal(true);
+                        }}
                         onBlendBatches={() => setBlendExecuteModal({
                           roastGroup: roastGroup,
                           displayName: config?.display_name?.trim() || roastGroup.replace(/_/g, ' '),
@@ -1322,17 +1444,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       )}
       {/* Add Batch Modal */}
       <Dialog open={showAddBatchModal} onOpenChange={(open) => {
-        if (!open) {
-          setShowAddBatchModal(false);
-          setAddBatchRgKey('');
-          setAddBatchNewName('');
-          setAddBatchKg('');
-          setAddBatchRoaster('');
-          setAddBatchDate(today);
-          setAddBatchCropster('');
-          setAddBatchMode('existing');
-          setAddBatchSaving(false);
-        }
+        if (!open) resetAddBatchModal();
       }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -1448,7 +1560,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
           </div>
 
           <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setShowAddBatchModal(false)}>
+            <Button variant="outline" onClick={resetAddBatchModal}>
               Cancel
             </Button>
             <Button
@@ -1504,15 +1616,18 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
 
                     toast.success(swaps.length > 0 ? `Batch added — ${swaps.length} successor swap(s) applied` : 'Batch added');
                     queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
-                    setShowAddBatchModal(false);
-                    setAddBatchRgKey('');
-                    setAddBatchNewName('');
-                    setAddBatchKg('');
-                    setAddBatchRoaster('');
-                    setAddBatchDate(today);
-                    setAddBatchCropster('');
-                    setAddBatchMode('existing');
+                    resetAddBatchModal();
                   };
+
+                  // Guard: roastGroupKey must be a known group
+                  if (addBatchMode === 'existing') {
+                    const known = (roastGroupsConfig ?? []).some(rg => rg.roast_group === roastGroupKey);
+                    if (!known) {
+                      toast.error('Roast group selection is invalid — please re-select and try again.');
+                      setAddBatchSaving(false);
+                      return;
+                    }
+                  }
 
                   // Skip depletion check for brand-new groups (no links yet)
                   if (!isNewlyCreated) {

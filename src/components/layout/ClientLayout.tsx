@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreview } from '@/contexts/PreviewContext';
 import { Button } from '@/components/ui/button';
 import { AccountSheet } from '@/components/account/AccountSheet';
 import {
@@ -10,7 +11,10 @@ import {
   User,
   LogOut,
   Menu,
-  X
+  X,
+  ShoppingBag,
+  Eye,
+  Calculator,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import hiIcon from '@/assets/home-island-icon.png';
@@ -20,16 +24,27 @@ interface ClientLayoutProps {
 }
 
 // Client-only navigation items
-const navItems = [
+const baseNavItems = [
   { to: '/portal', label: 'Home', icon: Home, end: true },
   { to: '/portal/new-order', label: 'New Order', icon: PlusCircle },
-  { to: '/portal/orders', label: 'Order History', icon: ClipboardList },
-  { to: '/portal/account', label: 'Account', icon: User },
+  { to: '/portal/orders', label: 'My Orders', icon: ClipboardList },
+  { to: '/portal/products', label: 'My Products', icon: ShoppingBag },
 ];
+const numbersNavItem = { to: '/client/numbers', label: 'My Numbers', icon: Calculator };
+const accountNavItem = { to: '/portal/account', label: 'Account', icon: User };
 
 export function ClientLayout({ children }: ClientLayoutProps) {
   const { authUser, signOut } = useAuth();
   const navigate = useNavigate();
+  const { isPreviewMode, previewAccountName, previewAccountId, exitPreview, effectivePermissions } = usePreview();
+  const canPlaceOrders = isPreviewMode ? !!effectivePermissions?.canPlaceOrders : !!authUser?.canPlaceOrders;
+  const canBookRoaster = isPreviewMode ? !!effectivePermissions?.canBookRoaster : !!authUser?.canBookRoaster;
+  const showNumbers = canPlaceOrders && !canBookRoaster;
+  const navItems = [
+    ...baseNavItems,
+    ...(showNumbers ? [numbersNavItem] : []),
+    accountNavItem,
+  ];
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = React.useState(false);
 
@@ -70,7 +85,7 @@ export function ClientLayout({ children }: ClientLayoutProps) {
                 <li key={item.to}>
                   <NavLink
                     to={item.to}
-                    end={'end' in item ? item.end : false}
+                    end={'end' in item ? Boolean(item.end) : false}
                     onClick={() => setSidebarOpen(false)}
                     className={({ isActive }) => cn(
                       "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-sidebar-foreground",
@@ -132,6 +147,28 @@ export function ClientLayout({ children }: ClientLayoutProps) {
             </div>
           </div>
         </header>
+
+        {/* Preview banner */}
+        {isPreviewMode && (
+          <div className="sticky top-0 z-[60] flex items-center justify-between gap-4 bg-amber-400 px-4 py-2 text-amber-950">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Eye className="h-4 w-4" />
+              Previewing as {previewAccountName}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 border-amber-600 bg-amber-300 text-amber-950 hover:bg-amber-200"
+              onClick={() => {
+                const id = previewAccountId;
+                exitPreview();
+                navigate(`/accounts/${id}`);
+              }}
+            >
+              Exit Preview
+            </Button>
+          </div>
+        )}
 
         {/* Page content - uses same page-container styling */}
         <main className="flex-1 overflow-y-auto">

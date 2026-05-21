@@ -6,6 +6,7 @@ import { CreateReleaseModal } from '@/components/sourcing/releases/CreateRelease
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 import { formatPerKg } from '@/lib/formatMoney';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,7 +21,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGr
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Search, Plus, Check, FileText, AlertTriangle, Copy, Mail, CalendarIcon, PackageCheck, Trash2, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Search, Plus, Check, FileText, AlertTriangle, Copy, Mail, CalendarIcon, PackageCheck, Trash2, ArrowUp, ArrowDown, ArrowUpDown, Table2 } from 'lucide-react';
+import { BulkEditGrid } from '@/components/bulk-edit/BulkEditGrid';
+import { useContractsBulkEdit } from '@/components/bulk-edit/configs/contracts';
+import { useBulkEditLogoutCleanup } from '@/components/bulk-edit/useChangeHighlights';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -142,6 +146,10 @@ function formatPrice(value: number | null, currency: string | null) {
 // ─── Main Page ─────────────────────────────────────────────
 
 export default function SourcingContracts() {
+  const { isAdmin, user } = useAuth();
+  useBulkEditLogoutCleanup(user?.id);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const contractsBulk = useContractsBulkEdit(bulkEditOpen);
   const [search, setSearch] = useState('');
   const FILTER_STORAGE_KEY = 'sourcing_contracts_filter';
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'ALL'>(() => {
@@ -314,6 +322,15 @@ export default function SourcingContracts() {
           <p className="text-sm text-muted-foreground">Purchase commitments with vendors</p>
         </div>
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button
+              variant={bulkEditOpen ? 'default' : 'outline'}
+              onClick={() => setBulkEditOpen((o) => !o)}
+              className="gap-1.5"
+            >
+              <Table2 className="h-4 w-4" /> {bulkEditOpen ? 'Close Bulk Edit' : 'Bulk Edit'}
+            </Button>
+          )}
           <ViewToggle value={viewMode} onChange={setViewMode} />
           <Button variant="outline" onClick={() => setCreateReleaseOpen(true)} className="gap-1.5">
             <Plus className="h-4 w-4" /> New Release
@@ -324,6 +341,21 @@ export default function SourcingContracts() {
         </div>
       </div>
 
+      {bulkEditOpen && isAdmin && (
+        <BulkEditGrid
+          tableKey="contracts"
+          title="Bulk Edit — Forward Contracts"
+          columns={contractsBulk.columns}
+          rows={contractsBulk.rows}
+          isLoading={contractsBulk.isLoading}
+          getRowId={contractsBulk.getRowId}
+          onCellSave={contractsBulk.onCellSave}
+          csvFilename={`contracts-${new Date().toISOString().slice(0, 10)}.csv`}
+          onClose={() => setBulkEditOpen(false)}
+        />
+      )}
+
+      {!bulkEditOpen && (
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -344,8 +376,9 @@ export default function SourcingContracts() {
           ))}
         </div>
       </div>
+      )}
 
-      {isLoading ? (
+      {!bulkEditOpen && (isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : filtered.length === 0 ? (
         <p className="text-sm text-muted-foreground">{search || statusFilter !== 'ALL' || categoryFilter !== 'ALL' ? 'No contracts match your filters.' : 'No contracts yet. Add one to get started.'}</p>
@@ -396,7 +429,7 @@ export default function SourcingContracts() {
             </TableBody>
           </Table>
         </div>
-      )}
+      ))}
 
       <ContractDetailPanel contractId={selectedContractId} onClose={() => setSelectedContractId(null)} vendors={vendors} vendorMap={vendorMap} lots={lotsByContract} requestedByContract={requestedByContract} />
       <AddContractModal open={addModalOpen} onOpenChange={setAddModalOpen} vendors={vendors} />
@@ -967,7 +1000,7 @@ function ContractDetailPanel({
                             {lot.status === 'EN_ROUTE' && lot.expected_delivery_date
                               ? `Arriving ${format(new Date(lot.expected_delivery_date + 'T00:00:00'), 'MMM d, yyyy')}`
                               : lot.received_date
-                              ? `Received ${format(new Date(lot.received_date + 'T00:00:00'), 'MMM d, yyyy')}`
+                              ? `Received ${format(parseDateOnly(lot.received_date)!, 'MMM d, yyyy')}`
                               : ''}
                           </p>
                         </div>

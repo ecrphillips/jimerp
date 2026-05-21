@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
     // Verify account exists
     const { data: account, error: accountError } = await adminClient
       .from('accounts')
-      .select('id, account_name')
+      .select('id, account_name, programs')
       .eq('id', account_id)
       .single();
 
@@ -191,6 +191,11 @@ Deno.serve(async (req) => {
       console.error('[create-account-user] Profile insert error:', profileError.message);
     }
 
+    // Program-aware permission guardrail: never grant flags for programs the account doesn't have.
+    const programs: string[] = (account as any).programs ?? [];
+    const effectiveCanPlaceOrders = programs.includes('MANUFACTURING') ? can_place_orders : false;
+    const effectiveCanBookRoaster = programs.includes('COROASTING') ? can_book_roaster : false;
+
     // Create account_users record
     const { data: accountUser, error: auError } = await adminClient
       .from('account_users')
@@ -198,8 +203,8 @@ Deno.serve(async (req) => {
         user_id: userId,
         account_id,
         is_owner,
-        can_place_orders,
-        can_book_roaster,
+        can_place_orders: effectiveCanPlaceOrders,
+        can_book_roaster: effectiveCanBookRoaster,
         can_manage_locations: false,
         can_invite_users: false,
         location_access: 'ALL',

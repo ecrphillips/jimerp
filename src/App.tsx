@@ -25,8 +25,10 @@ import Clients from "@/pages/internal/Clients";
 import Products from "@/pages/internal/Products";
 import RoastGroups from "@/pages/internal/RoastGroups";
 import RoastGroupDetail from "@/pages/internal/RoastGroupDetail";
+import ProductMap from "@/pages/internal/ProductMap";
 import Pricing from "@/pages/internal/Pricing";
 import PricingAdmin from "@/pages/internal/PricingAdmin";
+
 import Quotes from "@/pages/internal/Quotes";
 import NewQuote from "@/pages/internal/NewQuote";
 import QuoteDetail from "@/pages/internal/QuoteDetail";
@@ -54,15 +56,19 @@ import MarketPriceAudit from "@/pages/internal/MarketPriceAudit";
 import MarketPricingAnalysis from "@/pages/shared/MarketPricingAnalysis";
 import UsersAccess from "@/pages/internal/UsersAccess";
 import AdminFeedback from "@/pages/internal/AdminFeedback";
+import ShopifyDebug from "@/pages/internal/ShopifyDebug";
 import Portal from "@/pages/client/Portal";
 import NewOrder from "@/pages/client/NewOrder";
 import OrderHistory from "@/pages/client/OrderHistory";
+import ClientProducts from "@/pages/client/Products";
 import Account from "@/pages/client/Account";
 import MemberSchedule from "@/pages/member/MemberSchedule";
 import MemberBilling from "@/pages/member/MemberBilling";
 import MemberAccount from "@/pages/member/MemberAccount";
 import MyNumbers from "@/pages/member/MyNumbers";
+import ClientMyNumbers from "@/pages/client/MyNumbers";
 import NotFound from "@/pages/NotFound";
+import ExplorePage from "@/pages/public/ExplorePage";
 
 const queryClient = new QueryClient();
 
@@ -75,10 +81,11 @@ const App = () => (
         <PreviewProvider>
         <AuthProvider>
           <Routes>
-            {/* Public auth routes */}
+            {/* Public routes — no auth required */}
             <Route path="/auth" element={<Auth />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/auth/set-password" element={<SetPassword />} />
+            <Route path="/explore/:token" element={<ExplorePage />} />
             <Route path="/" element={<Navigate to="/auth" replace />} />
 
             {/* Internal (Admin/Ops) */}
@@ -150,6 +157,11 @@ const App = () => (
             <Route path="/roast-groups/:id" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><RoastGroupDetail /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/product-map" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><ProductMap /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/pricing" element={
@@ -294,6 +306,11 @@ const App = () => (
                 <InternalLayout><AdminFeedback /></InternalLayout>
               </ProtectedRoute>
             } />
+            <Route path="/admin/shopify-debug" element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <InternalLayout><ShopifyDebug /></InternalLayout>
+              </ProtectedRoute>
+            } />
 
             {/* Client Portal */}
             <Route path="/portal" element={
@@ -311,6 +328,11 @@ const App = () => (
                 <ClientLayout><OrderHistory /></ClientLayout>
               </ProtectedRoute>
             } />
+            <Route path="/portal/products" element={
+              <ProtectedRoute allowedRoles={['CLIENT']}>
+                <ClientLayout><ClientProducts /></ClientLayout>
+              </ProtectedRoute>
+            } />
             <Route path="/portal/account" element={
               <ProtectedRoute allowedRoles={['CLIENT']}>
                 <ClientLayout><Account /></ClientLayout>
@@ -319,6 +341,16 @@ const App = () => (
             <Route path="/portal/market-pricing" element={
               <ProtectedRoute allowedRoles={['CLIENT']}>
                 <ClientLayout><MarketPricingAnalysis /></ClientLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/portal/numbers" element={
+              <ProtectedRoute allowedRoles={['CLIENT']}>
+                <ClientLayout><ClientMyNumbers /></ClientLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/client/numbers" element={
+              <ProtectedRoute allowedRoles={['CLIENT']}>
+                <ClientLayout><ClientMyNumbers /></ClientLayout>
               </ProtectedRoute>
             } />
 

@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { formatMoney, formatPerKg, formatPerLb } from '@/lib/formatMoney';
 import { format } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,7 +21,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Search, Check, FileText, AlertTriangle, CheckCircle2, Pencil, Trash2, PackageCheck } from 'lucide-react';
+import { Search, Check, FileText, AlertTriangle, CheckCircle2, Pencil, Trash2, PackageCheck, Table2 } from 'lucide-react';
+import { BulkEditGrid } from '@/components/bulk-edit/BulkEditGrid';
+import { useLotsBulkEdit } from '@/components/bulk-edit/configs/lots';
+import { useBulkEditLogoutCleanup } from '@/components/bulk-edit/useChangeHighlights';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { CoverageCalendar } from '@/components/sourcing/CoverageCalendar';
 import { ViewToggle, useViewMode } from '@/components/sourcing/ViewToggle';
@@ -29,6 +33,7 @@ import { BookValueReportModal } from '@/components/sourcing/BookValueReportModal
 import { MarkLotReceivedModal } from '@/components/sourcing/MarkLotReceivedModal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useDefaultPricingFinancing } from '@/hooks/useDefaultPricingFinancing';
+import { useEffectiveFxRate } from '@/lib/fxRate';
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -147,8 +152,11 @@ function CostingStatusBadge({ costingStatus }: { costingStatus: string }) {
 export default function SourcingLots() {
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') === 'coverage' ? 'coverage' : 'lots';
-  const { authUser } = useAuth();
+  const { authUser, user } = useAuth();
   const isAdmin = authUser?.role === 'ADMIN';
+  useBulkEditLogoutCleanup(user?.id);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const lotsBulk = useLotsBulkEdit(bulkEditOpen);
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [physicalFilter, setPhysicalFilter] = useState<string>('ALL');
@@ -251,15 +259,40 @@ export default function SourcingLots() {
           <p className="text-sm text-muted-foreground">Green coffee inventory</p>
         </div>
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button
+              variant={bulkEditOpen ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setBulkEditOpen((o) => !o)}
+              className="gap-1.5"
+            >
+              <Table2 className="h-4 w-4" /> {bulkEditOpen ? 'Close Bulk Edit' : 'Bulk Edit'}
+            </Button>
+          )}
           <ViewToggle value={viewMode} onChange={setViewMode} />
           <Button variant="outline" size="sm" onClick={() => setFloorCountOpen(true)}>Floor Count</Button>
           <Button variant="outline" size="sm" onClick={() => setBookValueOpen(true)}>Book Value Report</Button>
         </div>
       </div>
 
+      {bulkEditOpen && isAdmin && (
+        <BulkEditGrid
+          tableKey="lots"
+          title="Bulk Edit — Green Lots"
+          columns={lotsBulk.columns}
+          rows={lotsBulk.rows}
+          isLoading={lotsBulk.isLoading}
+          getRowId={lotsBulk.getRowId}
+          onCellSave={lotsBulk.onCellSave}
+          csvFilename={`lots-${new Date().toISOString().slice(0, 10)}.csv`}
+          onClose={() => setBulkEditOpen(false)}
+        />
+      )}
+
       <FloorCountModal open={floorCountOpen} onOpenChange={setFloorCountOpen} lots={lots} purchaseLineByLotId={purchaseLineByLotId} contractMap={contractMap} />
       <BookValueReportModal open={bookValueOpen} onOpenChange={setBookValueOpen} lots={lots} purchaseLineByLotId={purchaseLineByLotId} />
 
+      {!bulkEditOpen && (
       <Tabs defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="lots">Lots</TabsTrigger>
@@ -412,6 +445,7 @@ export default function SourcingLots() {
           <CoverageCalendar />
         </TabsContent>
       </Tabs>
+      )}
 
       <LotDetailPanel lotId={selectedLotId} onClose={() => setSelectedLotId(null)} contractMap={contractMap} purchaseLineByLotId={purchaseLineByLotId} onMarkReceived={(l) => setMarkReceivedLot(l)} />
 
@@ -679,6 +713,8 @@ function LotDetailPanel({
     },
   });
 
+  const { effectiveRate: liveFxRate } = useEffectiveFxRate();
+
   // ─── Local cost state ────────────────────────────────────
   const [fxRate, setFxRate] = useState<number | null>(null);
   const [invoiceAmt, setInvoiceAmt] = useState<number>(0);
@@ -703,7 +739,8 @@ function LotDetailPanel({
   // Sync from DB
   useEffect(() => {
     if (lot) {
-      setFxRate(lot.fx_rate);
+      // Prefill with live BoC rate when lot has no confirmed fx_rate yet
+      setFxRate(lot.fx_rate ?? liveFxRate);
       if (lot.invoice_is_usd && lot.fx_rate && lot.invoice_amount_cad != null) {
         setInvoiceAmt(lot.invoice_amount_cad / lot.fx_rate);
       } else {
@@ -733,11 +770,12 @@ function LotDetailPanel({
       setEditVendorInvoice(lot.vendor_invoice_number || '');
       setEditLotNumber(lot.lot_number || '');
     }
-  }, [lot]);
+  }, [lot, liveFxRate]);
 
   const toCad = useCallback((val: number | null, isUsd: boolean, rate: number | null) => {
     if (val == null) return null;
     if (isUsd && rate) return val * rate;
+    if (isUsd && !rate) return null; // USD cost with no FX rate — cannot convert
     return val;
   }, []);
 
@@ -892,6 +930,9 @@ function LotDetailPanel({
     !!lot.other_costs_confirmed_at
   ) : false;
 
+  // Prevent confirming costs when any USD-flagged cost has no FX rate
+  const hasUsdCostWithoutRate = (invoiceIsUsd || carryFeesIsUsd || freightIsUsd) && !fxRate;
+
   // Notes
   const [noteText, setNoteText] = useState('');
   const addNoteMutation = useMutation({
@@ -936,7 +977,7 @@ function LotDetailPanel({
     lines.push(`Bags: ${lot.bags_released}`);
     lines.push(`Bag Size: ${lot.bag_size_kg} kg`);
     lines.push(`kg Received: ${kgReceived}`);
-    if (lot.received_date) lines.push(`Received: ${format(new Date(lot.received_date + 'T00:00:00'), 'MMM d, yyyy')}`);
+    if (lot.received_date) lines.push(`Received: ${format(parseDateOnly(lot.received_date)!, 'MMM d, yyyy')}`);
     if (lot.warehouse_location) lines.push(`Warehouse: ${lot.warehouse_location}`);
     if (lot.exceptions_noted) {
       lines.push(`Exceptions: Yes`);
@@ -1186,7 +1227,7 @@ function LotDetailPanel({
                     )}
                   </div>
                 )}
-                <div><span className="text-muted-foreground">Received:</span> {lot.received_date ? format(new Date(lot.received_date + 'T00:00:00'), 'MMM d, yyyy') : '—'}</div>
+                <div><span className="text-muted-foreground">Received:</span> {lot.received_date ? format(parseDateOnly(lot.received_date)!, 'MMM d, yyyy') : '—'}</div>
                 <div><span className="text-muted-foreground">Carrier:</span> {lot.carrier || '—'}</div>
               </div>
 
@@ -1331,7 +1372,7 @@ function LotDetailPanel({
                   <Button size="sm" variant="outline" onClick={saveCostValues} disabled={fieldSaveMutation.isPending}>
                     Save Draft
                   </Button>
-                  <Button onClick={() => confirmCostsMutation.mutate()} disabled={confirmCostsMutation.isPending}>
+                  <Button onClick={() => confirmCostsMutation.mutate()} disabled={confirmCostsMutation.isPending || hasUsdCostWithoutRate} title={hasUsdCostWithoutRate ? 'Set an FX rate before confirming — one or more costs are in USD' : undefined}>
                     {confirmCostsMutation.isPending ? 'Confirming…' : 'Confirm Costs'}
                   </Button>
                 </div>

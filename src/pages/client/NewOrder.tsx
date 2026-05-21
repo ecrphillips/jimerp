@@ -12,13 +12,16 @@ import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePreview } from '@/contexts/PreviewContext';
 import { toast } from 'sonner';
-import { Plus, Minus, Trash2, Package } from 'lucide-react';
+import { Plus, Minus, Trash2, Package, Eye } from 'lucide-react';
 import { GramPackagingBadge, formatGramsLabel } from '@/components/GramPackagingBadge';
 import { UnusualOrderModal, type FlaggedItem } from '@/components/client/UnusualOrderModal';
 import { LocationSelect } from '@/components/orders/LocationSelect';
 import { CaseQuantityInput } from '@/components/orders/CaseQuantityInput';
 import { useClientOrderingConstraints, validateCaseQuantity } from '@/hooks/useClientOrderingConstraints';
+import { blockNonIntegerKeys } from '@/lib/numericInput';
+import { DatePicker } from '@/components/ui/date-picker';
 import type { GrindOption, DeliveryMethod } from '@/types/database';
 
 interface LineItem {
@@ -57,6 +60,7 @@ function buildDisplayName(productName: string, packagingTypeName: string | null,
 
 export default function NewOrder() {
   const { authUser } = useAuth();
+  const { isPreviewMode } = usePreview();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -72,8 +76,11 @@ export default function NewOrder() {
   const minSpecificDate = useMemo(() => {
     const date = new Date();
     date.setDate(date.getDate() + 3);
-    return date.toISOString().split('T')[0];
+    return date;
   }, []);
+
+  const todayIsoDate = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const isShipDateInPast = shipPreference === 'SPECIFIC' && !!requestedShipDate && requestedShipDate < todayIsoDate;
 
   const [showUnusualModal, setShowUnusualModal] = useState(false);
   const [flaggedItems, setFlaggedItems] = useState<FlaggedItem[]>([]);
@@ -218,7 +225,7 @@ export default function NewOrder() {
       const { data: lastOrder } = await supabase
         .from('orders')
         .select('id, order_line_items(product_id, quantity_units)')
-        .eq('client_id', authUser.accountId)
+        .eq('account_id', authUser.accountId)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'])
         .order('created_at', { ascending: false })
         .limit(1)
@@ -227,7 +234,7 @@ export default function NewOrder() {
       const { data: recentOrders } = await supabase
         .from('orders')
         .select('id')
-        .eq('client_id', authUser.accountId)
+        .eq('account_id', authUser.accountId)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'])
         .order('created_at', { ascending: false })
         .limit(5);
@@ -359,6 +366,11 @@ export default function NewOrder() {
       }
     }
 
+    if (isShipDateInPast) {
+      const ok = window.confirm('Requested Ship Date is in the past. Submit order anyway?');
+      if (!ok) return;
+    }
+
     const isUnusual = await checkUnusualOrderSize();
     if (isUnusual) {
       setShowUnusualModal(true);
@@ -377,7 +389,7 @@ export default function NewOrder() {
         'validate-order-constraints',
         {
           body: {
-            client_id: authUser.accountId,
+            account_id: authUser.accountId,
             line_items: lineItems.map((li) => ({
               product_id: li.productId,
               quantity_units: li.quantity,
@@ -404,7 +416,7 @@ export default function NewOrder() {
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
-          client_id: authUser.accountId,
+          account_id: authUser.accountId,
           location_id: selectedLocationId || null,
           order_number: '',
           status: 'SUBMITTED',
@@ -536,6 +548,7 @@ export default function NewOrder() {
                 value={lineItem?.quantity ?? ''}
                 placeholder="0"
                 onChange={(e) => handleQuantityInputChange(p.id, e.target.value)}
+                onKeyDown={blockNonIntegerKeys}
               />
               <Button
                 size="icon"
@@ -627,6 +640,7 @@ export default function NewOrder() {
                         value={lineItem?.quantity ?? ''}
                         placeholder="0"
                         onChange={(e) => handleQuantityInputChange(variant.id, e.target.value)}
+                        onKeyDown={blockNonIntegerKeys}
                       />
                       <Button
                         size="icon"
@@ -669,6 +683,13 @@ export default function NewOrder() {
       <div className="page-header">
         <h1 className="page-title">New Order</h1>
       </div>
+
+      {isPreviewMode && (
+        <Alert className="mb-4 border-amber-400 bg-amber-50 text-amber-900">
+          <Eye className="h-4 w-4" />
+          <AlertDescription>Preview mode — order submission is disabled.</AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[1fr,400px]">
         {/* Left: Product List */}
@@ -762,6 +783,7 @@ export default function NewOrder() {
                                 className="w-12 h-6 text-center text-xs px-1"
                                 value={li.quantity}
                                 onChange={(e) => handleQuantityInputChange(li.productId, e.target.value)}
+                                onKeyDown={blockNonIntegerKeys}
                               />
                               <Button
                                 size="icon"
@@ -860,13 +882,17 @@ export default function NewOrder() {
                     <Label htmlFor="shipDate" className="text-sm">
                       Select date (at least 3 days out)
                     </Label>
-                    <Input
+                    <DatePicker
                       id="shipDate"
-                      type="date"
-                      value={requestedShipDate}
-                      min={minSpecificDate}
-                      onChange={(e) => setRequestedShipDate(e.target.value)}
+                      value={requestedShipDate || null}
+                      onChange={(v) => setRequestedShipDate(v ?? '')}
+                      minDate={minSpecificDate}
                     />
+                    {isShipDateInPast && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        ⚠ That date has already passed. Confirm this is intentional.
+                      </p>
+                    )}
                   </div>
                 )}
                 
@@ -899,7 +925,7 @@ export default function NewOrder() {
               <Button
                 className="w-full"
                 onClick={handleSubmitClick}
-                disabled={submitting || lineItems.length === 0}
+                disabled={isPreviewMode || submitting || lineItems.length === 0}
               >
                 {submitting ? 'Submitting…' : 'Submit Order'}
               </Button>

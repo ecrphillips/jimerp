@@ -129,6 +129,23 @@ function useWipLedgerTransactions() {
 }
 
 /**
+ * Fetch manual WIP adjustments (opening balances, recounts, losses, etc.)
+ * These are separate from inventory_transactions and must be included for correct WIP totals.
+ */
+function useWipManualAdjustments() {
+  return useQuery({
+    queryKey: ['authoritative-wip-manual-adjustments'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('wip_adjustments')
+        .select('roast_group, kg_delta');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
+/**
  * Fetch all products with roast_group mapping
  */
 function useProductsWithRoastGroup() {
@@ -252,11 +269,12 @@ function useOpenOrderLines() {
  */
 export function useAuthoritativeWip() {
   const { data: wipTransactions, isLoading: wipLoading } = useWipLedgerTransactions();
+  const { data: manualAdjustments, isLoading: manualLoading } = useWipManualAdjustments();
   const { data: roastGroups, isLoading: roastGroupsLoading } = useRoastGroupsInfo();
-  
+
   const wip = useMemo((): Record<string, AuthoritativeWip> => {
     if (!wipTransactions) return {};
-    
+
     // Track which roast groups are blends
     const blendGroups = new Set<string>();
     for (const rg of roastGroups ?? []) {
@@ -264,17 +282,16 @@ export function useAuthoritativeWip() {
         blendGroups.add(rg.roast_group);
       }
     }
-    
+
     // Aggregate transactions by roast group and type
     const roastedByGroup: Record<string, number> = {};
     const consumedByGroup: Record<string, number> = {};
     const adjustmentsByGroup: Record<string, number> = {};
-    
+
     for (const tx of wipTransactions) {
       if (!tx.roast_group) continue;
       const kg = Number(tx.quantity_kg ?? 0);
-      const notes = tx.notes?.toLowerCase() ?? '';
-      
+
       switch (tx.transaction_type) {
         case 'ROAST_OUTPUT':
           // Direct roast output - positive kg
@@ -291,7 +308,6 @@ export function useAuthoritativeWip() {
           break;
         case 'ADJUSTMENT':
           // Adjustments can be positive (blend output, reverts) or negative (blend consume)
-          // We track them separately to show in the UI
           adjustmentsByGroup[tx.roast_group] = (adjustmentsByGroup[tx.roast_group] ?? 0) + kg;
           break;
         case 'LOSS':
@@ -300,30 +316,30 @@ export function useAuthoritativeWip() {
           break;
       }
     }
-    
+
+    // Add manual adjustments from wip_adjustments table (opening balances, recounts, etc.)
+    // These are NOT in inventory_transactions but must be included for correct authoritative WIP.
+    for (const adj of manualAdjustments ?? []) {
+      if (!adj.roast_group) continue;
+      adjustmentsByGroup[adj.roast_group] = (adjustmentsByGroup[adj.roast_group] ?? 0) + Number(adj.kg_delta ?? 0);
+    }
+
     // Combine into authoritative WIP
     const allGroups = new Set([
-      ...Object.keys(roastedByGroup), 
+      ...Object.keys(roastedByGroup),
       ...Object.keys(consumedByGroup),
       ...Object.keys(adjustmentsByGroup),
     ]);
     const result: Record<string, AuthoritativeWip> = {};
-    
+
     for (const rg of allGroups) {
       const roasted = roastedByGroup[rg] ?? 0;
       const consumed = consumedByGroup[rg] ?? 0;
       const adjusted = adjustmentsByGroup[rg] ?? 0;
-      
-      // For blends: roasted_completed_kg may still include component roast outputs
-      // but the net WIP formula is the same: roasted - consumed + adjustments
-      // Adjustments for blends include "Created blend" (positive) and component consumption is tracked elsewhere
-      const isBlend = blendGroups.has(rg);
-      
-      // WIP = roasted - consumed + adjustments
-      // For blends, roasted might be 0 if blend output comes via ADJUSTMENT
-      // For single origins, roasted is the primary source
+
+      // WIP = roasted - consumed + adjustments (includes manual adjustments from wip_adjustments)
       const wipAvailable = roasted - consumed + adjusted;
-      
+
       result[rg] = {
         roast_group: rg,
         roasted_completed_kg: roasted,
@@ -332,14 +348,46 @@ export function useAuthoritativeWip() {
         wip_available_kg: Math.max(0, wipAvailable),
       };
     }
-    
+
     return result;
-  }, [wipTransactions, roastGroups]);
-  
+  }, [wipTransactions, manualAdjustments, roastGroups]);
+
   return {
     data: wip,
-    isLoading: wipLoading || roastGroupsLoading,
+    isLoading: wipLoading || manualLoading || roastGroupsLoading,
   };
+}
+
+/**
+ * Planned-batch summary by roast_group.
+ * Informational only — does NOT count toward WIP.
+ * Skips batches earmarked for a blend (planned_for_blend_roast_group set)
+ * and batches already consumed by a blend (consumed_by_blend_at set).
+ */
+export interface PlannedWipByGroup {
+  count: number;
+  planned_kg: number;
+}
+
+export function useAuthoritativePlannedWip() {
+  const { data: batches, isLoading } = useRoastedBatches();
+
+  const planned = useMemo((): Record<string, PlannedWipByGroup> => {
+    const result: Record<string, PlannedWipByGroup> = {};
+    for (const b of batches ?? []) {
+      if (b.status !== 'PLANNED') continue;
+      if (b.planned_for_blend_roast_group) continue;
+      if (b.consumed_by_blend_at) continue;
+      if (!b.roast_group) continue;
+      const entry = result[b.roast_group] ?? { count: 0, planned_kg: 0 };
+      entry.count += 1;
+      entry.planned_kg += Number(b.planned_output_kg ?? 0);
+      result[b.roast_group] = entry;
+    }
+    return result;
+  }, [batches]);
+
+  return { data: planned, isLoading };
 }
 
 /**

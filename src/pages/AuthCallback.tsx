@@ -15,6 +15,28 @@ export default function AuthCallback() {
     navigate('/auth', { replace: true });
   };
 
+  const resolveClientLanding = async (userId: string): Promise<'/member-portal' | '/portal'> => {
+    const { data: accountUser } = await supabase
+      .from('account_users')
+      .select('account_id, can_book_roaster')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (!accountUser?.account_id || !accountUser.can_book_roaster) {
+      return '/portal';
+    }
+
+    const { data: acct } = await supabase
+      .from('accounts')
+      .select('programs')
+      .eq('id', accountUser.account_id)
+      .maybeSingle();
+
+    const programs = (acct?.programs as string[] | null) ?? [];
+    return programs.includes('COROASTING') ? '/member-portal' : '/portal';
+  };
+
   useEffect(() => {
     const handleCallback = async () => {
       try {
@@ -68,7 +90,8 @@ export default function AuthCallback() {
             }
 
             if (roleData.role === 'CLIENT') {
-              navigate('/portal', { replace: true });
+              const landing = await resolveClientLanding(data.user.id);
+              navigate(landing, { replace: true });
             } else {
               navigate('/production', { replace: true });
             }
@@ -92,7 +115,8 @@ export default function AuthCallback() {
           }
 
           if (roleData.role === 'CLIENT') {
-            navigate('/portal', { replace: true });
+            const landing = await resolveClientLanding(session.user.id);
+            navigate(landing, { replace: true });
           } else {
             navigate('/production', { replace: true });
           }

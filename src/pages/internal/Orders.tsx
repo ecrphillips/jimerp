@@ -1,11 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { usePaginatedQuery } from '@/hooks/usePaginatedQuery';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subDays, startOfDay } from 'date-fns';
+import { parseDateOnly } from '@/lib/dateOnly';
 import { 
   MessageSquare, 
   Plus,
@@ -41,23 +43,38 @@ export default function Orders() {
     status: string;
   }>({ open: false, orderId: '', orderNumber: '', status: '' });
 
-  // Update URL when history days changes
+  // Update URL when history days changes. Also expand the server-side
+  // pagination window so the additional days have rows to filter against.
   const loadMoreHistory = () => {
     const newDays = historyDays + HISTORY_INCREMENT;
     setSearchParams({ historyDays: String(newDays) });
+    if (hasMoreFromServer) {
+      loadMoreOrders();
+    }
   };
 
-  // Fetch orders with line items for progress calculation
-  const { data, isLoading, error, refetch } = useQuery({
+  // Fetch orders with line items for progress calculation (paginated).
+  const {
+    rows: data,
+    isLoading,
+    error,
+    refetch,
+    hasMore: hasMoreFromServer,
+    loadMore: loadMoreOrders,
+    total: totalOrdersInDb,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } = usePaginatedQuery<any>({
     queryKey: ['orders'],
-    queryFn: async () => {
-      const { data, error } = await supabase
+    pageSize: 100,
+    fetchPage: async ({ offset, limit }) => {
+      const { data, error, count } = await supabase
         .from('orders')
-        .select(`
-          id, 
-          order_number, 
-          status, 
-          requested_ship_date, 
+        .select(
+          `
+          id,
+          order_number,
+          status,
+          requested_ship_date,
           work_deadline,
           work_deadline_at,
           internal_ops_notes,
@@ -71,18 +88,21 @@ export default function Orders() {
             client:clients(name),
             account:accounts(account_name),
             order_line_items(id, product_id, quantity_units)
-        `)
-        .order('created_at', { ascending: false });
+        `,
+          { count: 'exact' }
+        )
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
 
       if (error) throw error;
-      return data ?? [];
+      return { rows: data ?? [], count };
     },
   });
 
   // Helper to get the "age reference" date for an order
   const getAgeReference = (order: NonNullable<typeof data>[0]) => {
     if (order.work_deadline_at) return new Date(order.work_deadline_at);
-    if (order.requested_ship_date) return new Date(order.requested_ship_date);
+    if (order.requested_ship_date) return parseDateOnly(order.requested_ship_date)!;
     return new Date(order.created_at);
   };
 
@@ -183,8 +203,8 @@ export default function Orders() {
       if (aDeadline === null && bDeadline !== null) return 1;
       if (aDeadline !== null && bDeadline === null) return -1;
       if (aDeadline === null && bDeadline === null) {
-        const aShip = a.requested_ship_date ? new Date(a.requested_ship_date).getTime() : Infinity;
-        const bShip = b.requested_ship_date ? new Date(b.requested_ship_date).getTime() : Infinity;
+        const aShip = a.requested_ship_date ? parseDateOnly(a.requested_ship_date)!.getTime() : Infinity;
+        const bShip = b.requested_ship_date ? parseDateOnly(b.requested_ship_date)!.getTime() : Infinity;
         if (aShip !== bShip) return aShip - bShip;
         return a.order_number.localeCompare(b.order_number);
       }
@@ -193,8 +213,8 @@ export default function Orders() {
       const directedComparison = deadlineSortDir === 'asc' ? comparison : -comparison;
       if (directedComparison !== 0) return directedComparison;
       
-      const aShip = a.requested_ship_date ? new Date(a.requested_ship_date).getTime() : Infinity;
-      const bShip = b.requested_ship_date ? new Date(b.requested_ship_date).getTime() : Infinity;
+      const aShip = a.requested_ship_date ? parseDateOnly(a.requested_ship_date)!.getTime() : Infinity;
+      const bShip = b.requested_ship_date ? parseDateOnly(b.requested_ship_date)!.getTime() : Infinity;
       if (aShip !== bShip) return aShip - bShip;
       return a.order_number.localeCompare(b.order_number);
     });
@@ -278,7 +298,7 @@ export default function Orders() {
                   : `No orders in the last ${historyDays} days.`}
               </p>
               {/* Always show load more when there may be older orders */}
-              {!needsInvoicingFilter && totalOrderCount > 0 && historyDays < 90 && (
+              {!needsInvoicingFilter && (totalOrdersInDb ?? totalOrderCount) > 0 && historyDays < 90 && (
                 <div className="flex justify-center">
                   <Button
                     variant="ghost"
@@ -446,7 +466,7 @@ export default function Orders() {
               })}
 
               {/* Load more history control - show if there are hidden orders OR if we might have more */}
-              {!needsInvoicingFilter && historyDays < 90 && (hasMoreHistory || totalOrderCount > visibleOrders.length) && (
+              {!needsInvoicingFilter && historyDays < 90 && (hasMoreHistory || hasMoreFromServer || totalOrderCount > visibleOrders.length) && (
                 <div className="pt-4 flex justify-center">
                   <Button
                     variant="ghost"

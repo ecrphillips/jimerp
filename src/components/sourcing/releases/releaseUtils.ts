@@ -87,6 +87,41 @@ export function bookValuePerLbUsd(
   return bookValuePerKgUsd(pricePerLbUsd, sharedShareUsdPerKg) / KG_PER_LB;
 }
 
+// ─── Multi-source line types ───────────────────────────────────────────────
+
+export type SelectedLineSource = 'CONTRACT' | 'PURCHASE' | 'ADHOC';
+
+export interface SelectedLine {
+  // key — unique within the modal's selected map
+  key: string;
+  source_type: SelectedLineSource;
+  // vendor resolution
+  vendor_id: string | null;
+  vendor_name: string;
+  vendor_abbr: string | null;
+  // contract source (source_type === 'CONTRACT')
+  contract_id: string | null;
+  contract_name: string | null;
+  internal_contract_number: string | null;
+  vendor_contract_number: string | null;
+  // purchase source (source_type === 'PURCHASE')
+  purchase_line_id: string | null;
+  purchase_id: string | null;
+  existing_lot_id: string | null; // non-null if the purchase line already has a lot
+  // origin / display (populated for all source types)
+  lot_identifier: string | null;
+  origin_country: string | null;
+  region: string | null;
+  producer: string | null;
+  variety: string | null;
+  bag_size_kg: number;
+  // user-editable
+  bags_requested: number;
+  price_amount: string;
+  price_unit: string;
+  line_notes: string;
+}
+
 export function statusBadgeClass(status: string): string {
   if (status === 'INVOICED') return 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30';
   return 'bg-amber-500/15 text-amber-700 border-amber-500/30';

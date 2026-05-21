@@ -18,6 +18,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ArrowLeft, CalendarIcon, Save, Trash2, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useEffectiveFxRate } from '@/lib/fxRate';
 import { formatPerKg, formatPerLb } from '@/lib/formatMoney';
 import {
   Currency,
@@ -57,6 +58,13 @@ interface LineRow {
   price_per_lb_usd: number | null;
   original_price: any;
   notes: string | null;
+  source_type: string | null;
+  vendor_id: string | null;
+  lot_identifier: string | null;
+  origin_country: string | null;
+  region: string | null;
+  producer: string | null;
+  variety: string | null;
 }
 
 interface LotRow {
@@ -116,6 +124,23 @@ export default function ReleaseDetail() {
     enabled: !!id,
   });
 
+  const lineVendorIds = useMemo(() => [...new Set(lines.map(l => l.vendor_id).filter(Boolean) as string[])], [lines]);
+  const { data: lineVendors = [] } = useQuery({
+    queryKey: ['green-vendors-by-ids', lineVendorIds],
+    queryFn: async () => {
+      if (lineVendorIds.length === 0) return [] as { id: string; name: string }[];
+      const { data, error } = await supabase.from('green_vendors').select('id, name').in('id', lineVendorIds);
+      if (error) throw error;
+      return data as { id: string; name: string }[];
+    },
+    enabled: lineVendorIds.length > 0,
+  });
+  const lineVendorMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    lineVendors.forEach(v => { m[v.id] = v.name; });
+    return m;
+  }, [lineVendors]);
+
   const lotIds = lines.map(l => l.lot_id).filter(Boolean) as string[];
   const { data: lots = [] } = useQuery({
     queryKey: ['green-lots-by-release', id, lotIds],
@@ -151,6 +176,9 @@ export default function ReleaseDetail() {
     contracts.forEach(c => m[c.id] = c);
     return m;
   }, [contracts]);
+
+  const { effectiveRate } = useEffectiveFxRate();
+  const placeholderFxRate: number = effectiveRate ?? 1.40;
 
   // Hydrate edit state when release loads
   useEffect(() => {
@@ -207,33 +235,88 @@ export default function ReleaseDetail() {
         const priceUsdPerLb = Number(l.price_per_lb_usd) || 0;
         const coffeeCostUsd = priceUsdPerLb > 0 ? priceUsdPerLb * KG_PER_LB * lineKg : null;
 
+        // Currency flags preserved directly from the release form (never inferred from value comparisons)
+        const carryIsUsd = editShared.carry?.currency === 'USD';
+        const freightIsUsd = editShared.freight?.currency === 'USD';
+        const dutiesIsUsd = editShared.duties?.currency === 'USD';
+        const feesIsUsd = editShared.fees?.currency === 'USD';
+        const otherIsUsd = editShared.other?.currency === 'USD';
+
+        // Per-lot prorated amounts (raw, in their original currency)
         const lotCarryUsd = bucketTotals.carry.usd * kgShare;
         const lotCarryCad = bucketTotals.carry.cad * kgShare;
-        const lotFreightCad = (bucketTotals.freight.usd + bucketTotals.freight.cad) * kgShare;
-        const lotDutiesCad = (bucketTotals.duties.usd + bucketTotals.duties.cad) * kgShare;
-        const lotFeesCad = (bucketTotals.fees.usd + bucketTotals.fees.cad) * kgShare;
-        const lotOtherCad = (bucketTotals.other.usd + bucketTotals.other.cad) * kgShare;
+        const lotFreightUsd = bucketTotals.freight.usd * kgShare;
+        const lotFreightCadRaw = bucketTotals.freight.cad * kgShare;
+        const lotDutiesUsd = bucketTotals.duties.usd * kgShare;
+        const lotDutiesCadRaw = bucketTotals.duties.cad * kgShare;
+        const lotFeesUsd = bucketTotals.fees.usd * kgShare;
+        const lotFeesCadRaw = bucketTotals.fees.cad * kgShare;
+        const lotOtherUsd = bucketTotals.other.usd * kgShare;
+        const lotOtherCadRaw = bucketTotals.other.cad * kgShare;
 
-        const newBookKg = bookValuePerKgUsd(l.price_per_lb_usd, sharedShareUsdPerKg);
+        // Determine whether this lot has any USD cost → inherit the placeholder FX rate
+        const lotHasUsdCost =
+          coffeeCostUsd != null ||
+          (carryIsUsd && lotCarryUsd > 0) ||
+          (freightIsUsd && lotFreightUsd > 0) ||
+          (dutiesIsUsd && lotDutiesUsd > 0) ||
+          (feesIsUsd && lotFeesUsd > 0) ||
+          (otherIsUsd && lotOtherUsd > 0);
+
+        const lotFxRate = lotHasUsdCost ? placeholderFxRate : null;
+
+        // Convert each cost to CAD using the placeholder rate (null if USD cost but no rate)
+        const coffeeCostCad = coffeeCostUsd != null && lotFxRate != null
+          ? coffeeCostUsd * lotFxRate
+          : null;
+
+        const carryFeesCad = carryIsUsd
+          ? (lotFxRate != null ? lotCarryUsd * lotFxRate : null)
+          : (lotCarryCad > 0 ? lotCarryCad : null);
+
+        const freightCad = freightIsUsd
+          ? (lotFxRate != null ? lotFreightUsd * lotFxRate : null)
+          : (lotFreightCadRaw > 0 ? lotFreightCadRaw : null);
+
+        const dutiesCad = dutiesIsUsd
+          ? (lotFxRate != null ? lotDutiesUsd * lotFxRate : null)
+          : (lotDutiesCadRaw > 0 ? lotDutiesCadRaw : null);
+
+        const feesCad = feesIsUsd
+          ? (lotFxRate != null ? lotFeesUsd * lotFxRate : null)
+          : (lotFeesCadRaw > 0 ? lotFeesCadRaw : null);
+
+        const otherCad = otherIsUsd
+          ? (lotFxRate != null ? lotOtherUsd * lotFxRate : null)
+          : (lotOtherCadRaw > 0 ? lotOtherCadRaw : null);
+
+        // Book value in CAD using the placeholder rate
+        const totalCad = (coffeeCostCad ?? 0) + (carryFeesCad ?? 0) + (freightCad ?? 0) + (dutiesCad ?? 0) + (feesCad ?? 0) + (otherCad ?? 0);
+        const newBookKgCad = lineKg > 0 && totalCad > 0 ? totalCad / lineKg : null;
 
         const lotPatch: any = {
           // Arrival
           status: editArrival === 'RECEIVED' ? 'RECEIVED' : 'EN_ROUTE',
-          // Costs (mirror USD into *_cad with fx_rate=1 placeholder for surfacing on the lot detail panel)
-          fx_rate: 1,
+          // FX rate: placeholder if any USD cost; null if all CAD
+          fx_rate: lotFxRate,
+          // Invoice (coffee cost — always USD when price_per_lb_usd is set)
           invoice_amount_usd: coffeeCostUsd,
-          invoice_amount_cad: coffeeCostUsd,
-          invoice_is_usd: true,
-          carry_fees_usd: lotCarryUsd > 0 ? lotCarryUsd : null,
-          carry_fees_cad: (lotCarryUsd + lotCarryCad) > 0 ? (lotCarryUsd + lotCarryCad) : null,
-          carry_fees_is_usd: lotCarryUsd >= lotCarryCad,
-          freight_cad: lotFreightCad > 0 ? lotFreightCad : null,
-          freight_is_usd: false,
-          duties_cad: lotDutiesCad > 0 ? lotDutiesCad : null,
-          transaction_fees_cad: lotFeesCad > 0 ? lotFeesCad : null,
-          other_costs_cad: lotOtherCad > 0 ? lotOtherCad : null,
-          book_value_per_kg: newBookKg > 0 ? newBookKg : null,
-          market_value_per_kg: newBookKg > 0 ? newBookKg : null,
+          invoice_amount_cad: coffeeCostCad,
+          invoice_is_usd: coffeeCostUsd != null,
+          // Carry fees — currency preserved from release form
+          carry_fees_usd: carryIsUsd && lotCarryUsd > 0 ? lotCarryUsd : null,
+          carry_fees_cad: carryFeesCad,
+          carry_fees_is_usd: carryIsUsd,
+          // Freight — currency preserved from release form
+          freight_cad: freightCad,
+          freight_is_usd: freightIsUsd,
+          // Other shared costs (CAD-only columns; USD amounts converted via placeholder rate)
+          duties_cad: dutiesCad,
+          transaction_fees_cad: feesCad,
+          other_costs_cad: otherCad,
+          // Book value in CAD (estimate using placeholder rate)
+          book_value_per_kg: newBookKgCad,
+          market_value_per_kg: newBookKgCad,
         };
 
         if (editArrival === 'RECEIVED' && editReceived) {
@@ -330,7 +413,11 @@ export default function ReleaseDetail() {
       <Card>
         <CardContent className="p-5 space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold">{vendor?.name || 'Release'}</h1>
+            <h1 className="text-2xl font-bold">
+              {release.vendor_id
+                ? (vendor?.name || 'Release')
+                : (lineVendorIds.length > 1 ? 'Multiple vendors' : (lineVendorIds.length === 1 ? (lineVendorMap[lineVendorIds[0]] || 'Release') : 'Release'))}
+            </h1>
             {release.po_number && (
               <Badge variant="outline" className="font-mono text-sm">{release.po_number}</Badge>
             )}
@@ -447,7 +534,9 @@ export default function ReleaseDetail() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Lot #</TableHead>
+                  <TableHead>Vendor</TableHead>
                   <TableHead>Origin</TableHead>
+                  <TableHead>Source</TableHead>
                   <TableHead className="text-right">Bags</TableHead>
                   <TableHead className="text-right">Total kg</TableHead>
                   <TableHead className="text-right">Coffee $/lb</TableHead>
@@ -465,10 +554,18 @@ export default function ReleaseDetail() {
                   const lineKg = (l.bags_requested || 0) * Number(l.bag_size_kg || 0);
                   const bookKg = bookValuePerKgUsd(l.price_per_lb_usd, sharedShareUsdPerKg);
                   const bookLb = bookValuePerLbUsd(l.price_per_lb_usd, sharedShareUsdPerKg);
+                  // Origin: use line-level field first (PURCHASE/ADHOC), fall back to contract
+                  const originDisplay = l.origin_country || contract?.origin_country || contract?.origin || '—';
+                  const vendorName = l.vendor_id ? (lineVendorMap[l.vendor_id] || '—') : (vendor?.name || '—');
+                  const sourceLabel = l.source_type === 'PURCHASE' ? 'Purchase' : l.source_type === 'ADHOC' ? 'Ad-hoc' : 'Contract';
                   return (
                     <TableRow key={l.id}>
                       <TableCell className="font-mono text-xs">{lot?.lot_number || '—'}</TableCell>
-                      <TableCell className="text-sm">{contract?.origin_country || contract?.origin || '—'}</TableCell>
+                      <TableCell className="text-sm">{vendorName}</TableCell>
+                      <TableCell className="text-sm">{originDisplay}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">{sourceLabel}</Badge>
+                      </TableCell>
                       <TableCell className="text-right">{l.bags_requested}</TableCell>
                       <TableCell className="text-right">{lineKg.toLocaleString()} kg</TableCell>
                       <TableCell className="text-right">{l.price_per_lb_usd != null ? formatPerLb(Number(l.price_per_lb_usd), 'USD') : '—'}</TableCell>
@@ -489,8 +586,7 @@ export default function ReleaseDetail() {
               </TableBody>
               <tfoot className="bg-muted/30 border-t font-medium text-sm">
                 <tr>
-                  <td className="p-2"></td>
-                  <td className="p-2 text-right">Total</td>
+                  <td className="p-2" colSpan={4}></td>
                   <td className="p-2 text-right">{totalBags}</td>
                   <td className="p-2 text-right">{totalKg.toLocaleString()} kg</td>
                   <td className="p-2"></td>

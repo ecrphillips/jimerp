@@ -26,7 +26,7 @@ import { type PackagingVariant } from '@/components/PackagingBadge';
 import { SortablePackRow } from './SortablePackRow';
 import type { DateFilterConfig } from './types';
 // Use AUTHORITATIVE inventory hooks - computed from source-of-truth tables
-import { useAuthoritativeWip } from '@/hooks/useAuthoritativeInventory';
+import { useAuthoritativeWip, useAuthoritativePlannedWip } from '@/hooks/useAuthoritativeInventory';
 import { AuthoritativeSummaryPanel } from './AuthoritativeTotals';
 import { filterOrderByWorkStart } from '@/lib/productionScheduling';
 
@@ -58,6 +58,8 @@ interface ProductDemand {
   hasTimeSensitive: boolean;
   wipAvailableKg: number;
   requiredKg: number;
+  plannedKg: number;
+  plannedCount: number;
   wipStatus: 'full' | 'partial' | 'none'; // NEW: WIP status for color coding
   earliestShipDate: string | null;
   shortage: number;
@@ -150,6 +152,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   // ========== AUTHORITATIVE INVENTORY (from source-of-truth tables) ==========
   // WIP = sum(roasted_batches.actual_output_kg) - sum(packing_runs.kg_consumed)
   const { data: authWip } = useAuthoritativeWip();
+  const { data: plannedWip } = useAuthoritativePlannedWip();
   
   // Use authoritative WIP for roasted inventory display
   const roastedInventory = useMemo(() => {
@@ -210,6 +213,8 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
           shipDates: [],
           wipAvailableKg: 0,
           requiredKg: 0,
+          plannedKg: 0,
+          plannedCount: 0,
           wipStatus: 'none' as const, // NEW: WIP status for color coding
         };
       }
@@ -261,6 +266,11 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       
       product.wipAvailableKg = wipAvailableKg;
       product.requiredKg = requiredKg;
+
+      // Planned-batch hint (informational, not counted in WIP)
+      const plannedInfo = product.roast_group ? plannedWip?.[product.roast_group] : undefined;
+      product.plannedKg = plannedInfo?.planned_kg ?? 0;
+      product.plannedCount = plannedInfo?.count ?? 0;
       
       // NEW: WIP status for color coding
       // - 'full': enough WIP to complete entire row (wipAvailable >= requiredKg)
@@ -278,7 +288,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     }
 
     return Object.values(productMap).map(({ orderIds, shipDates, ...rest }) => rest);
-  }, [orderLineItems, checkmarks, packingByProductUnits, roastedInventory, products]);
+  }, [orderLineItems, checkmarks, packingByProductUnits, roastedInventory, products, plannedWip]);
 
   // Sort products by pack_display_order only (manual ordering)
   // NO automatic reprioritization - order is strictly user-controlled
@@ -579,6 +589,9 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                       const headerWipKg = product.roast_group
                         ? (roastedInventory[product.roast_group] ?? 0)
                         : 0;
+                      const headerPlanned = product.roast_group
+                        ? plannedWip?.[product.roast_group]
+                        : undefined;
                       
                       return (
                         <React.Fragment key={product.product_id}>
@@ -595,6 +608,12 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                                   {product.roast_group && (
                                     <span className="text-xs font-medium text-muted-foreground">
                                       {headerWipKg.toFixed(1)} kg WIP available
+                                      {headerPlanned && headerPlanned.count > 0 && (
+                                        <>
+                                          {' · '}
+                                          {headerPlanned.count} planned (~{headerPlanned.planned_kg.toFixed(1)} kg)
+                                        </>
+                                      )}
                                     </span>
                                   )}
                                 </div>
@@ -615,6 +634,8 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                           unblocksOrders={product.unblocksOrders}
                           wipAvailableKg={product.wipAvailableKg}
                           requiredKg={product.requiredKg}
+                          plannedKg={product.plannedKg}
+                          plannedCount={product.plannedCount}
                           packingRun={packing}
                           isExpanded={isExpanded}
                           onToggleExpand={() => setExpandedProductId(isExpanded ? null : product.product_id)}

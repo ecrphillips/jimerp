@@ -7,9 +7,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Lock, Unlock, AlertTriangle, Clock } from 'lucide-react';
 import { format, differenceInHours, parseISO } from 'date-fns';
+import { fromZonedTime } from 'date-fns-tz';
+import { DEFAULT_TZ } from '@/lib/timezone';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatTime12, timeToMinutes, TIER_RATES, type BookingRow, type MemberRow } from './bookingUtils';
+import { useAccountPricing } from '@/hooks/useAccountPricing';
+import { refundedHoursFiftyPercent } from '@/lib/coroastHoursLedger';
+import { formatCurrency } from '@/lib/currency';
 
 interface BookingDetailModalProps {
   open: boolean;
@@ -37,11 +42,24 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
   const member = booking ? members.find(m => m.id === booking.member_id) : undefined;
   const durationHrs = booking ? (timeToMinutes(booking.end_time) - timeToMinutes(booking.start_time)) / 60 : 0;
   const tier = member?.tier ?? 'MEMBER';
-  const rates = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
+  const tierDefaults = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
+  const { data: pricing } = useAccountPricing(booking?.member_id);
+  const rates = {
+    overageRate: pricing?.overageRate.value ?? tierDefaults.overageRate,
+    includedHours: pricing?.includedHours.value ?? tierDefaults.includedHours,
+  };
   const hourlyRate = rates.overageRate;
   const fullFee = durationHrs * hourlyRate;
 
-  const bookingStart = booking ? parseISO(`${booking.booking_date}T${booking.start_time}`) : new Date();
+  // Interpret booking_date + start_time as a wall-clock moment in the business
+  // timezone (DEFAULT_TZ), then materialise the UTC instant. Avoids the
+  // previous parseISO() call which silently used the runtime's local tz.
+  const bookingStart = booking
+    ? fromZonedTime(
+        `${booking.booking_date}T${booking.start_time.length === 5 ? booking.start_time + ':00' : booking.start_time}`,
+        DEFAULT_TZ,
+      )
+    : new Date();
   const hoursUntil = differenceInHours(bookingStart, new Date());
   const cancellationTier = getCancellationTier(hoursUntil);
   const cancellationFee = cancellationTier === '50pct' ? fullFee * 0.5 : fullFee;
@@ -65,7 +83,15 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
     return 'Included';
   }, [booking, allBookings, rates]);
 
-  const invalidateAll = () => queryClient.invalidateQueries({ queryKey: ['booking-calendar'] });
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['booking-calendar'] });
+    if (booking) {
+      const accountId = booking.account_id ?? booking.member_id;
+      const periodKey = booking.booking_date.slice(0, 7);
+      queryClient.invalidateQueries({ queryKey: ['coroast-hour-ledger', accountId] });
+      queryClient.invalidateQueries({ queryKey: ['coroast-billing-period', accountId, periodKey] });
+    }
+  };
 
   const cancelFreeMutation = useMutation({
     mutationFn: async () => {
@@ -96,9 +122,14 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
         cancelled_at: new Date().toISOString(),
       }).eq('id', booking.id);
       if (error) throw error;
-      // 50% fee — hours not returned
+      await supabase.from('coroast_hour_ledger').insert({
+        member_id: booking.member_id, billing_period_id: booking.billing_period_id,
+        booking_id: booking.id, entry_type: 'BOOKING_RETURNED' as any,
+        hours_delta: refundedHoursFiftyPercent(durationHrs),
+        notes: `50% cancellation for ${booking.booking_date}`,
+      });
     },
-    onSuccess: () => { toast.success(`Booking cancelled (50% fee: $${(fullFee * 0.5).toFixed(0)})`); invalidateAll(); onOpenChange(false); },
+    onSuccess: () => { toast.success(`Booking cancelled (50% fee: ${formatCurrency(fullFee * 0.5, { decimals: 0 })})`); invalidateAll(); onOpenChange(false); },
     onError: () => toast.error('Failed to cancel booking'),
   });
 
@@ -234,7 +265,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
               {cancellationTier === '100pct' && <Lock className="h-3.5 w-3.5 flex-shrink-0" />}
               {cancellationTier === '50pct' && <Clock className="h-3.5 w-3.5 flex-shrink-0" />}
               {tierLabel}
-              {cancellationTier !== 'free' && ` — Fee: $${cancellationFee.toFixed(0)}`}
+              {cancellationTier !== 'free' && ` — Fee: ${formatCurrency(cancellationFee, { decimals: 0 })}`}
             </div>
           )}
 
@@ -250,7 +281,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
               {cancellationTier === '50pct' && (
                 <Button size="sm" className="w-full bg-amber-500 hover:bg-amber-600 text-white"
                   onClick={() => cancel50PctMutation.mutate()} disabled={isPending}>
-                  Cancel Booking (50% fee — ${(fullFee * 0.5).toFixed(0)})
+                  Cancel Booking (50% fee — {formatCurrency(fullFee * 0.5, { decimals: 0 })})
                 </Button>
               )}
 
@@ -262,7 +293,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
                   </Button>
                   <Button variant="outline" size="sm" className="w-full"
                     onClick={() => setCancelMode('charge')} disabled={isPending}>
-                    Cancel &amp; Charge Fee (${fullFee.toFixed(0)})
+                    Cancel &amp; Charge Fee ({formatCurrency(fullFee, { decimals: 0 })})
                   </Button>
                   <Button variant="outline" size="sm" className="w-full"
                     onClick={() => setCancelMode('waive')} disabled={isPending}>
@@ -275,7 +306,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
                 <Button variant="outline" size="sm"
                   className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
                   onClick={() => noShowMutation.mutate()} disabled={isPending}>
-                  <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Mark as No-Show (100% fee — ${fullFee.toFixed(0)})
+                  <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Mark as No-Show (100% fee — {formatCurrency(fullFee, { decimals: 0 })})
                 </Button>
               )}
             </div>
@@ -295,7 +326,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
 
           {cancelMode === 'charge' && (
             <div className="space-y-2 pt-2 border-t">
-              <p className="text-xs font-medium">Fee of <span className="text-destructive">${fullFee.toFixed(2)}</span> will be charged. Hours not returned.</p>
+              <p className="text-xs font-medium">Fee of <span className="text-destructive">{formatCurrency(fullFee)}</span> will be charged. Hours not returned.</p>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setCancelMode(null)}>Back</Button>
                 <Button variant="destructive" size="sm" onClick={() => cancelChargeMutation.mutate()} disabled={isPending}>
@@ -307,7 +338,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
 
           {cancelMode === 'waive' && (
             <div className="space-y-2 pt-2 border-t">
-              <p className="text-xs font-medium">Fee of ${fullFee.toFixed(2)} will be waived. Hours returned.</p>
+              <p className="text-xs font-medium">Fee of {formatCurrency(fullFee)} will be waived. Hours returned.</p>
               <div>
                 <Label className="text-xs">Waive reason *</Label>
                 <Textarea value={waiveReason} onChange={e => setWaiveReason(e.target.value)} rows={2} placeholder="Reason for waiving the fee…" />
