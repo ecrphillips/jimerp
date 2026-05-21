@@ -132,7 +132,7 @@ const slipHtml = (
         <tr>
           <th>Product</th>
           <th class="num">Size</th>
-          <th>Grind / Packaging</th>
+          <th>Packaging</th>
           <th class="num">Qty</th>
         </tr>
       </thead>
