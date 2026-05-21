@@ -65,7 +65,7 @@ export function NotificationRoutingSettings() {
           value_json: value as unknown as Record<string, unknown>,
           updated_at: new Date().toISOString(),
           updated_by: user.user?.id || null,
-        } as Record<string, unknown>);
+        });
       if (error) throw error;
     },
     onSuccess: () => {
