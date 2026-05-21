@@ -60,7 +60,7 @@ export function TeamNotificationPrefs({ accountId, currentUserId }: Props) {
   });
 
   const getEmailPref = (row: TeamPrefRow, eventType: EventKey): boolean => {
-    const pref = row.prefs.find(p => p.event_type === eventType && p.channel === 'EMAIL');
+    const pref = (row.prefs ?? []).find(p => p.event_type === eventType && p.channel === 'EMAIL');
     return pref ? pref.enabled : false; // EMAIL default off
   };
 
