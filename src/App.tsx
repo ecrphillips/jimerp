@@ -52,6 +52,7 @@ import BulkProducts from "@/pages/internal/BulkProducts";
 import Inventory from "@/pages/internal/Inventory";
 import InventoryLedger from "@/pages/internal/InventoryLedger";
 import AdminTools from "@/pages/internal/AdminTools";
+import NotificationPreferences from "@/pages/internal/NotificationPreferences";
 import MarketPriceAudit from "@/pages/internal/MarketPriceAudit";
 import MarketPricingAnalysis from "@/pages/shared/MarketPricingAnalysis";
 import UsersAccess from "@/pages/internal/UsersAccess";
@@ -289,6 +290,11 @@ const App = () => (
             <Route path="/admin-tools" element={
               <ProtectedRoute allowedRoles={['ADMIN']}>
                 <InternalLayout><AdminTools /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/settings/notifications" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><NotificationPreferences /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/admin/users" element={

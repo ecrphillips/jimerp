@@ -21,6 +21,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import type { GrindOption } from '@/types/database';
 import type { Database } from '@/integrations/supabase/types';
 import { LocationSelect } from '@/components/orders/LocationSelect';
+import { OrderContextBanner } from '@/components/orders/OrderContextBanner';
 import { blockNonIntegerKeys } from '@/lib/numericInput';
 
 type DeliveryMethod = Database['public']['Enums']['delivery_method'];
@@ -379,15 +380,31 @@ export default function CreateOrderForClient() {
         throw new Error('Order insert returned null — possible RLS policy or trigger issue');
       }
 
+      // Always insert one default shipment so order_shipments stays consistent
+      // with the multi-ship-to model. UI for adding more shipments lives in the
+      // client portal NewOrder; admin-created orders get a single shipment here.
+      const { data: defaultShipment, error: shipError } = await (supabase as any)
+        .from('order_shipments')
+        .insert({
+          order_id: order.id,
+          shipment_number: 1,
+          delivery_method: deliveryMethod,
+          location_id: selectedLocationId || null,
+        })
+        .select('id')
+        .single();
+      if (shipError) throw shipError;
+
       const lineItemsData = lineItems.map((li) => ({
         order_id: order.id,
         product_id: li.productId,
         quantity_units: li.quantity,
         grind: li.grind,
         unit_price_locked: li.price!,
+        shipment_id: defaultShipment?.id ?? null,
       }));
 
-      const { error: lineError } = await supabase.from('order_line_items').insert(lineItemsData);
+      const { error: lineError } = await (supabase as any).from('order_line_items').insert(lineItemsData);
       if (lineError) throw lineError;
 
       // Trigger notification email (fire-and-forget for admin-created orders too)
@@ -562,6 +579,13 @@ export default function CreateOrderForClient() {
         </Link>
         <h1 className="page-title">Create Order for Client</h1>
       </div>
+
+      {selectedClientId && (
+        <OrderContextBanner
+          accountId={selectedClientId}
+          locationId={selectedLocationId || null}
+        />
+      )}
 
       {/* Client Selection */}
       <Card className="mb-6">

@@ -18,6 +18,7 @@ import { Plus, Minus, Trash2, Package, Eye } from 'lucide-react';
 import { GramPackagingBadge, formatGramsLabel } from '@/components/GramPackagingBadge';
 import { UnusualOrderModal, type FlaggedItem } from '@/components/client/UnusualOrderModal';
 import { LocationSelect } from '@/components/orders/LocationSelect';
+import { OrderContextBanner } from '@/components/orders/OrderContextBanner';
 import { CaseQuantityInput } from '@/components/orders/CaseQuantityInput';
 import { useClientOrderingConstraints, validateCaseQuantity } from '@/hooks/useClientOrderingConstraints';
 import { blockNonIntegerKeys } from '@/lib/numericInput';
@@ -34,6 +35,45 @@ interface LineItem {
   price: number | null;
   packagingTypeName: string | null;
   gramsPerUnit: number | null;
+  shipmentLocalId?: string;
+}
+
+interface AdditionalShipment {
+  localId: string;
+  delivery_method: DeliveryMethod;
+  ship_to_name: string;
+  ship_to_address_line1: string;
+  ship_to_address_line2: string;
+  ship_to_city: string;
+  ship_to_region: string;
+  ship_to_postal: string;
+  contact_name: string;
+  contact_phone: string;
+  contact_email: string;
+  notes: string;
+}
+
+const PRIMARY_SHIPMENT_LOCAL_ID = 'primary';
+
+function makeShipmentLocalId(): string {
+  return `s_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function newAdditionalShipment(): AdditionalShipment {
+  return {
+    localId: makeShipmentLocalId(),
+    delivery_method: 'COURIER',
+    ship_to_name: '',
+    ship_to_address_line1: '',
+    ship_to_address_line2: '',
+    ship_to_city: '',
+    ship_to_region: '',
+    ship_to_postal: '',
+    contact_name: '',
+    contact_phone: '',
+    contact_email: '',
+    notes: '',
+  };
 }
 
 interface Product {
@@ -72,6 +112,8 @@ export default function NewOrder() {
   const [clientPo, setClientPo] = useState('');
   const [clientNotes, setClientNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [additionalShipments, setAdditionalShipments] = useState<AdditionalShipment[]>([]);
+  const hasMultiShipTo = additionalShipments.length > 0;
 
   const minSpecificDate = useMemo(() => {
     const date = new Date();
@@ -423,7 +465,7 @@ export default function NewOrder() {
           requested_ship_date: shipPreference === 'SPECIFIC' && requestedShipDate ? requestedShipDate : null,
           delivery_method: deliveryMethod,
           client_po: clientPo || null,
-          client_notes: shipPreference === 'SOONEST' 
+          client_notes: shipPreference === 'SOONEST'
             ? `[Requested: Soonest possible]${clientNotes ? ` ${clientNotes}` : ''}`
             : clientNotes || null,
           created_by_user_id: authUser.id,
@@ -433,15 +475,84 @@ export default function NewOrder() {
 
       if (orderError) throw orderError;
 
-      const lineItemsData = lineItems.map((li) => ({
+      // Insert shipments: one primary (from location/delivery_method) + each additional.
+      const localToShipmentId: Record<string, string> = {};
+      type ShipmentInsertRow = {
+        order_id: string;
+        shipment_number: number;
+        delivery_method: DeliveryMethod;
+        location_id: string | null;
+        ship_to_name: string | null;
+        ship_to_address_line1: string | null;
+        ship_to_address_line2: string | null;
+        ship_to_city: string | null;
+        ship_to_region: string | null;
+        ship_to_postal: string | null;
+        contact_name: string | null;
+        contact_phone: string | null;
+        contact_email: string | null;
+        notes: string | null;
+      };
+      const primaryRow: ShipmentInsertRow = {
         order_id: order.id,
-        product_id: li.productId,
-        quantity_units: li.quantity,
-        grind: li.grind,
-        unit_price_locked: li.price!,
+        shipment_number: 1,
+        delivery_method: deliveryMethod,
+        location_id: selectedLocationId || null,
+        ship_to_name: null,
+        ship_to_address_line1: null,
+        ship_to_address_line2: null,
+        ship_to_city: null,
+        ship_to_region: null,
+        ship_to_postal: null,
+        contact_name: null,
+        contact_phone: null,
+        contact_email: null,
+        notes: null,
+      };
+      const additionalRows: ShipmentInsertRow[] = additionalShipments.map((s, idx) => ({
+        order_id: order.id,
+        shipment_number: idx + 2,
+        delivery_method: s.delivery_method,
+        location_id: null,
+        ship_to_name: s.ship_to_name || null,
+        ship_to_address_line1: s.ship_to_address_line1 || null,
+        ship_to_address_line2: s.ship_to_address_line2 || null,
+        ship_to_city: s.ship_to_city || null,
+        ship_to_region: s.ship_to_region || null,
+        ship_to_postal: s.ship_to_postal || null,
+        contact_name: s.contact_name || null,
+        contact_phone: s.contact_phone || null,
+        contact_email: s.contact_email || null,
+        notes: s.notes || null,
       }));
 
-      const { error: lineError } = await supabase.from('order_line_items').insert(lineItemsData);
+      const { data: insertedShipments, error: shipError } = await (supabase as any)
+        .from('order_shipments')
+        .insert([primaryRow, ...additionalRows])
+        .select('id, shipment_number');
+      if (shipError) throw shipError;
+      const primaryShipmentRow = insertedShipments?.find((r: { shipment_number: number }) => r.shipment_number === 1);
+      const primaryShipmentId: string | null = primaryShipmentRow?.id ?? null;
+      additionalShipments.forEach((s, idx) => {
+        const row = insertedShipments?.find((r: { shipment_number: number }) => r.shipment_number === idx + 2);
+        if (row?.id) localToShipmentId[s.localId] = row.id;
+      });
+
+      const lineItemsData = lineItems.map((li) => {
+        const targetShipmentId = li.shipmentLocalId && localToShipmentId[li.shipmentLocalId]
+          ? localToShipmentId[li.shipmentLocalId]
+          : primaryShipmentId;
+        return {
+          order_id: order.id,
+          product_id: li.productId,
+          quantity_units: li.quantity,
+          grind: li.grind,
+          unit_price_locked: li.price!,
+          shipment_id: targetShipmentId,
+        };
+      });
+
+      const { error: lineError } = await (supabase as any).from('order_line_items').insert(lineItemsData);
       if (lineError) throw lineError;
 
       supabase.functions.invoke('notify-new-order', {
@@ -684,6 +795,11 @@ export default function NewOrder() {
         <h1 className="page-title">New Order</h1>
       </div>
 
+      <OrderContextBanner
+        accountId={authUser?.accountId}
+        locationId={selectedLocationId || null}
+      />
+
       {isPreviewMode && (
         <Alert className="mb-4 border-amber-400 bg-amber-50 text-amber-900">
           <Eye className="h-4 w-4" />
@@ -812,6 +928,36 @@ export default function NewOrder() {
                               </SelectContent>
                             </Select>
                           )}
+                          {hasMultiShipTo && (
+                            <Select
+                              value={li.shipmentLocalId ?? PRIMARY_SHIPMENT_LOCAL_ID}
+                              onValueChange={(v) =>
+                                setLineItems((prev) =>
+                                  prev.map((x) =>
+                                    x.productId === li.productId
+                                      ? {
+                                          ...x,
+                                          shipmentLocalId:
+                                            v === PRIMARY_SHIPMENT_LOCAL_ID ? undefined : v,
+                                        }
+                                      : x,
+                                  ),
+                                )
+                              }
+                            >
+                              <SelectTrigger className="h-6 w-28 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={PRIMARY_SHIPMENT_LOCAL_ID}>Ship-to #1</SelectItem>
+                                {additionalShipments.map((s, idx) => (
+                                  <SelectItem key={s.localId} value={s.localId}>
+                                    Ship-to #{idx + 2}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
                           <span className="text-muted-foreground">
                             {li.price !== null
                               ? formatMoney(li.price * li.quantity)
@@ -914,6 +1060,148 @@ export default function NewOrder() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2 border-t pt-3">
+                <div className="flex items-center justify-between">
+                  <Label>Ship destinations</Label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setAdditionalShipments((prev) => [...prev, newAdditionalShipment()])
+                    }
+                  >
+                    <Plus className="h-3 w-3 mr-1" /> Add ship-to
+                  </Button>
+                </div>
+                {hasMultiShipTo && (
+                  <p className="text-xs text-muted-foreground">
+                    Primary destination uses the selected location + delivery method above.
+                    Assign each line item to a ship-to in the summary.
+                  </p>
+                )}
+                {additionalShipments.map((s, idx) => (
+                  <div key={s.localId} className="border rounded-md p-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium">Ship-to #{idx + 2}</span>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 text-destructive hover:text-destructive"
+                        onClick={() => {
+                          setAdditionalShipments((prev) =>
+                            prev.filter((x) => x.localId !== s.localId),
+                          );
+                          setLineItems((prev) =>
+                            prev.map((li) =>
+                              li.shipmentLocalId === s.localId
+                                ? { ...li, shipmentLocalId: undefined }
+                                : li,
+                            ),
+                          );
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    <Input
+                      placeholder="Recipient / company name"
+                      value={s.ship_to_name}
+                      onChange={(e) =>
+                        setAdditionalShipments((prev) =>
+                          prev.map((x) =>
+                            x.localId === s.localId ? { ...x, ship_to_name: e.target.value } : x,
+                          ),
+                        )
+                      }
+                    />
+                    <Input
+                      placeholder="Address line 1"
+                      value={s.ship_to_address_line1}
+                      onChange={(e) =>
+                        setAdditionalShipments((prev) =>
+                          prev.map((x) =>
+                            x.localId === s.localId
+                              ? { ...x, ship_to_address_line1: e.target.value }
+                              : x,
+                          ),
+                        )
+                      }
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        placeholder="City"
+                        value={s.ship_to_city}
+                        onChange={(e) =>
+                          setAdditionalShipments((prev) =>
+                            prev.map((x) =>
+                              x.localId === s.localId ? { ...x, ship_to_city: e.target.value } : x,
+                            ),
+                          )
+                        }
+                      />
+                      <Input
+                        placeholder="Region/Province"
+                        value={s.ship_to_region}
+                        onChange={(e) =>
+                          setAdditionalShipments((prev) =>
+                            prev.map((x) =>
+                              x.localId === s.localId ? { ...x, ship_to_region: e.target.value } : x,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+                    <Input
+                      placeholder="Postal code"
+                      value={s.ship_to_postal}
+                      onChange={(e) =>
+                        setAdditionalShipments((prev) =>
+                          prev.map((x) =>
+                            x.localId === s.localId
+                              ? { ...x, ship_to_postal: e.target.value }
+                              : x,
+                          ),
+                        )
+                      }
+                    />
+                    <Select
+                      value={s.delivery_method}
+                      onValueChange={(v) =>
+                        setAdditionalShipments((prev) =>
+                          prev.map((x) =>
+                            x.localId === s.localId
+                              ? { ...x, delivery_method: v as DeliveryMethod }
+                              : x,
+                          ),
+                        )
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PICKUP">Pickup</SelectItem>
+                        <SelectItem value="DELIVERY">Delivery</SelectItem>
+                        <SelectItem value="COURIER">Courier</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      placeholder="Notes (optional)"
+                      value={s.notes}
+                      onChange={(e) =>
+                        setAdditionalShipments((prev) =>
+                          prev.map((x) =>
+                            x.localId === s.localId ? { ...x, notes: e.target.value } : x,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+
               <div>
                 <Label htmlFor="po">PO Number (optional)</Label>
                 <Input id="po" value={clientPo} onChange={(e) => setClientPo(e.target.value)} />

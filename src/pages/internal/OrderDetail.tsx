@@ -13,6 +13,7 @@ import { format } from 'date-fns';
 import { parseDateOnly } from '@/lib/dateOnly';
 import { ArrowLeft, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock, FileText, Clock, Trash2 } from 'lucide-react';
 import { LocationBadge } from '@/components/orders/LocationSelect';
+import { OrderShipmentsCard } from '@/components/orders/OrderShipmentsCard';
 import { CreatedByBadge } from '@/components/orders/CreatedByBadge';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { GramPackagingBadge } from '@/components/GramPackagingBadge';
@@ -603,6 +604,8 @@ export default function OrderDetail() {
             </div>
           </CardContent>
         </Card>
+
+        <OrderShipmentsCard orderId={order.id} />
 
         <Card>
           <CardHeader>

@@ -403,7 +403,7 @@ export default function MemberSchedule() {
         const overlap = checkOverlap(saveDateStr, formStartTime, formEndTime, blocks, allBookings as BookingRow[], undefined, undefined, otherBusy);
         if (overlap) throw new Error(overlap);
 
-        const { error } = await supabase.rpc('create_member_booking', {
+        const { data: newBookingId, error } = await supabase.rpc('create_member_booking', {
           p_account_id: memberId,
           p_booking_date: saveDateStr,
           p_start_time: formStartTime,
@@ -412,6 +412,12 @@ export default function MemberSchedule() {
           p_recurring_block_id: null,
         });
         if (error) throw new Error(error.message);
+
+        if (newBookingId) {
+          supabase.functions.invoke('notify-booking-event', {
+            body: { booking_id: newBookingId, event_type: 'BOOKING_CREATED' },
+          }).catch((err) => console.warn('[notify-booking-event] failed:', err));
+        }
 
         toast.success('Booking confirmed!');
       }
@@ -435,6 +441,10 @@ export default function MemberSchedule() {
     mutationFn: async (bookingId: string) => {
       const { error } = await supabase.rpc('cancel_member_booking', { p_booking_id: bookingId });
       if (error) throw new Error(error.message);
+
+      supabase.functions.invoke('notify-booking-event', {
+        body: { booking_id: bookingId, event_type: 'BOOKING_CANCELLED' },
+      }).catch((err) => console.warn('[notify-booking-event] failed:', err));
     },
     onSuccess: (_data, bookingId) => {
       toast.success('Booking cancelled');

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.91.0";
+import { fanOutNotification } from "../_shared/notifications.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -158,12 +159,39 @@ serve(async (req: Request) => {
 
     console.log("[notify-new-order] Notification created successfully by", isInternal ? "internal user" : "client user");
 
+    // ========== EMAIL FAN-OUT (per-user prefs + shared mailbox) ==========
+    let emailFanOut: Awaited<ReturnType<typeof fanOutNotification>> | null = null;
+    try {
+      const submitterLine = submittedByName ? `Submitted by: ${submittedByName}\n` : "";
+      const deadlineLine = order.work_deadline ? `Work deadline: ${order.work_deadline}\n` : "";
+      emailFanOut = await fanOutNotification(adminClient, {
+        eventType: "ORDER_SUBMITTED",
+        label: "order_submitted_notification",
+        buildEmail: () => ({
+          subject: `New order ${order.order_number} — ${clientName}`,
+          text:
+            `A new order has been submitted.\n\n` +
+            `Order: ${order.order_number}\n` +
+            `Client: ${clientName}\n` +
+            submitterLine +
+            deadlineLine +
+            `\nOpen in JIM: /internal/orders/${order.id}\n`,
+        }),
+      });
+      if (emailFanOut.errors.length > 0) {
+        console.warn("[notify-new-order] Email fan-out errors:", emailFanOut.errors);
+      }
+    } catch (fanErr) {
+      console.error("[notify-new-order] Email fan-out failed:", fanErr);
+    }
+
     return new Response(
-      JSON.stringify({ 
-        ok: true, 
+      JSON.stringify({
+        ok: true,
         notification_created: true,
         order_number: order.order_number,
         client_name: clientName,
+        emails_enqueued: emailFanOut?.enqueued ?? 0,
         test,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
