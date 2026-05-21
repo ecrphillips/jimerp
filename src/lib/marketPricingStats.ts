@@ -116,7 +116,6 @@ export function bucketSummaries(
     { bucket: 'MID', count: mid.length, ...range(mid) },
     { bucket: 'PREMIUM', count: premium.length, ...range(premium) },
   ];
-
 }
 
 /**

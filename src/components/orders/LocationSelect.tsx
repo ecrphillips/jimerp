@@ -45,6 +45,13 @@ export function LocationSelect({
     enabled: !!clientId,
   });
 
+  // Auto-select when account has exactly one active location
+  React.useEffect(() => {
+    if (!locations || locations.length !== 1) return;
+    if (value === locations[0].id) return;
+    onChange(locations[0].id);
+  }, [locations, value, onChange]);
+
   // If no locations exist for this client, don't render anything
   if (!isLoading && (!locations || locations.length === 0)) {
     return null;
