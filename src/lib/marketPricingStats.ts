@@ -107,15 +107,16 @@ export function bucketSummaries(
     else if (v >= q3) premium.push(v);
     else mid.push(v);
   }
-  const range = (arr: number[]): { min: number; max: number } => ({
-    min: arr.length ? arr[0] : 0,
-    max: arr.length ? arr[arr.length - 1] : 0,
+  const range = (arr: number[]): { minPpg: number; maxPpg: number } => ({
+    minPpg: arr.length ? arr[0] : 0,
+    maxPpg: arr.length ? arr[arr.length - 1] : 0,
   });
   return [
     { bucket: 'VALUE', count: value.length, ...range(value) },
     { bucket: 'MID', count: mid.length, ...range(mid) },
     { bucket: 'PREMIUM', count: premium.length, ...range(premium) },
   ];
+
 }
 
 /**
