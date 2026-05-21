@@ -856,7 +856,7 @@ export default function OrderDetail() {
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={6} className="pt-4 text-right font-medium">Total:</td>
+                    <td colSpan={5} className="pt-4 text-right font-medium">Total:</td>
                     <td className="pt-4 text-right font-medium">${lineTotal.toFixed(2)}</td>
                   </tr>
                 </tfoot>
