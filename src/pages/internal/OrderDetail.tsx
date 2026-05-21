@@ -813,7 +813,6 @@ export default function OrderDetail() {
                     <th className="pb-2">Demanded</th>
                     <th className="pb-2">Packed</th>
                     <th className="pb-2">Status</th>
-                    <th className="pb-2">Grind</th>
                     <th className="pb-2">Unit Price</th>
                     <th className="pb-2 text-right">Subtotal</th>
                   </tr>
