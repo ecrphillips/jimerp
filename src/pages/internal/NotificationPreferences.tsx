@@ -41,7 +41,7 @@ export default function NotificationPreferences() {
     queryFn: async () => {
       if (!authUser?.id) return [];
       const { data, error } = await supabase
-        .from('user_notification_preferences' as never)
+        .from('user_notification_preferences')
         .select('id, event_type, channel, enabled')
         .eq('user_id', authUser.id);
       if (error) throw error;
