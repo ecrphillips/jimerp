@@ -1000,14 +1000,6 @@ export default function NewOrder() {
               <CardTitle>Order Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {authUser?.accountId && (
-                <LocationSelect
-                  clientId={authUser.accountId}
-                  value={selectedLocationId}
-                  onChange={setSelectedLocationId}
-                  required
-                />
-              )}
               <div className="space-y-2">
                 <Label>When do you need this order?</Label>
                 <div className="flex gap-2">
