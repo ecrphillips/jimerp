@@ -389,37 +389,49 @@ function ClientPrintLayout({
           <div>
             <Row k="Display unit" v={inputs.displayUnit === 'BAG' ? `Bag (${inputs.bagSizeG}g)` : inputs.displayUnit} />
             <Row k="Product" v={inputs.productName ?? '—'} />
-            <Row k="Cost per bag from us" v={inputs.costPerBagFromUs != null ? fmt(inputs.costPerBagFromUs) : '—'} />
+            <Row k="Your cost per bag (from Home Island)" v={inputs.costPerBagFromUs != null ? fmt(inputs.costPerBagFromUs) : '—'} />
             <Row k="Extra packaging /bag" v={inputs.extraPackagingPerBag != null ? fmt(inputs.extraPackagingPerBag) : '—'} />
-            <Row k="Pace assumption" v={inputs.paceMode === 'SEASONAL' ? 'Same quarter last year' : 'Last 3 months'} />
           </div>
           <div>
+            <Row k="Pace assumption" v={inputs.paceMode === 'SEASONAL' ? 'Same quarter last year' : 'Last 3 months'} />
+            <Row k="Monthly volume" v={inputs.monthlyKg != null ? `${inputs.monthlyKg} kg` : '—'} />
             <Row k="Labour" v={inputs.includeLabour ? `${inputs.labourHoursPerBatch}h × $${inputs.labourRatePerHr}/h` : 'Excluded'} />
             <Row k="Monthly overhead" v={inputs.overheadMonthly != null ? fmtBig(inputs.overheadMonthly) : '—'} />
-            <Row k="Monthly volume" v={inputs.monthlyKg != null ? `${inputs.monthlyKg} kg` : '—'} />
-            <Row k="Wholesale price" v={inputs.wholesalePrice != null ? fmt(inputs.wholesalePrice) : '—'} />
-            <Row k="Retail price" v={inputs.retailPrice != null ? fmt(inputs.retailPrice) : '—'} />
           </div>
         </div>
       </section>
+
+      {(() => {
+        const w = inputs.wholesalePrice ?? 0;
+        const r = inputs.retailPrice ?? 0;
+        const diff = r - w;
+        const wsMargin = r > 0 ? ((r - w) / r) * 100 : 0;
+        const unitSuffix = inputs.displayUnit === 'BAG' ? 'Bag' : inputs.displayUnit === 'KG' ? 'Kilogram' : 'Pound';
+        return (
+          <section className="mb-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">Pricing</h2>
+            <div className="grid grid-cols-3 gap-3 text-xs">
+              <div className="border rounded p-2">
+                <p className="text-muted-foreground">Target Wholesale Price per {unitSuffix}</p>
+                <p className="font-semibold tabular-nums text-base">{fmt(w)}</p>
+              </div>
+              <div className="border rounded p-2">
+                <p className="text-muted-foreground">Retail − Wholesale</p>
+                <p className="font-semibold tabular-nums text-base">${diff.toFixed(2)}</p>
+                <p className="text-[10px] text-muted-foreground">Wholesaler GM {wsMargin.toFixed(1)}%</p>
+              </div>
+              <div className="border rounded p-2">
+                <p className="text-muted-foreground">Target Retail Price per {unitSuffix}</p>
+                <p className="font-semibold tabular-nums text-base">{fmt(r)}</p>
+              </div>
+            </div>
+          </section>
+        );
+      })()}
 
       <section className="mb-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">Cost breakdown</h2>
         <CostBreakdownChart inputs={calc.engineInputs} perUnit={calc.perUnit} />
-      </section>
-
-      <section className="mb-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-          Suggested MSRP
-        </h2>
-        <div className="rounded border p-3 flex items-baseline justify-between">
-          <span className="text-2xl font-bold tabular-nums">
-            {calc.suggestedRetailPrice > 0 && Number.isFinite(calc.suggestedRetailPrice) ? fmt(calc.suggestedRetailPrice) : '—'}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            at {inputs.targetRetailMarginPct}% target retail margin
-          </span>
-        </div>
       </section>
 
       <section className="mb-4">
@@ -442,6 +454,7 @@ function ClientPrintLayout({
           </tbody>
         </table>
       </section>
+
 
       <section className="mb-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">Monthly view</h2>
