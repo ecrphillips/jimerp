@@ -987,7 +987,7 @@ export default function NewOrder() {
                   ))}
                 </ul>
               )}
-              {lineItems.length > 0 && (
+              {lineItems.length > 0 && !hidePricing && (
                 <div className="mt-4 pt-4 border-t flex justify-between font-medium">
                   <span>Total</span>
                   <span>${orderTotal.toFixed(2)}</span>
