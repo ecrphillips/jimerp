@@ -39,7 +39,7 @@ export function OrderShipmentsCard({ orderId }: OrderShipmentsCardProps) {
         .eq('order_id', orderId)
         .order('shipment_number');
       if (error) throw error;
-      return (data ?? []) as ShipmentRow[];
+      return (data ?? []) as unknown as ShipmentRow[];
     },
   });
 
