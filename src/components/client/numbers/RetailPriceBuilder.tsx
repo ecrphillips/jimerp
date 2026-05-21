@@ -195,14 +195,17 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
               <div className="flex items-center gap-2">
                 {lockGap ? <Lock className="h-3.5 w-3.5 text-primary" /> : <Unlock className="h-3.5 w-3.5 text-muted-foreground" />}
                 <Label htmlFor="lock-gap" className="text-xs cursor-pointer">
-                  Lock retail – wholesale gap at {fmt(lockedGap)}
+                  Lock retail – wholesale margin gap at {lockedGapPct.toFixed(1)}pp
                 </Label>
               </div>
               <Switch
                 id="lock-gap"
                 checked={lockGap}
                 onCheckedChange={(v) => {
-                  if (v) setLockedGap(Math.max(0, retail - wholesale));
+                  if (v) {
+                    const gap = Math.max(0, (retailMargin ?? 0) - (wholesaleMargin ?? 0));
+                    setLockedGapPct(gap);
+                  }
                   setLockGap(v);
                 }}
               />
