@@ -49,8 +49,13 @@ function seedFromPrefills(base: ClientUnitEconomicsInputs, prefills: ClientPrefi
 
 export default function ClientMyNumbers() {
   const { authUser } = useAuth();
-  const { previewAccountId } = usePreview();
+  const { previewAccountId, isPreviewMode } = usePreview();
   const accountId = previewAccountId ?? authUser?.accountId ?? null;
+
+  const isOwner = isPreviewMode || !!authUser?.isOwner;
+  if (!isOwner) {
+    return <Navigate to="/portal" replace />;
+  }
   const [searchParams, setSearchParams] = useSearchParams();
   const qc = useQueryClient();
 
