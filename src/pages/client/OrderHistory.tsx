@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { usePreview } from '@/contexts/PreviewContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { parseDateOnly } from '@/lib/dateOnly';
 import { ArrowLeft } from 'lucide-react';
