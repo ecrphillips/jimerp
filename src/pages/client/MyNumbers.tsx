@@ -51,11 +51,6 @@ export default function ClientMyNumbers() {
   const { authUser } = useAuth();
   const { previewAccountId, isPreviewMode } = usePreview();
   const accountId = previewAccountId ?? authUser?.accountId ?? null;
-
-  const isOwner = isPreviewMode || !!authUser?.isOwner;
-  if (!isOwner) {
-    return <Navigate to="/portal" replace />;
-  }
   const [searchParams, setSearchParams] = useSearchParams();
   const qc = useQueryClient();
 
@@ -206,6 +201,11 @@ export default function ClientMyNumbers() {
     contentRef: printRef,
     documentTitle: `${accountName || 'My Numbers'} — ${activeScenario?.name ?? 'Scenario'}`,
   });
+
+  const isOwner = isPreviewMode || !!authUser?.isOwner;
+  if (!isOwner) {
+    return <Navigate to="/portal" replace />;
+  }
 
   if (!accountId) {
     return (
