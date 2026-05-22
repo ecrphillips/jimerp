@@ -229,7 +229,7 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
                         );
                       }
                     }}
-                    className="h-7 w-16 text-xs"
+                    className="h-8 w-[4.5rem] text-sm"
                   />
                   <span className="text-xs text-muted-foreground">%</span>
                 </div>
