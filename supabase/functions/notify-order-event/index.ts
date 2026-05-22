@@ -169,6 +169,32 @@ serve(async (req: Request) => {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Authorization: ADMIN/OPS, or active member of the order's account
+    const { data: roleData } = await adminClient
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const isInternal = roleData?.role === "ADMIN" || roleData?.role === "OPS";
+    if (!isInternal) {
+      let authorized = false;
+      if (order.account_id) {
+        const { data: accountUser } = await adminClient
+          .from("account_users")
+          .select("id")
+          .eq("account_id", order.account_id)
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .maybeSingle();
+        authorized = !!accountUser;
+      }
+      if (!authorized) {
+        return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
     // deno-lint-ignore no-explicit-any
     const accountName = (order.account as any)?.account_name ?? "Account";
 
