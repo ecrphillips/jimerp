@@ -39,7 +39,8 @@ export function ClientLayout({ children }: ClientLayoutProps) {
   const { isPreviewMode, previewAccountName, previewAccountId, exitPreview, effectivePermissions } = usePreview();
   const canPlaceOrders = isPreviewMode ? !!effectivePermissions?.canPlaceOrders : !!authUser?.canPlaceOrders;
   const canBookRoaster = isPreviewMode ? !!effectivePermissions?.canBookRoaster : !!authUser?.canBookRoaster;
-  const showNumbers = canPlaceOrders && !canBookRoaster;
+  const isOwner = isPreviewMode ? true : !!authUser?.isOwner;
+  const showNumbers = isOwner && canPlaceOrders && !canBookRoaster;
   const navItems = [
     ...baseNavItems,
     ...(showNumbers ? [numbersNavItem] : []),
