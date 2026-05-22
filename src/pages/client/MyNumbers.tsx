@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
@@ -49,7 +49,7 @@ function seedFromPrefills(base: ClientUnitEconomicsInputs, prefills: ClientPrefi
 
 export default function ClientMyNumbers() {
   const { authUser } = useAuth();
-  const { previewAccountId } = usePreview();
+  const { previewAccountId, isPreviewMode } = usePreview();
   const accountId = previewAccountId ?? authUser?.accountId ?? null;
   const [searchParams, setSearchParams] = useSearchParams();
   const qc = useQueryClient();
@@ -201,6 +201,11 @@ export default function ClientMyNumbers() {
     contentRef: printRef,
     documentTitle: `${accountName || 'My Numbers'} — ${activeScenario?.name ?? 'Scenario'}`,
   });
+
+  const isOwner = isPreviewMode || !!authUser?.isOwner;
+  if (!isOwner) {
+    return <Navigate to="/portal" replace />;
+  }
 
   if (!accountId) {
     return (

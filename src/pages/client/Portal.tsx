@@ -29,7 +29,8 @@ export default function Portal() {
   const { previewAccountId, isPreviewMode, effectivePermissions } = usePreview();
   const canPlaceOrders = isPreviewMode ? !!effectivePermissions?.canPlaceOrders : !!authUser?.canPlaceOrders;
   const canBookRoaster = isPreviewMode ? !!effectivePermissions?.canBookRoaster : !!authUser?.canBookRoaster;
-  const showNumbers = canPlaceOrders && !canBookRoaster;
+  const isOwner = isPreviewMode ? true : !!authUser?.isOwner;
+  const showNumbers = isOwner && canPlaceOrders && !canBookRoaster;
 
   const { data: orders, isLoading } = useQuery({
     queryKey: ['client-portal-orders', previewAccountId],
