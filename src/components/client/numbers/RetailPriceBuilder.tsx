@@ -52,25 +52,27 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
 
   const marginPct = (price: number) => (price > 0 && totalCost >= 0 ? ((price - totalCost) / price) * 100 : 0);
 
-  // Dollar spread between retail and wholesale = gross margin available to the wholesaler.
-  const targetSpread = Math.max(0, targetRetail - targetWholesale);
+  // Wholesaler margin pct = (retail - wholesale) / retail. This is what we lock.
+  const targetWholesalerMarginPct =
+    targetRetail > 0 ? Math.max(0, ((targetRetail - targetWholesale) / targetRetail) * 100) : 20;
 
   // Working retail price — seeded from the target retail price.
   const [retail, setRetail] = useState<number>(targetRetail);
-  const [lockSpread, setLockSpread] = useState<boolean>(true);
-  const [lockedSpread, setLockedSpread] = useState<number>(targetSpread);
+  const [lockMargin, setLockMargin] = useState<boolean>(true);
+  const [lockedMarginPct, setLockedMarginPct] = useState<number>(targetWholesalerMarginPct);
 
   // Re-seed working values when the underlying target changes (scenario switch, edit).
   useEffect(() => {
     setRetail(targetRetail);
-    setLockedSpread(targetSpread);
+    setLockedMarginPct(targetWholesalerMarginPct);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetRetail, targetWholesale, totalCost]);
 
-  /** Wholesale price = retail - locked dollar spread (clamped to >= 0). */
-  const wholesaleFromSpread = (r: number): number => Math.max(0, r - lockedSpread);
+  /** Wholesale price derived from retail when locked at a given wholesaler-margin %. */
+  const wholesaleFromMargin = (r: number, pct: number): number =>
+    Math.max(0, r * (1 - pct / 100));
 
-  const wholesale = lockSpread ? wholesaleFromSpread(retail) : targetWholesale;
+  const wholesale = lockMargin ? wholesaleFromMargin(retail, lockedMarginPct) : targetWholesale;
 
   const retailMargin = retail > 0 ? marginPct(retail) : null;
   const wholesaleMargin = wholesale > 0 ? marginPct(wholesale) : null;
@@ -95,7 +97,9 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
   const step = inputs.displayUnit === 'BAG' ? 0.25 : 0.10;
 
   const commit = (nextRetail: number) => {
-    const nextWholesale = lockSpread ? wholesaleFromSpread(nextRetail) : targetWholesale;
+    const nextWholesale = lockMargin
+      ? wholesaleFromMargin(nextRetail, lockedMarginPct)
+      : targetWholesale;
     onChange(Number(nextRetail.toFixed(2)), Number(nextWholesale.toFixed(2)));
   };
 
@@ -197,22 +201,46 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
               );
             })()}
 
-            {/* Lock wholesaler spread */}
-            <div className="flex items-center justify-between rounded border px-3 py-2">
-              <div className="flex items-center gap-2">
-                {lockSpread ? <Lock className="h-3.5 w-3.5 text-primary" /> : <Unlock className="h-3.5 w-3.5 text-muted-foreground" />}
-                <Label htmlFor="lock-spread" className="text-xs cursor-pointer">
-                  Lock gross margin available to wholesaler at {fmt(lockedSpread)}/{unit}
+            {/* Lock wholesaler margin % */}
+            <div className="flex items-center justify-between rounded border px-3 py-2 gap-3">
+              <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+                {lockMargin ? <Lock className="h-3.5 w-3.5 text-primary shrink-0" /> : <Unlock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                <Label htmlFor="lock-margin" className="text-xs cursor-pointer">
+                  Lock margin available to wholesalers at
                 </Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    step={0.5}
+                    min={0}
+                    max={95}
+                    value={Number.isFinite(lockedMarginPct) ? Number(lockedMarginPct.toFixed(1)) : ''}
+                    disabled={!lockMargin}
+                    onChange={(e) => {
+                      const v = e.target.value === '' ? 0 : Number(e.target.value);
+                      const clamped = Math.max(0, Math.min(95, v));
+                      setLockedMarginPct(clamped);
+                      if (lockMargin) {
+                        onChange(
+                          Number(retail.toFixed(2)),
+                          Number(wholesaleFromMargin(retail, clamped).toFixed(2)),
+                        );
+                      }
+                    }}
+                    className="h-7 w-16 text-xs"
+                  />
+                  <span className="text-xs text-muted-foreground">%</span>
+                </div>
               </div>
               <Switch
-                id="lock-spread"
-                checked={lockSpread}
+                id="lock-margin"
+                checked={lockMargin}
                 onCheckedChange={(v) => {
-                  if (v) {
-                    setLockedSpread(Math.max(0, retail - wholesale));
+                  if (v && retail > 0) {
+                    setLockedMarginPct(Math.max(0, ((retail - wholesale) / retail) * 100));
                   }
-                  setLockSpread(v);
+                  setLockMargin(v);
                 }}
               />
             </div>
