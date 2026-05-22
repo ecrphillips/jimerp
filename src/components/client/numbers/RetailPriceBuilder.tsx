@@ -95,7 +95,7 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
   const step = inputs.displayUnit === 'BAG' ? 0.25 : 0.10;
 
   const commit = (nextRetail: number) => {
-    const nextWholesale = lockGap ? wholesaleFromGap(nextRetail) : targetWholesale;
+    const nextWholesale = lockSpread ? wholesaleFromSpread(nextRetail) : targetWholesale;
     onChange(Number(nextRetail.toFixed(2)), Number(nextWholesale.toFixed(2)));
   };
 
