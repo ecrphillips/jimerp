@@ -141,7 +141,7 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className="w-24">
+                <div className="w-28">
                   <Input
                     type="number"
                     inputMode="decimal"
@@ -153,6 +153,7 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
                       setRetail(v);
                       commit(v);
                     }}
+                    className="h-9 text-sm"
                   />
                 </div>
                 <Slider
@@ -228,7 +229,7 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
                         );
                       }
                     }}
-                    className="h-7 w-16 text-xs"
+                    className="h-8 w-[4.5rem] text-sm"
                   />
                   <span className="text-xs text-muted-foreground">%</span>
                 </div>
