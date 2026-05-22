@@ -71,6 +71,34 @@ serve(async (req: Request) => {
       );
     }
 
+    // Authorization: ADMIN/OPS, or active member of the booking's account
+    const { data: roleData } = await adminClient
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const isInternal = roleData?.role === "ADMIN" || roleData?.role === "OPS";
+
+    if (!isInternal) {
+      let authorized = false;
+      if (booking.account_id) {
+        const { data: accountUser } = await adminClient
+          .from("account_users")
+          .select("id")
+          .eq("account_id", booking.account_id)
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .maybeSingle();
+        authorized = !!accountUser;
+      }
+      if (!authorized) {
+        return new Response(
+          JSON.stringify({ ok: false, error: "Forbidden" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
     // deno-lint-ignore no-explicit-any
     const accountName = (booking.account as any)?.account_name ?? "Unknown member";
     const action = body.event_type === "BOOKING_CREATED" ? "New" : "Cancelled";

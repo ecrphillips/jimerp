@@ -97,7 +97,19 @@ Deno.serve(async (req) => {
     const now = new Date().toISOString()
 
     for (const recipient of NOTIFY_RECIPIENTS) {
-      const messageId = crypto.randomUUID()
+      // Idempotency: skip if we've already enqueued for this (submission, recipient) pair.
+      // This prevents email flooding on a public endpoint by replaying the same submission_id.
+      const messageId = `prospect-submit-${submission_id}-${recipient}`
+      const { data: existing } = await adminClient
+        .from('email_send_log')
+        .select('id')
+        .eq('message_id', messageId)
+        .maybeSingle()
+      if (existing) {
+        console.log('[notify-prospect-submission] Already notified', recipient, 'for', submission_id)
+        continue
+      }
+
       await adminClient.from('email_send_log').insert({
         message_id: messageId,
         template_name: 'prospect_submission_notify',
