@@ -166,20 +166,36 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
             {/* Margin comparison */}
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded border p-3 space-y-1">
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Retail margin</div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Our margin on Retail</div>
                 <div className="text-xl font-semibold tabular-nums">{fmtPct(retailMargin)}</div>
                 <div className="text-[11px] text-muted-foreground">
                   Cost {fmt(totalCost)} → Retail {fmt(retail)}
                 </div>
               </div>
               <div className="rounded border p-3 space-y-1">
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Wholesale margin left</div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Our margin on Wholesale</div>
                 <div className="text-xl font-semibold tabular-nums">{fmtPct(wholesaleMargin)}</div>
                 <div className="text-[11px] text-muted-foreground">
-                  Wholesale {fmt(wholesale)} {wholesaleVsTarget !== 0 && `(${fmtDelta(wholesaleVsTarget)})`}
+                  Cost {fmt(totalCost)} → Wholesale {fmt(wholesale)} {wholesaleVsTarget !== 0 && `(${fmtDelta(wholesaleVsTarget)})`}
                 </div>
               </div>
             </div>
+
+            {/* Wholesale client's margin */}
+            {(() => {
+              const wholesalerMargin = retail > 0 ? ((retail - wholesale) / retail) * 100 : null;
+              return (
+                <div className="rounded border p-3 space-y-1 bg-muted/30">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Margin available to Wholesale Clients
+                  </div>
+                  <div className="text-xl font-semibold tabular-nums">{fmtPct(wholesalerMargin)}</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    (Retail {fmt(retail)} − Wholesale {fmt(wholesale)}) ÷ Retail {fmt(retail)}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Lock wholesaler spread */}
             <div className="flex items-center justify-between rounded border px-3 py-2">
