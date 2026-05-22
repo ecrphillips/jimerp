@@ -19,7 +19,7 @@ const COLOURS = {
 export function CostBreakdownChart({ inputs, perUnit }: Props) {
   // Build a single horizontally-stacked bar
   const segments: Array<{ key: keyof CostBreakdown; label: string; value: number; colour: string }> = [
-    { key: 'green',     label: 'Green coffee',  value: perUnit.green,     colour: COLOURS.green },
+    { key: 'green',     label: 'Home Island price',  value: perUnit.green,     colour: COLOURS.green },
     { key: 'packaging', label: 'Packaging',     value: perUnit.packaging, colour: COLOURS.packaging },
     { key: 'roasting',  label: 'Home Island roasting', value: perUnit.roasting, colour: COLOURS.roasting },
   ];
