@@ -201,22 +201,46 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
               );
             })()}
 
-            {/* Lock wholesaler spread */}
-            <div className="flex items-center justify-between rounded border px-3 py-2">
-              <div className="flex items-center gap-2">
-                {lockSpread ? <Lock className="h-3.5 w-3.5 text-primary" /> : <Unlock className="h-3.5 w-3.5 text-muted-foreground" />}
-                <Label htmlFor="lock-spread" className="text-xs cursor-pointer">
-                  Lock gross margin available to wholesaler at {fmt(lockedSpread)}/{unit}
+            {/* Lock wholesaler margin % */}
+            <div className="flex items-center justify-between rounded border px-3 py-2 gap-3">
+              <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+                {lockMargin ? <Lock className="h-3.5 w-3.5 text-primary shrink-0" /> : <Unlock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                <Label htmlFor="lock-margin" className="text-xs cursor-pointer">
+                  Lock margin available to wholesalers at
                 </Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    step={0.5}
+                    min={0}
+                    max={95}
+                    value={Number.isFinite(lockedMarginPct) ? Number(lockedMarginPct.toFixed(1)) : ''}
+                    disabled={!lockMargin}
+                    onChange={(e) => {
+                      const v = e.target.value === '' ? 0 : Number(e.target.value);
+                      const clamped = Math.max(0, Math.min(95, v));
+                      setLockedMarginPct(clamped);
+                      if (lockMargin) {
+                        onChange(
+                          Number(retail.toFixed(2)),
+                          Number(wholesaleFromMargin(retail, clamped).toFixed(2)),
+                        );
+                      }
+                    }}
+                    className="h-7 w-16 text-xs"
+                  />
+                  <span className="text-xs text-muted-foreground">%</span>
+                </div>
               </div>
               <Switch
-                id="lock-spread"
-                checked={lockSpread}
+                id="lock-margin"
+                checked={lockMargin}
                 onCheckedChange={(v) => {
-                  if (v) {
-                    setLockedSpread(Math.max(0, retail - wholesale));
+                  if (v && retail > 0) {
+                    setLockedMarginPct(Math.max(0, ((retail - wholesale) / retail) * 100));
                   }
-                  setLockSpread(v);
+                  setLockMargin(v);
                 }}
               />
             </div>
