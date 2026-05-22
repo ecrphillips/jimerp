@@ -65,6 +65,13 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
   const cancellationFee = cancellationTier === '50pct' ? fullFee * 0.5 : fullFee;
   const isPast = bookingStart < new Date();
   const isConfirmed = booking?.status === 'CONFIRMED';
+  const isCompleted = booking?.status === 'COMPLETED';
+  const isNoShow = booking?.status === 'NO_SHOW';
+  // Past CONFIRMED rows are auto-swept to COMPLETED by the hourly
+  // sweep_past_bookings_to_completed() cron job, but treat them as
+  // completed in the UI immediately so users don't see a stale CONFIRMED
+  // state between the booking ending and the next sweep.
+  const treatAsCompleted = isCompleted || (isConfirmed && isPast);
 
   const hoursType = useMemo(() => {
     if (!booking) return 'Included';
@@ -194,8 +201,22 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
     onError: () => toast.error('Failed to mark no-show'),
   });
 
+  const revertToCompletedMutation = useMutation({
+    mutationFn: async () => {
+      if (!booking) return;
+      const { error } = await supabase.from('coroast_bookings').update({
+        status: 'COMPLETED' as any,
+        cancellation_fee_amt: 0,
+      }).eq('id', booking.id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success('Reverted to completed'); invalidateAll(); onOpenChange(false); },
+    onError: () => toast.error('Failed to revert booking'),
+  });
+
   const isPending = cancelFreeMutation.isPending || cancel50PctMutation.isPending || deleteMutation.isPending ||
-    cancelChargeMutation.isPending || cancelWaiveMutation.isPending || noShowMutation.isPending;
+    cancelChargeMutation.isPending || cancelWaiveMutation.isPending || noShowMutation.isPending ||
+    revertToCompletedMutation.isPending;
 
   if (!booking) return null;
 
@@ -269,7 +290,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
             </div>
           )}
 
-          {isConfirmed && !cancelMode && (
+          {isConfirmed && !isPast && !cancelMode && (
             <div className="space-y-2 pt-2 border-t">
               {cancellationTier === 'free' && (
                 <Button size="sm" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -301,14 +322,31 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
                   </Button>
                 </>
               )}
+            </div>
+          )}
 
-              {isPast && (
-                <Button variant="outline" size="sm"
-                  className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
-                  onClick={() => noShowMutation.mutate()} disabled={isPending}>
-                  <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Mark as No-Show (100% fee — {formatCurrency(fullFee, { decimals: 0 })})
-                </Button>
-              )}
+          {treatAsCompleted && !cancelMode && (
+            <div className="space-y-2 pt-2 border-t">
+              <p className="text-xs text-muted-foreground">
+                Booking complete. If the member did not show, mark as no-show to charge the 100% fee.
+              </p>
+              <Button variant="outline" size="sm"
+                className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
+                onClick={() => noShowMutation.mutate()} disabled={isPending}>
+                <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Mark as No-Show (100% fee — {formatCurrency(fullFee, { decimals: 0 })})
+              </Button>
+            </div>
+          )}
+
+          {isNoShow && !cancelMode && (
+            <div className="space-y-2 pt-2 border-t">
+              <p className="text-xs text-muted-foreground">
+                Marked as no-show. Revert if the member actually attended.
+              </p>
+              <Button variant="outline" size="sm" className="w-full"
+                onClick={() => revertToCompletedMutation.mutate()} disabled={isPending}>
+                Revert to Completed
+              </Button>
             </div>
           )}
 

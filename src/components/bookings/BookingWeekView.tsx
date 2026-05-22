@@ -64,6 +64,7 @@ type CalendarEvent = {
   recurring: boolean;
   urgency: UrgencyTier;
   isNoShow: boolean;
+  isCompleted: boolean;
 };
 
 export function BookingWeekView({ blocks, bookings, members, windows = [], onSlotClick, onBookingClick }: BookingWeekViewProps) {
@@ -119,16 +120,20 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
         tooltip: `Unavailable: ${formatTime12(b.start_time)} – ${formatTime12(b.end_time)}${b.notes ? ' — ' + b.notes : ''}`,
         bgColor: 'hsl(25 45% 25%)',
         textColor: 'hsl(40 30% 96%)',
-        isBlock: true, isOverage: false, recurring: false, urgency: 'none' as UrgencyTier, isNoShow: false,
+        isBlock: true, isOverage: false, recurring: false, urgency: 'none' as UrgencyTier, isNoShow: false, isCompleted: false,
       });
     }
 
     for (const bk of bookings) {
       if (CANCELLED_STATUSES.includes(bk.status)) continue;
       const isNoShow = bk.status === 'NO_SHOW';
+      const isCompleted = bk.status === 'COMPLETED';
+      const baseColor = getMemberColor(bk.member_id, allMemberIds);
       const color = isNoShow
         ? { bg: NO_SHOW_BG, text: '#fff' }
-        : getMemberColor(bk.member_id, allMemberIds);
+        : isCompleted
+          ? { bg: baseColor.bg, text: baseColor.text }
+          : baseColor;
       const isOverage = bookingOverageSet.has(bk.id);
       const bkStart = parseISO(`${bk.booking_date}T${bk.start_time}`);
       const hrsUntil = differenceInHours(bkStart, now);
@@ -141,11 +146,11 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
         startMin: timeToMinutes(bk.start_time),
         endMin: timeToMinutes(bk.end_time),
         label: bk.accounts?.account_name ?? 'Booking',
-        tooltip: `${bk.accounts?.account_name ?? 'Member'}: ${formatTime12(bk.start_time)} – ${formatTime12(bk.end_time)}${bk.duration_hours ? ` (${Number(bk.duration_hours).toFixed(1)}h)` : ''}${isNoShow ? ' [NO SHOW]' : ''}`,
+        tooltip: `${bk.accounts?.account_name ?? 'Member'}: ${formatTime12(bk.start_time)} – ${formatTime12(bk.end_time)}${bk.duration_hours ? ` (${Number(bk.duration_hours).toFixed(1)}h)` : ''}${isNoShow ? ' [NO SHOW]' : isCompleted ? ' [COMPLETED]' : ''}`,
         bgColor: color.bg,
         textColor: color.text,
         isBlock: false, isOverage, recurring: !!bk.recurring_block_id,
-        urgency, isNoShow,
+        urgency: isCompleted || isNoShow ? 'none' : urgency, isNoShow, isCompleted,
       });
     }
 
@@ -288,6 +293,7 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
                         className={cn(
                           'absolute left-0.5 right-0.5 rounded px-1 text-[10px] leading-tight overflow-hidden z-20',
                           ev.isBlock ? 'cursor-not-allowed opacity-90' : 'cursor-pointer',
+                          ev.isCompleted && 'opacity-60',
                           ev.isOverage && 'ring-1 ring-inset ring-white/40',
                           !ev.isBlock && ev.urgency === 'amber' && 'ring-2 ring-amber-400',
                           !ev.isBlock && ev.urgency === 'red' && 'ring-2 ring-destructive',
@@ -344,6 +350,10 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded" style={{ backgroundColor: NO_SHOW_BG }} />
           <span>No-Show</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded bg-muted-foreground/40" />
+          <span>Completed</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded border" style={{ backgroundImage: 'repeating-linear-gradient(135deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px)' }} />
