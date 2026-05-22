@@ -5433,6 +5433,7 @@ export type Database = {
         }
         Returns: Json
       }
+      sweep_past_bookings_to_completed: { Args: never; Returns: number }
       sync_locked_price_for_quote_line: {
         Args: { p_line_id: string }
         Returns: undefined
