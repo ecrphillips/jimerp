@@ -52,25 +52,27 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
 
   const marginPct = (price: number) => (price > 0 && totalCost >= 0 ? ((price - totalCost) / price) * 100 : 0);
 
-  // Dollar spread between retail and wholesale = gross margin available to the wholesaler.
-  const targetSpread = Math.max(0, targetRetail - targetWholesale);
+  // Wholesaler margin pct = (retail - wholesale) / retail. This is what we lock.
+  const targetWholesalerMarginPct =
+    targetRetail > 0 ? Math.max(0, ((targetRetail - targetWholesale) / targetRetail) * 100) : 20;
 
   // Working retail price — seeded from the target retail price.
   const [retail, setRetail] = useState<number>(targetRetail);
-  const [lockSpread, setLockSpread] = useState<boolean>(true);
-  const [lockedSpread, setLockedSpread] = useState<number>(targetSpread);
+  const [lockMargin, setLockMargin] = useState<boolean>(true);
+  const [lockedMarginPct, setLockedMarginPct] = useState<number>(targetWholesalerMarginPct);
 
   // Re-seed working values when the underlying target changes (scenario switch, edit).
   useEffect(() => {
     setRetail(targetRetail);
-    setLockedSpread(targetSpread);
+    setLockedMarginPct(targetWholesalerMarginPct);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetRetail, targetWholesale, totalCost]);
 
-  /** Wholesale price = retail - locked dollar spread (clamped to >= 0). */
-  const wholesaleFromSpread = (r: number): number => Math.max(0, r - lockedSpread);
+  /** Wholesale price derived from retail when locked at a given wholesaler-margin %. */
+  const wholesaleFromMargin = (r: number, pct: number): number =>
+    Math.max(0, r * (1 - pct / 100));
 
-  const wholesale = lockSpread ? wholesaleFromSpread(retail) : targetWholesale;
+  const wholesale = lockMargin ? wholesaleFromMargin(retail, lockedMarginPct) : targetWholesale;
 
   const retailMargin = retail > 0 ? marginPct(retail) : null;
   const wholesaleMargin = wholesale > 0 ? marginPct(wholesale) : null;
@@ -95,7 +97,9 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
   const step = inputs.displayUnit === 'BAG' ? 0.25 : 0.10;
 
   const commit = (nextRetail: number) => {
-    const nextWholesale = lockSpread ? wholesaleFromSpread(nextRetail) : targetWholesale;
+    const nextWholesale = lockMargin
+      ? wholesaleFromMargin(nextRetail, lockedMarginPct)
+      : targetWholesale;
     onChange(Number(nextRetail.toFixed(2)), Number(nextWholesale.toFixed(2)));
   };
 
