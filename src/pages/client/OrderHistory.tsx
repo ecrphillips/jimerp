@@ -35,11 +35,37 @@ interface LineItemSummary {
 export default function OrderHistory() {
   const queryClient = useQueryClient();
   const { previewAccountId } = usePreview();
+  const { authUser, isInternal } = useAuth();
   const { hidePricing } = usePricingVisibility();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
+  // Locations this user is allowed to see. null = no restriction (internal/owner/ALL).
+  const { data: allowedLocationIds } = useQuery({
+    queryKey: ['allowed-location-ids', previewAccountId, authUser?.id, isInternal],
+    enabled: !!previewAccountId && !!authUser?.id,
+    queryFn: async (): Promise<string[] | null> => {
+      if (isInternal) return null;
+      const { data: membership, error } = await supabase
+        .from('account_users')
+        .select('id, is_owner, location_access')
+        .eq('account_id', previewAccountId!)
+        .eq('user_id', authUser!.id)
+        .eq('is_active', true)
+        .maybeSingle();
+      if (error) throw error;
+      if (!membership) return [];
+      if (membership.is_owner || membership.location_access === 'ALL') return null;
+      const { data: assigned, error: aErr } = await supabase
+        .from('account_user_locations')
+        .select('location_id')
+        .eq('account_user_id', membership.id);
+      if (aErr) throw aErr;
+      return (assigned ?? []).map((r) => r.location_id);
+    },
+  });
+
   const { data: orders, isLoading, error } = useQuery({
-    queryKey: ['client-orders', previewAccountId],
+    queryKey: ['client-orders', previewAccountId, allowedLocationIds],
     queryFn: async () => {
       let q = supabase
         .from('orders')
@@ -48,8 +74,12 @@ export default function OrderHistory() {
       const { data, error } = await q.order('created_at', { ascending: false });
 
       if (error) throw error;
-      return (data ?? []) as Order[];
+      const rows = (data ?? []) as Order[];
+      if (allowedLocationIds === null || allowedLocationIds === undefined) return rows;
+      const allowed = new Set(allowedLocationIds);
+      return rows.filter((o) => o.location_id && allowed.has(o.location_id));
     },
+    enabled: allowedLocationIds !== undefined || isInternal,
   });
 
   // Fetch line item summaries for all orders in the list view
