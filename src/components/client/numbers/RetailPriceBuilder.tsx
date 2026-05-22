@@ -50,36 +50,27 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
   const targetRetail = inputs.retailPrice ?? 0;
   const targetWholesale = inputs.wholesalePrice ?? 0;
 
-  // Margin gap (in margin %-points) between target retail and target wholesale.
   const marginPct = (price: number) => (price > 0 && totalCost >= 0 ? ((price - totalCost) / price) * 100 : 0);
-  const targetGapPct = Math.max(0, marginPct(targetRetail) - marginPct(targetWholesale));
+
+  // Dollar spread between retail and wholesale = gross margin available to the wholesaler.
+  const targetSpread = Math.max(0, targetRetail - targetWholesale);
 
   // Working retail price — seeded from the target retail price.
   const [retail, setRetail] = useState<number>(targetRetail);
-  const [lockGap, setLockGap] = useState<boolean>(true);
-  const [lockedGapPct, setLockedGapPct] = useState<number>(targetGapPct);
+  const [lockSpread, setLockSpread] = useState<boolean>(true);
+  const [lockedSpread, setLockedSpread] = useState<number>(targetSpread);
 
   // Re-seed working values when the underlying target changes (scenario switch, edit).
   useEffect(() => {
     setRetail(targetRetail);
-    setLockedGapPct(targetGapPct);
+    setLockedSpread(targetSpread);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetRetail, targetWholesale, totalCost]);
 
-  /** Solve wholesale price so that its margin% = retailMargin% - lockedGapPct. */
-  const wholesaleFromGap = (r: number): number => {
-    if (r <= 0 || totalCost <= 0) return targetWholesale;
-    const retailM = (r - totalCost) / r;                // fraction
-    const wholesaleM = retailM - lockedGapPct / 100;    // fraction
-    if (wholesaleM >= 0.99) return r;                   // degenerate
-    if (wholesaleM <= -10) return 0;
-    // price = cost / (1 - margin); guard against div-by-zero / negative
-    const denom = 1 - wholesaleM;
-    if (denom <= 0) return r;
-    return Math.max(0, totalCost / denom);
-  };
+  /** Wholesale price = retail - locked dollar spread (clamped to >= 0). */
+  const wholesaleFromSpread = (r: number): number => Math.max(0, r - lockedSpread);
 
-  const wholesale = lockGap ? wholesaleFromGap(retail) : targetWholesale;
+  const wholesale = lockSpread ? wholesaleFromSpread(retail) : targetWholesale;
 
   const retailMargin = retail > 0 ? marginPct(retail) : null;
   const wholesaleMargin = wholesale > 0 ? marginPct(wholesale) : null;
@@ -104,7 +95,7 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
   const step = inputs.displayUnit === 'BAG' ? 0.25 : 0.10;
 
   const commit = (nextRetail: number) => {
-    const nextWholesale = lockGap ? wholesaleFromGap(nextRetail) : targetWholesale;
+    const nextWholesale = lockSpread ? wholesaleFromSpread(nextRetail) : targetWholesale;
     onChange(Number(nextRetail.toFixed(2)), Number(nextWholesale.toFixed(2)));
   };
 
@@ -190,23 +181,22 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
               </div>
             </div>
 
-            {/* Lock gap */}
+            {/* Lock wholesaler spread */}
             <div className="flex items-center justify-between rounded border px-3 py-2">
               <div className="flex items-center gap-2">
-                {lockGap ? <Lock className="h-3.5 w-3.5 text-primary" /> : <Unlock className="h-3.5 w-3.5 text-muted-foreground" />}
-                <Label htmlFor="lock-gap" className="text-xs cursor-pointer">
-                  Lock retail – wholesale margin gap at {lockedGapPct.toFixed(1)}%
+                {lockSpread ? <Lock className="h-3.5 w-3.5 text-primary" /> : <Unlock className="h-3.5 w-3.5 text-muted-foreground" />}
+                <Label htmlFor="lock-spread" className="text-xs cursor-pointer">
+                  Lock gross margin available to wholesaler at {fmt(lockedSpread)}/{unit}
                 </Label>
               </div>
               <Switch
-                id="lock-gap"
-                checked={lockGap}
+                id="lock-spread"
+                checked={lockSpread}
                 onCheckedChange={(v) => {
                   if (v) {
-                    const gap = Math.max(0, (retailMargin ?? 0) - (wholesaleMargin ?? 0));
-                    setLockedGapPct(gap);
+                    setLockedSpread(Math.max(0, retail - wholesale));
                   }
-                  setLockGap(v);
+                  setLockSpread(v);
                 }}
               />
             </div>
