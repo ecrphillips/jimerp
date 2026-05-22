@@ -181,23 +181,22 @@ export function RetailPriceBuilder({ inputs, totalCost, onChange }: Props) {
               </div>
             </div>
 
-            {/* Lock gap */}
+            {/* Lock wholesaler spread */}
             <div className="flex items-center justify-between rounded border px-3 py-2">
               <div className="flex items-center gap-2">
-                {lockGap ? <Lock className="h-3.5 w-3.5 text-primary" /> : <Unlock className="h-3.5 w-3.5 text-muted-foreground" />}
-                <Label htmlFor="lock-gap" className="text-xs cursor-pointer">
-                  Lock retail – wholesale margin gap at {lockedGapPct.toFixed(1)}%
+                {lockSpread ? <Lock className="h-3.5 w-3.5 text-primary" /> : <Unlock className="h-3.5 w-3.5 text-muted-foreground" />}
+                <Label htmlFor="lock-spread" className="text-xs cursor-pointer">
+                  Lock gross margin available to wholesaler at {fmt(lockedSpread)}/{unit}
                 </Label>
               </div>
               <Switch
-                id="lock-gap"
-                checked={lockGap}
+                id="lock-spread"
+                checked={lockSpread}
                 onCheckedChange={(v) => {
                   if (v) {
-                    const gap = Math.max(0, (retailMargin ?? 0) - (wholesaleMargin ?? 0));
-                    setLockedGapPct(gap);
+                    setLockedSpread(Math.max(0, retail - wholesale));
                   }
-                  setLockGap(v);
+                  setLockSpread(v);
                 }}
               />
             </div>
