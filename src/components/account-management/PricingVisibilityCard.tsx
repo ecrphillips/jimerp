@@ -31,7 +31,7 @@ export function PricingVisibilityCard({ accountId }: Props) {
     mutationFn: async (hide: boolean) => {
       const { error } = await ownerRpc('owner_set_account_pricing_visibility', {
         p_account_id: accountId,
-        p_hide: hide,
+        p_hidden: hide,
       });
       if (error) throw error;
     },
