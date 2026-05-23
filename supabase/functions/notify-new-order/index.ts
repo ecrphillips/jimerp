@@ -1,6 +1,12 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.91.0";
-import { ensureUnsubscribeToken, fanOutNotification, unsubscribeFooter } from "../_shared/notifications.ts";
+import {
+  ensureUnsubscribeToken,
+  fanOutNotification,
+  renderOrderItemsHtml,
+  renderOrderItemsText,
+  unsubscribeFooter,
+} from "../_shared/notifications.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,7 +41,7 @@ function formatDate(d: string | null): string {
   }
 }
 
-interface LineItem { product_name: string; quantity_units: number }
+interface LineItem { product_name: string; bag_size_g: number | null; quantity_units: number }
 
 interface ShipTo {
   delivery_method: string | null;
@@ -277,13 +283,15 @@ serve(async (req: Request) => {
     // Line items
     const { data: liRows, error: liErr } = await adminClient
       .from("order_line_items")
-      .select("quantity_units, product:products(product_name)")
+      .select("quantity_units, product:products(product_name, bag_size_g)")
       .eq("order_id", order.id)
       .order("created_at", { ascending: true });
     if (liErr) console.warn("[notify-new-order] Line items fetch error:", liErr.message);
     const lineItems: LineItem[] = (liRows ?? []).map((li: { quantity_units: number; product: unknown }) => ({
       // deno-lint-ignore no-explicit-any
       product_name: (li.product as any)?.product_name ?? "Unknown Product",
+      // deno-lint-ignore no-explicit-any
+      bag_size_g: (li.product as any)?.bag_size_g ?? null,
       quantity_units: li.quantity_units,
     }));
 
@@ -301,9 +309,7 @@ serve(async (req: Request) => {
     const submitterLine = submittedByName ? `Submitted by: ${submittedByName}` : null;
     const shipFmt = formatShipTo(ship);
 
-    const itemsText = lineItems.length === 0
-      ? "  (no line items)"
-      : lineItems.map((li) => `  • ${li.product_name} — ${li.quantity_units} units`).join("\n");
+    const itemsText = renderOrderItemsText(lineItems);
 
     const text = [
       `A new order has been submitted.`,
@@ -320,19 +326,9 @@ serve(async (req: Request) => {
       shipFmt.text,
       ``,
       `If you need to make changes, contact us at orders@homeislandcoffee.com.`,
-      ``,
-      `Open order: /internal/orders/${order.id}`,
     ].filter((l) => l !== null).join("\n");
 
-    const itemRowsHtml = lineItems.length === 0
-      ? `<tr><td colspan="2" style="padding:6px 0;color:#666;">(no line items)</td></tr>`
-      : lineItems
-          .map(
-            (li) =>
-              `<tr><td style="padding:4px 12px 4px 0;">${escapeHtml(li.product_name)}</td>` +
-              `<td style="padding:4px 0;text-align:right;">${li.quantity_units} units</td></tr>`,
-          )
-          .join("");
+    const itemRowsHtml = renderOrderItemsHtml(lineItems);
 
     const subject = `New order ${order.order_number} — ${clientName}`;
     const html = `<!doctype html>
@@ -350,7 +346,6 @@ serve(async (req: Request) => {
   <h3 style="margin:16px 0 8px 0;font-size:14px;">Delivery</h3>
   <p style="margin:0 0 16px 0;">${shipFmt.html}</p>
   <p style="margin:16px 0 8px 0;color:#666;font-size:13px;">If you need to make changes, contact us at <a href="mailto:orders@homeislandcoffee.com">orders@homeislandcoffee.com</a>.</p>
-  <p style="margin:0;font-size:13px;">Open order: /internal/orders/${escapeHtml(order.id)}</p>
 </body></html>`;
 
     // ========== EMAIL FAN-OUT ==========
