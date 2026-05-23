@@ -23,3 +23,5 @@ project_id = "cgdzjkryygwlyygeznrb"
     verify_jwt = false
   [functions.update-user]
     verify_jwt = false
+  [functions.unsubscribe]
+    verify_jwt = false

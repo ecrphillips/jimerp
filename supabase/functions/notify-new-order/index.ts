@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.91.0";
-import { fanOutNotification } from "../_shared/notifications.ts";
+import { ensureUnsubscribeToken, fanOutNotification, unsubscribeFooter } from "../_shared/notifications.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -67,6 +67,18 @@ function formatShipTo(ship: ShipTo | null): { text: string; html: string } {
 
 // deno-lint-ignore no-explicit-any
 async function enqueueShared(adminClient: any, subject: string, text: string, html: string) {
+  let unsubscribeToken: string;
+  try {
+    unsubscribeToken = await ensureUnsubscribeToken(adminClient, SHARED_MAILBOX);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[notify-new-order] shared mailbox token failed:", msg);
+    return { ok: false, error: `unsubscribe token: ${msg}` };
+  }
+  const footer = unsubscribeFooter(unsubscribeToken);
+  const finalText = `${text}${footer.text}`;
+  const finalHtml = html.replace(/<\/body>/i, `${footer.html}</body>`);
+
   const messageId = crypto.randomUUID();
   const { data: logRow } = await adminClient
     .from("email_send_log")
@@ -88,10 +100,11 @@ async function enqueueShared(adminClient: any, subject: string, text: string, ht
       from: FROM_DISPLAY,
       sender_domain: FROM_DOMAIN,
       subject,
-      text,
-      html,
+      text: finalText,
+      html: finalHtml,
       purpose: "transactional",
       label: "order_submitted_notification",
+      unsubscribe_token: unsubscribeToken,
       queued_at: new Date().toISOString(),
     },
   });
