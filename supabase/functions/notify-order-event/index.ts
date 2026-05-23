@@ -5,7 +5,8 @@
 // Recipients:
 //   • Order placer (created_by_user_id) — email pulled from profiles
 //   • Account owners (account_users where is_owner = true and is_active = true)
-//   • Shared mailbox (orders@homeislandcoffee.com) — for SHARED_MAILBOX_EVENTS
+//   • Shared mailbox: ONLY when an admin has wired one in via
+//     app_settings.notification_routes.<EVENT>. No hardcoded fallback.
 //
 // Per-user EMAIL preferences are respected. If the user has an explicit
 // pref row for (event_type, channel='EMAIL') with enabled=false, they are
@@ -13,7 +14,12 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.91.0";
-import { ensureUnsubscribeToken, unsubscribeFooter } from "../_shared/notifications.ts";
+import {
+  ensureUnsubscribeToken,
+  renderOrderItemsHtml,
+  renderOrderItemsText,
+  unsubscribeFooter,
+} from "../_shared/notifications.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,20 +39,18 @@ interface NotifyBody {
   details?: string;
 }
 
-const SHARED_MAILBOX_EVENTS: OrderEventType[] = [
-  "ORDER_CONFIRMED",
-  "ORDER_SHIPPED",
-  "ORDER_CANCELLED",
-  "ORDER_CLIENT_EDITED",
-];
-
-const FALLBACK_SHARED_MAILBOX = "orders@homeislandcoffee.com";
+// orders@homeislandcoffee.com is ONLY a hardcoded recipient for ORDER_SUBMITTED
+// (handled by notify-new-order). It must NOT be added for any of the events
+// this function handles. Per-user EMAIL preferences are the sole recipient
+// source here; the only exception is an explicit app_settings override row
+// keyed `notification_routes.<EVENT>`.
 
 const FROM_DISPLAY = "Home Island Coffee Partners <noreply@notify.homeislandcoffee.com>";
 const FROM_DOMAIN = "notify.homeislandcoffee.com";
 
 interface LineItem {
   product_name: string;
+  bag_size_g: number | null;
   quantity_units: number;
 }
 
@@ -130,7 +134,6 @@ function buildText(
   lineItems: LineItem[],
   ship: ShipTo | null,
   details: string | undefined,
-  origin: string,
 ): string {
   const lines: string[] = [];
   lines.push(eventHeadline(event, orderNumber, accountName));
@@ -140,8 +143,7 @@ function buildText(
   lines.push(`Requested ship date: ${formatDate(requestedShipDate)}`);
   lines.push("");
   lines.push("Items:");
-  if (lineItems.length === 0) lines.push("  (no line items)");
-  else for (const li of lineItems) lines.push(`  • ${li.product_name} — ${li.quantity_units} units`);
+  lines.push(renderOrderItemsText(lineItems));
   lines.push("");
   const shipFmt = formatShipTo(ship);
   lines.push("Delivery:");
@@ -152,8 +154,6 @@ function buildText(
   }
   lines.push("");
   lines.push("If you need to make changes, contact us at orders@homeislandcoffee.com.");
-  lines.push("");
-  lines.push(`View order: ${origin}/internal/orders/`);
   return lines.join("\n");
 }
 
@@ -165,18 +165,9 @@ function buildHtml(
   lineItems: LineItem[],
   ship: ShipTo | null,
   details: string | undefined,
-  origin: string,
 ): string {
   const shipFmt = formatShipTo(ship);
-  const itemRows = lineItems.length === 0
-    ? `<tr><td colspan="2" style="padding:6px 0;color:#666;">(no line items)</td></tr>`
-    : lineItems
-        .map(
-          (li) =>
-            `<tr><td style="padding:4px 12px 4px 0;">${escapeHtml(li.product_name)}</td>` +
-            `<td style="padding:4px 0;text-align:right;">${li.quantity_units} units</td></tr>`,
-        )
-        .join("");
+  const itemRows = renderOrderItemsHtml(lineItems);
 
   return `<!doctype html>
 <html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#222;max-width:600px;margin:0 auto;padding:24px;">
@@ -200,7 +191,6 @@ function buildHtml(
   ${details ? `<p style="margin:0 0 16px 0;"><strong>Notes:</strong> ${escapeHtml(details)}</p>` : ""}
 
   <p style="margin:16px 0 8px 0;color:#666;font-size:13px;">If you need to make changes, contact us at <a href="mailto:orders@homeislandcoffee.com">orders@homeislandcoffee.com</a>.</p>
-  <p style="margin:0;font-size:13px;"><a href="${escapeHtml(origin)}/internal/orders/">View order</a></p>
 </body></html>`;
 }
 
@@ -332,12 +322,14 @@ serve(async (req: Request) => {
     // Line items
     const { data: liRows } = await adminClient
       .from("order_line_items")
-      .select("quantity_units, product:products(product_name)")
+      .select("quantity_units, product:products(product_name, bag_size_g)")
       .eq("order_id", order.id)
       .order("created_at", { ascending: true });
     const lineItems: LineItem[] = (liRows ?? []).map((li: { quantity_units: number; product: unknown }) => ({
       // deno-lint-ignore no-explicit-any
       product_name: (li.product as any)?.product_name ?? "Unknown Product",
+      // deno-lint-ignore no-explicit-any
+      bag_size_g: (li.product as any)?.bag_size_g ?? null,
       quantity_units: li.quantity_units,
     }));
 
@@ -388,9 +380,11 @@ serve(async (req: Request) => {
       }
     }
 
-    // Shared mailbox: app_settings override, else hardcoded fallback for SHARED_MAILBOX_EVENTS.
-    if (SHARED_MAILBOX_EVENTS.includes(body.event_type)) {
-      let sharedAdded: string | null = null;
+    // Shared mailbox: only honor an explicit app_settings override row. No
+    // hardcoded fallback. orders@homeislandcoffee.com is reserved for
+    // ORDER_SUBMITTED (notify-new-order) and must not appear on other events
+    // unless an admin has wired it in via notification_routes.<EVENT>.
+    {
       const { data: setting } = await adminClient
         .from("app_settings")
         .select("value_json")
@@ -399,20 +393,16 @@ serve(async (req: Request) => {
       // deno-lint-ignore no-explicit-any
       const v = setting?.value_json as any;
       if (v?.enabled && v?.shared_email) {
-        sharedAdded = String(v.shared_email).toLowerCase();
-        recipients.add(sharedAdded);
-      } else {
-        sharedAdded = FALLBACK_SHARED_MAILBOX;
-        recipients.add(FALLBACK_SHARED_MAILBOX);
+        const shared = String(v.shared_email).toLowerCase();
+        recipients.add(shared);
+        console.log(`[notify-order-event] shared mailbox override: ${shared}`);
       }
-      console.log(`[notify-order-event] shared mailbox: ${sharedAdded}`);
     }
 
-    const origin = req.headers.get("origin") ?? "https://homeislandcoffeepartners.lovable.app";
     const subject = buildSubject(body.event_type, order.order_number, accountName);
     const requestedShip = order.requested_ship_date ?? order.work_deadline ?? null;
-    const text = buildText(body.event_type, order.order_number, accountName, requestedShip, lineItems, ship, body.details, origin);
-    const html = buildHtml(body.event_type, order.order_number, accountName, requestedShip, lineItems, ship, body.details, origin);
+    const text = buildText(body.event_type, order.order_number, accountName, requestedShip, lineItems, ship, body.details);
+    const html = buildHtml(body.event_type, order.order_number, accountName, requestedShip, lineItems, ship, body.details);
     const label = `order_${body.event_type.toLowerCase().replace(/^order_/, "")}_notification`;
 
     console.log(`[notify-order-event] recipients=${[...recipients].join(",")}`);

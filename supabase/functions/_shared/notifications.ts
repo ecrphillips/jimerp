@@ -107,13 +107,64 @@ export function buildUnsubscribeUrl(token: string): string {
   return `${base.replace(/\/$/, '')}/functions/v1/unsubscribe?token=${encodeURIComponent(token)}`;
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// ---------------------------------------------------------------------------
+// Order line item rendering (shared across order email functions)
+// ---------------------------------------------------------------------------
+
+export interface OrderLineItemRow {
+  product_name: string;
+  bag_size_g: number | null;
+  quantity_units: number;
+}
+
+export function formatBagSize(grams: number | null | undefined): string {
+  if (grams == null) return '—';
+  return grams >= 1000 ? `${grams / 1000}kg` : `${grams}g`;
+}
+
+export function renderOrderItemsText(items: OrderLineItemRow[]): string {
+  if (items.length === 0) return '  (no line items)';
+  const header = ['Item', 'Bag Size', 'Quantity'];
+  const rows = items.map((li) => [
+    li.product_name,
+    formatBagSize(li.bag_size_g),
+    String(li.quantity_units),
+  ]);
+  const all = [header, ...rows];
+  const widths = [0, 1, 2].map((c) => Math.max(...all.map((r) => r[c].length)));
+  return all.map((r) => r.map((c, i) => c.padEnd(widths[i])).join('  ')).join('\n');
+}
+
+export function renderOrderItemsHtml(items: OrderLineItemRow[]): string {
+  if (items.length === 0) {
+    return `<tr><td colspan="3" style="padding:6px 0;color:#666;">(no line items)</td></tr>`;
+  }
+  const headerRow =
+    `<tr>` +
+    `<th align="left" style="padding:4px 12px 4px 0;border-bottom:1px solid #ddd;font-size:13px;">Item</th>` +
+    `<th align="left" style="padding:4px 12px 4px 0;border-bottom:1px solid #ddd;font-size:13px;">Bag Size</th>` +
+    `<th align="right" style="padding:4px 0;border-bottom:1px solid #ddd;font-size:13px;">Quantity</th>` +
+    `</tr>`;
+  const bodyRows = items
+    .map(
+      (li) =>
+        `<tr>` +
+        `<td style="padding:4px 12px 4px 0;">${escapeHtml(li.product_name)}</td>` +
+        `<td style="padding:4px 12px 4px 0;">${escapeHtml(formatBagSize(li.bag_size_g))}</td>` +
+        `<td style="padding:4px 0;text-align:right;">${li.quantity_units}</td>` +
+        `</tr>`,
+    )
+    .join('');
+  return headerRow + bodyRows;
 }
 
 /** Inline-able footer lines to append at the end of a transactional email body. */

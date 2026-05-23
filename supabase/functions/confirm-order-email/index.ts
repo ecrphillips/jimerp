@@ -1,6 +1,25 @@
+// Sends the customer-facing ORDER_CONFIRMED email.
+//
+// Recipients are resolved the same way as notify-order-event for
+// ORDER_CONFIRMED:
+//   • Order placer (orders.created_by_user_id)
+//   • Active owners on the order's account (account_users.is_owner=true AND is_active=true)
+// All recipients are filtered through user_notification_preferences for
+// (event_type=ORDER_CONFIRMED, channel=EMAIL). A user with enabled=false is
+// skipped; everyone else (default) receives the email.
+//
+// Notably we do NOT fall back to accounts.billing_email or any other
+// account-level address. Shared mailbox CCs are also gone — orders@homeislandcoffee.com
+// is reserved for ORDER_SUBMITTED.
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.91.0";
-import { ensureUnsubscribeToken, unsubscribeFooter } from "../_shared/notifications.ts";
+import {
+  ensureUnsubscribeToken,
+  renderOrderItemsHtml,
+  renderOrderItemsText,
+  unsubscribeFooter,
+} from "../_shared/notifications.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,13 +29,16 @@ const corsHeaders = {
 
 const FROM_ADDRESS = "noreply@homeislandcoffee.com";
 const FROM_DISPLAY = "Home Island Manufacturing <noreply@homeislandcoffee.com>";
-const CC_ADDRESS = "orders@homeislandcoffee.com";
 
 interface ConfirmRequest {
   order_id: string;
 }
 
-interface LineItem { product_name: string; quantity_units: number }
+interface LineItem {
+  product_name: string;
+  bag_size_g: number | null;
+  quantity_units: number;
+}
 
 interface ShipTo {
   delivery_method: string | null;
@@ -114,7 +136,7 @@ serve(async (req: Request) => {
 
     const { data: order, error: orderError } = await adminClient
       .from("orders")
-      .select("id, order_number, requested_ship_date, work_deadline, work_deadline_at, account_id, status")
+      .select("id, order_number, requested_ship_date, work_deadline, work_deadline_at, account_id, created_by_user_id, status")
       .eq("id", order_id)
       .maybeSingle();
 
@@ -136,7 +158,7 @@ serve(async (req: Request) => {
 
     const { data: account, error: accountError } = await adminClient
       .from("accounts")
-      .select("account_name, billing_email")
+      .select("account_name")
       .eq("id", order.account_id)
       .maybeSingle();
 
@@ -148,17 +170,9 @@ serve(async (req: Request) => {
       );
     }
 
-    if (!account.billing_email) {
-      console.warn(`[confirm-order-email] Account ${order.account_id} has no billing_email — cannot send`);
-      return new Response(
-        JSON.stringify({ ok: false, error: "Account has no billing email" }),
-        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const { data: liRows, error: lineError } = await adminClient
       .from("order_line_items")
-      .select("quantity_units, product:products(product_name)")
+      .select("quantity_units, product:products(product_name, bag_size_g)")
       .eq("order_id", order_id)
       .order("created_at", { ascending: true });
 
@@ -168,6 +182,8 @@ serve(async (req: Request) => {
     const lineItems: LineItem[] = (liRows ?? []).map((li: { quantity_units: number; product: unknown }) => ({
       // deno-lint-ignore no-explicit-any
       product_name: (li.product as any)?.product_name ?? "Unknown Product",
+      // deno-lint-ignore no-explicit-any
+      bag_size_g: (li.product as any)?.bag_size_g ?? null,
       quantity_units: li.quantity_units,
     }));
 
@@ -180,15 +196,62 @@ serve(async (req: Request) => {
       .maybeSingle();
     const ship: ShipTo | null = shipment ?? null;
 
+    // ---- Resolve recipients: placer + active owners, filtered by per-user EMAIL prefs ----
+    const userIds = new Set<string>();
+    if (order.created_by_user_id) userIds.add(order.created_by_user_id);
+    if (order.account_id) {
+      const { data: owners } = await adminClient
+        .from("account_users")
+        .select("user_id")
+        .eq("account_id", order.account_id)
+        .eq("is_owner", true)
+        .eq("is_active", true);
+      // deno-lint-ignore no-explicit-any
+      for (const o of (owners ?? []) as any[]) {
+        if (o?.user_id) userIds.add(o.user_id);
+      }
+    }
+
+    const recipients = new Set<string>();
+    if (userIds.size > 0) {
+      const ids = [...userIds];
+      const [{ data: profiles }, { data: prefs }] = await Promise.all([
+        adminClient.from("profiles").select("user_id, email").in("user_id", ids),
+        adminClient
+          .from("user_notification_preferences")
+          .select("user_id, enabled")
+          .in("user_id", ids)
+          .eq("event_type", "ORDER_CONFIRMED")
+          .eq("channel", "EMAIL"),
+      ]);
+      const disabled = new Set(
+        // deno-lint-ignore no-explicit-any
+        (prefs ?? []).filter((p: any) => p.enabled === false).map((p: any) => p.user_id),
+      );
+      // deno-lint-ignore no-explicit-any
+      for (const p of (profiles ?? []) as any[]) {
+        if (!p?.email) continue;
+        if (disabled.has(p.user_id)) continue;
+        recipients.add(String(p.email).toLowerCase());
+      }
+    }
+
+    if (recipients.size === 0) {
+      console.warn(`[confirm-order-email] No eligible recipients for order ${order_id} — nothing to send`);
+      return new Response(
+        JSON.stringify({ ok: true, enqueued: 0, recipients: [], message: "No eligible recipients" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const accountName = account.account_name;
     const orderNumber = order.order_number;
     const roastDay = formatDate(order.work_deadline_at ?? order.work_deadline ?? null);
     const shipDate = formatDate(order.requested_ship_date);
     const shipFmt = formatShipTo(ship);
 
-    const itemsText = lineItems.length === 0
-      ? "  (no line items)"
-      : lineItems.map((li) => `  • ${li.product_name} — ${li.quantity_units} units`).join("\n");
+    const itemsText = renderOrderItemsText(lineItems);
+    const itemRowsHtml = renderOrderItemsHtml(lineItems);
 
     const subject = `Order Confirmed — ${orderNumber} — ${accountName}`;
 
@@ -211,16 +274,6 @@ If you need to make changes, contact us at orders@homeislandcoffee.com.
 
 Thank you,
 Home Island Manufacturing`;
-
-    const itemRowsHtml = lineItems.length === 0
-      ? `<tr><td colspan="2" style="padding:6px 0;color:#666;">(no line items)</td></tr>`
-      : lineItems
-          .map(
-            (li) =>
-              `<tr><td style="padding:4px 12px 4px 0;">${escapeHtml(li.product_name)}</td>` +
-              `<td style="padding:4px 0;text-align:right;">${li.quantity_units} units</td></tr>`,
-          )
-          .join("");
 
     const emailHtml = `<!doctype html>
 <html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#222;max-width:600px;margin:0 auto;padding:24px;">
@@ -296,24 +349,29 @@ Home Island Manufacturing`;
       return { ok: true, message_id: messageId };
     }
 
-    const primary = await enqueueOne(account.billing_email);
-    if (!primary.ok) {
-      console.error("[confirm-order-email] Failed to enqueue primary:", primary.error);
-      return new Response(
-        JSON.stringify({ ok: false, error: "Failed to enqueue email" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const results: { recipient: string; ok: boolean; message_id: string; error?: string }[] = [];
+    for (const r of recipients) {
+      const result = await enqueueOne(r);
+      results.push({ recipient: r, ...result });
     }
 
-    const ccCopy = await enqueueOne(CC_ADDRESS);
-    if (!ccCopy.ok) {
-      console.warn("[confirm-order-email] Failed to enqueue CC copy (non-fatal):", ccCopy.error);
-    }
+    const enqueued = results.filter((r) => r.ok).length;
+    const errors = results.filter((r) => !r.ok).map((r) => `${r.recipient}: ${r.error}`);
 
-    console.log(`[confirm-order-email] Enqueued confirmation for order ${orderNumber} → ${account.billing_email} (cc copy: ${CC_ADDRESS})`);
+    console.log(
+      `[confirm-order-email] order ${orderNumber} → enqueued=${enqueued}/${recipients.size} recipients=[${[...recipients].join(",")}]`,
+    );
+    if (errors.length > 0) {
+      console.warn(`[confirm-order-email] errors:`, errors);
+    }
 
     return new Response(
-      JSON.stringify({ ok: true, message_id: primary.message_id, cc_message_id: ccCopy.message_id }),
+      JSON.stringify({
+        ok: true,
+        enqueued,
+        recipients: [...recipients],
+        errors,
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
