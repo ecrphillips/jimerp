@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Minus, Plus } from 'lucide-react';
+import { Check } from 'lucide-react';
 
 interface ShipPickInputProps {
   value: number;
@@ -10,17 +10,16 @@ interface ShipPickInputProps {
   disabled?: boolean;
 }
 
-export function ShipPickInput({ 
-  value, 
-  maxValue, 
-  onCommit, 
-  disabled = false 
+export function ShipPickInput({
+  value,
+  maxValue,
+  onCommit,
+  disabled = false
 }: ShipPickInputProps) {
   const [draftValue, setDraftValue] = useState<string>(value.toString());
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Sync from props only when NOT focused
   useEffect(() => {
     if (!isFocused) {
       setDraftValue(value.toString());
@@ -28,7 +27,6 @@ export function ShipPickInput({
   }, [value, isFocused]);
 
   const commitValue = (newValue: number) => {
-    // Clamp to 0-maxValue
     const clamped = Math.max(0, Math.min(newValue, maxValue));
     setDraftValue(clamped.toString());
     onCommit(clamped);
@@ -36,14 +34,12 @@ export function ShipPickInput({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputValue = e.target.value;
-    
-    // Allow empty string while typing
+
     if (inputValue === '') {
       setDraftValue('');
       return;
     }
-    
-    // Only allow valid integers
+
     const parsed = parseInt(inputValue, 10);
     if (!isNaN(parsed) && parsed >= 0) {
       setDraftValue(parsed.toString());
@@ -56,8 +52,6 @@ export function ShipPickInput({
 
   const handleBlur = () => {
     setIsFocused(false);
-    
-    // Treat empty as 0, then commit
     const finalValue = draftValue === '' ? 0 : parseInt(draftValue, 10) || 0;
     commitValue(finalValue);
   };
@@ -68,23 +62,14 @@ export function ShipPickInput({
     }
   };
 
-  const handleButtonClick = (delta: number) => {
-    const current = parseInt(draftValue, 10) || 0;
-    const newValue = current + delta;
-    commitValue(newValue);
+  const handlePickAll = () => {
+    commitValue(maxValue);
   };
+
+  const currentValue = parseInt(draftValue, 10) || 0;
 
   return (
     <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
-      <Button
-        size="sm"
-        variant="outline"
-        className="h-7 w-7 p-0"
-        onClick={() => handleButtonClick(-1)}
-        disabled={disabled || (parseInt(draftValue, 10) || 0) <= 0}
-      >
-        <Minus className="h-3 w-3" />
-      </Button>
       <Input
         ref={inputRef}
         type="number"
@@ -95,17 +80,19 @@ export function ShipPickInput({
         onFocus={handleFocus}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
-        className="w-12 h-7 text-center text-sm px-1"
+        className="w-16 h-7 text-center text-sm px-1"
         disabled={disabled}
       />
       <Button
         size="sm"
         variant="outline"
-        className="h-7 w-7 p-0"
-        onClick={() => handleButtonClick(1)}
-        disabled={disabled || (parseInt(draftValue, 10) || 0) >= maxValue}
+        className="h-7 px-2 text-xs gap-1"
+        onClick={handlePickAll}
+        disabled={disabled || currentValue >= maxValue}
+        title="Pick all"
       >
-        <Plus className="h-3 w-3" />
+        <Check className="h-3 w-3" />
+        Pick all
       </Button>
     </div>
   );
