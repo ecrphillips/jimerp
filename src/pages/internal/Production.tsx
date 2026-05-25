@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Flame, Package, Truck, CalendarClock } from 'lucide-react';
+import { Flame, Package, Truck, CalendarClock, ClipboardList } from 'lucide-react';
+import { PlanTab } from '@/components/production/PlanTab';
 import { RoastTab } from '@/components/production/RoastTab';
 import { PackTab } from '@/components/production/PackTab';
 import { ShipTab } from '@/components/production/ShipTab';
@@ -14,7 +15,7 @@ import {
 import type { DateFilterConfig } from '@/components/production/types';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 
-type StationView = 'roast' | 'pack' | 'ship';
+type StationView = 'plan' | 'roast' | 'pack' | 'ship';
 type DateFilterMode = 'today' | 'tomorrow' | 'all';
 
 export default function Production() {
@@ -49,7 +50,7 @@ export default function Production() {
   // Read initial tab from URL param, default to 'roast'
   const tabFromUrl = searchParams.get('tab') as StationView | null;
   const [stationView, setStationView] = useState<StationView>(
-    tabFromUrl && ['roast', 'pack', 'ship'].includes(tabFromUrl) ? tabFromUrl : 'roast'
+    tabFromUrl && ['plan', 'roast', 'pack', 'ship'].includes(tabFromUrl) ? tabFromUrl : 'plan'
   );
 
   // Update URL when tab changes
@@ -110,7 +111,11 @@ export default function Production() {
 
       {/* Station Tabs */}
       <Tabs value={stationView} onValueChange={(v) => handleTabChange(v as StationView)} className="mb-4">
-        <TabsList className="grid w-full grid-cols-3 max-w-md">
+        <TabsList className="grid w-full grid-cols-4 max-w-xl">
+          <TabsTrigger value="plan" className="flex items-center gap-2">
+            <ClipboardList className="h-4 w-4" />
+            Plan
+          </TabsTrigger>
           <TabsTrigger value="roast" className="flex items-center gap-2">
             <Flame className="h-4 w-4" />
             Roast
@@ -124,6 +129,10 @@ export default function Production() {
             Ship
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="plan" className="mt-4">
+          <PlanTab dateFilterConfig={dateFilterConfig} today={today} />
+        </TabsContent>
 
         <TabsContent value="roast" className="mt-4">
           <RoastTab dateFilterConfig={dateFilterConfig} today={today} />
