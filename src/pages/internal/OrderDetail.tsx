@@ -515,7 +515,8 @@ export default function OrderDetail() {
             </Button>
           </Link>
           <Link to="/production?tab=ship">
-            <Button variant="outline" size="sm" className="gap-1">
+            <Button variant="default" size="default" className="gap-2 shadow-sm">
+              <ArrowLeft className="h-4 w-4" />
               <Truck className="h-4 w-4" />
               Back to Production
             </Button>
