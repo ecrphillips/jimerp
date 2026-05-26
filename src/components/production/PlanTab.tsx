@@ -30,6 +30,9 @@ function dayShapeLabel(mode: DateFilterConfig['mode']): string {
   return 'All open';
 }
 
+const pl = (n: number, singular: string, plural?: string) =>
+  `${n} ${n === 1 ? singular : (plural ?? singular + 's')}`;
+
 type Anomaly = {
   key: string;
   message: string;
@@ -309,9 +312,9 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
           <Skeleton className="h-6 w-3/4" />
         ) : (
           <p className="text-base font-medium">
-            {label}: {dayShape.batches} batches across {dayShape.roastGroups} roast
-            groups, ~{Math.round(dayShape.greenKg)} kg green, {dayShape.openOrders}{' '}
-            orders open
+            {label}: {pl(dayShape.batches, 'batch', 'batches')} across{' '}
+            {pl(dayShape.roastGroups, 'roast group')}, ~{Math.round(dayShape.greenKg)} kg green,{' '}
+            {pl(dayShape.openOrders, 'order')} open
           </p>
         )}
       </div>
