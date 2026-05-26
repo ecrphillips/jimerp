@@ -22,7 +22,8 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Truck, AlertTriangle, Package } from 'lucide-react';
+import { Truck, AlertTriangle, Package, RefreshCw } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { SortableShipCard } from './SortableShipCard';
 import { format, addDays, parseISO } from 'date-fns';
@@ -734,6 +735,18 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     markOrderInvoicedMutation.mutate(orderId);
   }, [markOrderInvoicedMutation]);
 
+  // Refresh handler — re-sort + drop SHIPPED orders without page reload.
+  // Clears local reorder state so sync effect repopulates from fresh server data.
+  const handleRefresh = useCallback(() => {
+    hasUserReorderedRef.current = false;
+    setLocalOrders([]);
+    queryClient.invalidateQueries({ queryKey: ['shippable-orders-all'] });
+    queryClient.invalidateQueries({ queryKey: ['shipped-awaiting-invoice'] });
+    queryClient.invalidateQueries({ queryKey: ['ship-demand-all'] });
+    queryClient.invalidateQueries({ queryKey: ['all-ship-picks'] });
+    queryClient.invalidateQueries({ queryKey: ['ship-picks-gating'] });
+  }, [queryClient]);
+
   // Use localOrders for rendering to prevent snapping
   const displayOrders = localOrders.length > 0 ? localOrders : allOrdersWithMetrics;
 
@@ -752,13 +765,31 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
       {/* All Orders - Unified List with Drag & Drop */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Truck className="h-5 w-5" />
-            Orders
-            <span className="ml-2 text-xs font-normal text-muted-foreground">
-              ({displayShippableCount} ready • {displayPendingCount} pending)
-            </span>
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Truck className="h-5 w-5" />
+              Orders
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                ({displayShippableCount} ready • {displayPendingCount} pending)
+              </span>
+            </CardTitle>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-muted-foreground"
+                    onClick={handleRefresh}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    <span className="sr-only">Refresh list</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Refresh list</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <p className="text-sm text-muted-foreground">
             Drag to reorder. Green = ready to ship.
           </p>
