@@ -173,6 +173,8 @@ export type Database = {
           coroast_custom_storage_rate: number | null
           coroast_joined_date: string | null
           coroast_tier: string | null
+          account_status: Database["public"]["Enums"]["account_status"]
+          prospect_selected_tier: Database["public"]["Enums"]["coroast_tier"] | null
           created_at: string
           hide_pricing_from_non_owners: boolean
           id: string
@@ -214,6 +216,8 @@ export type Database = {
           coroast_custom_storage_rate?: number | null
           coroast_joined_date?: string | null
           coroast_tier?: string | null
+          account_status?: Database["public"]["Enums"]["account_status"]
+          prospect_selected_tier?: Database["public"]["Enums"]["coroast_tier"] | null
           created_at?: string
           hide_pricing_from_non_owners?: boolean
           id?: string
@@ -255,6 +259,8 @@ export type Database = {
           coroast_custom_storage_rate?: number | null
           coroast_joined_date?: string | null
           coroast_tier?: string | null
+          account_status?: Database["public"]["Enums"]["account_status"]
+          prospect_selected_tier?: Database["public"]["Enums"]["coroast_tier"] | null
           created_at?: string
           hide_pricing_from_non_owners?: boolean
           id?: string
@@ -5518,6 +5524,7 @@ export type Database = {
         | "FRI"
         | "SAT"
         | "SUN"
+      account_status: "ACTIVE" | "PROSPECT"
       coroast_tier: "ACCESS" | "GROWTH" | "MEMBER" | "PRODUCTION"
       default_roaster: "SAMIAC" | "LORING" | "EITHER"
       delivery_method: "PICKUP" | "DELIVERY" | "COURIER"
@@ -5761,6 +5768,7 @@ export const Constants = {
         "OTHER",
       ],
       coroast_recurring_day: ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
+      account_status: ["ACTIVE", "PROSPECT"],
       coroast_tier: ["ACCESS", "GROWTH", "MEMBER", "PRODUCTION"],
       default_roaster: ["SAMIAC", "LORING", "EITHER"],
       delivery_method: ["PICKUP", "DELIVERY", "COURIER"],

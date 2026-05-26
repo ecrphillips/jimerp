@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
 import { Button } from '@/components/ui/button';
 import { AccountSheet } from '@/components/account/AccountSheet';
+import { ProspectSignupBanner } from '@/components/prospect/ProspectSignupBanner';
 import { CalendarDays, BarChart3, User, LogOut, Menu, X, Eye, Calculator } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import hiIcon from '@/assets/home-island-icon.png';
@@ -139,6 +140,7 @@ export function MemberPortalLayout({ children }: MemberPortalLayoutProps) {
         </header>
 
         <main className="flex-1 overflow-y-auto">
+          <ProspectSignupBanner />
           {children}
         </main>
       </div>

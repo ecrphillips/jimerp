@@ -32,6 +32,9 @@ import {
 import { useAccountPricing } from '@/hooks/useAccountPricing';
 import { AvailabilityTimeSelect } from '@/components/bookings/AvailabilityTimeSelect';
 import { DAYS_OF_WEEK, DAY_LABELS, JS_DAY_TO_STRING } from '@/components/coroast/types';
+import { useIsProspect } from '@/hooks/useIsProspect';
+import { MemberOnlyAction } from '@/components/prospect/MemberOnlyAction';
+import { SAMPLE_PROSPECT_BOOKINGS, SAMPLE_PROSPECT_BUSY_SLOTS } from '@/lib/prospectSampleData';
 
 const JS_DOW_TO_STRING: Record<number, string> = {
   0: 'SUN', 1: 'MON', 2: 'TUE', 3: 'WED', 4: 'THU', 5: 'FRI', 6: 'SAT',
@@ -94,6 +97,7 @@ export default function MemberSchedule() {
   const { previewAccountId } = usePreview();
   const queryClient = useQueryClient();
   const effectiveAccountId = previewAccountId ?? authUser?.accountId;
+  const { isProspect } = useIsProspect();
 
   // Fetch account record for this member
   const { data: member } = useQuery({
@@ -169,7 +173,7 @@ export default function MemberSchedule() {
     },
   });
 
-  const { data: allBookings = [] } = useQuery({
+  const { data: realAllBookings = [] } = useQuery({
     queryKey: ['member-portal-bookings'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -179,13 +183,15 @@ export default function MemberSchedule() {
       if (error) throw error;
       return data as (BookingRow & { notes_member: string | null })[];
     },
+    enabled: !isProspect,
   });
+  const allBookings = isProspect ? SAMPLE_PROSPECT_BOOKINGS : realAllBookings;
 
   // Other members' bookings on the shared roaster — redacted to (date, start, end) by the
   // get_coroast_busy_slots SECURITY DEFINER RPC. Direct SELECT is RLS-restricted to the
   // caller's own account, so we use the RPC to surface "this slot is taken" without
   // leaking member names, notes, or account ids.
-  const { data: otherBusy = [] } = useQuery({
+  const { data: realOtherBusy = [] } = useQuery({
     queryKey: ['member-portal-other-busy'],
     queryFn: async () => {
       const now = new Date();
@@ -198,8 +204,9 @@ export default function MemberSchedule() {
       if (error) throw error;
       return (data ?? []) as BusySlot[];
     },
-    enabled: !!memberId,
+    enabled: !!memberId && !isProspect,
   });
+  const otherBusy = isProspect ? SAMPLE_PROSPECT_BUSY_SLOTS : realOtherBusy;
 
   // Hours used this month
   const currentMonthStr = formatInTimeZone(new Date(), DEFAULT_TZ, 'yyyy-MM');
@@ -479,6 +486,11 @@ export default function MemberSchedule() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
+      {isProspect && (
+        <div className="rounded-md border border-dashed border-primary/40 bg-primary/5 px-3 py-2 text-xs text-foreground">
+          <span className="font-semibold">Sample data</span> — this is what your dashboard will look like as a member.
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">My Schedule</h1>
@@ -775,9 +787,11 @@ export default function MemberSchedule() {
 
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setShowConfirm(false)}>Back</Button>
-                <Button onClick={() => createBookingMutation.mutate()} disabled={createBookingMutation.isPending}>
-                  {createBookingMutation.isPending ? 'Booking…' : 'Confirm Booking'}
-                </Button>
+                <MemberOnlyAction actionLabel="submit this booking" mode="replace">
+                  <Button onClick={() => createBookingMutation.mutate()} disabled={createBookingMutation.isPending}>
+                    {createBookingMutation.isPending ? 'Booking…' : 'Confirm Booking'}
+                  </Button>
+                </MemberOnlyAction>
               </div>
             </div>
           )}
@@ -813,14 +827,16 @@ export default function MemberSchedule() {
 
                 {canCancel ? (
                   <div className="space-y-2">
-                    <Button
-                      variant="destructive"
-                      className="w-full"
-                      onClick={() => cancelMutation.mutate(selectedBooking.id)}
-                      disabled={cancelMutation.isPending}
-                    >
-                      {cancelMutation.isPending ? 'Cancelling…' : 'Cancel Booking'}
-                    </Button>
+                    <MemberOnlyAction actionLabel="cancel bookings" mode="replace">
+                      <Button
+                        variant="destructive"
+                        className="w-full"
+                        onClick={() => cancelMutation.mutate(selectedBooking.id)}
+                        disabled={cancelMutation.isPending}
+                      >
+                        {cancelMutation.isPending ? 'Cancelling…' : 'Cancel Booking'}
+                      </Button>
+                    </MemberOnlyAction>
                     <p className="text-xs text-muted-foreground text-center">
                       Free cancellation (more than 48 hours away)
                     </p>

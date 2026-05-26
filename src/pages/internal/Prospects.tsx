@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { Plus, CheckCircle2, Trash2 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 import { PronounsField } from '@/components/contacts/PronounsField';
+import { ProspectAccountCreator } from '@/components/prospect/ProspectAccountCreator';
 
 type ProspectStream = Database['public']['Enums']['prospect_stream'];
 type ProspectStage = Database['public']['Enums']['prospect_stage'];
@@ -115,10 +116,13 @@ export default function Prospects() {
     <div className="page-container">
       <div className="page-header flex items-center justify-between">
         <h1 className="page-title">Prospects</h1>
-        <Button onClick={() => setShowDialog(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Prospect
-        </Button>
+        <div className="flex items-center gap-2">
+          <ProspectAccountCreator />
+          <Button onClick={() => setShowDialog(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Prospect
+          </Button>
+        </div>
       </div>
 
       <Card>

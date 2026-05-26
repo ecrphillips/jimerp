@@ -89,6 +89,15 @@ export function toEngineInputs(c: ClientUnitEconomicsInputs): UnitEconomicsInput
   // costPerKg such that (bagG / 1000) * costPerKg == costPerBag
   const costPerKgRoasted = costPerBag * (1000 / bagG);
 
+  // Translate the client's (hours-per-batch × rate / batchSize) labour model
+  // into the engine's single $/hour rate. Old labour $/kg roasted was
+  //   (hoursPerBatch * rate) / batchSize
+  // New engine treats labour as rate / throughput($/kg roasted), so:
+  //   equivalentRatePerHour = (hoursPerBatch * rate / batchSize) * throughput
+  const batch = Math.max(1, c.batchSizeKg || 40);
+  const equivalentLabourRatePerHour =
+    (c.labourHoursPerBatch * c.labourRatePerHr / batch) * 40; // 40 = ROASTER_THROUGHPUT_KG_PER_HR
+
   return {
     ...DEFAULT_INPUTS,
     displayUnit: c.displayUnit,
@@ -100,9 +109,7 @@ export function toEngineInputs(c: ClientUnitEconomicsInputs): UnitEconomicsInput
     tier: null,
     forecastOverage: false,
     includeLabour: c.includeLabour,
-    labourHoursPerBatch: c.labourHoursPerBatch,
-    labourRatePerHr: c.labourRatePerHr,
-    batchSizeKg: c.batchSizeKg,
+    labourRatePerHour: equivalentLabourRatePerHour,
     overheadMonthly: c.overheadMonthly,
     monthlyKg: c.monthlyKg,
     wholesalePrice: c.wholesalePrice,

@@ -40,11 +40,12 @@ export interface UnitEconomicsInputs {
   tier: CoroastTier | null;         // null when account has no tier
   forecastOverage: boolean;         // if true, also show overage rate
 
-  // Labour
+  // Labour — single $/hour rate applied to roasting hours (monthlyKg / throughput)
   includeLabour: boolean;
-  labourHoursPerBatch: number;
-  labourRatePerHr: number;
-  batchSizeKg: number;              // how much roasted per batch (default 40 — one hour)
+  labourRatePerHour: number;
+
+  // Optional pricing target (not used by engine math; UI helper only)
+  targetRetailMarginPct?: number | null;
 
   // Overhead
   overheadMonthly: number | null;
@@ -70,9 +71,8 @@ export const DEFAULT_INPUTS: UnitEconomicsInputs = {
   tier: null,
   forecastOverage: false,
   includeLabour: false,
-  labourHoursPerBatch: 0,
-  labourRatePerHr: 25,
-  batchSizeKg: 40,
+  labourRatePerHour: 25,
+  targetRetailMarginPct: null,
   overheadMonthly: null,
   monthlyKg: null,
   wholesalePrice: null,
@@ -148,10 +148,11 @@ export function costPerUnit(i: UnitEconomicsInputs): CostBreakdown {
     : roastingCostPerKg(i.tier);
   const roasting = kgRoastedPerUnit.times(roastRate);
 
-  // Labour
+  // Labour: total monthly labour $ = rate × (monthlyKg / throughput).
+  // Translates to $/kg roasted = rate / throughput → $/unit = kgPerUnit × rate / throughput.
   let labour = new Decimal(0);
-  if (i.includeLabour && i.labourHoursPerBatch > 0 && i.batchSizeKg > 0) {
-    const labourPerKg = D(i.labourHoursPerBatch).times(i.labourRatePerHr).div(i.batchSizeKg);
+  if (i.includeLabour && i.labourRatePerHour > 0) {
+    const labourPerKg = D(i.labourRatePerHour).div(ROASTER_THROUGHPUT_KG_PER_HR);
     labour = kgRoastedPerUnit.times(labourPerKg);
   }
 

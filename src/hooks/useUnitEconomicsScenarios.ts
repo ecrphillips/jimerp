@@ -27,10 +27,24 @@ export function useScenarios(accountId: string | null) {
         .eq('account_id', accountId)
         .order('updated_at', { ascending: false });
       if (error) throw error;
-      return (data ?? []).map(r => ({
-        ...r,
-        inputs: { ...DEFAULT_INPUTS, ...((r.inputs as Record<string, unknown>) || {}) } as UnitEconomicsInputs,
-      })) as ScenarioRow[];
+      return (data ?? []).map(r => {
+        const raw = (r.inputs as Record<string, unknown>) || {};
+        // Migrate legacy labour fields (labourHoursPerBatch × labourRatePerHr / batchSizeKg × throughput)
+        // into the new single $/hour rate. Strip dropped fields.
+        const merged: Record<string, unknown> = { ...DEFAULT_INPUTS, ...raw };
+        if (merged.labourRatePerHour == null || merged.labourRatePerHour === 25) {
+          const hpb = Number(raw.labourHoursPerBatch ?? 0);
+          const rate = Number(raw.labourRatePerHr ?? 0);
+          const batch = Number(raw.batchSizeKg ?? 40);
+          if (hpb > 0 && rate > 0 && batch > 0) {
+            merged.labourRatePerHour = (hpb * rate / batch) * 40;
+          }
+        }
+        delete merged.labourHoursPerBatch;
+        delete merged.labourRatePerHr;
+        delete merged.batchSizeKg;
+        return { ...r, inputs: merged as UnitEconomicsInputs };
+      }) as ScenarioRow[];
     },
   });
 }

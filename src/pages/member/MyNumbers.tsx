@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
@@ -32,7 +32,7 @@ import { TIER_RATES } from '@/components/bookings/bookingUtils';
 
 export default function MyNumbers() {
   const { authUser } = useAuth();
-  const { previewAccountId } = usePreview();
+  const { previewAccountId, isPreviewMode } = usePreview();
   const accountId = previewAccountId ?? authUser?.accountId ?? null;
   const [searchParams, setSearchParams] = useSearchParams();
   const qc = useQueryClient();
@@ -47,6 +47,7 @@ export default function MyNumbers() {
   const [renameValue, setRenameValue] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
   const baselineLoaded = useRef(false);
+  const autoCreated = useRef(false);
 
   // Fetch account name for header & PDF
   useEffect(() => {
@@ -67,6 +68,8 @@ export default function MyNumbers() {
       setActiveId(scenarios[0].id);
       return;
     }
+    if (autoCreated.current) return;
+    autoCreated.current = true;
     // Auto-create first scenario for this account
     (async () => {
       const seed: UnitEconomicsInputs = {
@@ -200,6 +203,11 @@ export default function MyNumbers() {
     documentTitle: `${accountName || 'My Numbers'} — ${activeScenario?.name ?? 'Scenario'}`,
   });
 
+  const isOwner = isPreviewMode || !!authUser?.isOwner;
+  if (!isOwner) {
+    return <Navigate to="/member-portal" replace />;
+  }
+
   if (!accountId) {
     return (
       <div className="p-6">
@@ -219,6 +227,12 @@ export default function MyNumbers() {
           <p className="text-sm text-muted-foreground">
             Model your unit economics and plan your pricing.
           </p>
+          <Link
+            to="/member-portal/market-pricing"
+            className="text-xs text-muted-foreground hover:text-primary underline underline-offset-2 mt-1 inline-block"
+          >
+            Compare to regional market pricing →
+          </Link>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={activeId ?? ''} onValueChange={setActiveId}>
@@ -264,28 +278,17 @@ export default function MyNumbers() {
         {saveStatus === 'error' && <span className="text-destructive">Couldn't save — try again</span>}
       </div>
 
-      {/* Market pricing link */}
-      <Link
-        to="/member-portal/market-pricing"
-        className="block rounded-lg border bg-card p-4 hover:border-primary hover:bg-accent/30 transition-colors"
-      >
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="font-medium">See how your retail price compares to the regional market</div>
-            <div className="text-xs text-muted-foreground">
-              Where your $/g sits in the Canadian specialty-coffee spectrum, updated monthly.
-            </div>
-          </div>
-          <div className="text-primary text-sm font-medium">View market →</div>
-        </div>
-      </Link>
-
       {/* Two columns */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         <div className="lg:col-span-2">
-          <InputsPanel inputs={inputs} onChange={setInputs} greenPrefilled={greenPrefilled} />
+          <InputsPanel
+            inputs={inputs}
+            onChange={setInputs}
+            greenPrefilled={greenPrefilled}
+            marketPricingPath="/member-portal/market-pricing"
+          />
         </div>
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-3 space-y-4">
           <OutputsPanel
             inputs={inputs}
             onChannelSplitChange={(v) => setInputs({ ...inputs, wholesalePct: v })}
@@ -385,7 +388,7 @@ function PrintLayout({
             <Row k="Tier" v={tier?.label ?? '—'} />
           </div>
           <div>
-            <Row k="Labour" v={inputs.includeLabour ? `${inputs.labourHoursPerBatch}h × $${inputs.labourRatePerHr}/h` : 'Excluded'} />
+            <Row k="Labour" v={inputs.includeLabour ? `$${inputs.labourRatePerHour}/h` : 'Excluded'} />
             <Row k="Monthly overhead" v={inputs.overheadMonthly != null ? fmtBig(inputs.overheadMonthly) : '—'} />
             <Row k="Monthly volume" v={inputs.monthlyKg != null ? `${inputs.monthlyKg} kg` : '—'} />
             <Row k="Wholesale price" v={inputs.wholesalePrice != null ? fmt(inputs.wholesalePrice) : '—'} />
