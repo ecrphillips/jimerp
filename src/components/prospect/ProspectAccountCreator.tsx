@@ -11,6 +11,7 @@ import { UserPlus, Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { findOrCreateMirrorClient } from '@/lib/inviteHelpers';
 
 interface CreatedState {
   accountId: string;
@@ -120,36 +121,8 @@ export function ProspectAccountCreator() {
       if (iErr || !inv) throw new Error(`invitations insert: ${iErr?.message ?? 'unknown'}`);
       invitationId = inv.id;
 
-      // 4a. Find or create the mirror `clients` row. `user_roles` requires a
-      // client_id for CLIENT role, so the deployed `invite-user` fn needs one.
-      let mirrorClientId: string | null = null;
-      const { data: existingClient } = await supabase
-        .from('clients')
-        .select('id')
-        .eq('name', bn)
-        .maybeSingle();
-      if (existingClient) {
-        mirrorClientId = existingClient.id;
-      } else {
-        const baseCode = (bn.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 3) || 'CLT').padEnd(3, 'X');
-        let code = baseCode;
-        for (let i = 0; i < 20; i++) {
-          const { data: codeClash } = await supabase
-            .from('clients')
-            .select('id')
-            .eq('client_code', code)
-            .maybeSingle();
-          if (!codeClash) break;
-          code = baseCode.slice(0, 2) + i.toString(36).toUpperCase().slice(-1);
-        }
-        const { data: newClient, error: ncErr } = await supabase
-          .from('clients')
-          .insert({ name: bn, client_code: code, is_active: true })
-          .select('id')
-          .single();
-        if (ncErr || !newClient) throw new Error(`mirror client insert: ${ncErr?.message ?? 'unknown'}`);
-        mirrorClientId = newClient.id;
-      }
+      // 4a. Mirror clients row — required by `user_roles.client_id` for CLIENT role.
+      const mirrorClientId = await findOrCreateMirrorClient(bn);
 
       // 4b. Auth invite via deployed `invite-user` edge function.
       // Creates auth user + profiles + user_roles(CLIENT, client_id).

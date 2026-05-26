@@ -17,6 +17,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
+import { findOrCreateMirrorClient } from '@/lib/inviteHelpers';
 import { toast } from 'sonner';
 import { ArrowLeft, Info, CalendarIcon, Plus, Pencil, CheckCircle2, ExternalLink, ShieldCheck, Lock, Eye, EyeOff, Mail, Package, Calendar as CalendarIconLucide, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -810,26 +811,60 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
           if (locError) throw locError;
         }
       } else {
-        // Call invite-account-user edge function
-        const { data, error: fnError } = await supabase.functions.invoke('invite-account-user', {
-          body: {
-            email: form.email,
-            account_id: accountId,
-            is_owner: form.is_owner,
-            can_place_orders: form.can_place_orders,
-            can_book_roaster: form.can_book_roaster,
-            can_manage_locations: form.can_manage_locations,
-            can_invite_users: form.can_invite_users,
-            location_access: form.location_access,
-            assigned_locations: form.location_access === 'ASSIGNED' ? form.assigned_locations : [],
-          },
-        });
-        const errMsg = (fnError?.message || data?.error) as string | undefined;
-        if (errMsg) {
-          if (errMsg.includes('already linked to this account')) {
+        // Refuse if this email is already linked to this account.
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('user_id')
+          .eq('email', form.email.toLowerCase())
+          .maybeSingle();
+        if (existingProfile) {
+          const { data: existingAu } = await supabase
+            .from('account_users')
+            .select('id')
+            .eq('user_id', existingProfile.user_id)
+            .eq('account_id', accountId)
+            .maybeSingle();
+          if (existingAu) {
             throw new Error('This email is already linked to this account. Check the Users tab — they may appear with a broken profile.');
           }
-          throw new Error(errMsg || 'Failed to invite user');
+        }
+
+        // Mirror clients row — required by `user_roles.client_id` for CLIENT role.
+        const mirrorClientId = await findOrCreateMirrorClient(account.account_name);
+
+        // Auth invite via deployed `invite-user` (creates auth user + profiles + user_roles).
+        const { data: inviteRes, error: fnError } = await supabase.functions.invoke('invite-user', {
+          body: {
+            email: form.email,
+            role: 'CLIENT',
+            client_id: mirrorClientId,
+            name: form.email.split('@')[0],
+          },
+        });
+        const inviteJson = (inviteRes ?? {}) as { success?: boolean; user_id?: string; error?: string; message?: string };
+        if (fnError || inviteJson.error || !inviteJson.user_id) {
+          throw new Error(fnError?.message || inviteJson.error || inviteJson.message || 'Failed to invite user');
+        }
+
+        // Link auth user to this account with the requested perms.
+        const { data: newAu, error: auErr } = await supabase.from('account_users').insert({
+          user_id: inviteJson.user_id,
+          account_id: accountId,
+          is_owner: form.is_owner,
+          can_place_orders: form.can_place_orders,
+          can_book_roaster: form.can_book_roaster,
+          can_manage_locations: form.can_manage_locations,
+          can_invite_users: form.can_invite_users,
+          location_access: form.location_access,
+        }).select('id').single();
+        if (auErr || !newAu) throw new Error(`account_users insert: ${auErr?.message ?? 'unknown'}`);
+
+        // Assigned-location rows (when location_access === 'ASSIGNED').
+        if (form.location_access === 'ASSIGNED' && form.assigned_locations.length > 0) {
+          const { error: locErr } = await supabase.from('account_user_locations').insert(
+            form.assigned_locations.map(lid => ({ account_user_id: newAu.id, location_id: lid }))
+          );
+          if (locErr) throw locErr;
         }
       }
     },
