@@ -120,30 +120,70 @@ export function ProspectAccountCreator() {
       if (iErr || !inv) throw new Error(`invitations insert: ${iErr?.message ?? 'unknown'}`);
       invitationId = inv.id;
 
-      // 4 + 5. Auth invite + account_users link via edge function.
-      // This calls supabase.auth.admin.inviteUserByEmail, creates profiles +
-      // user_roles + account_users (perms: is_owner=true, can_book_roaster=true,
-      // can_place_orders=false). Lands them at /auth/callback on first login,
-      // then ProtectedRoute routes coroast members to /member-portal.
+      // 4a. Find or create the mirror `clients` row. `user_roles` requires a
+      // client_id for CLIENT role, so the deployed `invite-user` fn needs one.
+      let mirrorClientId: string | null = null;
+      const { data: existingClient } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('name', bn)
+        .maybeSingle();
+      if (existingClient) {
+        mirrorClientId = existingClient.id;
+      } else {
+        const baseCode = (bn.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 3) || 'CLT').padEnd(3, 'X');
+        let code = baseCode;
+        for (let i = 0; i < 20; i++) {
+          const { data: codeClash } = await supabase
+            .from('clients')
+            .select('id')
+            .eq('client_code', code)
+            .maybeSingle();
+          if (!codeClash) break;
+          code = baseCode.slice(0, 2) + i.toString(36).toUpperCase().slice(-1);
+        }
+        const { data: newClient, error: ncErr } = await supabase
+          .from('clients')
+          .insert({ name: bn, client_code: code, is_active: true })
+          .select('id')
+          .single();
+        if (ncErr || !newClient) throw new Error(`mirror client insert: ${ncErr?.message ?? 'unknown'}`);
+        mirrorClientId = newClient.id;
+      }
+
+      // 4b. Auth invite via deployed `invite-user` edge function.
+      // Creates auth user + profiles + user_roles(CLIENT, client_id).
+      // Does NOT create account_users — we do that in step 5.
       const { data: inviteRes, error: invokeErr } = await supabase.functions.invoke(
-        'invite-account-user',
+        'invite-user',
         {
           body: {
             email: em,
-            account_id: accountId,
-            is_owner: true,
-            can_book_roaster: true,
-            can_place_orders: false,
-            can_manage_locations: false,
-            can_invite_users: false,
-            location_access: 'ALL',
+            role: 'CLIENT',
+            client_id: mirrorClientId,
+            name: cn,
           },
         },
       );
-      if (invokeErr || (inviteRes && (inviteRes as { error?: string }).error)) {
-        const msg = invokeErr?.message ?? (inviteRes as { error?: string }).error ?? 'unknown';
-        throw new Error(`invite-account-user: ${msg}`);
+      const inviteJson = (inviteRes ?? {}) as { success?: boolean; user_id?: string; error?: string; message?: string };
+      if (invokeErr || inviteJson.error || !inviteJson.user_id) {
+        const msg = invokeErr?.message ?? inviteJson.error ?? inviteJson.message ?? 'unknown';
+        throw new Error(`invite-user: ${msg}`);
       }
+      const newUserId = inviteJson.user_id;
+
+      // 5. Link auth user to the prospect account as owner with co-roasting access only.
+      const { error: auErr } = await supabase.from('account_users').insert({
+        user_id: newUserId,
+        account_id: accountId,
+        is_owner: true,
+        can_book_roaster: true,
+        can_place_orders: false,
+        can_manage_locations: false,
+        can_invite_users: false,
+        location_access: 'ALL',
+      });
+      if (auErr) throw new Error(`account_users insert: ${auErr.message}`);
 
       // 6. Link prospect → account
       const { error: linkErr } = await supabase
