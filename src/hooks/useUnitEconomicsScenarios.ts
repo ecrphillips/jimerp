@@ -43,7 +43,7 @@ export function useScenarios(accountId: string | null) {
         delete merged.labourHoursPerBatch;
         delete merged.labourRatePerHr;
         delete merged.batchSizeKg;
-        return { ...r, inputs: merged as UnitEconomicsInputs };
+        return { ...r, inputs: merged as unknown as UnitEconomicsInputs };
       }) as ScenarioRow[];
     },
   });
