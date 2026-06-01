@@ -426,6 +426,23 @@ export default function Orders() {
                       )}
                     </div>
 
+                    {/* Roasted total (kg / lbs) */}
+                    {(() => {
+                      const kg = getRoastedKg(o);
+                      const lbs = kg * 2.20462;
+                      return (
+                        <div
+                          className="w-24 text-right text-xs tabular-nums"
+                          onClick={() => navigate(`/orders/${o.id}`)}
+                          title={`${kg.toFixed(2)} kg / ${lbs.toFixed(1)} lbs`}
+                        >
+                          <span className="font-medium">{kg.toFixed(1)}</span>
+                          <span className="text-muted-foreground"> kg</span>
+                          <div className="text-[10px] text-muted-foreground">{lbs.toFixed(1)} lbs</div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Progress bar */}
                     <div 
                       className="w-28"
