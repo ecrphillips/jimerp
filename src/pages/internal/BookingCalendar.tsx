@@ -126,6 +126,7 @@ export default function BookingCalendar() {
         booking={detailBooking}
         members={members}
         allBookings={bookings}
+        blocks={blocks}
       />
     </div>
   );

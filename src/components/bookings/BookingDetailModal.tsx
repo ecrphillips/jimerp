@@ -5,13 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Lock, Unlock, AlertTriangle, Clock } from 'lucide-react';
+import { Lock, Unlock, AlertTriangle, Clock, Pencil } from 'lucide-react';
 import { format, differenceInHours, parseISO } from 'date-fns';
 import { fromZonedTime } from 'date-fns-tz';
 import { DEFAULT_TZ } from '@/lib/timezone';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { formatTime12, timeToMinutes, TIER_RATES, type BookingRow, type MemberRow } from './bookingUtils';
+import { formatTime12, timeToMinutes, checkOverlap, TIER_RATES, type BookingRow, type MemberRow, type BlockRow } from './bookingUtils';
+import { AvailabilityTimeSelect } from './AvailabilityTimeSelect';
 import { useAccountPricing } from '@/hooks/useAccountPricing';
 import { refundedHoursFiftyPercent } from '@/lib/coroastHoursLedger';
 import { formatCurrency } from '@/lib/currency';
@@ -22,6 +23,7 @@ interface BookingDetailModalProps {
   booking: BookingRow | null;
   members: MemberRow[];
   allBookings: BookingRow[];
+  blocks: BlockRow[];
 }
 
 type CancelMode = 'charge' | 'waive' | 'delete' | null;
@@ -34,10 +36,14 @@ function getCancellationTier(hoursUntil: number): CancellationTier {
   return '100pct';
 }
 
-export function BookingDetailModal({ open, onOpenChange, booking, members, allBookings }: BookingDetailModalProps) {
+export function BookingDetailModal({ open, onOpenChange, booking, members, allBookings, blocks }: BookingDetailModalProps) {
   const queryClient = useQueryClient();
   const [cancelMode, setCancelMode] = useState<CancelMode>(null);
   const [waiveReason, setWaiveReason] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [editStart, setEditStart] = useState('');
+  const [editEndTime, setEditEndTime] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
 
   const member = booking ? members.find(m => m.id === booking.member_id) : undefined;
   const durationHrs = booking ? (timeToMinutes(booking.end_time) - timeToMinutes(booking.start_time)) / 60 : 0;
@@ -72,6 +78,20 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
   // completed in the UI immediately so users don't see a stale CONFIRMED
   // state between the booking ending and the next sweep.
   const treatAsCompleted = isCompleted || (isConfirmed && isPast);
+  // Times are editable for any non-cancelled booking — including past,
+  // in-progress, completed, and no-show — for post-hoc billing correction.
+  const editable = isConfirmed || treatAsCompleted || isNoShow;
+  // Exclude this booking from the overlap source so it doesn't conflict with itself.
+  const editableBookings = useMemo(() => allBookings.filter(b => b.id !== booking?.id), [allBookings, booking?.id]);
+
+  const startEdit = () => {
+    if (!booking) return;
+    setCancelMode(null);
+    setEditError(null);
+    setEditStart(booking.start_time.slice(0, 5));
+    setEditEndTime(booking.end_time.slice(0, 5));
+    setEditing(true);
+  };
 
   const hoursType = useMemo(() => {
     if (!booking) return 'Included';
@@ -214,9 +234,53 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
     onError: () => toast.error('Failed to revert booking'),
   });
 
+  const editTimesMutation = useMutation({
+    mutationFn: async () => {
+      if (!booking) return;
+      if (!editStart || !editEndTime) throw new Error('Start and end times required');
+      const oldDur = (timeToMinutes(booking.end_time) - timeToMinutes(booking.start_time)) / 60;
+      const newDur = (timeToMinutes(editEndTime) - timeToMinutes(editStart)) / 60;
+      if (newDur <= 0) throw new Error('End time must be after start time');
+      // Overlap check against blocks + other bookings (exclude self). Availability
+      // windows are intentionally not enforced — post-hoc corrections may run late.
+      const overlap = checkOverlap(booking.booking_date, editStart, editEndTime, blocks, allBookings, booking.id);
+      if (overlap) throw new Error(overlap);
+
+      const oldStart = formatTime12(booking.start_time);
+      const oldEnd = formatTime12(booking.end_time);
+
+      const { error: updErr } = await supabase.from('coroast_bookings').update({
+        start_time: editStart,
+        end_time: editEndTime,
+        // NO_SHOW fee scales with duration; keep it in sync. Harmless otherwise.
+        ...(booking.status === 'NO_SHOW' ? { cancellation_fee_amt: newDur * hourlyRate } : {}),
+      }).eq('id', booking.id);
+      if (updErr) throw updErr;
+
+      const delta = newDur - oldDur;
+      if (delta !== 0) {
+        await supabase.from('coroast_hour_ledger').insert({
+          account_id: booking.account_id ?? booking.member_id,
+          billing_period_id: booking.billing_period_id,
+          booking_id: booking.id,
+          entry_type: (delta > 0 ? 'MANUAL_DEBIT' : 'MANUAL_CREDIT') as any,
+          hours_delta: delta,
+          notes: `Time adjusted ${oldStart}–${oldEnd} → ${formatTime12(editStart)}–${formatTime12(editEndTime)}`,
+        });
+      }
+    },
+    onSuccess: () => {
+      toast.success('Booking times updated');
+      invalidateAll();
+      setEditing(false);
+      onOpenChange(false);
+    },
+    onError: (err: Error) => setEditError(err.message || 'Failed to update times'),
+  });
+
   const isPending = cancelFreeMutation.isPending || cancel50PctMutation.isPending || deleteMutation.isPending ||
     cancelChargeMutation.isPending || cancelWaiveMutation.isPending || noShowMutation.isPending ||
-    revertToCompletedMutation.isPending;
+    revertToCompletedMutation.isPending || editTimesMutation.isPending;
 
   if (!booking) return null;
 
@@ -233,7 +297,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
       : 'destructive';
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) setCancelMode(null); onOpenChange(o); }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { setCancelMode(null); setEditing(false); setEditError(null); } onOpenChange(o); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -275,7 +339,61 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
             </div>
           )}
 
-          {isConfirmed && (
+          {editable && !editing && !cancelMode && (
+            <div className="pt-2 border-t">
+              <Button variant="outline" size="sm" className="w-full" onClick={startEdit} disabled={isPending}>
+                <Pencil className="h-3.5 w-3.5 mr-1" /> Edit Times
+              </Button>
+            </div>
+          )}
+
+          {editing && (
+            <div className="space-y-3 pt-2 border-t">
+              <p className="text-xs text-muted-foreground">
+                Adjust the actual start/end for billing. Hours used and overages recalculate automatically.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs">Start Time</Label>
+                  <AvailabilityTimeSelect
+                    value={editStart}
+                    onValueChange={(v) => { setEditStart(v); setEditError(null); }}
+                    placeholder="Start"
+                    dateStr={booking.booking_date}
+                    blocks={blocks}
+                    bookings={editableBookings}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">End Time</Label>
+                  <AvailabilityTimeSelect
+                    value={editEndTime}
+                    onValueChange={(v) => { setEditEndTime(v); setEditError(null); }}
+                    placeholder="End"
+                    dateStr={booking.booking_date}
+                    blocks={blocks}
+                    bookings={editableBookings}
+                    startTimeForRange={editStart || undefined}
+                  />
+                </div>
+              </div>
+              {editStart && editEndTime && timeToMinutes(editEndTime) > timeToMinutes(editStart) && (
+                <p className="text-xs text-muted-foreground">
+                  New duration: {((timeToMinutes(editEndTime) - timeToMinutes(editStart)) / 60).toFixed(1)}h
+                </p>
+              )}
+              {editError && <p className="text-xs text-destructive font-medium">{editError}</p>}
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setEditing(false)} disabled={isPending}>Cancel</Button>
+                <Button size="sm" onClick={() => { setEditError(null); editTimesMutation.mutate(); }}
+                  disabled={isPending || !editStart || !editEndTime || timeToMinutes(editEndTime) <= timeToMinutes(editStart)}>
+                  {editTimesMutation.isPending ? 'Saving…' : 'Save Times'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {isConfirmed && !editing && (
             <div className={`flex items-center gap-1.5 text-xs rounded p-2 ${
               cancellationTier === 'free'
                 ? 'text-emerald-700 bg-emerald-500/10'
@@ -290,7 +408,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
             </div>
           )}
 
-          {isConfirmed && !isPast && !cancelMode && (
+          {isConfirmed && !isPast && !cancelMode && !editing && (
             <div className="space-y-2 pt-2 border-t">
               {cancellationTier === 'free' && (
                 <Button size="sm" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -325,7 +443,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
             </div>
           )}
 
-          {treatAsCompleted && !cancelMode && (
+          {treatAsCompleted && !cancelMode && !editing && (
             <div className="space-y-2 pt-2 border-t">
               <p className="text-xs text-muted-foreground">
                 Booking complete. If the member did not show, mark as no-show to charge the 100% fee.
@@ -338,7 +456,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
             </div>
           )}
 
-          {isNoShow && !cancelMode && (
+          {isNoShow && !cancelMode && !editing && (
             <div className="space-y-2 pt-2 border-t">
               <p className="text-xs text-muted-foreground">
                 Marked as no-show. Revert if the member actually attended.
