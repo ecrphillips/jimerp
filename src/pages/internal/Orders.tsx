@@ -87,7 +87,7 @@ export default function Orders() {
           created_at,
             client:clients(name),
             account:accounts(account_name),
-            order_line_items(id, product_id, quantity_units)
+            order_line_items(id, product_id, quantity_units, product:products(bag_size_g))
         `,
           { count: 'exact' }
         )
