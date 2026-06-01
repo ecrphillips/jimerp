@@ -18,7 +18,6 @@ import { GramPackagingBadge, formatGramsLabel } from '@/components/GramPackaging
 import { useClientOrderingConstraints } from '@/hooks/useClientOrderingConstraints';
 import { WorkDeadlinePicker } from '@/components/orders/WorkDeadlinePicker';
 import { DatePicker } from '@/components/ui/date-picker';
-import type { GrindOption } from '@/types/database';
 import type { Database } from '@/integrations/supabase/types';
 import { LocationSelect } from '@/components/orders/LocationSelect';
 import { OrderContextBanner } from '@/components/orders/OrderContextBanner';
@@ -31,8 +30,6 @@ interface LineItem {
   productName: string;
   displayName: string;
   quantity: number;
-  grind: GrindOption | null;
-  grindOptions: GrindOption[];
   price: number | null;
   packagingTypeName: string | null;
   gramsPerUnit: number | null;
@@ -45,7 +42,6 @@ interface Product {
   bag_size_g: number;
   grams_per_unit: number | null;
   format: string;
-  grind_options: GrindOption[];
   is_perennial: boolean;
   packaging_type_id: string | null;
   packaging_types: { name: string } | null;
@@ -149,7 +145,7 @@ export default function CreateOrderForClient() {
       if (!selectedClientId) return [];
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, bag_size_g, grams_per_unit, format, grind_options, is_perennial, packaging_type_id, packaging_types(name), client_id, account_id')
+        .select('id, product_name, sku, bag_size_g, grams_per_unit, format, is_perennial, packaging_type_id, packaging_types(name), client_id, account_id')
         .eq('account_id', selectedClientId)
         .eq('is_active', true)
         .order('product_name', { ascending: true });
@@ -239,17 +235,14 @@ export default function CreateOrderForClient() {
   const getLineItem = (productId: string) => lineItems.find((li) => li.productId === productId);
 
   const createLineItem = (product: Product, qty: number): LineItem => {
-    const grindOpts = (product.grind_options ?? []) as GrindOption[];
     const packagingTypeName = product.packaging_types?.name ?? null;
     const gramsPerUnit = product.grams_per_unit;
-    
+
     return {
       productId: product.id,
       productName: product.product_name,
       displayName: buildDisplayName(product.product_name, packagingTypeName, gramsPerUnit),
       quantity: qty,
-      grind: grindOpts.length > 0 ? grindOpts[0] : null,
-      grindOptions: grindOpts,
       price: effectivePrice(product.id).price,
       packagingTypeName,
       gramsPerUnit,
@@ -276,12 +269,6 @@ export default function CreateOrderForClient() {
     }
     setLineItems((prev) =>
       prev.map((li) => (li.productId === productId ? { ...li, quantity: qty } : li))
-    );
-  };
-
-  const updateGrind = (productId: string, grind: GrindOption) => {
-    setLineItems((prev) =>
-      prev.map((li) => (li.productId === productId ? { ...li, grind } : li))
     );
   };
 
@@ -399,7 +386,7 @@ export default function CreateOrderForClient() {
         order_id: order.id,
         product_id: li.productId,
         quantity_units: li.quantity,
-        grind: li.grind,
+        grind: null,
         unit_price_locked: li.price!,
         shipment_id: defaultShipment?.id ?? null,
       }));
@@ -705,18 +692,6 @@ export default function CreateOrderForClient() {
                           />
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          {li.grindOptions.length > 0 && (
-                            <Select value={li.grind ?? ''} onValueChange={(v) => updateGrind(li.productId, v as GrindOption)}>
-                              <SelectTrigger className="h-7 w-24 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {li.grindOptions.map((g) => (
-                                  <SelectItem key={g} value={g}>{g}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
                           <span className="w-8 text-center">{li.quantity}</span>
                           <span className="w-16 text-right">${((li.price ?? 0) * li.quantity).toFixed(2)}</span>
                           <Button
