@@ -40,7 +40,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { OhShitModal } from './OhShitModal';
-import { UndoWorkflowModal, type UndoOperationType } from './UndoWorkflowModal';
 import { DepletionWarningModal, executeDepletionSwaps, type DepletionSwap } from './DepletionWarningModal';
 import { evaluateMultiRoastGroupImpacts, type MultiRgImpact } from '@/hooks/useGreenLotDepletion';
 import { useSortable } from '@dnd-kit/sortable';
@@ -146,14 +145,6 @@ export function RoastGroupDrawer({
   const [batchLotSelections, setBatchLotSelections] = useState<Record<string, string>>({});
   
   // Undo workflow modal state
-  const [undoWorkflowTarget, setUndoWorkflowTarget] = useState<{
-    type: UndoOperationType;
-    id: string;
-    label: string;
-    roastGroup: string;
-    quantityKg: number;
-  } | null>(null);
-  
   // Edit mode tracking for sort-freeze - freeze order while user is editing
   const [hasEditedSinceOpen, setHasEditedSinceOpen] = useState(false);
   
@@ -752,20 +743,6 @@ export function RoastGroupDrawer({
   };
 
   // Handler to open undo workflow modal with batch info
-  const handleOpenUndoWorkflow = useCallback((batchId: string) => {
-    const batch = batches.find(b => b.id === batchId);
-    if (batch && batch.status === 'ROASTED') {
-      setUndoWorkflowTarget({
-        type: 'roast_batch',
-        id: batch.id,
-        label: `${config?.display_name?.trim() || roastGroup.replace(/_/g, ' ')} batch - ${batch.actual_output_kg.toFixed(1)} kg`,
-        roastGroup: batch.roast_group,
-        quantityKg: batch.actual_output_kg,
-      });
-    }
-  }, [batches, config?.display_name, roastGroup]);
-
-  // Legacy handler for simple undo confirmation (kept for compatibility)
   const handleUndoConfirm = () => {
     const batch = batches.find(b => b.id === undoConfirmBatchId);
     if (batch) {
@@ -1106,7 +1083,7 @@ export function RoastGroupDrawer({
                                     loss_kg: lossKg,
                                     loss_note: lossNote,
                                   })}
-                                  onUndo={(id) => handleOpenUndoWorkflow(id)}
+                                  onUndo={(id) => setUndoConfirmBatchId(id)}
                                   onDelete={(id) => setDeleteConfirmBatchId(id)}
                                   onOhShit={(batch) => setOhShitBatch(batch)}
                                   onUpdate={(data) => updateBatchMutation.mutate(data)}
@@ -1162,7 +1139,7 @@ export function RoastGroupDrawer({
                           loss_kg: lossKg,
                           loss_note: lossNote,
                         })}
-                        onUndo={(id) => handleOpenUndoWorkflow(id)}
+                        onUndo={(id) => setUndoConfirmBatchId(id)}
                         onDelete={(id) => setDeleteConfirmBatchId(id)}
                         onOhShit={(batch) => setOhShitBatch(batch)}
                         onUpdate={(data) => updateBatchMutation.mutate(data)}
@@ -1237,15 +1214,6 @@ export function RoastGroupDrawer({
           allBatches={batches}
           allRoastGroups={allRoastGroups}
           today={today}
-        />
-      )}
-      
-      {/* Undo Workflow Modal */}
-      {undoWorkflowTarget && (
-        <UndoWorkflowModal
-          open={!!undoWorkflowTarget}
-          onOpenChange={(open) => !open && setUndoWorkflowTarget(null)}
-          target={undoWorkflowTarget}
         />
       )}
 

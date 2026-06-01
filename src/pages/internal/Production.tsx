@@ -14,6 +14,7 @@ import {
 } from '@/lib/productionScheduling';
 import type { DateFilterConfig } from '@/components/production/types';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
+import { useProductionRealtime } from '@/hooks/useProductionRealtime';
 
 type StationView = 'plan' | 'roast' | 'pack' | 'ship';
 type DateFilterMode = 'today' | 'tomorrow' | 'all';
@@ -21,6 +22,9 @@ type DateFilterMode = 'today' | 'tomorrow' | 'all';
 export default function Production() {
   const [searchParams, setSearchParams] = useSearchParams();
   const today = getVancouverDateString(0);
+
+  // Keep all production tabs live (realtime + 30s polling fallback) — no manual refresh.
+  useProductionRealtime();
   
   // Date filter: 'today', 'tomorrow', or 'all'
   const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('all');

@@ -23,7 +23,7 @@ interface Props {
 export function RoastGroupWipSection({ roastGroupKey, displayName }: Props) {
   const { authUser } = useAuth();
   const isAdminOrOps = authUser?.role === 'ADMIN' || authUser?.role === 'OPS';
-  const [open, setOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'adjust' | 'zero' | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['roast-group-wip', roastGroupKey],
@@ -83,14 +83,25 @@ export function RoastGroupWipSection({ roastGroupKey, displayName }: Props) {
               {isLoading ? '…' : `${balance.toFixed(1)} kg`}
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setOpen(true)}
-            disabled={isLoading}
-          >
-            Adjust WIP
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setModalMode('adjust')}
+              disabled={isLoading}
+            >
+              Adjust WIP
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setModalMode('zero')}
+              disabled={isLoading || balance === 0}
+            >
+              Zero inventory
+            </Button>
+          </div>
         </div>
 
         {lastAdj && (
@@ -103,11 +114,12 @@ export function RoastGroupWipSection({ roastGroupKey, displayName }: Props) {
       </CardContent>
 
       <WipAdjustmentModal
-        open={open}
-        onOpenChange={setOpen}
+        open={modalMode !== null}
+        onOpenChange={(o) => setModalMode(o ? modalMode : null)}
         roastGroup={roastGroupKey}
         roastGroupDisplayName={displayName}
         currentBalanceKg={balance}
+        mode={modalMode ?? 'adjust'}
       />
     </Card>
   );

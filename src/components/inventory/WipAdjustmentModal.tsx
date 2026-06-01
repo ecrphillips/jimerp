@@ -52,6 +52,13 @@ interface WipAdjustmentModalProps {
   roastGroup: string;
   roastGroupDisplayName: string;
   currentBalanceKg: number;
+  /**
+   * 'adjust' (default): free-form recount/adjustment.
+   * 'zero': one-click "set WIP to zero" — pre-fills the new balance to 0 and
+   * presents as a destructive confirmation. Still writes an audited adjustment
+   * row (negative kg_delta), never a silent overwrite.
+   */
+  mode?: 'adjust' | 'zero';
 }
 
 export function WipAdjustmentModal({
@@ -60,9 +67,11 @@ export function WipAdjustmentModal({
   roastGroup,
   roastGroupDisplayName,
   currentBalanceKg,
+  mode = 'adjust',
 }: WipAdjustmentModalProps) {
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
+  const isZeroMode = mode === 'zero';
 
   const [newBalanceStr, setNewBalanceStr] = useState('');
   const [reason, setReason] = useState<WipAdjustmentReason>('OPENING_BALANCE');
@@ -70,11 +79,11 @@ export function WipAdjustmentModal({
 
   useEffect(() => {
     if (open) {
-      setNewBalanceStr(currentBalanceKg.toFixed(1));
-      setReason(currentBalanceKg === 0 ? 'OPENING_BALANCE' : 'RECOUNT');
+      setNewBalanceStr(isZeroMode ? '0' : currentBalanceKg.toFixed(1));
+      setReason(isZeroMode ? 'COUNT_ADJUSTMENT' : currentBalanceKg === 0 ? 'OPENING_BALANCE' : 'RECOUNT');
       setNotes('');
     }
-  }, [open, currentBalanceKg]);
+  }, [open, currentBalanceKg, isZeroMode]);
 
   const newBalance = parseFloat(newBalanceStr);
   const isValidNumber = !isNaN(newBalance) && newBalanceStr.trim() !== '';
@@ -131,10 +140,20 @@ export function WipAdjustmentModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Adjust WIP — {roastGroupDisplayName}</DialogTitle>
+          <DialogTitle>
+            {isZeroMode ? 'Zero WIP' : 'Adjust WIP'} — {roastGroupDisplayName}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
+          {isZeroMode && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              This sets WIP for <span className="font-semibold">{roastGroupDisplayName}</span> to{' '}
+              <span className="font-semibold">0 kg</span> by writing a{' '}
+              {currentBalanceKg !== 0 ? `${(-currentBalanceKg).toFixed(1)} kg` : '0 kg'} adjustment.
+              It does not delete history — the adjustment is recorded with your name and the time.
+            </div>
+          )}
           <div>
             <Label htmlFor="new-balance">New WIP balance (kg)</Label>
             <Input
@@ -211,10 +230,11 @@ export function WipAdjustmentModal({
             Cancel
           </Button>
           <Button
+            variant={isZeroMode ? 'destructive' : 'default'}
             onClick={() => mutation.mutate()}
             disabled={!isValidNumber || noChange || mutation.isPending}
           >
-            {mutation.isPending ? 'Saving…' : 'Save'}
+            {mutation.isPending ? 'Saving…' : isZeroMode ? 'Zero inventory' : 'Save'}
           </Button>
         </DialogFooter>
       </DialogContent>

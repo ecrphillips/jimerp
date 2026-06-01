@@ -255,17 +255,109 @@ function useOpenOrderLines() {
 // COMPUTED HOOKS
 // ============================================================================
 
+/** Minimal shapes the pure WIP reducer needs (a subset of the DB rows). */
+export interface WipLedgerTx {
+  roast_group: string | null;
+  quantity_kg: number | null;
+  transaction_type: string | null;
+}
+export interface WipManualAdjustmentRow {
+  roast_group: string | null;
+  kg_delta: number | null;
+}
+
 /**
- * Authoritative WIP by roast group
- * 
+ * Pure WIP reducer — the single source of truth for authoritative WIP.
+ * Extracted from useAuthoritativeWip so it can be unit-tested without Supabase.
+ *
  * WIP is calculated ENTIRELY from the inventory_transactions ledger:
- * - ROAST_OUTPUT: positive kg added (roasted batches)
+ * - ROAST_OUTPUT: positive kg added (roasted batches, INCLUDING blend component batches,
+ *   which write a ROAST_OUTPUT to their own component roast group when roasted)
  * - PACK_CONSUME_WIP: negative kg removed (packing consumed)
- * - ADJUSTMENT: +/- kg (blend outputs, reverts, manual adjustments)
+ * - ADJUSTMENT: +/- kg (blend output +, blend component decrement -, reverts, manual)
  * - LOSS: negative kg (recorded losses)
- * 
- * This is the single source of truth. The roasted_batches table is used only
- * for batch status tracking, not for inventory calculations.
+ *
+ * Blend bookkeeping must stay balanced: executing a blend writes a positive ADJUSTMENT
+ * to the blend group AND a matching negative ADJUSTMENT to each component group, so the
+ * kg blended away is removed from component WIP (otherwise it is double-counted and a
+ * sibling product in the component group can consume coffee already in the blend).
+ */
+export function computeAuthoritativeWip(
+  wipTransactions: WipLedgerTx[],
+  manualAdjustments: WipManualAdjustmentRow[] = [],
+): Record<string, AuthoritativeWip> {
+  // Aggregate transactions by roast group and type
+  const roastedByGroup: Record<string, number> = {};
+  const consumedByGroup: Record<string, number> = {};
+  const adjustmentsByGroup: Record<string, number> = {};
+
+  for (const tx of wipTransactions) {
+    if (!tx.roast_group) continue;
+    const kg = Number(tx.quantity_kg ?? 0);
+
+    switch (tx.transaction_type) {
+      case 'ROAST_OUTPUT':
+        // Direct roast output - positive kg
+        roastedByGroup[tx.roast_group] = (roastedByGroup[tx.roast_group] ?? 0) + kg;
+        break;
+      case 'PACK_CONSUME_WIP':
+        // Packing consumption - typically negative, but track absolute consumed
+        if (kg < 0) {
+          consumedByGroup[tx.roast_group] = (consumedByGroup[tx.roast_group] ?? 0) + Math.abs(kg);
+        } else {
+          // Reversal - reduce consumed
+          consumedByGroup[tx.roast_group] = (consumedByGroup[tx.roast_group] ?? 0) - kg;
+        }
+        break;
+      case 'ADJUSTMENT':
+        // Adjustments can be positive (blend output, reverts) or negative (blend consume)
+        adjustmentsByGroup[tx.roast_group] = (adjustmentsByGroup[tx.roast_group] ?? 0) + kg;
+        break;
+      case 'LOSS':
+        // Losses are negative
+        adjustmentsByGroup[tx.roast_group] = (adjustmentsByGroup[tx.roast_group] ?? 0) + kg;
+        break;
+    }
+  }
+
+  // Add manual adjustments from wip_adjustments table (opening balances, recounts, etc.)
+  // These are NOT in inventory_transactions but must be included for correct authoritative WIP.
+  for (const adj of manualAdjustments) {
+    if (!adj.roast_group) continue;
+    adjustmentsByGroup[adj.roast_group] = (adjustmentsByGroup[adj.roast_group] ?? 0) + Number(adj.kg_delta ?? 0);
+  }
+
+  // Combine into authoritative WIP
+  const allGroups = new Set([
+    ...Object.keys(roastedByGroup),
+    ...Object.keys(consumedByGroup),
+    ...Object.keys(adjustmentsByGroup),
+  ]);
+  const result: Record<string, AuthoritativeWip> = {};
+
+  for (const rg of allGroups) {
+    const roasted = roastedByGroup[rg] ?? 0;
+    const consumed = consumedByGroup[rg] ?? 0;
+    const adjusted = adjustmentsByGroup[rg] ?? 0;
+
+    // WIP = roasted - consumed + adjustments (includes manual adjustments from wip_adjustments)
+    const wipAvailable = roasted - consumed + adjusted;
+
+    result[rg] = {
+      roast_group: rg,
+      roasted_completed_kg: roasted,
+      packed_consumed_kg: consumed,
+      adjustments_kg: adjusted,
+      wip_available_kg: Math.max(0, wipAvailable),
+    };
+  }
+
+  return result;
+}
+
+/**
+ * Authoritative WIP by roast group.
+ * Thin React-Query wrapper around computeAuthoritativeWip (the pure reducer above).
  */
 export function useAuthoritativeWip() {
   const { data: wipTransactions, isLoading: wipLoading } = useWipLedgerTransactions();
@@ -274,83 +366,8 @@ export function useAuthoritativeWip() {
 
   const wip = useMemo((): Record<string, AuthoritativeWip> => {
     if (!wipTransactions) return {};
-
-    // Track which roast groups are blends
-    const blendGroups = new Set<string>();
-    for (const rg of roastGroups ?? []) {
-      if (rg.is_blend) {
-        blendGroups.add(rg.roast_group);
-      }
-    }
-
-    // Aggregate transactions by roast group and type
-    const roastedByGroup: Record<string, number> = {};
-    const consumedByGroup: Record<string, number> = {};
-    const adjustmentsByGroup: Record<string, number> = {};
-
-    for (const tx of wipTransactions) {
-      if (!tx.roast_group) continue;
-      const kg = Number(tx.quantity_kg ?? 0);
-
-      switch (tx.transaction_type) {
-        case 'ROAST_OUTPUT':
-          // Direct roast output - positive kg
-          roastedByGroup[tx.roast_group] = (roastedByGroup[tx.roast_group] ?? 0) + kg;
-          break;
-        case 'PACK_CONSUME_WIP':
-          // Packing consumption - typically negative, but track absolute consumed
-          if (kg < 0) {
-            consumedByGroup[tx.roast_group] = (consumedByGroup[tx.roast_group] ?? 0) + Math.abs(kg);
-          } else {
-            // Reversal - reduce consumed
-            consumedByGroup[tx.roast_group] = (consumedByGroup[tx.roast_group] ?? 0) - kg;
-          }
-          break;
-        case 'ADJUSTMENT':
-          // Adjustments can be positive (blend output, reverts) or negative (blend consume)
-          adjustmentsByGroup[tx.roast_group] = (adjustmentsByGroup[tx.roast_group] ?? 0) + kg;
-          break;
-        case 'LOSS':
-          // Losses are negative
-          adjustmentsByGroup[tx.roast_group] = (adjustmentsByGroup[tx.roast_group] ?? 0) + kg;
-          break;
-      }
-    }
-
-    // Add manual adjustments from wip_adjustments table (opening balances, recounts, etc.)
-    // These are NOT in inventory_transactions but must be included for correct authoritative WIP.
-    for (const adj of manualAdjustments ?? []) {
-      if (!adj.roast_group) continue;
-      adjustmentsByGroup[adj.roast_group] = (adjustmentsByGroup[adj.roast_group] ?? 0) + Number(adj.kg_delta ?? 0);
-    }
-
-    // Combine into authoritative WIP
-    const allGroups = new Set([
-      ...Object.keys(roastedByGroup),
-      ...Object.keys(consumedByGroup),
-      ...Object.keys(adjustmentsByGroup),
-    ]);
-    const result: Record<string, AuthoritativeWip> = {};
-
-    for (const rg of allGroups) {
-      const roasted = roastedByGroup[rg] ?? 0;
-      const consumed = consumedByGroup[rg] ?? 0;
-      const adjusted = adjustmentsByGroup[rg] ?? 0;
-
-      // WIP = roasted - consumed + adjustments (includes manual adjustments from wip_adjustments)
-      const wipAvailable = roasted - consumed + adjusted;
-
-      result[rg] = {
-        roast_group: rg,
-        roasted_completed_kg: roasted,
-        packed_consumed_kg: consumed,
-        adjustments_kg: adjusted,
-        wip_available_kg: Math.max(0, wipAvailable),
-      };
-    }
-
-    return result;
-  }, [wipTransactions, manualAdjustments, roastGroups]);
+    return computeAuthoritativeWip(wipTransactions, manualAdjustments ?? []);
+  }, [wipTransactions, manualAdjustments]);
 
   return {
     data: wip,
