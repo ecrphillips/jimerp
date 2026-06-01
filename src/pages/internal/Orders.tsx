@@ -254,6 +254,16 @@ export default function Orders() {
   const isTerminalStatus = (status: string) => 
     status === 'SHIPPED' || status === 'CANCELLED';
 
+  // Total roasted kg for an order = sum(units * bag_size_g) / 1000
+  const getRoastedKg = (order: typeof visibleOrders[0]) => {
+    const lineItems = order.order_line_items ?? [];
+    const grams = lineItems.reduce((sum, li: any) => {
+      const bag = li.product?.bag_size_g ?? 0;
+      return sum + (li.quantity_units ?? 0) * bag;
+    }, 0);
+    return grams / 1000;
+  };
+
   // Visibility label
   const visibilityLabel = `Showing ${activeCount} active + ${terminalCount} shipped/cancelled from the last ${historyDays} days`;
 
