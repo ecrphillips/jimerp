@@ -27,7 +27,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { SortableShipCard } from './SortableShipCard';
 import { format, addDays, parseISO } from 'date-fns';
-import type { Database } from '@/integrations/supabase/types';
 import type { DateFilterConfig } from './types';
 // Use AUTHORITATIVE inventory hooks - computed from source-of-truth tables
 import { useAuthoritativeFg, useAuthoritativeShortList } from '@/hooks/useAuthoritativeInventory';
@@ -35,7 +34,6 @@ import { AuthoritativeSummaryPanel } from './AuthoritativeTotals';
 import { filterOrderByWorkStart } from '@/lib/productionScheduling';
 
 type ShipPriority = 'NORMAL' | 'TIME_SENSITIVE';
-type OrderStatus = Database['public']['Enums']['order_status'];
 
 interface ShipTabProps {
   dateFilterConfig: DateFilterConfig;
@@ -544,19 +542,26 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     },
   });
 
+  // Route through the update_order_status RPC (validates transition, writes the
+  // audit log, sets shipped_or_ready atomically) so this matches the OrderDetail
+  // path instead of a raw orders.update that bypassed all of that.
   const markOrderShippedMutation = useMutation({
     mutationFn: async (orderId: string) => {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: 'SHIPPED' as OrderStatus, shipped_or_ready: true })
-        .eq('id', orderId);
+      const { error } = await supabase.rpc('update_order_status' as any, {
+        p_order_id: orderId,
+        p_target_status: 'SHIPPED',
+      });
       if (error) throw error;
+      return orderId;
     },
-    onSuccess: () => {
+    onSuccess: (orderId) => {
       toast.success('Order marked as shipped');
       queryClient.invalidateQueries({ queryKey: ['shippable-orders'] });
       queryClient.invalidateQueries({ queryKey: ['shipped-awaiting-invoice'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      supabase.functions.invoke('notify-order-event', {
+        body: { order_id: orderId, event_type: 'ORDER_SHIPPED' },
+      }).catch((e) => console.warn('[notify-order-event] SHIPPED failed:', e));
     },
     onError: (err) => {
       console.error(err);

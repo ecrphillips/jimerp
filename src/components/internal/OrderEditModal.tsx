@@ -85,7 +85,6 @@ export function OrderEditModal({
   const [editedShipments, setEditedShipments] = useState<ShipmentDraft[]>([]);
   const [newLineProductId, setNewLineProductId] = useState<string>('');
   const [newLineQuantity, setNewLineQuantity] = useState<number>(1);
-  const [newLineGrind, setNewLineGrind] = useState<GrindOption>('WHOLE_BEAN');
 
   // Load existing shipments when the modal opens.
   const { data: existingShipments } = useQuery({
@@ -249,7 +248,7 @@ export function OrderEditModal({
             order_id: order.id,
             product_id: li.product_id,
             quantity_units: li.quantity_units,
-            grind: li.grind,
+            grind: null,
             unit_price_locked: li.unit_price_locked,
             shipment_id: resolveShipmentId(li.shipment_id),
           });
@@ -259,7 +258,6 @@ export function OrderEditModal({
             .from('order_line_items')
             .update({
               quantity_units: li.quantity_units,
-              grind: li.grind,
               shipment_id: resolveShipmentId(li.shipment_id),
             })
             .eq('id', li.id);
@@ -358,7 +356,7 @@ export function OrderEditModal({
         product_id: newLineProductId,
         product_name: product.product_name,
         quantity_units: newLineQuantity,
-        grind: newLineGrind,
+        grind: null,
         unit_price_locked: price,
         shipment_id: defaultShipmentId,
         isNew: true,
@@ -367,7 +365,6 @@ export function OrderEditModal({
     ]);
     setNewLineProductId('');
     setNewLineQuantity(1);
-    setNewLineGrind('WHOLE_BEAN');
   };
 
   const handleRemoveLineItem = (itemId: string) => {
@@ -379,12 +376,6 @@ export function OrderEditModal({
   const handleQuantityChange = (itemId: string, quantity: number) => {
     setEditedLineItems((items) =>
       items.map((li) => (li.id === itemId ? { ...li, quantity_units: Math.max(1, quantity) } : li)),
-    );
-  };
-
-  const handleGrindChange = (itemId: string, grind: GrindOption | null) => {
-    setEditedLineItems((items) =>
-      items.map((li) => (li.id === itemId ? { ...li, grind } : li)),
     );
   };
 
@@ -588,20 +579,6 @@ export function OrderEditModal({
                       className="w-20 h-8"
                     />
 
-                    <Select
-                      value={li.grind ?? 'WHOLE_BEAN'}
-                      onValueChange={(v) => handleGrindChange(li.id, v as GrindOption)}
-                    >
-                      <SelectTrigger className="w-28 h-8">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="WHOLE_BEAN">Whole Bean</SelectItem>
-                        <SelectItem value="ESPRESSO">Espresso</SelectItem>
-                        <SelectItem value="FILTER">Filter</SelectItem>
-                      </SelectContent>
-                    </Select>
-
                     {activeShipments.length > 0 && (
                       <Select
                         value={li.shipment_id ?? activeShipments[0]?.id ?? ''}
@@ -665,22 +642,6 @@ export function OrderEditModal({
                 />
               </div>
 
-              <div className="w-28 space-y-1">
-                <Label className="text-xs">Grind</Label>
-                <Select
-                  value={newLineGrind}
-                  onValueChange={(v) => setNewLineGrind(v as GrindOption)}
-                >
-                  <SelectTrigger className="h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="WHOLE_BEAN">Whole Bean</SelectItem>
-                    <SelectItem value="ESPRESSO">Espresso</SelectItem>
-                    <SelectItem value="FILTER">Filter</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
 
               <Button
                 size="sm"

@@ -24,15 +24,13 @@ import { useClientOrderingConstraints, validateCaseQuantity } from '@/hooks/useC
 import { usePricingVisibility } from '@/hooks/usePricingVisibility';
 import { blockNonIntegerKeys } from '@/lib/numericInput';
 import { DatePicker } from '@/components/ui/date-picker';
-import type { GrindOption, DeliveryMethod } from '@/types/database';
+import type { DeliveryMethod } from '@/types/database';
 
 interface LineItem {
   productId: string;
   productName: string;
   displayName: string;
   quantity: number;
-  grind: GrindOption | null;
-  grindOptions: GrindOption[];
   price: number | null;
   packagingTypeName: string | null;
   gramsPerUnit: number | null;
@@ -84,7 +82,6 @@ interface Product {
   bag_size_g: number;
   grams_per_unit: number | null;
   format: string;
-  grind_options: GrindOption[];
   is_perennial: boolean;
   packaging_type_id: string | null;
   packaging_types: { name: string } | null;
@@ -142,7 +139,7 @@ export default function NewOrder() {
     queryFn: async () => {
       let query = supabase
         .from('products')
-        .select('id, product_name, sku, bag_size_g, grams_per_unit, format, grind_options, is_perennial, packaging_type_id, packaging_types(name)')
+        .select('id, product_name, sku, bag_size_g, grams_per_unit, format, is_perennial, packaging_type_id, packaging_types(name)')
         .eq('is_active', true)
         .order('product_name', { ascending: true });
 
@@ -205,17 +202,14 @@ export default function NewOrder() {
   const getLineItem = (productId: string) => lineItems.find((li) => li.productId === productId);
 
   const createLineItem = (product: Product, qty: number): LineItem => {
-    const grindOpts = (product.grind_options ?? []) as GrindOption[];
     const packagingTypeName = product.packaging_types?.name ?? null;
     const gramsPerUnit = product.grams_per_unit;
-    
+
     return {
       productId: product.id,
       productName: product.product_name,
       displayName: buildDisplayName(product.product_name, packagingTypeName, gramsPerUnit),
       quantity: qty,
-      grind: grindOpts.length > 0 ? grindOpts[0] : null,
-      grindOptions: grindOpts,
       price: prices?.[product.id] ?? null,
       packagingTypeName,
       gramsPerUnit,
@@ -245,12 +239,6 @@ export default function NewOrder() {
     }
     setLineItems((prev) =>
       prev.map((li) => (li.productId === productId ? { ...li, quantity: qty } : li))
-    );
-  };
-
-  const updateGrind = (productId: string, grind: GrindOption) => {
-    setLineItems((prev) =>
-      prev.map((li) => (li.productId === productId ? { ...li, grind } : li))
     );
   };
 
@@ -548,7 +536,7 @@ export default function NewOrder() {
           order_id: order.id,
           product_id: li.productId,
           quantity_units: li.quantity,
-          grind: li.grind,
+          grind: null,
           unit_price_locked: li.price!,
           shipment_id: targetShipmentId,
         };

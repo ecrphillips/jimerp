@@ -85,6 +85,10 @@ export default function Inventory() {
   // WIP Floor Count modal
   const [floorCountOpen, setFloorCountOpen] = useState(false);
 
+  // "Available only" view filters: roasted-not-packed (WIP) and finished-not-picked (FG)
+  const [wipAvailableOnly, setWipAvailableOnly] = useState(true);
+  const [fgAvailableOnly, setFgAvailableOnly] = useState(true);
+
   // ===== WIP Tab Queries =====
   
   // Fetch roast groups to identify blends
@@ -443,6 +447,28 @@ export default function Inventory() {
     setAbsoluteAdjustOpen(true);
   };
 
+  // Roasted-not-packed view: roast groups with positive net WIP awaiting packing.
+  const wipAvailableRows = useMemo(
+    () => wipByRoastGroup.filter((r) => r.net_wip_kg > 0),
+    [wipByRoastGroup],
+  );
+  const wipDisplayRows = wipAvailableOnly ? wipAvailableRows : wipByRoastGroup;
+  const wipAvailableTotalKg = useMemo(
+    () => wipAvailableRows.reduce((sum, r) => sum + r.net_wip_kg, 0),
+    [wipAvailableRows],
+  );
+
+  // Finished-not-picked view: products with packed units on hand not yet shipped.
+  const fgAvailableRows = useMemo(
+    () => (fgInventory ?? []).filter((r) => r.units_on_hand > 0),
+    [fgInventory],
+  );
+  const fgDisplayRows = fgAvailableOnly ? fgAvailableRows : (fgInventory ?? []);
+  const fgAvailableUnits = useMemo(
+    () => fgAvailableRows.reduce((sum, r) => sum + r.units_on_hand, 0),
+    [fgAvailableRows],
+  );
+
   return (
     <div className="p-6 space-y-6">
       <GreenCoffeeAlerts />
@@ -491,37 +517,52 @@ export default function Inventory() {
                   <p className="text-xs text-muted-foreground">
                     For post-roast blends, WIP is created when components are blended, not when components are roasted.
                   </p>
+                  <p className="mt-2 text-sm font-medium">
+                    {wipAvailableTotalKg.toFixed(1)} kg roasted awaiting packing across {wipAvailableRows.length}{' '}
+                    {wipAvailableRows.length === 1 ? 'group' : 'groups'}
+                  </p>
                 </div>
-                {isAdminOrOps && (
-                  <div className="flex gap-2 shrink-0">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setPickerGroup('');
-                        setPickerOpen(true);
-                      }}
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add WIP for roast group
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setFloorCountOpen(true)}
-                    >
-                      <Scale className="h-4 w-4" />
-                      Floor Count
-                    </Button>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    variant={wipAvailableOnly ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setWipAvailableOnly((v) => !v)}
+                  >
+                    {wipAvailableOnly ? 'Showing available' : 'Show all'}
+                  </Button>
+                  {isAdminOrOps && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setPickerGroup('');
+                          setPickerOpen(true);
+                        }}
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add WIP for roast group
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setFloorCountOpen(true)}
+                      >
+                        <Scale className="h-4 w-4" />
+                        Floor Count
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
             </CardHeader>
             <CardContent>
-              {wipByRoastGroup.length === 0 ? (
+              {wipDisplayRows.length === 0 ? (
                 <div className="py-6">
                   <p className="text-muted-foreground">
-                    No WIP data available. Use “Add WIP for roast group” above to enter an opening balance.
+                    {wipAvailableOnly && wipByRoastGroup.length > 0
+                      ? 'No roasted coffee is currently awaiting packing. Toggle “Show all” to see fully-consumed groups.'
+                      : 'No WIP data available. Use “Add WIP for roast group” above to enter an opening balance.'}
                   </p>
                 </div>
               ) : (
@@ -537,7 +578,7 @@ export default function Inventory() {
                     </tr>
                   </thead>
                   <tbody>
-                    {wipByRoastGroup.map((row) => (
+                    {wipDisplayRows.map((row) => (
                       <tr key={row.roast_group} className="border-b">
                         <td className="py-3 font-medium">{row.roast_group}</td>
                         <td className="py-3 text-right">{row.roasted_kg.toFixed(1)} kg</td>
@@ -594,13 +635,33 @@ export default function Inventory() {
         <TabsContent value="fg" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Finished Goods Inventory</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Packed units on hand by product
-              </p>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="text-lg">Finished Goods Inventory</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Packed units on hand by product
+                  </p>
+                  <p className="mt-2 text-sm font-medium">
+                    {fgAvailableUnits} {fgAvailableUnits === 1 ? 'unit' : 'units'} finished awaiting pick across{' '}
+                    {fgAvailableRows.length} {fgAvailableRows.length === 1 ? 'product' : 'products'}
+                  </p>
+                </div>
+                <Button
+                  variant={fgAvailableOnly ? 'default' : 'outline'}
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => setFgAvailableOnly((v) => !v)}
+                >
+                  {fgAvailableOnly ? 'Showing available' : 'Show all'}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              {fgInventory?.length === 0 && allProducts?.length === 0 ? (
+              {fgAvailableOnly && fgDisplayRows.length === 0 ? (
+                <p className="text-muted-foreground py-4">
+                  No finished goods are currently awaiting pick. Toggle “Show all” to see every product.
+                </p>
+              ) : !fgAvailableOnly && fgInventory?.length === 0 && allProducts?.length === 0 ? (
                 <p className="text-muted-foreground py-4">No products configured.</p>
               ) : (
                 <table className="w-full text-sm">
@@ -615,7 +676,7 @@ export default function Inventory() {
                   </thead>
                   <tbody>
                     {/* Show products that have FG inventory */}
-                    {fgInventory?.map((row) => (
+                    {fgDisplayRows.map((row) => (
                       <FgInventoryRow
                         key={row.id}
                         row={row}
@@ -623,8 +684,8 @@ export default function Inventory() {
                         onSet={(value) => handleFgSet(row.product_id, row.units_on_hand, value)}
                       />
                     ))}
-                    {/* Show products without FG inventory (units = 0) */}
-                    {allProducts
+                    {/* Show products without FG inventory (units = 0) — only in the "show all" view */}
+                    {!fgAvailableOnly && allProducts
                       ?.filter(p => !fgInventory?.some(fg => fg.product_id === p.id))
                       .map((product) => (
                         <tr key={product.id} className="border-b text-muted-foreground">

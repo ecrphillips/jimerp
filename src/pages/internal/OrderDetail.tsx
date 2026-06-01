@@ -25,9 +25,30 @@ import { OrderEditModal } from '@/components/internal/OrderEditModal';
 import { OrderDateAuditHistory } from '@/components/internal/OrderDateAuditHistory';
 import { WorkDeadlinePicker } from '@/components/orders/WorkDeadlinePicker';
 import { OrderDeleteModal } from '@/components/internal/OrderDeleteModal';
+import { ALLOWED_ORDER_TRANSITIONS } from '@/lib/orderTransitions';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
+
+// Linear fulfillment ladder for the status stepper (CANCELLED is off-ladder).
+const PRODUCTION_LADDER: OrderStatus[] = [
+  'DRAFT',
+  'SUBMITTED',
+  'CONFIRMED',
+  'IN_PRODUCTION',
+  'READY',
+  'SHIPPED',
+];
+
+const STATUS_LABEL: Record<OrderStatus, string> = {
+  DRAFT: 'Draft',
+  SUBMITTED: 'Submitted',
+  CONFIRMED: 'Confirmed',
+  IN_PRODUCTION: 'In Production',
+  READY: 'Ready',
+  SHIPPED: 'Shipped',
+  CANCELLED: 'Cancelled',
+};
 
 interface PackingRun {
   product_id: string;
@@ -228,9 +249,11 @@ export default function OrderDetail() {
     invoiced?: boolean;
   } | null>(null);
 
-  // Incomplete fulfillment modal state
+  // Incomplete fulfillment modal state. `incompleteIntent` records which
+  // advancement the soft-warning is gating so the modal's confirm can dispatch it.
   const [showIncompleteModal, setShowIncompleteModal] = useState(false);
   const [incompleteSteps, setIncompleteSteps] = useState<string[]>([]);
+  const [incompleteIntent, setIncompleteIntent] = useState<'SHIP' | 'READY'>('SHIP');
 
   // Status change modal state (for undoing shipped status)
   const [showStatusChangeModal, setShowStatusChangeModal] = useState(false);
@@ -279,10 +302,11 @@ export default function OrderDetail() {
   // Uses derived pack complete status - no longer checks invoiced as a blocker
   const handleMarkAsShipped = useCallback(() => {
     if (!order) return;
-    
+
     // Only check pack completion - invoiced is tracked separately
     if (!isDerivedPackComplete) {
       setIncompleteSteps(['Packed (per run sheet)']);
+      setIncompleteIntent('SHIP');
       setShowIncompleteModal(true);
     } else {
       markAsShippedMutation.mutate();
@@ -505,6 +529,58 @@ export default function OrderDetail() {
 
   const lineTotal = lineItemsWithPackedStatus.reduce((sum, li) => sum + li.quantity_units * li.unit_price_locked, 0);
 
+  // Advancement is always a deliberate click. SHIPPED keeps its pack-complete gate;
+  // READY soft-warns when not packed but still allows an override.
+  const handleAdvanceTo = (target: OrderStatus) => {
+    if (target === 'SHIPPED') {
+      handleMarkAsShipped();
+      return;
+    }
+    if (target === 'CONFIRMED' && order.status === 'SUBMITTED') {
+      confirmMutation.mutate();
+      return;
+    }
+    if (target === 'READY' && !isDerivedPackComplete) {
+      setIncompleteSteps(['Packed (per run sheet)']);
+      setIncompleteIntent('READY');
+      setShowIncompleteModal(true);
+      return;
+    }
+    handleStatusChange(target);
+  };
+
+  // Primary recommended next action for the current status.
+  const primaryNext: { target: OrderStatus; label: string; pending: boolean } | null = (() => {
+    switch (order.status) {
+      case 'SUBMITTED':
+        return { target: 'CONFIRMED', label: 'Confirm Order', pending: confirmMutation.isPending };
+      case 'CONFIRMED':
+        return { target: 'IN_PRODUCTION', label: 'Start Production', pending: changeStatusMutation.isPending };
+      case 'IN_PRODUCTION':
+        return { target: 'READY', label: 'Mark Ready', pending: changeStatusMutation.isPending };
+      case 'READY':
+        return { target: 'SHIPPED', label: 'Mark as Shipped', pending: markAsShippedMutation.isPending };
+      default:
+        return null;
+    }
+  })();
+
+  // Human label for a transition target, phrased as revert when moving backward.
+  const currentIdx = PRODUCTION_LADDER.indexOf(order.status);
+  const transitionLabel = (target: OrderStatus): string => {
+    const targetIdx = PRODUCTION_LADDER.indexOf(target);
+    const isRevert = targetIdx !== -1 && currentIdx !== -1 && targetIdx < currentIdx;
+    if (target === 'CANCELLED') return 'Cancel Order';
+    if (isRevert) return `Revert to ${STATUS_LABEL[target]}`;
+    return STATUS_LABEL[target];
+  };
+
+  // Remaining allowed transitions for the secondary menu (excludes the primary
+  // recommendation and the rarely-needed move back to DRAFT).
+  const secondaryTransitions = (ALLOWED_ORDER_TRANSITIONS[order.status] ?? []).filter(
+    (t) => t !== primaryNext?.target && t !== 'DRAFT',
+  );
+
   return (
     <div className="page-container">
       <div className="page-header flex items-center justify-between">
@@ -568,39 +644,67 @@ export default function OrderDetail() {
             Edit Order
           </Button>
           
-          {/* Confirm button for SUBMITTED orders */}
-          {order.status === 'SUBMITTED' && (
-            <Button onClick={() => confirmMutation.mutate()} disabled={confirmMutation.isPending}>
-              {confirmMutation.isPending ? 'Confirming…' : 'Confirm Order'}
-            </Button>
-          )}
-          
-          {/* Mark as Shipped button for non-shipped, non-cancelled orders */}
-          {order.status !== 'SHIPPED' && order.status !== 'CANCELLED' && order.status !== 'DRAFT' && (
-            <Button 
-              onClick={handleMarkAsShipped} 
-              disabled={markAsShippedMutation.isPending}
+          {/* Primary next-action button — the one obvious step for this status */}
+          {primaryNext && (
+            <Button
+              onClick={() => handleAdvanceTo(primaryNext.target)}
+              disabled={primaryNext.pending}
               className="gap-2"
             >
-              <Truck className="h-4 w-4" />
-              {markAsShippedMutation.isPending ? 'Processing…' : 'Mark as Shipped'}
+              {primaryNext.target === 'SHIPPED' && <Truck className="h-4 w-4" />}
+              {primaryNext.target === 'IN_PRODUCTION' && <Flame className="h-4 w-4" />}
+              {primaryNext.pending ? 'Working…' : primaryNext.label}
             </Button>
           )}
-          
-          {/* Status change dropdown for SHIPPED orders (undo) */}
-          {order.status === 'SHIPPED' && (
-            <Select onValueChange={(value) => handleStatusChange(value as OrderStatus)}>
+
+          {/* Secondary transitions (reverts, cancel, alternate advances) */}
+          {secondaryTransitions.length > 0 && (
+            <Select
+              value=""
+              onValueChange={(value) => handleAdvanceTo(value as OrderStatus)}
+            >
               <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Change Status" />
+                <SelectValue placeholder={primaryNext ? 'More actions' : 'Change Status'} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="CONFIRMED">Revert to Confirmed</SelectItem>
-                <SelectItem value="READY">Revert to Ready</SelectItem>
+                {secondaryTransitions.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {transitionLabel(t)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           )}
         </div>
       </div>
+
+      {/* Status stepper — at-a-glance position in the fulfillment ladder */}
+      {order.status !== 'CANCELLED' && (
+        <div className="mb-4 flex flex-wrap items-center gap-1 text-xs">
+          {PRODUCTION_LADDER.map((s, i) => {
+            const done = currentIdx !== -1 && i < currentIdx;
+            const current = i === currentIdx;
+            return (
+              <React.Fragment key={s}>
+                <span
+                  className={`rounded px-2 py-1 ${
+                    current
+                      ? 'bg-primary text-primary-foreground font-medium'
+                      : done
+                      ? 'bg-primary/15 text-primary'
+                      : 'bg-muted text-muted-foreground'
+                  }`}
+                >
+                  {STATUS_LABEL[s]}
+                </span>
+                {i < PRODUCTION_LADDER.length - 1 && (
+                  <span className="text-muted-foreground">→</span>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
@@ -882,7 +986,11 @@ export default function OrderDetail() {
         incompleteSteps={incompleteSteps}
         onConfirm={() => {
           setShowIncompleteModal(false);
-          markAsShippedMutation.mutate();
+          if (incompleteIntent === 'READY') {
+            changeStatusMutation.mutate('READY');
+          } else {
+            markAsShippedMutation.mutate();
+          }
         }}
       />
 
