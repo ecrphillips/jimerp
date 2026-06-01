@@ -310,14 +310,16 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
       
       // Get the origin for SKU generation
       let skuOrigin: string;
+      let skuIsBlend = false;
       if (roastGroupMode === 'new') {
         skuOrigin = origin === '__custom__' ? customOrigin.trim() : origin;
       } else {
         const selectedRg = singleOriginRoastGroups.find(g => g.roast_group === selectedRoastGroup);
         skuOrigin = selectedRg?.origin ?? '';
+        skuIsBlend = selectedRg?.is_blend === true;
       }
-      
-      if (roastGroupMode === 'existing' && !skuOrigin) {
+
+      if (roastGroupMode === 'existing' && !skuIsBlend && !skuOrigin) {
         throw new Error('Selected roast group is missing an origin. Open the roast group detail page and set the origin before creating products.');
       }
 
@@ -328,12 +330,13 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
         resolvedSkus = getResolvedSkus(
           selectedClient.account_code!,
           skuOrigin,
-          false,
+          skuIsBlend,
           finishedGoodName.trim(),
           validVariants,
           existingSkus ?? new Set(),
           lifecycle === 'perennial'
         );
+
       } catch (err: any) {
         toast.error(err?.message ?? 'Could not generate SKU');
         return;
