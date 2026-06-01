@@ -338,6 +338,7 @@ export default function Orders() {
                     <ArrowDown className="h-3 w-3" />
                   )}
                 </div>
+                <div className="w-24 text-right">Roasted</div>
                 <div className="w-28">Progress</div>
                 <div className="w-20">Status</div>
                 <div className="w-16 text-center">Health</div>
