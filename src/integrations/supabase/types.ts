@@ -151,6 +151,7 @@ export type Database = {
         Row: {
           account_code: string | null
           account_name: string
+          account_status: Database["public"]["Enums"]["account_status"]
           archetype: string | null
           billing_address: string | null
           billing_contact_name: string | null
@@ -173,8 +174,6 @@ export type Database = {
           coroast_custom_storage_rate: number | null
           coroast_joined_date: string | null
           coroast_tier: string | null
-          account_status: Database["public"]["Enums"]["account_status"]
-          prospect_selected_tier: Database["public"]["Enums"]["coroast_tier"] | null
           created_at: string
           hide_pricing_from_non_owners: boolean
           id: string
@@ -185,6 +184,7 @@ export type Database = {
           pricing_profile_id: string | null
           programs: string[]
           pronouns: string | null
+          prospect_selected_tier: string | null
           relationship_id: string | null
           service_fee_notes: string | null
           service_fee_updated_at: string | null
@@ -194,6 +194,7 @@ export type Database = {
         Insert: {
           account_code?: string | null
           account_name: string
+          account_status?: Database["public"]["Enums"]["account_status"]
           archetype?: string | null
           billing_address?: string | null
           billing_contact_name?: string | null
@@ -216,8 +217,6 @@ export type Database = {
           coroast_custom_storage_rate?: number | null
           coroast_joined_date?: string | null
           coroast_tier?: string | null
-          account_status?: Database["public"]["Enums"]["account_status"]
-          prospect_selected_tier?: Database["public"]["Enums"]["coroast_tier"] | null
           created_at?: string
           hide_pricing_from_non_owners?: boolean
           id?: string
@@ -228,6 +227,7 @@ export type Database = {
           pricing_profile_id?: string | null
           programs?: string[]
           pronouns?: string | null
+          prospect_selected_tier?: string | null
           relationship_id?: string | null
           service_fee_notes?: string | null
           service_fee_updated_at?: string | null
@@ -237,6 +237,7 @@ export type Database = {
         Update: {
           account_code?: string | null
           account_name?: string
+          account_status?: Database["public"]["Enums"]["account_status"]
           archetype?: string | null
           billing_address?: string | null
           billing_contact_name?: string | null
@@ -259,8 +260,6 @@ export type Database = {
           coroast_custom_storage_rate?: number | null
           coroast_joined_date?: string | null
           coroast_tier?: string | null
-          account_status?: Database["public"]["Enums"]["account_status"]
-          prospect_selected_tier?: Database["public"]["Enums"]["coroast_tier"] | null
           created_at?: string
           hide_pricing_from_non_owners?: boolean
           id?: string
@@ -271,6 +270,7 @@ export type Database = {
           pricing_profile_id?: string | null
           programs?: string[]
           pronouns?: string | null
+          prospect_selected_tier?: string | null
           relationship_id?: string | null
           service_fee_notes?: string | null
           service_fee_updated_at?: string | null
@@ -5496,6 +5496,7 @@ export type Database = {
       }
     }
     Enums: {
+      account_status: "PROSPECT" | "ACTIVE" | "PAUSED" | "CHURNED"
       app_role: "ADMIN" | "OPS" | "CLIENT"
       board_source: "MATCHSTICK" | "FUNK" | "NOSMOKE"
       contract_status: "ACTIVE" | "DEPLETED" | "CANCELLED"
@@ -5524,7 +5525,6 @@ export type Database = {
         | "FRI"
         | "SAT"
         | "SUN"
-      account_status: "ACTIVE" | "PROSPECT"
       coroast_tier: "ACCESS" | "GROWTH" | "MEMBER" | "PRODUCTION"
       default_roaster: "SAMIAC" | "LORING" | "EITHER"
       delivery_method: "PICKUP" | "DELIVERY" | "COURIER"
@@ -5744,6 +5744,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      account_status: ["PROSPECT", "ACTIVE", "PAUSED", "CHURNED"],
       app_role: ["ADMIN", "OPS", "CLIENT"],
       board_source: ["MATCHSTICK", "FUNK", "NOSMOKE"],
       contract_status: ["ACTIVE", "DEPLETED", "CANCELLED"],
@@ -5768,7 +5769,6 @@ export const Constants = {
         "OTHER",
       ],
       coroast_recurring_day: ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
-      account_status: ["ACTIVE", "PROSPECT"],
       coroast_tier: ["ACCESS", "GROWTH", "MEMBER", "PRODUCTION"],
       default_roaster: ["SAMIAC", "LORING", "EITHER"],
       delivery_method: ["PICKUP", "DELIVERY", "COURIER"],
