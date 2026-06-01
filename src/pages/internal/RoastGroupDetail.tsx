@@ -90,6 +90,21 @@ export default function RoastGroupDetail() {
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
+      // Gate: green-lot links are ON DELETE RESTRICT on purpose (sourcing
+      // traceability). Check up front so we can show a clear instruction instead
+      // of a raw foreign-key violation from the delete below.
+      const { count: greenLotLinks, error: linkErr } = await supabase
+        .from('green_lot_roast_group_links')
+        .select('*', { count: 'exact', head: true })
+        .eq('roast_group', id!);
+      if (linkErr) throw linkErr;
+      if ((greenLotLinks ?? 0) > 0) {
+        throw new Error(
+          `This roast group is linked to ${greenLotLinks} green coffee lot(s). ` +
+          `Unlink the green lots first, then delete.`
+        );
+      }
+
       // Unlink products first
       const { error: unlinkErr } = await supabase
         .from('products')
@@ -97,7 +112,8 @@ export default function RoastGroupDetail() {
         .eq('roast_group', id!);
       if (unlinkErr) throw unlinkErr;
 
-      // Delete roast group (cascades components, inventory levels)
+      // Delete roast group. FK cascades now clean up child rows:
+      // components, inventory levels, notes, inventory_transactions, wip_adjustments.
       const { error: delErr } = await supabase
         .from('roast_groups')
         .delete()

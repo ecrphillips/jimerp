@@ -15,12 +15,15 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Package, Layers } from 'lucide-react';
+import { Package, Layers, GripVertical, RotateCcw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { type PackagingVariant } from '@/components/PackagingBadge';
 import { SortablePackRow } from './SortablePackRow';
@@ -29,6 +32,43 @@ import type { DateFilterConfig } from './types';
 import { useAuthoritativeWip, useAuthoritativePlannedWip } from '@/hooks/useAuthoritativeInventory';
 import { AuthoritativeSummaryPanel } from './AuthoritativeTotals';
 import { filterOrderByWorkStart } from '@/lib/productionScheduling';
+import {
+  orderPackGroups,
+  rollUpGroupTier,
+  type PackSortMode,
+  type PackGroupMeta,
+} from '@/lib/packGroupSort';
+
+const UNASSIGNED = '__unassigned__';
+
+const SORT_OPTIONS: { value: PackSortMode; label: string }[] = [
+  { value: 'wip', label: 'WIP priority' },
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+  { value: 'alpha', label: 'A–Z' },
+];
+
+/** A draggable pill in the group-order bar (drag to reorder roast groups). */
+function GroupOrderPill({ id, label, tier }: { id: string; label: string; tier: 'full' | 'partial' | 'none' }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const dot =
+    tier === 'full' ? 'bg-green-500' : tier === 'partial' ? 'bg-amber-500' : 'bg-muted-foreground/40';
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-xs select-none cursor-grab active:cursor-grabbing ${
+        isDragging ? 'opacity-60 shadow' : ''
+      }`}
+      {...attributes}
+      {...listeners}
+    >
+      <GripVertical className="h-3 w-3 text-muted-foreground" />
+      <span className={`h-2 w-2 rounded-full ${dot}`} />
+      <span className="font-medium">{label}</span>
+    </div>
+  );
+}
 
 // Removed SortOption type - no more auto-sorting, order is manual via pack_display_order
 
@@ -82,6 +122,26 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [frozenOrder, setFrozenOrder] = useState<ProductDemand[] | null>(null);
   const lastEditTimeRef = useRef<number>(0);
+
+  // Roast-group ordering controls.
+  // sortMode drives the default group order; a manual drag order (held in memory,
+  // not persisted) overrides it until the group set changes or the user resets.
+  const [sortMode, setSortMode] = useState<PackSortMode>('wip');
+  const [manualGroupOrder, setManualGroupOrder] = useState<string[] | null>(null);
+
+  // Roast-group config for display names + the Roast-tab sequence (display_order),
+  // used as the tie-break for the "no WIP" tier so it mirrors the Roast tab.
+  const { data: roastGroupsConfig } = useQuery({
+    queryKey: ['pack-roast-groups-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('roast_groups')
+        .select('roast_group, display_name, display_order');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30000,
+  });
 
   // Fetch products (only active) with pack_display_order
   const { data: products } = useQuery({
@@ -354,6 +414,86 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     return localProducts.length > 0 ? localProducts : computedSortedProducts;
   }, [editingProductId, frozenOrder, localProducts, computedSortedProducts, demandByProduct]);
 
+  // ===== Roast-group ordering (WIP-priority default, sort control, manual drag) =====
+
+  const groupKeyOf = useCallback(
+    (rg: string | null) => rg ?? UNASSIGNED,
+    [],
+  );
+
+  // Build one PackGroupMeta per roast group currently present, rolling product
+  // readiness up to a group tier and pulling display name + roast-tab index.
+  const groupMetas = useMemo((): PackGroupMeta[] => {
+    const configByKey = new Map(
+      (roastGroupsConfig ?? []).map((c) => [c.roast_group, c]),
+    );
+    const byGroup = new Map<string, ProductDemand[]>();
+    for (const p of sortedProducts) {
+      const key = groupKeyOf(p.roast_group);
+      const arr = byGroup.get(key) ?? [];
+      arr.push(p);
+      byGroup.set(key, arr);
+    }
+
+    const metas: PackGroupMeta[] = [];
+    for (const [key, prods] of byGroup) {
+      const cfg = key === UNASSIGNED ? undefined : configByKey.get(key);
+      const tier = rollUpGroupTier(
+        prods.map((p) => ({ wipStatus: p.wipStatus, remainingUnits: p.shortage })),
+      );
+      const shipDates = prods
+        .map((p) => p.earliestShipDate)
+        .filter((d): d is string => !!d)
+        .sort();
+      metas.push({
+        roastGroup: key,
+        displayName: cfg?.display_name?.trim() || (key === UNASSIGNED ? 'Unassigned' : key.replace(/_/g, ' ')),
+        tier,
+        roastTabIndex: cfg?.display_order ?? 999999,
+        earliestShipDate: shipDates[0] ?? null,
+      });
+    }
+    return metas;
+  }, [sortedProducts, roastGroupsConfig, groupKeyOf]);
+
+  // The active group order (manual drag wins, else the sort-control order).
+  const groupOrder = useMemo(
+    () => orderPackGroups(groupMetas, sortMode, manualGroupOrder),
+    [groupMetas, sortMode, manualGroupOrder],
+  );
+
+  const metaByKey = useMemo(
+    () => new Map(groupMetas.map((m) => [m.roastGroup, m])),
+    [groupMetas],
+  );
+
+  // Flatten products into the chosen group order; within a group, keep the existing
+  // row order (pack_display_order / manual row drag). This drives both render + row DnD.
+  const displayProducts = useMemo(() => {
+    const byGroup = new Map<string, ProductDemand[]>();
+    for (const p of sortedProducts) {
+      const key = groupKeyOf(p.roast_group);
+      const arr = byGroup.get(key) ?? [];
+      arr.push(p);
+      byGroup.set(key, arr);
+    }
+    const out: ProductDemand[] = [];
+    for (const key of groupOrder) {
+      out.push(...(byGroup.get(key) ?? []));
+    }
+    return out;
+  }, [sortedProducts, groupOrder, groupKeyOf]);
+
+  // Drag-reorder of the group-order bar.
+  const handleGroupDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = groupOrder.indexOf(String(active.id));
+    const newIndex = groupOrder.indexOf(String(over.id));
+    if (oldIndex === -1 || newIndex === -1) return;
+    setManualGroupOrder(arrayMove(groupOrder, oldIndex, newIndex));
+  }, [groupOrder]);
+
 
   // Map packing runs by product_id
   const packingByProduct = useMemo(() => {
@@ -374,12 +514,27 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     previousUnits: number
   ) => {
     const delta = newUnits - previousUnits;
-    
+
     // No change, skip
     if (delta === 0) return;
-    
+
     // Calculate kg consumed/returned for the delta
     const kgDelta = bagSizeG > 0 ? (delta * bagSizeG) / 1000 : 0;
+
+    // Guard: never consume more WIP than is actually available for this roast group.
+    // Blend component kg is removed from component WIP when a blend executes, so this
+    // also blocks a sibling single-origin product from packing coffee already in a blend.
+    if (delta > 0 && roastGroup) {
+      const availableWipKg = roastedInventory[roastGroup] ?? 0;
+      const EPSILON = 0.001;
+      if (kgDelta > availableWipKg + EPSILON) {
+        toast.error(
+          `Not enough WIP for ${roastGroup}: need ${kgDelta.toFixed(2)} kg, only ${availableWipKg.toFixed(2)} kg available. ` +
+          `Coffee may already be committed to a blend.`
+        );
+        throw new Error('Insufficient WIP for pack');
+      }
+    }
     
     console.log('[PackTab] updatePackingUnits:', { 
       productId, newUnits, previousUnits, delta, bagSizeG, kgDelta, roastGroup, target_date: today 
@@ -457,7 +612,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     queryClient.invalidateQueries({ queryKey: ['authoritative-packing-runs'] });
     queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
     queryClient.invalidateQueries({ queryKey: ['inventory-ledger-fg'] });
-  }, [today, user?.id, queryClient]);
+  }, [today, user?.id, queryClient, roastedInventory]);
 
   // Mutation to update pack_display_order
   const updateDisplayOrderMutation = useMutation({
@@ -492,26 +647,26 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   // Handle drag end for reordering - use local state for optimistic updates
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
-    
+
     if (!over || active.id === over.id) return;
-    
-    const oldIndex = sortedProducts.findIndex(p => p.product_id === active.id);
-    const newIndex = sortedProducts.findIndex(p => p.product_id === over.id);
-    
+
+    const oldIndex = displayProducts.findIndex(p => p.product_id === active.id);
+    const newIndex = displayProducts.findIndex(p => p.product_id === over.id);
+
     if (oldIndex === -1 || newIndex === -1) return;
-    
+
     // Mark that user has reordered to prevent server sync from overriding
     hasUserReorderedRef.current = true;
-    
+
     // Optimistically update local state immediately
-    const reordered = arrayMove(sortedProducts, oldIndex, newIndex);
+    const reordered = arrayMove(displayProducts, oldIndex, newIndex);
     setLocalProducts(reordered);
-    
+
     // Persist new order to DB
     reordered.forEach((product, index) => {
       updateDisplayOrderMutation.mutate({ productId: product.product_id, newOrder: (index + 1) * 10 });
     });
-  }, [sortedProducts, updateDisplayOrderMutation]);
+  }, [displayProducts, updateDisplayOrderMutation]);
 
   return (
     <div className="space-y-4">
@@ -528,10 +683,27 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                 Pack SKUs
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Drag rows to reorder. Green = WIP covers full row. Amber = partial WIP.
+                Drag rows to reorder within a group. Green = WIP covers full row. Amber = partial WIP.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Sort control — overrides the default WIP-priority group order */}
+              <div className="flex items-center rounded-md border p-0.5">
+                {SORT_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => { setSortMode(opt.value); setManualGroupOrder(null); }}
+                    className={`px-2 py-1 text-xs rounded ${
+                      sortMode === opt.value && !manualGroupOrder
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
               <Button variant="outline" size="sm" asChild>
                 <Link to="/inventory?tab=wip&from=pack">
                   <Layers className="h-4 w-4 mr-1" />
@@ -540,9 +712,48 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
               </Button>
             </div>
           </div>
+
+          {/* Group-order bar: drag pills to reorder roast groups themselves */}
+          {groupOrder.length > 1 && (
+            <div className="mt-3 rounded-md border bg-muted/30 p-2">
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Group order {manualGroupOrder ? '(manual)' : `(${SORT_OPTIONS.find(o => o.value === sortMode)?.label})`} — drag to reorder
+                </span>
+                {manualGroupOrder && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => setManualGroupOrder(null)}
+                  >
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    Reset
+                  </Button>
+                )}
+              </div>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleGroupDragEnd}>
+                <SortableContext items={groupOrder} strategy={horizontalListSortingStrategy}>
+                  <div className="flex flex-wrap gap-1.5">
+                    {groupOrder.map((key) => {
+                      const meta = metaByKey.get(key);
+                      return (
+                        <GroupOrderPill
+                          key={key}
+                          id={key}
+                          label={meta?.displayName ?? key}
+                          tier={meta?.tier ?? 'none'}
+                        />
+                      );
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
-          {sortedProducts.length === 0 ? (
+          {displayProducts.length === 0 ? (
             <div className="py-8 text-center">
               <div className="text-4xl mb-3">📦</div>
               <p className="text-lg font-medium text-foreground mb-1">No packing demand right now</p>
@@ -561,7 +772,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
               onDragEnd={handleDragEnd}
             >
               <SortableContext
-                items={sortedProducts.map(p => p.product_id)}
+                items={displayProducts.map(p => p.product_id)}
                 strategy={verticalListSortingStrategy}
               >
                 <table className="w-full text-sm">
@@ -577,11 +788,11 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedProducts.map((product, index) => {
+                    {displayProducts.map((product, index) => {
                       const packing = packingByProduct[product.product_id];
                       const packed = packing?.units_packed ?? 0;
                       const isExpanded = expandedProductId === product.product_id;
-                      const prevRoastGroup = index > 0 ? sortedProducts[index - 1].roast_group : undefined;
+                      const prevRoastGroup = index > 0 ? displayProducts[index - 1].roast_group : undefined;
                       const showHeader = product.roast_group !== prevRoastGroup;
                       const headerLabel = product.roast_group
                         ? product.roast_group.replace(/_/g, ' ')

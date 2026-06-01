@@ -347,13 +347,18 @@ export function BlendExecuteModal({
         if (!batch) continue;
         
         batchIdsToConsume.push(batchId);
-        
-        // Note: Component decrements are recorded for audit but NOT used for WIP calc
-        // since component batches are NOT in WIP (they're "staged_for_blend")
+
+        // Decrement the component roast group's WIP. When a component batch is
+        // marked ROASTED it writes a positive ROAST_OUTPUT to its own roast group
+        // (RoastGroupDrawer markRoastedMutation), so the kg IS counted as component
+        // WIP. Without this offsetting negative ADJUSTMENT the same kg is counted
+        // twice — once as component WIP and again as blend output — letting a
+        // sibling single-origin product in the component group "steal" coffee that
+        // is physically already in the blend.
         componentTransactions.push({
           transaction_type: 'ADJUSTMENT',
           roast_group: batch.roast_group,
-          quantity_kg: -selection.consumeKg, // Negative = decrement component staging
+          quantity_kg: -selection.consumeKg, // Negative = remove blended kg from component WIP
           is_system_generated: true,
           created_by: user?.id,
           notes: `Blended into ${blendDisplayName} (batch ${batchId.slice(0, 8)})`,
@@ -392,12 +397,13 @@ export function BlendExecuteModal({
         notes: `Created blend from ${batchIdsToConsume.length} component batches`,
       };
       
-      // Insert ONLY the blend output transaction
-      // (Component decrements are NOT inserted since components aren't in WIP)
+      // Insert the blend output (positive, to the blend group) AND the component
+      // WIP decrements (negative, to each component group) in one call so the
+      // ledger stays balanced: kg leaving the components equals kg entering the blend.
       const { error: txError } = await supabase
         .from('inventory_transactions')
-        .insert([blendTransaction]);
-      
+        .insert([blendTransaction, ...componentTransactions]);
+
       if (txError) {
         // Rollback: un-consume the batches if transaction insert failed
         await supabase
