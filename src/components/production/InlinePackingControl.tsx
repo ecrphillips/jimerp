@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Minus, Plus, Loader2 } from 'lucide-react';
+import { Minus, Plus, Loader2, Check } from 'lucide-react';
 
 interface InlinePackingControlProps {
   value: number;
@@ -9,14 +9,17 @@ interface InlinePackingControlProps {
   onEditingChange?: (isEditing: boolean) => void;
   disabled?: boolean;
   isComplete?: boolean;
+  /** When set, shows an "All packed" button that fills to this value (the demand). */
+  fillValue?: number;
 }
 
-export function InlinePackingControl({ 
-  value, 
-  onCommit, 
+export function InlinePackingControl({
+  value,
+  onCommit,
   onEditingChange,
   disabled = false,
-  isComplete = false 
+  isComplete = false,
+  fillValue,
 }: InlinePackingControlProps) {
   const [localValue, setLocalValue] = useState<string>(value.toString());
   const [isSaving, setIsSaving] = useState(false);
@@ -149,6 +152,20 @@ export function InlinePackingControl({
     commitValue(newValue);
   };
 
+  const handleFill = () => {
+    if (fillValue === undefined) return;
+    setLocalValue(fillValue.toString());
+
+    notifyEditingChange(true);
+    resetIdleTimeout();
+
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    commitValue(fillValue);
+  };
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -209,6 +226,21 @@ export function InlinePackingControl({
       >
         <Plus className="h-3 w-3" />
       </Button>
+
+      {fillValue !== undefined && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-xs gap-1"
+          onClick={handleFill}
+          disabled={isDisabled || (parseInt(localValue, 10) || 0) >= fillValue}
+          title="All packed"
+        >
+          <Check className="h-3 w-3" />
+          All packed
+        </Button>
+      )}
     </div>
   );
 }

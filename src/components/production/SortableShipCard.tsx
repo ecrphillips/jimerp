@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ShipPickInput } from './ShipPickInput';
 import { NudgeScheduleButtons } from './NudgeScheduleButtons';
-import { OverdueBadge, isOrderOverdue } from './OverdueBadge';
+import { DueBadge, getDueBucket } from './OverdueBadge';
 import { format, parseISO } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { TIMEZONE } from '@/lib/productionScheduling';
@@ -213,8 +213,9 @@ export function SortableShipCard({
   const hasOpsNotes = !!order.internal_ops_notes;
   const isShippable = allItemsFullyPicked;
   
-  // Check if order is overdue
-  const isOverdue = useMemo(() => isOrderOverdue(order.work_deadline), [order.work_deadline]);
+  // Due-day bucket (calm cue, replaces noisy LATE)
+  const dueBucket = useMemo(() => getDueBucket(order.work_deadline), [order.work_deadline]);
+  const isDueToday = dueBucket === 'today';
   
   // Format work_deadline for display in Vancouver time
   const formattedDeadline = order.work_deadline
@@ -226,12 +227,12 @@ export function SortableShipCard({
       ref={setNodeRef}
       style={style}
       className={`border rounded-lg p-4 transition-colors ${
-        isOverdue && !isShippable
-          ? 'border-destructive bg-destructive/5 ring-2 ring-destructive/30 shadow-md' // OVERDUE - highest priority styling
-          : isShippable 
-            ? 'border-green-500 bg-green-50 ring-2 ring-green-200 shadow-sm' 
-            : isTimeSensitive 
-              ? 'border-destructive/30 bg-destructive/5' 
+        isShippable
+          ? 'border-green-500 bg-green-50 ring-2 ring-green-200 shadow-sm'
+          : isDueToday && !isShippable
+            ? 'border-destructive/40 bg-destructive/5' // Due today - calm emphasis, no pulse/ring
+            : isTimeSensitive
+              ? 'border-destructive/30 bg-destructive/5'
               : 'border-muted bg-muted/20 opacity-80'
       }`}
     >
@@ -262,11 +263,9 @@ export function SortableShipCard({
               {order.shipToLabel}
             </span>
 
-            {/* Overdue badge - highest priority, always visible */}
-            {isOverdue && (
-              <OverdueBadge workDeadlineAt={order.work_deadline} />
-            )}
-            
+            {/* Due-day cue - calm, replaces noisy LATE badge */}
+            <DueBadge workDeadlineAt={order.work_deadline} />
+
             {/* Shippable badge */}
             {isShippable && (
               <Badge className="text-xs bg-green-600 hover:bg-green-700">
@@ -274,8 +273,8 @@ export function SortableShipCard({
                 Ready
               </Badge>
             )}
-            
-            {isTimeSensitive && !isOverdue && (
+
+            {isTimeSensitive && !isDueToday && (
               <Badge variant="destructive" className="text-xs">
                 <Clock className="h-3 w-3 mr-1" />
                 Urgent
@@ -457,6 +456,7 @@ export function SortableShipCard({
                     <ShipPickInput
                       value={picked}
                       maxValue={Math.max(available + picked, li.quantity_units)} // Can pick up to what's available + already picked
+                      fillValue={li.quantity_units} // "Pick all" fills Required, not FG available
                       onCommit={(newValue) => handlePickChange(li.id, newValue, available + picked, li.product_id)}
                       disabled={upsertPickMutation.isPending}
                     />
