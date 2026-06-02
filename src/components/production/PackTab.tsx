@@ -457,9 +457,26 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   }, [sortedProducts, roastGroupsConfig, groupKeyOf]);
 
   // The active group order (manual drag wins, else the sort-control order).
+  //
+  // Frozen during a session so completing a group's last row does NOT bounce it to
+  // the bottom live (WIP-priority stays the rule). The order is only recomputed when
+  // the user explicitly changes sort mode / drags, when the SET of groups changes
+  // (add/remove), or on remount (nav away + back / refresh) — at which point WIP sort
+  // naturally sinks fully-packed groups (tier 'none') to the bottom.
+  const groupKeySig = useMemo(
+    () => groupMetas.map((m) => m.roastGroup).sort().join('|'),
+    [groupMetas],
+  );
+  const [frozenGroupOrder, setFrozenGroupOrder] = useState<string[] | null>(null);
+  useEffect(() => {
+    setFrozenGroupOrder(orderPackGroups(groupMetas, sortMode, manualGroupOrder));
+    // groupMetas intentionally omitted: live tier/completion changes must NOT re-sort.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortMode, manualGroupOrder, groupKeySig]);
+
   const groupOrder = useMemo(
-    () => orderPackGroups(groupMetas, sortMode, manualGroupOrder),
-    [groupMetas, sortMode, manualGroupOrder],
+    () => frozenGroupOrder ?? orderPackGroups(groupMetas, sortMode, manualGroupOrder),
+    [frozenGroupOrder, groupMetas, sortMode, manualGroupOrder],
   );
 
   const metaByKey = useMemo(
@@ -521,22 +538,11 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     // Calculate kg consumed/returned for the delta
     const kgDelta = bagSizeG > 0 ? (delta * bagSizeG) / 1000 : 0;
 
-    // Guard: never consume more WIP than is actually available for this roast group.
-    // Blend component kg is removed from component WIP when a blend executes, so this
-    // also blocks a sibling single-origin product from packing coffee already in a blend.
-    if (delta > 0 && roastGroup) {
-      const availableWipKg = roastedInventory[roastGroup] ?? 0;
-      const EPSILON = 0.001;
-      if (kgDelta > availableWipKg + EPSILON) {
-        toast.error(
-          `Not enough WIP for ${roastGroup}: need ${kgDelta.toFixed(2)} kg, only ${availableWipKg.toFixed(2)} kg available. ` +
-          `Coffee may already be committed to a blend.`
-        );
-        throw new Error('Insufficient WIP for pack');
-      }
-    }
-    
-    console.log('[PackTab] updatePackingUnits:', { 
+    // No upstream-material gating: a user packing a bag the system thinks doesn't
+    // exist is treated as an upstream data-entry lag, not a physical shortage. The
+    // "0 available" / amber WIP color cues are nudge enough; never block completion.
+
+    console.log('[PackTab] updatePackingUnits:', {
       productId, newUnits, previousUnits, delta, bagSizeG, kgDelta, roastGroup, target_date: today 
     });
     
@@ -612,7 +618,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     queryClient.invalidateQueries({ queryKey: ['authoritative-packing-runs'] });
     queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
     queryClient.invalidateQueries({ queryKey: ['inventory-ledger-fg'] });
-  }, [today, user?.id, queryClient, roastedInventory]);
+  }, [today, user?.id, queryClient]);
 
   // Mutation to update pack_display_order
   const updateDisplayOrderMutation = useMutation({

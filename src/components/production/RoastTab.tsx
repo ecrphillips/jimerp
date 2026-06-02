@@ -440,9 +440,13 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       const fg_kg = inventoryLevelsByGroup[roast_group]?.fg_kg ?? 0;
       const net_demand_kg = Math.max(0, data.total_kg - wip_kg - fg_kg);
       
-      // A group is "completed" if it has no net demand but has some form of activity
+      // A group is "completed" if it has no net demand, has some form of activity,
+      // and has no PLANNED batches still queued (unroasted work must stay visible).
       const hasActivity = groupsWithActivity.has(roast_group);
-      const isCompleted = net_demand_kg === 0 && hasActivity;
+      const hasPlanned = (batches ?? []).some(
+        b => b.roast_group === roast_group && b.status === 'PLANNED'
+      );
+      const isCompleted = net_demand_kg === 0 && hasActivity && !hasPlanned;
       
       return {
         roast_group,

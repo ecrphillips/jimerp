@@ -6,6 +6,8 @@ import { Check } from 'lucide-react';
 interface ShipPickInputProps {
   value: number;
   maxValue: number;
+  /** Value the "Pick all" button fills to — the required quantity, not FG available. */
+  fillValue: number;
   onCommit: (newValue: number) => void;
   disabled?: boolean;
 }
@@ -13,6 +15,7 @@ interface ShipPickInputProps {
 export function ShipPickInput({
   value,
   maxValue,
+  fillValue,
   onCommit,
   disabled = false
 }: ShipPickInputProps) {
@@ -63,7 +66,7 @@ export function ShipPickInput({
   };
 
   const handlePickAll = () => {
-    commitValue(maxValue);
+    commitValue(fillValue);
   };
 
   const currentValue = parseInt(draftValue, 10) || 0;
@@ -88,7 +91,7 @@ export function ShipPickInput({
         variant="outline"
         className="h-7 px-2 text-xs gap-1"
         onClick={handlePickAll}
-        disabled={disabled || currentValue >= maxValue}
+        disabled={disabled || currentValue >= fillValue}
         title="Pick all"
       >
         <Check className="h-3 w-3" />

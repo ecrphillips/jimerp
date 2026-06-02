@@ -195,6 +195,7 @@ export function SortablePackRow({
             onCommit={onUpdatePackedUnits}
             onEditingChange={onEditingChange}
             isComplete={isComplete}
+            fillValue={demandedUnits}
           />
         </td>
         <td className="py-3 text-right">
