@@ -1498,6 +1498,36 @@ export type Database = {
         }
         Relationships: []
       }
+      coroast_tier_rates: {
+        Row: {
+          base_fee: number
+          included_hours: number
+          is_legacy: boolean
+          label: string
+          overage_rate_per_hr: number
+          tier: Database["public"]["Enums"]["coroast_tier"]
+          updated_at: string
+        }
+        Insert: {
+          base_fee: number
+          included_hours: number
+          is_legacy?: boolean
+          label: string
+          overage_rate_per_hr: number
+          tier: Database["public"]["Enums"]["coroast_tier"]
+          updated_at?: string
+        }
+        Update: {
+          base_fee?: number
+          included_hours?: number
+          is_legacy?: boolean
+          label?: string
+          overage_rate_per_hr?: number
+          tier?: Database["public"]["Enums"]["coroast_tier"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       coroast_unit_economics_scenarios: {
         Row: {
           account_id: string | null
@@ -5301,6 +5331,17 @@ export type Database = {
           booking_date: string
           end_time: string
           start_time: string
+        }[]
+      }
+      get_coroast_tier_rates: {
+        Args: never
+        Returns: {
+          base_fee: number
+          included_hours: number
+          is_legacy: boolean
+          label: string
+          overage_rate_per_hr: number
+          tier: Database["public"]["Enums"]["coroast_tier"]
         }[]
       }
       get_invitation_by_token: { Args: { p_token: string }; Returns: Json }
