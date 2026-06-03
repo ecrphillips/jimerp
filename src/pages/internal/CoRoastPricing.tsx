@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatMoney } from '@/lib/formatMoney';
 import { format } from 'date-fns';
+import { CO_ROAST_TIER_DEFAULTS } from '@/components/bookings/bookingUtils';
 
 const SETTINGS_KEY = 'coroast_tier_rates';
 
@@ -24,11 +25,19 @@ interface TierRates {
 
 type AllTierRates = Record<string, TierRates>;
 
-const DEFAULT_RATES: AllTierRates = {
-  MEMBER: { base: 399, includedHours: 3, overageRate: 160, includedPallets: 0, storageRate: 175 },
-  GROWTH: { base: 859, includedHours: 7, overageRate: 145, includedPallets: 1, storageRate: 175 },
-  PRODUCTION: { base: 1399, includedHours: 12, overageRate: 130, includedPallets: 2, storageRate: 175 },
-};
+// Derived from the single source of truth in bookingUtils. Legacy tiers are
+// excluded so they never surface in the admin pricing UI (3 active tiers only).
+const DEFAULT_RATES: AllTierRates = Object.fromEntries(
+  Object.entries(CO_ROAST_TIER_DEFAULTS)
+    .filter(([, d]) => !d.isLegacy)
+    .map(([tier, d]) => [tier, {
+      base: d.base,
+      includedHours: d.includedHours,
+      overageRate: d.overageRate,
+      includedPallets: d.includedPallets,
+      storageRate: d.storageRate,
+    }]),
+);
 
 const TIER_LABELS: Record<string, string> = {
   MEMBER: 'Member',

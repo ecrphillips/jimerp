@@ -1350,6 +1350,7 @@ export type Database = {
       }
       coroast_recurring_blocks: {
         Row: {
+          account_id: string
           created_at: string
           created_by: string | null
           day_of_week: Database["public"]["Enums"]["coroast_recurring_day"]
@@ -1364,6 +1365,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_id: string
           created_at?: string
           created_by?: string | null
           day_of_week: Database["public"]["Enums"]["coroast_recurring_day"]
@@ -1378,6 +1380,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_id?: string
           created_at?: string
           created_by?: string | null
           day_of_week?: Database["public"]["Enums"]["coroast_recurring_day"]
@@ -1391,7 +1394,15 @@ export type Database = {
           start_time?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "coroast_recurring_blocks_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       coroast_storage_allocations: {
         Row: {
