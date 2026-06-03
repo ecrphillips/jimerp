@@ -5188,6 +5188,17 @@ export type Database = {
         Args: { _account_id: string }
         Returns: undefined
       }
+      _coroast_effective_booking_rules: {
+        Args: { p_account_id: string }
+        Returns: {
+          allow_past_dated_bookings: boolean
+          allow_recurring_bookings: boolean
+          booking_horizon_days: number
+          cancellation_free_hours: number
+          max_booking_duration_hours: number
+          min_booking_duration_hours: number
+        }[]
+      }
       _derive_green_source: {
         Args: { _line_id: string }
         Returns: {
