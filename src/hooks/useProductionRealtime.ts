@@ -65,8 +65,7 @@ export function useProductionRealtime(enabled = true) {
     const channel = supabase.channel('production-realtime');
     for (const table of WATCHED_TABLES) {
       channel.on(
-        // @ts-expect-error supabase-js realtime filter typing is loose for postgres_changes
-        'postgres_changes',
+        'postgres_changes' as never,
         { event: '*', schema: 'public', table },
         () => invalidateAll(),
       );
