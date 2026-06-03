@@ -30,6 +30,7 @@ import { formatPronounsSuffix } from '@/lib/pronounOptions';
 import PricingAnalysisTab from '@/components/account/PricingAnalysisTab';
 import OfferWorkspaceTab from '@/components/account/OfferWorkspaceTab';
 import { formatAuditEntry, type PricingAuditRow } from '@/lib/coroastPricing';
+import { CO_ROAST_TIER_DEFAULTS } from '@/components/bookings/bookingUtils';
 
 // PricingTierCard removed — pricing tiers are no longer in the data model.
 function PricingTierCard(_props: { accountId: string; pricingTierId: string | null }) {
@@ -1442,11 +1443,20 @@ const OVERRIDE_FIELDS = [
   { key: 'coroast_custom_packaging_block_rate', label: 'Packaging Block Rate ($/2-hr block)', tierKey: 'packagingBlockRate', isDollar: true },
 ] as const;
 
-const TIER_DEFAULTS: Record<string, Record<string, number>> = {
-  MEMBER:     { base: 399,  includedHours: 3,  overageRate: 160, includedPallets: 0, storageRate: 175, packagingBlocksIncluded: 0, packagingBlockRate: 0 },
-  GROWTH:     { base: 859,  includedHours: 7,  overageRate: 145, includedPallets: 1, storageRate: 175, packagingBlocksIncluded: 0, packagingBlockRate: 0 },
-  PRODUCTION: { base: 1399, includedHours: 12, overageRate: 130, includedPallets: 2, storageRate: 175, packagingBlocksIncluded: 0, packagingBlockRate: 0 },
-};
+// Derived from the single source of truth in bookingUtils (active tiers only).
+const TIER_DEFAULTS: Record<string, Record<string, number>> = Object.fromEntries(
+  Object.entries(CO_ROAST_TIER_DEFAULTS)
+    .filter(([, d]) => !d.isLegacy)
+    .map(([tier, d]) => [tier, {
+      base: d.base,
+      includedHours: d.includedHours,
+      overageRate: d.overageRate,
+      includedPallets: d.includedPallets,
+      storageRate: d.storageRate,
+      packagingBlocksIncluded: d.packagingBlocksIncluded,
+      packagingBlockRate: d.packagingBlockRate,
+    }]),
+);
 
 function CustomRateOverrides({ account, refetch }: { account: any; refetch: () => void }) {
   const { authUser } = useAuth();

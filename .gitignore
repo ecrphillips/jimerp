@@ -25,3 +25,4 @@ dist-ssr
 
 # Claude Code local state
 .claude/
+supabase/.temp/

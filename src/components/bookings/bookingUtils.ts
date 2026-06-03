@@ -177,16 +177,43 @@ export type TierRate = {
   label: string;
 };
 
-// Fallback / synchronous source for non-booking call sites
-// (unitEconomics.ts, coroastPricing.ts) that cannot use React Query.
-// Source of truth is the `coroast_tier_rates` table; this mirrors the seed.
+// ── Single source of truth for bundled co-roast tier defaults ────────────────
+// Fallback / synchronous source for call sites that cannot use React Query
+// (unitEconomics.ts, coroastPricing.ts) and seed for the admin pages
+// (CoRoastPricing.tsx, AccountDetail.tsx). The live source of truth is the
+// `coroast_tier_rates` table (read via useTierRates); this mirrors its seed.
 // Keep in sync with migration 20260514094701_coroast_rpc_hardening.sql.
-export const TIER_RATES: Record<string, TierRate> = {
-  MEMBER:     { base: 399,   includedHours: 3,  overageRate: 160, packagingBlocksIncluded: 0, packagingBlockRate: 0, label: 'Member' },
-  GROWTH:     { base: 859,   includedHours: 7,  overageRate: 145, packagingBlocksIncluded: 0, packagingBlockRate: 0, label: 'Growth' },
-  PRODUCTION: { base: 1399,  includedHours: 12, overageRate: 130, packagingBlocksIncluded: 0, packagingBlockRate: 0, label: 'Production' },
-  ACCESS:     { base: 300,   includedHours: 3,  overageRate: 135, packagingBlocksIncluded: 0, packagingBlockRate: 0, label: 'Access (Legacy)' },
+// Every other rate/storage map in the app is DERIVED from this constant — do
+// not reintroduce parallel hardcoded copies.
+export type CoRoastTierDefault = {
+  base: number;
+  includedHours: number;
+  overageRate: number;
+  includedPallets: number;
+  storageRate: number;
+  packagingBlocksIncluded: number;
+  packagingBlockRate: number;
+  label: string;
+  isLegacy: boolean;
 };
+
+export const CO_ROAST_TIER_DEFAULTS: Record<string, CoRoastTierDefault> = {
+  MEMBER:     { base: 399,  includedHours: 3,  overageRate: 160, includedPallets: 0, storageRate: 175, packagingBlocksIncluded: 0, packagingBlockRate: 0, label: 'Member',          isLegacy: false },
+  GROWTH:     { base: 859,  includedHours: 7,  overageRate: 145, includedPallets: 1, storageRate: 175, packagingBlocksIncluded: 0, packagingBlockRate: 0, label: 'Growth',          isLegacy: false },
+  PRODUCTION: { base: 1399, includedHours: 12, overageRate: 130, includedPallets: 2, storageRate: 175, packagingBlocksIncluded: 0, packagingBlockRate: 0, label: 'Production',      isLegacy: false },
+  ACCESS:     { base: 300,  includedHours: 3,  overageRate: 135, includedPallets: 0, storageRate: 225, packagingBlocksIncluded: 0, packagingBlockRate: 0, label: 'Access (Legacy)', isLegacy: true  },
+};
+
+export const TIER_RATES: Record<string, TierRate> = Object.fromEntries(
+  Object.entries(CO_ROAST_TIER_DEFAULTS).map(([tier, d]) => [tier, {
+    base: d.base,
+    includedHours: d.includedHours,
+    overageRate: d.overageRate,
+    packagingBlocksIncluded: d.packagingBlocksIncluded,
+    packagingBlockRate: d.packagingBlockRate,
+    label: d.label,
+  }]),
+);
 
 type TierRateRow = {
   tier: CoroastTier;
@@ -234,12 +261,13 @@ export function useTierRates() {
   return { rates, isLoading: query.isLoading, error: query.error };
 }
 
-export const STORAGE_RATES: Record<string, { includedPallets: number; ratePerPallet: number }> = {
-  MEMBER:     { includedPallets: 0, ratePerPallet: 175 },
-  GROWTH:     { includedPallets: 1, ratePerPallet: 175 },
-  PRODUCTION: { includedPallets: 2, ratePerPallet: 175 },
-  ACCESS:     { includedPallets: 0, ratePerPallet: 225 }, // Legacy
-};
+export const STORAGE_RATES: Record<string, { includedPallets: number; ratePerPallet: number }> =
+  Object.fromEntries(
+    Object.entries(CO_ROAST_TIER_DEFAULTS).map(([tier, d]) => [tier, {
+      includedPallets: d.includedPallets,
+      ratePerPallet: d.storageRate,
+    }]),
+  );
 
 export const HOUR_START = 5;
 export const HOUR_END = 22;

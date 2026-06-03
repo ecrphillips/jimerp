@@ -102,18 +102,18 @@ AuthContext (global state) → ProtectedRoute (per-route enforcement)
 - `BOOKING_CONFIRMED` → positive
 - `BOOKING_RETURNED` → negative
 
-This is the convention used by the admin UI in `src/components/bookings/BookingFormDialog.tsx` and `BookingDetailModal.tsx`. The member-portal RPCs in `supabase/migrations/20260501195324_*.sql` currently use the **opposite sign** and need to be flipped. When changing one path, change all so they stay consistent.
+This convention is used by the admin UI (`src/components/bookings/BookingFormDialog.tsx`, `BookingDetailModal.tsx`) **and** the member-portal RPCs — both are consistent as of `supabase/migrations/20260514120000_fix_hours_delta_sign.sql` (which flipped the originally-inverted RPC signs). When changing one path, change all so they stay consistent.
 
 ## Co-Roasting: Member Writes Go Through SECURITY DEFINER RPCs
 
 Members do not have direct INSERT/UPDATE/DELETE RLS on `coroast_bookings`, `coroast_hour_ledger`, `coroast_recurring_blocks`, or `coroast_billing_periods`. All member writes go through SECURITY DEFINER RPCs (`create_member_booking`, `create_member_recurring_bookings`, `cancel_member_booking`). Do not grant members direct write access.
 
-Business rules (4-week MEMBER-tier horizon, 48-hour cancellation lock) **must** be enforced inside the RPCs — UI checks alone can be bypassed.
+Business rules (booking horizon, cancellation lock, duration bounds, recurring-allowed) **must** be enforced inside the RPCs — UI checks alone can be bypassed. As of `20260603000000_*.sql` (Stage 2) all three RPCs call `_coroast_effective_booking_rules(account_id)`, which merges the `coroast_tier_booking_rules` tier defaults with the per-account `accounts.coroast_custom_*` overrides (both seeded in `20260512230749_*.sql`). To change a rule, update the table/override rows — do **not** hardcode new limits in the RPC bodies.
 
 ## Co-Roasting: Schema Gotchas
 
 - `account_id` is the canonical FK to `accounts(id)` on `coroast_bookings`, `coroast_billing_periods`, `coroast_hour_ledger`, `coroast_invoices`, `coroast_storage_allocations`, `coroast_waiver_log`. Legacy `member_id` columns are nullable and unused for new writes.
-- **Exception**: `coroast_recurring_blocks` has only `member_id` (no `account_id` column). New writes populate `member_id` with the account UUID. `BookingFormDialog.tsx` currently writes to a non-existent `account_id` field on this table — that admin flow is broken.
+- `coroast_recurring_blocks` gained `account_id` (NOT NULL, FK → `accounts(id)`) in `20260514120000_coroast_recurring_blocks_account_id.sql`; its read RLS is now account-scoped on that column. Both the admin flow (`BookingFormDialog.tsx`) and the `create_member_recurring_bookings` RPC write `account_id` (the RPC also keeps `member_id` populated for back-compat). `member_id` is nullable and slated for removal in a follow-up migration.
 - Standard RLS read pattern for account-scoped tables:
   ```sql
   USING (EXISTS (
@@ -126,7 +126,9 @@ Business rules (4-week MEMBER-tier horizon, 48-hour cancellation lock) **must** 
 
 ## Co-Roasting: Tier Rates
 
-`TIER_RATES` are defined in `src/components/bookings/bookingUtils.ts` **and** duplicated in `supabase/migrations/20260501195324_*.sql` (`_get_or_create_billing_period`). When updating rates, update **both**. The `ACCESS` tier is legacy — kept for historical billing records, do not surface in new UI.
+Frontend tier rates have a single source of truth: `CO_ROAST_TIER_DEFAULTS` in `src/components/bookings/bookingUtils.ts`. `TIER_RATES`, `STORAGE_RATES` (same file), `DEFAULT_RATES` (`CoRoastPricing.tsx`), and `TIER_DEFAULTS` (`AccountDetail.tsx`) are all **derived** from it — do not reintroduce parallel hardcoded copies. The live runtime source is the `coroast_tier_rates` DB table (read via `useTierRates`); `CO_ROAST_TIER_DEFAULTS` mirrors its seed and is the synchronous fallback.
+
+When changing rates, update in lockstep: (1) `CO_ROAST_TIER_DEFAULTS`, (2) the `coroast_tier_rates` table seed in `supabase/migrations/20260514094701_*.sql`, and (3) the `_get_or_create_billing_period` CASE in `supabase/migrations/20260501195324_*.sql`. The `ACCESS` tier is legacy (`isLegacy: true`) — kept for historical billing, filtered out of admin UI; do not surface in new UI.
 
 ## Migration Discipline
 
