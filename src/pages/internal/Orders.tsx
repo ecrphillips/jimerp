@@ -373,7 +373,11 @@ export default function Orders() {
                       className="flex-1 flex items-center gap-2 min-w-0"
                       onClick={() => navigate(`/orders/${o.id}`)}
                     >
-                      <span className="font-medium">{o.order_number}</span>
+                      <span className="font-medium truncate">
+                        {(o as any).account?.account_name ?? o.client?.name ?? 'Unknown'}
+                      </span>
+                      <LocationCodeDisplay locationId={o.location_id} />
+                      <span className="text-sm text-muted-foreground">{o.order_number}</span>
                       {o.created_by_admin && (
                         <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary" title="Created by Admin">
                           <UserPlus className="h-3 w-3" />
@@ -389,10 +393,6 @@ export default function Orders() {
                           Needs deadline
                         </Badge>
                       )}
-                      <span className="text-sm text-muted-foreground truncate">
-                        {(o as any).account?.account_name ?? o.client?.name ?? 'Unknown'}
-                      </span>
-                      <LocationCodeDisplay locationId={o.location_id} />
                     </div>
 
                     {/* Deadline column - show date/time or set button */}
