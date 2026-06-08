@@ -5357,6 +5357,10 @@ export type Database = {
         Args: { p_roast_group: string }
         Returns: Json
       }
+      get_shopify_source_token: {
+        Args: { _source_id: string }
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
