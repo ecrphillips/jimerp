@@ -191,7 +191,7 @@ export function LocationCodeDisplay({ locationId }: LocationCodeDisplayProps) {
   const { data: location } = useAccountLocationLookup(locationId);
   if (!location) return null;
   return (
-    <span className="text-xs text-muted-foreground" title={location.location_name}>
+    <span className="text-sm text-muted-foreground" title={location.location_name}>
       @ {location.location_name}
     </span>
   );
