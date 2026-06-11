@@ -82,11 +82,13 @@ serve(async (req) => {
       oauth_state_expires_at: null,
     });
 
-    return htmlPage(
-      "QuickBooks sandbox connected",
-      `JIM is now authorized against sandbox company ${realmId}. You can close this tab and use “Test connection” in Admin Tools.`,
-      false,
-    );
+    // Redirect straight back to Admin Tools — some deploy paths serve the
+    // HTML body as plain text, so a 302 is the reliable success UX.
+    const siteUrl = Deno.env.get("SITE_URL") || "https://homeislandcoffeepartners.lovable.app";
+    return new Response(null, {
+      status: 302,
+      headers: { Location: `${siteUrl}/admin-tools` },
+    });
   } catch (err) {
     console.error("quickbooks-oauth-callback error:", err);
     return htmlPage(
