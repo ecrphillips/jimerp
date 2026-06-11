@@ -22,7 +22,7 @@ import { corsHeadersFor } from '../_shared/cors.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '2.1-source_id';
+const FUNCTION_VERSION = '2.2-triggered_by';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -285,7 +285,6 @@ async function pullSource(
       source_id: source.id,
       result: 'success',
       trigger_type: triggerType,
-      triggered_by: 'shopify-pull-orders',
     })
     .select('id')
     .single();
