@@ -33,3 +33,13 @@ project_id = "cgdzjkryygwlyygeznrb"
     verify_jwt = false
   [functions.handle-email-suppression]
     verify_jwt = false
+  [functions.quickbooks-oauth-start]
+    verify_jwt = true
+  [functions.quickbooks-oauth-callback]
+    verify_jwt = false
+  [functions.quickbooks-token-refresh]
+    verify_jwt = true
+  [functions.quickbooks-test-connection]
+    verify_jwt = true
+  [functions.quickbooks-disconnect]
+    verify_jwt = true

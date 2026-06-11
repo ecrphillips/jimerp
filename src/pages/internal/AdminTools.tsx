@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { OrderNotificationSettings } from '@/components/admin/OrderNotificationSettings';
 import { FxRateSettings } from '@/components/admin/FxRateSettings';
+import { QuickBooksSettings } from '@/components/admin/QuickBooksSettings';
 import { BuildInfoPanel } from '@/components/admin/BuildInfoPanel';
 import { PackagingTypesManager } from '@/components/admin/PackagingTypesManager';
 import { buildSku, getOriginCode, generateFgNameCode, formatGramsSuffix } from '@/lib/skuGenerator';
@@ -373,6 +374,9 @@ export default function AdminTools() {
 
       {/* USD/CAD Exchange Rate */}
       <FxRateSettings />
+
+      {/* QuickBooks (Sandbox) Connection */}
+      <QuickBooksSettings />
 
       {/* Order Submit Notifications */}
       <OrderNotificationSettings />
