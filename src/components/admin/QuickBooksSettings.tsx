@@ -23,13 +23,10 @@ export function QuickBooksSettings() {
   const queryClient = useQueryClient();
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
 
-  // Cast needed until `quickbooks_connection` lands in the generated Supabase
-  // types (regenerate after running the migration).
   const { data: connection, isLoading } = useQuery({
     queryKey: ['quickbooks-connection'],
     queryFn: async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('quickbooks_connection')
         .select('status, realm_id, company_name, connected_at, token_expires_at, refresh_token_expires_at')
         .eq('id', 1)
