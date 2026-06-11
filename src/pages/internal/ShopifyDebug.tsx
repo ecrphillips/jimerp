@@ -141,11 +141,12 @@ export default function ShopifyDebug() {
         order_number?: string;
         error?: string;
       }>;
+      const version = data?.version ?? 'pre-2.1 (stale deploy)';
       if (results.length === 0) {
-        toast.info(data?.message ?? 'No active Shopify sources');
+        toast.info(`${data?.message ?? 'No active Shopify sources'} — fn ${version}`);
       }
       for (const r of results) {
-        const summary = `${r.store_slug}: ${r.result} — retrieved ${r.orders_retrieved}, included ${r.orders_included}, quarantined ${r.orders_quarantined}${r.order_number ? `, order ${r.order_number}` : ''}`;
+        const summary = `[fn ${version}] ${r.store_slug}: ${r.result} — retrieved ${r.orders_retrieved}, included ${r.orders_included}, quarantined ${r.orders_quarantined}${r.order_number ? `, order ${r.order_number}` : ''}`;
         if (r.result === 'error') toast.error(`${summary} (${r.error})`);
         else if (r.result === 'partial') toast.warning(summary);
         else toast.success(summary);

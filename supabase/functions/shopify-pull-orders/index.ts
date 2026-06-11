@@ -21,6 +21,8 @@ import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-
 import { corsHeadersFor } from '../_shared/cors.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
+// Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
+const FUNCTION_VERSION = '2.1-source_id';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -559,6 +561,8 @@ async function pullSource(
   }
 }
 
+console.log(`shopify-pull-orders boot, version ${FUNCTION_VERSION}`);
+
 Deno.serve(async (req) => {
   const corsHeaders = corsHeadersFor(req);
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -609,7 +613,11 @@ Deno.serve(async (req) => {
   const { data: sources, error: srcErr } = await query;
   if (srcErr) return json({ error: srcErr.message }, 500, corsHeaders);
   if (!sources || sources.length === 0) {
-    return json({ message: 'No active Shopify sources', results: [] }, 200, corsHeaders);
+    return json(
+      { message: 'No active Shopify sources', version: FUNCTION_VERSION, results: [] },
+      200,
+      corsHeaders,
+    );
   }
 
   const results: PullResult[] = [];
@@ -630,5 +638,5 @@ Deno.serve(async (req) => {
   }
 
   const anyError = results.some((r) => r.result === 'error');
-  return json({ results }, anyError ? 207 : 200, corsHeaders);
+  return json({ version: FUNCTION_VERSION, results }, anyError ? 207 : 200, corsHeaders);
 });
