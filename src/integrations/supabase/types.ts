@@ -4971,6 +4971,8 @@ export type Database = {
           id: string
           is_active: boolean
           linked_account_id: string
+          oauth_client_id: string | null
+          oauth_client_secret: string | null
           owner_notes: string | null
           pull_cadence: string
           pull_schedule_cron: string | null
@@ -4988,6 +4990,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           linked_account_id: string
+          oauth_client_id?: string | null
+          oauth_client_secret?: string | null
           owner_notes?: string | null
           pull_cadence?: string
           pull_schedule_cron?: string | null
@@ -5005,6 +5009,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           linked_account_id?: string
+          oauth_client_id?: string | null
+          oauth_client_secret?: string | null
           owner_notes?: string | null
           pull_cadence?: string
           pull_schedule_cron?: string | null
