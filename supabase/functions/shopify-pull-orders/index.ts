@@ -22,7 +22,7 @@ import { corsHeadersFor } from '../_shared/cors.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '2.2-triggered_by';
+const FUNCTION_VERSION = '2.3-mapped_by';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -374,7 +374,7 @@ async function pullSource(
       shopify_variant_id: string;
       jim_product_id: string;
       mapped_at: string;
-      mapped_by: string;
+      notes: string;
       shopify_product_title: string;
       shopify_sku: string | null;
     }[] = [];
@@ -401,7 +401,7 @@ async function pullSource(
           shopify_variant_id: li.variantId,
           jim_product_id: match.id,
           mapped_at: new Date().toISOString(),
-          mapped_by: 'auto:name+size',
+          notes: 'auto-mapped by product name + bag size',
           shopify_product_title: li.title,
           shopify_sku: li.sku,
         });
