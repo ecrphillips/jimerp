@@ -35,6 +35,7 @@ interface ShopifyLineItem {
 interface ShopifyOrder {
   id: string; // legacy numeric id as text
   name: string; // e.g. #1001
+  createdAt: string | null;
   lineItems: ShopifyLineItem[];
 }
 
@@ -103,6 +104,7 @@ async function fetchUnfulfilledOrders(
           nodes {
             id
             name
+            createdAt
             lineItems(first: 100) {
               nodes {
                 sku
@@ -141,6 +143,7 @@ async function fetchUnfulfilledOrders(
       orders.push({
         id: legacyId(node.id)!,
         name: node.name,
+        createdAt: node.createdAt ?? null,
         lineItems: (node.lineItems?.nodes ?? []).map((li: Record<string, unknown>) => ({
           sku: (li.sku as string) || null,
           title: (li.title as string) ?? '',
@@ -277,9 +280,10 @@ async function pullSource(
   const { data: logRow, error: logErr } = await admin
     .from('shopify_pull_log')
     .insert({
-      shopify_source_id: source.id,
+      source_id: source.id,
       result: 'success',
       trigger_type: triggerType,
+      triggered_by: 'shopify-pull-orders',
     })
     .select('id')
     .single();
@@ -288,7 +292,7 @@ async function pullSource(
   }
   const pullLogId = logRow.id as string;
 
-  const finalize = async (patch: Partial<PullResult>): Promise<PullResult> => {
+  const finalize = async (patch: Partial<PullResult>, details?: unknown): Promise<PullResult> => {
     const out = { ...base, ...patch };
     await admin
       .from('shopify_pull_log')
@@ -298,6 +302,9 @@ async function pullSource(
         orders_included: out.orders_included,
         orders_quarantined: out.orders_quarantined,
         error_message: out.error ?? null,
+        generated_order_id: out.order_id ?? null,
+        completed_at: new Date().toISOString(),
+        ...(details !== undefined ? { details } : {}),
       })
       .eq('id', pullLogId);
     return out;
@@ -311,7 +318,7 @@ async function pullSource(
     const { data: existing, error: existErr } = await admin
       .from('shopify_bundle_source_orders')
       .select('shopify_order_id')
-      .eq('shopify_source_id', source.id);
+      .eq('source_id', source.id);
     if (existErr) throw new Error(`bundle lookup failed: ${existErr.message}`);
     const seen = new Set((existing ?? []).map((r) => r.shopify_order_id));
     const newOrders = shopifyOrders.filter((o) => !seen.has(o.id));
@@ -320,18 +327,24 @@ async function pullSource(
       return await finalize({ orders_retrieved: shopifyOrders.length });
     }
 
-    // Mapping table: variant-level beats product-level.
+    // Mapping table: variant-level beats product-level. do_not_produce variants
+    // are intentionally excluded from JIM orders (not quarantined).
     const { data: mappings, error: mapErr } = await admin
       .from('shopify_product_mappings')
-      .select('shopify_product_id, shopify_variant_id, product_id')
-      .eq('shopify_source_id', source.id)
-      .not('product_id', 'is', null);
+      .select('shopify_product_id, shopify_variant_id, jim_product_id, do_not_produce')
+      .eq('source_id', source.id);
     if (mapErr) throw new Error(`mapping lookup failed: ${mapErr.message}`);
     const byVariant = new Map<string, string>();
     const byProduct = new Map<string, string>();
+    const doNotProduce = new Set<string>();
     for (const m of mappings ?? []) {
-      if (m.shopify_variant_id) byVariant.set(m.shopify_variant_id, m.product_id!);
-      else byProduct.set(m.shopify_product_id, m.product_id!);
+      if (m.do_not_produce && m.shopify_variant_id) {
+        doNotProduce.add(m.shopify_variant_id);
+        continue;
+      }
+      if (!m.jim_product_id) continue;
+      if (m.shopify_variant_id) byVariant.set(m.shopify_variant_id, m.jim_product_id);
+      else byProduct.set(m.shopify_product_id, m.jim_product_id);
     }
 
     // Account products: used for SKU fallback and name+size auto-matching.
@@ -355,10 +368,14 @@ async function pullSource(
     // Shopify products never need manual transposition. A unique match persists a
     // mapping row and queues the JIM SKU for write-back to the Shopify variant.
     const newMappings: {
-      shopify_source_id: string;
+      source_id: string;
       shopify_product_id: string;
       shopify_variant_id: string;
-      product_id: string;
+      jim_product_id: string;
+      mapped_at: string;
+      mapped_by: string;
+      shopify_product_title: string;
+      shopify_sku: string | null;
     }[] = [];
     const skuPushes: { shopifyProductId: string; shopifyVariantId: string; sku: string }[] = [];
     const attempted = new Set<string>();
@@ -366,6 +383,7 @@ async function pullSource(
       for (const li of o.lineItems) {
         if (li.unfulfilledQuantity <= 0 || resolve(li)) continue;
         if (!li.variantId || !li.productId || attempted.has(li.variantId)) continue;
+        if (doNotProduce.has(li.variantId)) continue;
         attempted.add(li.variantId);
         const wantName = normalizeName(li.title);
         const wantGrams = parseGrams(li.variantTitle);
@@ -377,10 +395,14 @@ async function pullSource(
         const match = candidates[0];
         byVariant.set(li.variantId, match.id);
         newMappings.push({
-          shopify_source_id: source.id,
+          source_id: source.id,
           shopify_product_id: li.productId,
           shopify_variant_id: li.variantId,
-          product_id: match.id,
+          jim_product_id: match.id,
+          mapped_at: new Date().toISOString(),
+          mapped_by: 'auto:name+size',
+          shopify_product_title: li.title,
+          shopify_sku: li.sku,
         });
         if (match.sku) {
           skuPushes.push({
@@ -396,10 +418,8 @@ async function pullSource(
     if (newMappings.length > 0) {
       const { error: insErr } = await admin
         .from('shopify_product_mappings')
-        .upsert(newMappings, {
-          onConflict: 'shopify_source_id,shopify_product_id,shopify_variant_id',
-        });
-      if (insErr) throw new Error(`mapping upsert failed: ${insErr.message}`);
+        .insert(newMappings);
+      if (insErr) throw new Error(`mapping insert failed: ${insErr.message}`);
       if (skuPushes.length > 0) {
         skuPushError = await pushSkusToShopify(source.store_url, accessToken, skuPushes);
       }
@@ -408,8 +428,10 @@ async function pullSource(
     // Partition orders: fully mappable vs quarantined.
     const included: ShopifyOrder[] = [];
     const quarantined: { order: ShopifyOrder; unmapped: string[] }[] = [];
+    const producible = (li: ShopifyLineItem) =>
+      li.unfulfilledQuantity > 0 && !(li.variantId && doNotProduce.has(li.variantId));
     for (const o of newOrders) {
-      const items = o.lineItems.filter((li) => li.unfulfilledQuantity > 0);
+      const items = o.lineItems.filter(producible);
       const unmapped = items.filter((li) => !resolve(li)).map((li) => li.sku || li.title);
       if (items.length === 0) continue; // nothing left to fulfill
       if (unmapped.length > 0) quarantined.push({ order: o, unmapped });
@@ -431,7 +453,7 @@ async function pullSource(
     const qtyByLine = new Map<string, { productId: string; grind: string | null; qty: number }>();
     for (const o of included) {
       for (const li of o.lineItems) {
-        if (li.unfulfilledQuantity <= 0) continue;
+        if (!producible(li)) continue;
         const productId = resolve(li)!;
         const grind = parseGrind(li.variantTitle);
         const key = `${productId}|${grind ?? ''}`;
@@ -502,10 +524,20 @@ async function pullSource(
 
     const { error: bundleErr } = await admin.from('shopify_bundle_source_orders').insert(
       included.map((o) => ({
-        shopify_source_id: source.id,
+        source_id: source.id,
         shopify_order_id: o.id,
-        order_id: order.id,
-        bundle_status: 'included',
+        shopify_order_number: o.name,
+        shopify_created_at: o.createdAt,
+        bundle_order_id: order.id,
+        pull_log_id: pullLogId,
+        line_items: o.lineItems.filter(producible).map((li) => ({
+          sku: li.sku,
+          title: li.title,
+          variant_title: li.variantTitle,
+          quantity: li.unfulfilledQuantity,
+          shopify_product_id: li.productId,
+          shopify_variant_id: li.variantId,
+        })),
       })),
     );
     if (bundleErr) throw new Error(`bundle link insert failed: ${bundleErr.message}`);
