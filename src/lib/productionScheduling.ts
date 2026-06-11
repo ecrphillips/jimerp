@@ -38,6 +38,19 @@ export const PRODUCTION_WINDOW_END = 16; // 16:00
 export const REQUIRED_PROCESSING_MINUTES = 121; // 2 hours 1 minute
 export const WORK_DAYS = [1, 2, 3, 4, 5]; // Mon-Fri (0=Sun, 6=Sat)
 export const DEFAULT_NUDGE_HOUR = 10; // Default nudge target time
+export const DEFAULT_ORDER_CUTOFF_HOUR = 12; // Noon — same-day entry cutoff + deadline hour
+
+// Weekday labels indexed by JS getDay() (0=Sun … 6=Sat).
+// Used for the per-account "standard production days" config UI.
+export const WEEKDAY_LABELS = [
+  { value: 0, short: 'Sun', long: 'Sunday' },
+  { value: 1, short: 'Mon', long: 'Monday' },
+  { value: 2, short: 'Tue', long: 'Tuesday' },
+  { value: 3, short: 'Wed', long: 'Wednesday' },
+  { value: 4, short: 'Thu', long: 'Thursday' },
+  { value: 5, short: 'Fri', long: 'Friday' },
+  { value: 6, short: 'Sat', long: 'Saturday' },
+] as const;
 
 /**
  * Get the current time in Vancouver timezone
@@ -529,6 +542,57 @@ export function logRunSheetQuery(
   } else {
     console.log(`[RunSheet:${label}] No orders with work_deadline_at`);
   }
+}
+
+/**
+ * Compute the default work_deadline_at for a NEW order, based on the
+ * client's standard production weekdays.
+ *
+ * Rules (all in America/Vancouver):
+ * - `productionWeekdays` uses JS getDay() values (0=Sun … 6=Sat).
+ * - The deadline is set to `cutoffHour`:00 (noon by default) on the earliest
+ *   production day that is still actionable:
+ *     - Today counts ONLY if the order is entered before today's cutoff.
+ *     - Otherwise the deadline rolls forward to the next production weekday.
+ *
+ * Examples (FUNK produces Mon + Thu, noon cutoff):
+ *   - Entered Wed (any time)      → Thu noon
+ *   - Entered Thu 09:00 (< noon)  → Thu noon (today)
+ *   - Entered Thu 13:00 (≥ noon)  → next Mon noon
+ *   - Entered Fri                 → next Mon noon
+ *
+ * Returns an ISO UTC string, or null when the account has no standard
+ * production days configured (caller should leave the deadline unset).
+ *
+ * @param productionWeekdays Standard production weekdays, or null/empty.
+ * @param cutoffHour         Local cutoff/deadline hour (default noon).
+ * @param fromTime           Override "now" (Vancouver-zoned Date) for testing.
+ */
+export function computeDefaultWorkDeadline(
+  productionWeekdays: number[] | null | undefined,
+  cutoffHour: number = DEFAULT_ORDER_CUTOFF_HOUR,
+  fromTime?: Date
+): string | null {
+  const days = Array.from(new Set((productionWeekdays ?? []).filter(d => d >= 0 && d <= 6)));
+  if (days.length === 0) return null;
+
+  const now = fromTime ?? getVancouverNow();
+  const today = startOfDay(now);
+  const todayCutoff = setMinutes(setHours(today, cutoffHour), 0);
+  const beforeCutoffToday = isBefore(now, todayCutoff);
+
+  // Walk forward up to two weeks to find the next eligible production day.
+  for (let offset = 0; offset < 14; offset++) {
+    const candidate = addDays(today, offset);
+    if (!days.includes(getDay(candidate))) continue;
+    // Today only qualifies if we're still before the cutoff.
+    if (offset === 0 && !beforeCutoffToday) continue;
+
+    const deadlineLocal = setMinutes(setHours(candidate, cutoffHour), 0);
+    return fromZonedTime(deadlineLocal, TIMEZONE).toISOString();
+  }
+
+  return null;
 }
 
 /**

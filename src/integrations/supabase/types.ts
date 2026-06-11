@@ -181,7 +181,9 @@ export type Database = {
           managed_sku_count: number | null
           monthly_service_fee: number | null
           notes_internal: string | null
+          order_cutoff_hour: number
           pricing_profile_id: string | null
+          production_weekdays: number[] | null
           programs: string[]
           pronouns: string | null
           prospect_selected_tier: string | null
@@ -224,7 +226,9 @@ export type Database = {
           managed_sku_count?: number | null
           monthly_service_fee?: number | null
           notes_internal?: string | null
+          order_cutoff_hour?: number
           pricing_profile_id?: string | null
+          production_weekdays?: number[] | null
           programs?: string[]
           pronouns?: string | null
           prospect_selected_tier?: string | null
@@ -267,7 +271,9 @@ export type Database = {
           managed_sku_count?: number | null
           monthly_service_fee?: number | null
           notes_internal?: string | null
+          order_cutoff_hour?: number
           pricing_profile_id?: string | null
+          production_weekdays?: number[] | null
           programs?: string[]
           pronouns?: string | null
           prospect_selected_tier?: string | null
@@ -5288,6 +5294,39 @@ export type Database = {
       decrement_lot_kg: {
         Args: { p_kg: number; p_lot_id: string }
         Returns: undefined
+      }
+      execute_blend: {
+        Args: {
+          p_blend_roast_group: string
+          p_blend_display_name: string
+          p_batch_ids: string[]
+          p_consume_kgs: number[]
+        }
+        Returns: number
+      }
+      mark_batch_roasted: {
+        Args: {
+          p_batch_id: string
+          p_actual_output_kg: number
+          p_lot_id?: string | null
+          p_loss_kg?: number
+          p_loss_note?: string | null
+        }
+        Returns: boolean
+      }
+      revert_batch_to_planned: {
+        Args: { p_batch_id: string }
+        Returns: boolean
+      }
+      update_packing_units: {
+        Args: {
+          p_product_id: string
+          p_target_date: string
+          p_new_units: number
+          p_bag_size_g: number
+          p_roast_group: string | null
+        }
+        Returns: number
       }
       delete_client_safe: {
         Args: { p_client_id: string; p_force?: boolean }

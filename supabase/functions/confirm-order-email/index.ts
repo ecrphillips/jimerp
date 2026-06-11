@@ -111,13 +111,13 @@ serve(async (req: Request) => {
       );
     }
 
-    const { data: roleData } = await adminClient
+    const { data: roleData, error: roleError } = await adminClient
       .from("user_roles")
       .select("role")
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
-    if (!roleData || !["ADMIN", "OPS"].includes(roleData.role)) {
+    if (roleError || !roleData || !["ADMIN", "OPS"].includes(roleData.role)) {
       return new Response(
         JSON.stringify({ ok: false, error: "Forbidden — internal role required" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -308,7 +308,7 @@ Home Island Manufacturing`;
       const finalHtml = emailHtml.replace(/<\/body>/i, `${footer.html}</body>`);
 
       const messageId = crypto.randomUUID();
-      const { data: logRow } = await adminClient
+      const { data: logRow, error: logError } = await adminClient
         .from("email_send_log")
         .insert({
           message_id: messageId,
@@ -317,7 +317,10 @@ Home Island Manufacturing`;
           status: "pending",
         })
         .select("id")
-        .single();
+        .maybeSingle();
+      if (logError) {
+        console.error("[confirm-order-email] email_send_log insert failed:", logError.message);
+      }
 
       const { error: enqueueError } = await adminClient.rpc("enqueue_email", {
         queue_name: "transactional_emails",

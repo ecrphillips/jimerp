@@ -17,21 +17,28 @@ import {
 } from '@/components/ui/select';
 import { CalendarIcon, Clock, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { 
-  TIMEZONE, 
-  PRODUCTION_WINDOW_START, 
-  PRODUCTION_WINDOW_END,
-  isBusinessDay,
-  getNextBusinessDay,
-} from '@/lib/productionScheduling';
+import { TIMEZONE } from '@/lib/productionScheduling';
 
-// Time options from 08:00 to 16:00 in 1-hour increments
-// Matches the production window exactly
-const TIME_OPTIONS = Array.from({ length: PRODUCTION_WINDOW_END - PRODUCTION_WINDOW_START + 1 }, (_, i) => {
-  const hour = PRODUCTION_WINDOW_START + i;
-  const value = `${hour.toString().padStart(2, '0')}:00`;
-  return { value, label: value };
-});
+// Coarse priority buckets within the production window.
+// Simplifies the choice to AM / Noon / PM while still allowing a nudge
+// up or down in priority within the same day. Noon is the default.
+const TIME_AM = '08:00';
+const TIME_NOON = '12:00';
+const TIME_PM = '16:00';
+const DEFAULT_TIME = TIME_NOON;
+
+const TIME_OPTIONS = [
+  { value: TIME_AM, label: 'AM' },
+  { value: TIME_NOON, label: 'Noon' },
+  { value: TIME_PM, label: 'PM' },
+];
+
+// Map an arbitrary stored hour back to its bucket.
+function bucketFromHour(hour: number): string {
+  if (hour < 12) return TIME_AM;
+  if (hour === 12) return TIME_NOON;
+  return TIME_PM;
+}
 
 /**
  * Normalize a Date to midnight in local browser time.
@@ -82,7 +89,7 @@ export function WorkDeadlinePicker({
 }: WorkDeadlinePickerProps) {
   // Use a "calendar date" (midnight local) for the picker, separate from time
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-  const [selectedTime, setSelectedTime] = useState<string>('10:00');
+  const [selectedTime, setSelectedTime] = useState<string>(DEFAULT_TIME);
   const [hasInteracted, setHasInteracted] = useState(false);
   
   // Track the last value we emitted to avoid re-syncing our own updates
@@ -107,24 +114,19 @@ export function WorkDeadlinePicker({
           const calendarDate = toCalendarDate(zonedDate);
           setSelectedDate(calendarDate);
           
-          const hours = zonedDate.getHours().toString().padStart(2, '0');
-          const minutes = zonedDate.getMinutes().toString().padStart(2, '0');
-          const timeStr = `${hours}:${minutes}`;
-          
-          // Clamp to valid time options
-          const validTime = TIME_OPTIONS.find(t => t.value === timeStr);
-          setSelectedTime(validTime ? timeStr : '10:00');
+          // Collapse the stored hour into an AM / Noon / PM bucket
+          setSelectedTime(bucketFromHour(zonedDate.getHours()));
         }
       } catch {
         // Invalid date, reset
         setSelectedDate(undefined);
-        setSelectedTime('10:00');
+        setSelectedTime(DEFAULT_TIME);
       }
     } else {
       // No value - set defaults only if user hasn't interacted
       if (!hasInteracted) {
         setSelectedDate(undefined);
-        setSelectedTime('10:00');
+        setSelectedTime(DEFAULT_TIME);
       }
     }
   }, [value, hasInteracted]);
@@ -197,7 +199,8 @@ export function WorkDeadlinePicker({
   // Formatted display - use the calendar date components directly
   const displayText = useMemo(() => {
     if (!selectedDate || !selectedTime) return null;
-    return `${format(selectedDate, 'EEE MMM d')}, ${selectedTime}`;
+    const timeLabel = TIME_OPTIONS.find(t => t.value === selectedTime)?.label ?? selectedTime;
+    return `${format(selectedDate, 'EEE MMM d')}, ${timeLabel}`;
   }, [selectedDate, selectedTime]);
 
   return (

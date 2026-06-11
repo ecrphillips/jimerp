@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +17,7 @@ import { Plus, Minus, Trash2, ArrowLeft, ShieldAlert, AlertCircle } from 'lucide
 import { GramPackagingBadge, formatGramsLabel } from '@/components/GramPackagingBadge';
 import { useClientOrderingConstraints } from '@/hooks/useClientOrderingConstraints';
 import { WorkDeadlinePicker } from '@/components/orders/WorkDeadlinePicker';
+import { computeDefaultWorkDeadline } from '@/lib/productionScheduling';
 import { DatePicker } from '@/components/ui/date-picker';
 import type { Database } from '@/integrations/supabase/types';
 import { LocationSelect } from '@/components/orders/LocationSelect';
@@ -97,6 +98,9 @@ export default function CreateOrderForClient() {
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [requestedShipDate, setRequestedShipDate] = useState('');
   const [workDeadlineAt, setWorkDeadlineAt] = useState<string | null>(null);
+  // Once the admin manually touches the deadline picker, stop auto-applying the
+  // client's standard-production-day default so we don't clobber their choice.
+  const deadlineUserEditedRef = useRef(false);
   const [confirmOnCreate, setConfirmOnCreate] = useState(false);
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('PICKUP');
   const [clientPo, setClientPo] = useState('');
@@ -137,6 +141,39 @@ export default function CreateOrderForClient() {
     },
     enabled: !!selectedClientId,
   });
+
+  // Fetch the selected client's standard production schedule (drives the
+  // default work deadline for new orders).
+  const { data: accountSchedule } = useQuery({
+    queryKey: ['account-schedule', selectedClientId],
+    queryFn: async () => {
+      if (!selectedClientId) return null;
+      const { data, error } = await supabase
+        .from('accounts')
+        .select('production_weekdays, order_cutoff_hour')
+        .eq('id', selectedClientId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedClientId,
+  });
+
+  // Reset the manual-edit guard whenever the client changes so the new
+  // client's default deadline can apply.
+  useEffect(() => {
+    deadlineUserEditedRef.current = false;
+  }, [selectedClientId]);
+
+  // Apply the client's standard-production-day default deadline (editable).
+  useEffect(() => {
+    if (!selectedClientId || !accountSchedule || deadlineUserEditedRef.current) return;
+    const next = computeDefaultWorkDeadline(
+      accountSchedule.production_weekdays,
+      accountSchedule.order_cutoff_hour ?? undefined,
+    );
+    setWorkDeadlineAt(next);
+  }, [selectedClientId, accountSchedule]);
 
   // Fetch products for selected client with packaging type join
   const { data: products, isLoading: productsLoading } = useQuery({
@@ -735,10 +772,15 @@ export default function CreateOrderForClient() {
                   <Label>Work Deadline <span className="text-destructive">*</span></Label>
                   <WorkDeadlinePicker
                     value={workDeadlineAt}
-                    onChange={setWorkDeadlineAt}
+                    onChange={(v) => { deadlineUserEditedRef.current = true; setWorkDeadlineAt(v); }}
                     showSaveButton={false}
                     compact
                   />
+                  {workDeadlineAt && !deadlineUserEditedRef.current && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Auto-set from this client's standard production days. Edit if needed.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Label htmlFor="delivery">Delivery Method</Label>

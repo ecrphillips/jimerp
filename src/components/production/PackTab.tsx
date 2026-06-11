@@ -524,114 +524,69 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   // Inline update for packing - writes ledger transactions for WIP consumption and FG production
   // Now uses inventory_transactions ledger as source of truth
   const updatePackingUnits = useCallback(async (
-    productId: string, 
-    newUnits: number, 
+    productId: string,
+    newUnits: number,
     bagSizeG: number,
     roastGroup: string | null,
     previousUnits: number
   ) => {
-    const delta = newUnits - previousUnits;
+    // Cheap client-side no-op skip; the RPC recomputes the real delta against
+    // the DB row under lock, so a stale previousUnits here can't lose updates.
+    if (newUnits === previousUnits) return;
 
-    // No change, skip
-    if (delta === 0) return;
-
-    // Calculate kg consumed/returned for the delta
-    const kgDelta = bagSizeG > 0 ? (delta * bagSizeG) / 1000 : 0;
-
+    // Atomic RPC: upserts packing_runs and writes the PACK_CONSUME_WIP /
+    // PACK_PRODUCE_FG ledger rows in one transaction, with the real delta
+    // recomputed against the DB row under lock.
+    //
     // No upstream-material gating: a user packing a bag the system thinks doesn't
     // exist is treated as an upstream data-entry lag, not a physical shortage. The
     // "0 available" / amber WIP color cues are nudge enough; never block completion.
-
-    console.log('[PackTab] updatePackingUnits:', {
-      productId, newUnits, previousUnits, delta, bagSizeG, kgDelta, roastGroup, target_date: today 
+    const { error } = await supabase.rpc('update_packing_units', {
+      p_product_id: productId,
+      p_target_date: today,
+      p_new_units: newUnits,
+      p_bag_size_g: bagSizeG,
+      p_roast_group: roastGroup,
     });
-    
-    // Update packing_runs for legacy compatibility and tracking
-    const { error: packingError } = await supabase
-      .from('packing_runs')
-      .upsert({
-        product_id: productId,
-        target_date: today,
-        units_packed: newUnits,
-        kg_consumed: bagSizeG > 0 ? (newUnits * bagSizeG) / 1000 : 0,
-        updated_by: user?.id,
-      }, {
-        onConflict: 'product_id,target_date',
-      });
-    
-    if (packingError) {
-      toast.error('Failed to save packing progress');
-      throw packingError;
+
+    if (error) {
+      console.error('[PackTab] updatePackingUnits failed:', error);
+      toast.error(error.message || 'Failed to save packing progress');
+      throw error;
     }
-    
-    // Write ledger transactions for the delta
-    // For positive delta: consume WIP, produce FG
-    // For negative delta (reversal): return WIP, reduce FG
-    const transactions = [];
-    
-    // PACK_CONSUME_WIP: negative kg (consuming) or positive kg (returning)
-    if (roastGroup && kgDelta !== 0) {
-      transactions.push({
-        transaction_type: 'PACK_CONSUME_WIP' as const,
-        roast_group: roastGroup,
-        product_id: productId,
-        quantity_kg: -kgDelta, // negative for consumption, positive for return
-        quantity_units: null,
-        notes: delta > 0 
-          ? `Packed ${delta} units of ${bagSizeG}g` 
-          : `Reversed ${Math.abs(delta)} units of ${bagSizeG}g`,
-        is_system_generated: true,
-        created_by: user?.id,
-      });
-    }
-    
-    // PACK_PRODUCE_FG: positive units (producing) or negative units (reversing)
-    if (delta !== 0) {
-      transactions.push({
-        transaction_type: 'PACK_PRODUCE_FG' as const,
-        roast_group: roastGroup,
-        product_id: productId,
-        quantity_kg: null,
-        quantity_units: delta, // positive for production, negative for reversal
-        notes: delta > 0 
-          ? `Packed ${delta} units` 
-          : `Reversed ${Math.abs(delta)} units`,
-        is_system_generated: true,
-        created_by: user?.id,
-      });
-    }
-    
-    if (transactions.length > 0) {
-      const { error: ledgerError } = await supabase
-        .from('inventory_transactions')
-        .insert(transactions);
-      
-      if (ledgerError) {
-        console.error('[PackTab] Ledger write failed:', ledgerError);
-        toast.error('Failed to update inventory ledger');
-        throw ledgerError;
-      }
-    }
-    
+
     // Invalidate queries to refresh UI
     queryClient.invalidateQueries({ queryKey: ['packing-runs'] });
     queryClient.invalidateQueries({ queryKey: ['authoritative-packing-runs'] });
     queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
     queryClient.invalidateQueries({ queryKey: ['inventory-ledger-fg'] });
-  }, [today, user?.id, queryClient]);
+    queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
+  }, [today, queryClient]);
 
-  // Mutation to update pack_display_order
+  // Mutation to update pack_display_order for a whole reordered list at once.
+  // A single mutation (vs one per product) means one error path; on any
+  // failure we refetch so the UI resyncs instead of persisting a partial order.
   const updateDisplayOrderMutation = useMutation({
-    mutationFn: async ({ productId, newOrder }: { productId: string; newOrder: number }) => {
-      const { error } = await supabase
-        .from('products')
-        .update({ pack_display_order: newOrder })
-        .eq('id', productId);
-      if (error) throw error;
+    mutationFn: async (rows: Array<{ productId: string; newOrder: number }>) => {
+      const results = await Promise.allSettled(
+        rows.map(({ productId, newOrder }) =>
+          supabase
+            .from('products')
+            .update({ pack_display_order: newOrder })
+            .eq('id', productId)
+            .then(({ error }) => {
+              if (error) throw error;
+            })
+        )
+      );
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      if (failed > 0) throw new Error(`${failed} of ${rows.length} reorder updates failed`);
     },
     onError: (err) => {
       console.error(err);
-      toast.error('Failed to update order');
+      toast.error('Failed to save new order — resyncing');
+      hasUserReorderedRef.current = false;
+      queryClient.invalidateQueries({ queryKey: ['all-products-for-pack'] });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['all-products-for-pack'] });
@@ -668,10 +623,10 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     const reordered = arrayMove(displayProducts, oldIndex, newIndex);
     setLocalProducts(reordered);
 
-    // Persist new order to DB
-    reordered.forEach((product, index) => {
-      updateDisplayOrderMutation.mutate({ productId: product.product_id, newOrder: (index + 1) * 10 });
-    });
+    // Persist new order to DB in one mutation
+    updateDisplayOrderMutation.mutate(
+      reordered.map((product, index) => ({ productId: product.product_id, newOrder: (index + 1) * 10 }))
+    );
   }, [displayProducts, updateDisplayOrderMutation]);
 
   return (

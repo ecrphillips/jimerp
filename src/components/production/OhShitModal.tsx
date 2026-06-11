@@ -171,7 +171,24 @@ export function OhShitModal({
   const applyChangesMutation = useMutation({
     mutationFn: async () => {
       const userId = user?.id;
-      
+
+      // Re-fetch the touched batches so status checks and WIP deltas are
+      // computed from current DB values, not the rows captured when the modal
+      // (or the parent list) last refreshed. Stale values here would write
+      // wrong-sized ledger adjustments.
+      const idsToRefresh = [batch.id, flowData.affectedBatchId].filter(Boolean) as string[];
+      const { data: freshRows, error: freshError } = await supabase
+        .from('roasted_batches')
+        .select('id, status, actual_output_kg')
+        .in('id', idsToRefresh);
+      if (freshError) throw freshError;
+      const freshById: Record<string, { status: string; actual_output_kg: number }> = {};
+      for (const r of freshRows ?? []) freshById[r.id] = r;
+      const freshCurrent = freshById[batch.id];
+      if (!freshCurrent) throw new Error('Batch no longer exists — refresh and try again');
+      const currentStatus = freshCurrent.status;
+      const currentOutputKg = Number(freshCurrent.actual_output_kg) || 0;
+
       switch (flowData.eventType) {
         case 'BIN_MIX_SAME': {
           const batch1Kg = parseFloat(flowData.batch1OutputKg) || 0;
@@ -191,7 +208,7 @@ export function OhShitModal({
           if (batch2Error) throw batch2Error;
 
           // Create WIP entry for batch 2 if it was PLANNED
-          if (batch.status === 'PLANNED') {
+          if (currentStatus === 'PLANNED') {
             const { error: ledgerError } = await supabase
               .from('wip_ledger')
               .insert({
@@ -205,8 +222,8 @@ export function OhShitModal({
               });
             if (ledgerError) throw ledgerError;
           } else {
-            // Adjust WIP if already roasted
-            const deltaWip = batch2Kg - batch.actual_output_kg;
+            // Adjust WIP if already roasted (delta vs current DB output)
+            const deltaWip = batch2Kg - currentOutputKg;
             if (deltaWip !== 0) {
               const { error: ledgerError } = await supabase
                 .from('wip_ledger')
@@ -225,7 +242,9 @@ export function OhShitModal({
 
           // Update the affected batch (batch 1 - the previous one still in destoner)
           if (affectedBatch) {
-            const previousOutput = affectedBatch.actual_output_kg;
+            const previousOutput = freshById[affectedBatch.id]
+              ? Number(freshById[affectedBatch.id].actual_output_kg) || 0
+              : affectedBatch.actual_output_kg;
             const { error: batch1Error } = await supabase
               .from('roasted_batches')
               .update({ 
@@ -303,14 +322,14 @@ export function OhShitModal({
           if (voidCurrentError) throw voidCurrentError;
 
           // If batch was already ROASTED with output, subtract its previous output from WIP
-          if (batch.status === 'ROASTED' && batch.actual_output_kg > 0) {
+          if (currentStatus === 'ROASTED' && currentOutputKg > 0) {
             const { error: ledgerError } = await supabase
               .from('wip_ledger')
               .insert({
                 target_date: batch.target_date,
                 roast_group: batch.roast_group,
                 entry_type: 'REALLOCATE_OUT',
-                delta_kg: -batch.actual_output_kg,
+                delta_kg: -currentOutputKg,
                 related_batch_id: batch.id,
                 created_by: userId,
                 notes: 'Output voided - moved to RECOVERY_BLEND',
@@ -331,14 +350,17 @@ export function OhShitModal({
             if (voidAffectedError) throw voidAffectedError;
 
             // Remove WIP from affected batch's roast group if it had output
-            if (affectedBatch.actual_output_kg > 0) {
+            const affectedFreshKg = freshById[affectedBatch.id]
+              ? Number(freshById[affectedBatch.id].actual_output_kg) || 0
+              : affectedBatch.actual_output_kg;
+            if (affectedFreshKg > 0) {
               const { error: ledgerError } = await supabase
                 .from('wip_ledger')
                 .insert({
                   target_date: batch.target_date,
                   roast_group: affectedBatch.roast_group,
                   entry_type: 'REALLOCATE_OUT',
-                  delta_kg: -affectedBatch.actual_output_kg,
+                  delta_kg: -affectedFreshKg,
                   related_batch_id: affectedBatch.id,
                   created_by: userId,
                   notes: 'Output voided - moved to RECOVERY_BLEND',
@@ -407,11 +429,11 @@ export function OhShitModal({
         
         case 'DESTONER_SPILL': {
           const recovered = parseFloat(flowData.recoveredKg) || 0;
-          const previousOutput = batch.actual_output_kg;
+          const previousOutput = currentOutputKg;
           const deltaWip = recovered - previousOutput;
-          
+
           // Update batch
-          if (batch.status === 'PLANNED') {
+          if (currentStatus === 'PLANNED') {
             const { error: batchError } = await supabase
               .from('roasted_batches')
               .update({ 

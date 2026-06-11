@@ -24,6 +24,7 @@ import { useClientOrderingConstraints, validateCaseQuantity } from '@/hooks/useC
 import { usePricingVisibility } from '@/hooks/usePricingVisibility';
 import { blockNonIntegerKeys } from '@/lib/numericInput';
 import { DatePicker } from '@/components/ui/date-picker';
+import { computeDefaultWorkDeadline } from '@/lib/productionScheduling';
 import type { DeliveryMethod } from '@/types/database';
 
 interface LineItem {
@@ -132,6 +133,23 @@ export default function NewOrder() {
 
   const { constraints, isLoading: constraintsLoading } = useClientOrderingConstraints(authUser?.accountId);
   const { hidePricing } = usePricingVisibility();
+
+  // Account's standard production schedule — used to auto-set the work deadline
+  // on submit. Members never see/edit it; admins configure it per account.
+  const { data: accountSchedule, isLoading: scheduleLoading } = useQuery({
+    queryKey: ['account-schedule', authUser?.accountId],
+    queryFn: async () => {
+      if (!authUser?.accountId) return null;
+      const { data, error } = await supabase
+        .from('accounts')
+        .select('production_weekdays, order_cutoff_hour')
+        .eq('id', authUser.accountId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!authUser?.accountId,
+  });
 
   // Fetch allowed products with packaging type join
   const { data: products, isLoading: productsLoading } = useQuery({
@@ -415,6 +433,14 @@ export default function NewOrder() {
   const submitOrder = async () => {
     if (!authUser?.accountId) return;
 
+    // The work deadline is derived from the account's production schedule. If
+    // that query hasn't resolved yet, the deadline would silently default to
+    // null even for accounts that have a schedule — block until it loads.
+    if (scheduleLoading) {
+      toast.error('Still loading your account schedule — try again in a moment.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const { data: validationResult, error: validationError } = await supabase.functions.invoke(
@@ -453,6 +479,10 @@ export default function NewOrder() {
           order_number: '',
           status: 'SUBMITTED',
           requested_ship_date: shipPreference === 'SPECIFIC' && requestedShipDate ? requestedShipDate : null,
+          work_deadline_at: computeDefaultWorkDeadline(
+            accountSchedule?.production_weekdays,
+            accountSchedule?.order_cutoff_hour ?? undefined,
+          ),
           delivery_method: deliveryMethod,
           client_po: clientPo || null,
           client_notes: shipPreference === 'SOONEST'

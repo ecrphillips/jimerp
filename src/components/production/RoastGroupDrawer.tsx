@@ -447,60 +447,21 @@ export function RoastGroupDrawer({
       roast_group: string;
       target_date: string;
     }) => {
-      // Update batch status - the eq('status', 'PLANNED') ensures idempotency
-      // If batch is already ROASTED, this update will affect 0 rows
-      const { data: updateData, error: batchError } = await supabase
-        .from('roasted_batches')
-        .update({ 
-          status: 'ROASTED',
-          actual_output_kg,
-        })
-        .eq('id', id)
-        .eq('status', 'PLANNED')
-        .select('id');
-      
-      if (batchError) throw batchError;
-      
-      // Check if we actually updated anything (idempotency check)
-      if (!updateData || updateData.length === 0) {
-        // Batch was already roasted or doesn't exist - no-op
+      // Atomic RPC: flips PLANNED → ROASTED, writes the ROAST_OUTPUT ledger row,
+      // and (if a lot is selected) logs + decrements the green lot — all in one
+      // transaction, so the batch can never be marked roasted without its ledger
+      // entry. Returns false if the batch was already roasted (no-op).
+      const selectedLotId = batchLotSelections[id];
+      const { data: transitioned, error } = await supabase.rpc('mark_batch_roasted', {
+        p_batch_id: id,
+        p_actual_output_kg: actual_output_kg,
+        p_lot_id: selectedLotId ?? null,
+      });
+      if (error) throw error;
+
+      if (!transitioned) {
         return { alreadyRoasted: true, actual_output_kg: 0 };
       }
-      
-      // Create inventory_transactions entry for roast output (new ledger)
-      const { error: ledgerError } = await supabase
-        .from('inventory_transactions')
-        .insert({
-          transaction_type: 'ROAST_OUTPUT',
-          roast_group,
-          quantity_kg: actual_output_kg,
-          is_system_generated: true,
-          created_by: user?.id,
-          notes: `Batch ${id.slice(0, 8)}`,
-        });
-      if (ledgerError) throw ledgerError;
-      
-      // Log green lot consumption if a lot is selected
-      const selectedLotId = batchLotSelections[id];
-      if (selectedLotId) {
-        const { error: consumeError } = await supabase
-          .from('green_lot_consumption_log')
-          .insert({
-            lot_id: selectedLotId,
-            roasted_batch_id: id,
-            kg_consumed: actual_output_kg,
-            created_by: user?.id,
-            notes: `Batch ${id.slice(0, 8)}`,
-          });
-        if (consumeError) throw consumeError;
-
-        const { error: deductError } = await supabase.rpc('decrement_lot_kg', {
-          p_lot_id: selectedLotId,
-          p_kg: actual_output_kg,
-        });
-        if (deductError) throw deductError;
-      }
-      
       return { alreadyRoasted: false, actual_output_kg };
     },
     onSuccess: (result) => {
@@ -539,27 +500,14 @@ export function RoastGroupDrawer({
       planned_output_kg: number | null;
       cropster_batch_id: string | null;
     }) => {
-      // Revert batch status
-      const { error: batchError } = await supabase
-        .from('roasted_batches')
-        .update({ status: 'PLANNED' })
-        .eq('id', id)
-        .eq('status', 'ROASTED');
-      if (batchError) throw batchError;
-      
-      // Create reversing inventory_transactions entry (negative ADJUSTMENT)
-      const { error: ledgerError } = await supabase
-        .from('inventory_transactions')
-        .insert({
-          transaction_type: 'ADJUSTMENT',
-          roast_group,
-          quantity_kg: -actual_output_kg,
-          is_system_generated: true,
-          created_by: user?.id,
-          notes: `Reverted batch ${id.slice(0, 8)} to planned`,
-        });
-      if (ledgerError) throw ledgerError;
-      
+      // Atomic RPC: reverts status and writes the reversing negative ADJUSTMENT
+      // (using the batch's recorded output, read under lock) in one transaction.
+      // No-ops if the batch is not currently ROASTED.
+      const { error } = await supabase.rpc('revert_batch_to_planned', {
+        p_batch_id: id,
+      });
+      if (error) throw error;
+
       return { planned_output_kg, cropster_batch_id };
     },
     onSuccess: (data) => {
@@ -600,44 +548,18 @@ export function RoastGroupDrawer({
       loss_kg: number;
       loss_note: string;
     }) => {
-      // Update batch status
-      const { error: batchError } = await supabase
-        .from('roasted_batches')
-        .update({ 
-          status: 'ROASTED',
-          actual_output_kg,
-        })
-        .eq('id', id)
-        .eq('status', 'PLANNED');
-      if (batchError) throw batchError;
-      
-      // Create inventory_transactions entry for roast output
-      const { error: ledgerError } = await supabase
-        .from('inventory_transactions')
-        .insert({
-          transaction_type: 'ROAST_OUTPUT',
-          roast_group,
-          quantity_kg: actual_output_kg,
-          is_system_generated: true,
-          created_by: user?.id,
-          notes: `Batch ${id.slice(0, 8)}`,
-        });
-      if (ledgerError) throw ledgerError;
-      
-      // Create LOSS transaction if there's a loss amount
-      if (loss_kg > 0) {
-        const { error: lossError } = await supabase
-          .from('inventory_transactions')
-          .insert({
-            transaction_type: 'LOSS',
-            roast_group,
-            quantity_kg: -loss_kg, // Negative because it's a loss
-            is_system_generated: false,
-            created_by: user?.id,
-            notes: loss_note,
-          });
-        if (lossError) throw lossError;
-      }
+      // Atomic RPC: status flip + ROAST_OUTPUT + LOSS in one transaction.
+      // Lot consumption is intentionally not part of this flow (matches the
+      // pre-RPC behavior of the loss path).
+      const { data: transitioned, error } = await supabase.rpc('mark_batch_roasted', {
+        p_batch_id: id,
+        p_actual_output_kg: actual_output_kg,
+        p_lot_id: null,
+        p_loss_kg: loss_kg,
+        p_loss_note: loss_note,
+      });
+      if (error) throw error;
+      if (!transitioned) throw new Error('Batch already roasted');
     },
     onSuccess: () => {
       toast.success('Batch marked as roasted with loss recorded');

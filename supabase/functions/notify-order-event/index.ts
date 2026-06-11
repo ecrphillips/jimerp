@@ -261,8 +261,9 @@ serve(async (req: Request) => {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const { data: { user } } = await adminClient.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (!user) {
+    const { data: { user }, error: authError } = await adminClient.auth.getUser(authHeader.replace("Bearer ", ""));
+    if (authError || !user) {
+      console.error("[notify-order-event] Invalid token:", authError?.message);
       return new Response(JSON.stringify({ ok: false, error: "Invalid token" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

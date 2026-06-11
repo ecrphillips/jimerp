@@ -53,21 +53,37 @@ export function InlinePackingControl({
     }, 1200);
   }, [notifyEditingChange]);
 
+  const pendingValueRef = useRef<number | null>(null);
+
   const commitValue = useCallback(async (newValue: number) => {
     if (newValue === lastSavedValue) return;
-    
+
+    // Serialize commits: if one is in flight, remember only the latest target
+    // and send it when the current commit settles. Firing commits concurrently
+    // risks them landing out of order (absolute targets → last-arrived wins).
+    if (isCommittingRef.current) {
+      pendingValueRef.current = newValue;
+      return;
+    }
+
     isCommittingRef.current = true;
     setIsSaving(true);
-    
+
     try {
       await onCommit(newValue);
       setLastSavedValue(newValue);
     } catch (error) {
       // Revert on failure
+      pendingValueRef.current = null;
       setLocalValue(lastSavedValue.toString());
     } finally {
       setIsSaving(false);
       isCommittingRef.current = false;
+      if (pendingValueRef.current !== null) {
+        const next = pendingValueRef.current;
+        pendingValueRef.current = null;
+        commitValue(next);
+      }
     }
   }, [onCommit, lastSavedValue]);
 

@@ -26,6 +26,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
 import { PronounsField } from '@/components/contacts/PronounsField';
 import { formatPronounsSuffix } from '@/lib/pronounOptions';
+import { WEEKDAY_LABELS, DEFAULT_ORDER_CUTOFF_HOUR } from '@/lib/productionScheduling';
 
 import PricingAnalysisTab from '@/components/account/PricingAnalysisTab';
 import OfferWorkspaceTab from '@/components/account/OfferWorkspaceTab';
@@ -165,6 +166,128 @@ function ServiceFeeCard({ account }: { account: any }) {
           </>
         )}
         <p className="text-xs text-muted-foreground pt-1 border-t">{updatedLine}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Standard Production Days Card (ADMIN/OPS, manufacturing) ──────
+// Production weekdays use JS getDay() values (0=Sun..6=Sat). We only surface
+// Mon–Fri since the order work-deadline picker enforces business days.
+const PRODUCTION_DAY_OPTIONS = WEEKDAY_LABELS.filter(d => d.value >= 1 && d.value <= 5);
+
+function formatHourLabel(hour: number): string {
+  const h12 = hour % 12 === 0 ? 12 : hour % 12;
+  const ampm = hour < 12 ? 'AM' : 'PM';
+  return `${h12}:00 ${ampm}`;
+}
+
+function ProductionDaysCard({ account }: { account: any }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [days, setDays] = useState<number[]>(account.production_weekdays ?? []);
+  const [cutoffHour, setCutoffHour] = useState<number>(account.order_cutoff_hour ?? DEFAULT_ORDER_CUTOFF_HOUR);
+
+  useEffect(() => {
+    setDays(account.production_weekdays ?? []);
+    setCutoffHour(account.order_cutoff_hour ?? DEFAULT_ORDER_CUTOFF_HOUR);
+  }, [account.production_weekdays, account.order_cutoff_hour]);
+
+  const toggleDay = (value: number) => {
+    setDays(prev => prev.includes(value) ? prev.filter(d => d !== value) : [...prev, value].sort((a, b) => a - b));
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from('accounts')
+        .update({
+          production_weekdays: days.length > 0 ? days : null,
+          order_cutoff_hour: cutoffHour,
+        } as any)
+        .eq('id', account.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Production days updated');
+      queryClient.invalidateQueries({ queryKey: ['account-detail'] });
+      setEditing(false);
+    },
+    onError: (err: any) => toast.error(err?.message ?? 'Failed to save production days'),
+  });
+
+  const sortedDays = [...(account.production_weekdays ?? [])].sort((a, b) => a - b);
+  const dayLabels = sortedDays
+    .map(v => WEEKDAY_LABELS.find(d => d.value === v)?.short)
+    .filter(Boolean);
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-sm">Standard Production Days</CardTitle>
+          <Tooltip>
+            <TooltipTrigger><Info className="h-3.5 w-3.5 text-muted-foreground" /></TooltipTrigger>
+            <TooltipContent className="text-xs max-w-xs">
+              New orders for this client default their work deadline to the cutoff time on the next
+              production day. Orders entered before the cutoff on a production day are due that same day.
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        {!editing && (
+          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+            <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        {editing ? (
+          <>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Production days</Label>
+              <div className="flex flex-wrap gap-3">
+                {PRODUCTION_DAY_OPTIONS.map(opt => (
+                  <label key={opt.value} className="flex items-center gap-1.5 text-sm">
+                    <Checkbox checked={days.includes(opt.value)} onCheckedChange={() => toggleDay(opt.value)} />
+                    {opt.short}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Order cutoff / deadline time</Label>
+              <Select value={String(cutoffHour)} onValueChange={v => setCutoffHour(Number(v))}>
+                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 9 }, (_, i) => i + 8).map(h => (
+                    <SelectItem key={h} value={String(h)}>{formatHourLabel(h)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={saveMutation.isPending}>Cancel</Button>
+              <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <span className="text-muted-foreground">Production days</span>
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {dayLabels.length > 0
+                  ? dayLabels.map(l => <Badge key={l} variant="secondary">{l}</Badge>)
+                  : <span className="text-muted-foreground">Not set — new orders won't auto-set a deadline.</span>}
+              </div>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Cutoff / deadline time</span>
+              <p className="font-medium">{formatHourLabel(account.order_cutoff_hour ?? DEFAULT_ORDER_CUTOFF_HOUR)}</p>
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );
@@ -349,6 +472,8 @@ function ProfileTab({ account, refetch }: { account: any; refetch: () => void })
         <PricingTierCard accountId={account.id} pricingTierId={account.pricing_tier_id ?? null} />
 
         {isInternal && <ServiceFeeCard account={account} />}
+
+        {isInternal && account.programs?.includes('MANUFACTURING') && <ProductionDaysCard account={account} />}
 
         {prospect && (
           <Card>

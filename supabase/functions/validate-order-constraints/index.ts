@@ -53,11 +53,18 @@ serve(async (req) => {
     }
 
     // Get user's role
-    const { data: roleData } = await supabaseClient
+    const { data: roleData, error: roleError } = await supabaseClient
       .from("user_roles")
       .select("role, client_id")
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
+
+    if (roleError || !roleData) {
+      return new Response(
+        JSON.stringify({ valid: false, errors: ["Could not resolve user role"] }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const userRole = roleData?.role;
     const isAdminOrOps = userRole === "ADMIN" || userRole === "OPS";
@@ -93,10 +100,47 @@ serve(async (req) => {
 
     const errors: string[] = [];
 
-    // Fetch case constraints via user's legacy client_id (service role bypasses RLS).
-    // roleData.client_id is the user_roles.client_id for CLIENT users.
+    // Fetch case constraints via the user's legacy client_id (service role bypasses RLS).
+    // New account-based users have no client_id on their own user_roles row, so fall
+    // back to resolving the account's legacy client through any member of the account
+    // (account_users → user_roles.client_id). Without this fallback, account-based
+    // users silently skip case_only/case_size validation entirely.
     // TODO: migrate case_only/case_size to accounts table to remove this bridge.
-    const legacyClientId = roleData?.client_id;
+    let legacyClientId: string | null = roleData?.client_id ?? null;
+
+    if (!legacyClientId && account_id) {
+      const { data: members, error: membersError } = await supabaseClient
+        .from("account_users")
+        .select("user_id")
+        .eq("account_id", account_id);
+
+      if (membersError) {
+        return new Response(
+          JSON.stringify({ valid: false, errors: ["Error resolving account constraints"] }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const memberIds = (members ?? []).map((m) => m.user_id);
+      if (memberIds.length > 0) {
+        const { data: linkedRoles, error: linkedError } = await supabaseClient
+          .from("user_roles")
+          .select("client_id")
+          .in("user_id", memberIds)
+          .not("client_id", "is", null)
+          .limit(1);
+
+        if (linkedError) {
+          return new Response(
+            JSON.stringify({ valid: false, errors: ["Error resolving account constraints"] }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        legacyClientId = linkedRoles?.[0]?.client_id ?? null;
+      }
+    }
+
     const { data: clientData, error: clientError } = legacyClientId
       ? await supabaseClient
           .from("clients")

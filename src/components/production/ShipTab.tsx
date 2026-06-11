@@ -26,12 +26,11 @@ import { Truck, AlertTriangle, Package, RefreshCw } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { SortableShipCard } from './SortableShipCard';
-import { format, addDays, parseISO } from 'date-fns';
 import type { DateFilterConfig } from './types';
 // Use AUTHORITATIVE inventory hooks - computed from source-of-truth tables
 import { useAuthoritativeFg, useAuthoritativeShortList } from '@/hooks/useAuthoritativeInventory';
 import { AuthoritativeSummaryPanel } from './AuthoritativeTotals';
-import { filterOrderByWorkStart } from '@/lib/productionScheduling';
+import { filterOrderByWorkStart, computeNudgedDeadline } from '@/lib/productionScheduling';
 
 type ShipPriority = 'NORMAL' | 'TIME_SENSITIVE';
 
@@ -646,14 +645,14 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     });
   }, [localOrders, updateDisplayOrderMutation]);
 
-  const toggleOrderPriority = (order: ShippableShipment) => {
+  const toggleOrderPriority = async (order: ShippableShipment) => {
     const newPriority: ShipPriority = order.priority === 'NORMAL' ? 'TIME_SENSITIVE' : 'NORMAL';
 
     const updates = order.lineItems.map((li) => {
       const existingCheckmark = checkmarks?.find(
         (cm) => cm.product_id === li.product_id && cm.bag_size_g === li.bag_size_g
       ) ?? null;
-      
+
       return priorityMutation.mutateAsync({
         productId: li.product_id,
         bagSize: li.bag_size_g,
@@ -661,30 +660,29 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         existingCheckmark,
       });
     });
-    
-    Promise.all(updates);
+
+    const results = await Promise.allSettled(updates);
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    if (failed > 0) {
+      toast.error(`Failed to update priority for ${failed} item(s)`);
+    }
   };
 
-  // Calculate today + 1 for "Do this today" action
-  const todayPlusOne = useMemo(() => {
-    const todayDate = parseISO(today + 'T12:00:00');
-    return format(addDays(todayDate, 1), 'yyyy-MM-dd');
-  }, [today]);
-
-  // "Do this later" - increment work_deadline by 1 day and set manually_deprioritized = true
+  // "Do this later" - push work_deadline_at to the next business day and set
+  // manually_deprioritized = true. Writes work_deadline_at (timestamptz) — the
+  // field every production view reads — not the legacy work_deadline text column.
   const doThisLaterMutation = useMutation({
     mutationFn: async (order: ShippableShipment) => {
-      const currentDate = order.work_deadline ? parseISO(order.work_deadline) : new Date();
-      const newDate = format(addDays(currentDate, 1), 'yyyy-MM-dd');
-      
+      const newDeadline = computeNudgedDeadline(order.work_deadline, 'later');
+
       const { error } = await supabase
         .from('orders')
         .update({
-          work_deadline: newDate,
+          work_deadline_at: newDeadline,
           manually_deprioritized: true,
         })
         .eq('id', order.order_id);
-      
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -698,17 +696,20 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     },
   });
 
-  // "Do this today" - set work_deadline to today+1 and clear manually_deprioritized
+  // "Do this today" - pull work_deadline_at into today's window and clear
+  // manually_deprioritized. Same field note as doThisLaterMutation above.
   const doThisTodayMutation = useMutation({
     mutationFn: async (order: ShippableShipment) => {
+      const newDeadline = computeNudgedDeadline(order.work_deadline, 'earlier');
+
       const { error } = await supabase
         .from('orders')
         .update({
-          work_deadline: todayPlusOne,
+          work_deadline_at: newDeadline,
           manually_deprioritized: false,
         })
         .eq('id', order.order_id);
-      
+
       if (error) throw error;
     },
     onSuccess: () => {

@@ -8,7 +8,6 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Loader2, AlertTriangle, CheckCircle2, Layers, ArrowRight, Beaker } from 'lucide-react';
 
@@ -57,7 +56,6 @@ export function BlendExecuteModal({
   blendDisplayName,
   today,
 }: BlendExecuteModalProps) {
-  const { user } = useAuth();
   const queryClient = useQueryClient();
   
   const [selectedBatches, setSelectedBatches] = useState<Record<string, SelectedBatch>>({});
@@ -324,96 +322,27 @@ export function BlendExecuteModal({
   // Check if we can blend
   const canBlend = totalBlendOutput > 0 && proportionCheck.valid && recipeValid;
   
-  // Blend mutation with idempotency guard
+  // Blend mutation — atomic SECURITY DEFINER RPC. The function locks the
+  // selected batches, verifies none are already consumed (guards against a
+  // concurrent blend), marks them consumed, and writes the balanced ledger
+  // rows (positive blend output + negative component decrements) in a single
+  // transaction, so a partial failure cannot leave the ledger unbalanced.
   const blendMutation = useMutation({
     mutationFn: async () => {
       if (!canBlend) throw new Error('Cannot blend - check proportions and selections');
-      
-      const batchIdsToConsume: string[] = [];
-      const componentTransactions: Array<{
-        transaction_type: 'ADJUSTMENT';
-        roast_group: string;
-        quantity_kg: number;
-        is_system_generated: boolean;
-        created_by: string | undefined;
-        notes: string;
-      }> = [];
-      
-      // Collect batch IDs and component decrements
-      for (const [batchId, selection] of Object.entries(selectedBatches)) {
-        if (selection.consumeKg <= 0) continue;
-        
-        const batch = batchesWithAvailable.find(b => b.id === batchId);
-        if (!batch) continue;
-        
-        batchIdsToConsume.push(batchId);
 
-        // Decrement the component roast group's WIP. When a component batch is
-        // marked ROASTED it writes a positive ROAST_OUTPUT to its own roast group
-        // (RoastGroupDrawer markRoastedMutation), so the kg IS counted as component
-        // WIP. Without this offsetting negative ADJUSTMENT the same kg is counted
-        // twice — once as component WIP and again as blend output — letting a
-        // sibling single-origin product in the component group "steal" coffee that
-        // is physically already in the blend.
-        componentTransactions.push({
-          transaction_type: 'ADJUSTMENT',
-          roast_group: batch.roast_group,
-          quantity_kg: -selection.consumeKg, // Negative = remove blended kg from component WIP
-          is_system_generated: true,
-          created_by: user?.id,
-          notes: `Blended into ${blendDisplayName} (batch ${batchId.slice(0, 8)})`,
-        });
-      }
-      
-      // Step 1: Atomically mark selected batches as consumed
-      // This is the idempotency guard - if any batch is already consumed, abort
-      const now = new Date().toISOString();
-      const { error: consumeError, data: consumedData } = await supabase
-        .from('roasted_batches')
-        .update({ consumed_by_blend_at: now })
-        .in('id', batchIdsToConsume)
-        .is('consumed_by_blend_at', null)  // CRITICAL: Only update if not already consumed
-        .select('id');
-      
-      if (consumeError) throw consumeError;
-      
-      // Verify ALL batches were consumed (no partial success = no race condition)
-      if (!consumedData || consumedData.length !== batchIdsToConsume.length) {
-        const consumedIds = new Set(consumedData?.map(b => b.id) ?? []);
-        const failedIds = batchIdsToConsume.filter(id => !consumedIds.has(id));
-        throw new Error(
-          `Blend aborted: ${failedIds.length} batch(es) were already consumed by another blend. ` +
-          `Please refresh and try again.`
-        );
-      }
-      
-      // Step 2: Create the blend output transaction (this is what adds to WIP)
-      const blendTransaction = {
-        transaction_type: 'ADJUSTMENT' as const,
-        roast_group: blendRoastGroup,
-        quantity_kg: totalBlendOutput, // Positive = increment parent blend WIP
-        is_system_generated: true,
-        created_by: user?.id,
-        notes: `Created blend from ${batchIdsToConsume.length} component batches`,
-      };
-      
-      // Insert the blend output (positive, to the blend group) AND the component
-      // WIP decrements (negative, to each component group) in one call so the
-      // ledger stays balanced: kg leaving the components equals kg entering the blend.
-      const { error: txError } = await supabase
-        .from('inventory_transactions')
-        .insert([blendTransaction, ...componentTransactions]);
+      const selections = Object.values(selectedBatches).filter(s => s.consumeKg > 0);
+      if (selections.length === 0) throw new Error('No batches selected');
 
-      if (txError) {
-        // Rollback: un-consume the batches if transaction insert failed
-        await supabase
-          .from('roasted_batches')
-          .update({ consumed_by_blend_at: null })
-          .in('id', batchIdsToConsume);
-        throw txError;
-      }
-      
-      return totalBlendOutput;
+      const { data, error } = await supabase.rpc('execute_blend', {
+        p_blend_roast_group: blendRoastGroup,
+        p_blend_display_name: blendDisplayName,
+        p_batch_ids: selections.map(s => s.batchId),
+        p_consume_kgs: selections.map(s => s.consumeKg),
+      });
+
+      if (error) throw error;
+      return Number(data ?? totalBlendOutput);
     },
     onSuccess: (amount) => {
       toast.success(`Blended ${amount.toFixed(1)} kg of ${blendDisplayName}`);
