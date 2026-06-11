@@ -43,3 +43,5 @@ project_id = "cgdzjkryygwlyygeznrb"
     verify_jwt = true
   [functions.quickbooks-disconnect]
     verify_jwt = true
+  [functions.shopify-pull-orders]
+    verify_jwt = true

@@ -122,6 +122,44 @@ export default function ShopifyDebug() {
   const invalidate = (key: string) =>
     queryClient.invalidateQueries({ queryKey: ['shopify-debug', key] });
 
+  const [pulling, setPulling] = React.useState(false);
+
+  const handleRunPullNow = async () => {
+    setPulling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        'shopify-pull-orders',
+        { body: {} },
+      );
+      if (error) throw error;
+      const results = (data?.results ?? []) as Array<{
+        store_slug: string;
+        result: string;
+        orders_retrieved: number;
+        orders_included: number;
+        orders_quarantined: number;
+        order_number?: string;
+        error?: string;
+      }>;
+      if (results.length === 0) {
+        toast.info(data?.message ?? 'No active Shopify sources');
+      }
+      for (const r of results) {
+        const summary = `${r.store_slug}: ${r.result} — retrieved ${r.orders_retrieved}, included ${r.orders_included}, quarantined ${r.orders_quarantined}${r.order_number ? `, order ${r.order_number}` : ''}`;
+        if (r.result === 'error') toast.error(`${summary} (${r.error})`);
+        else if (r.result === 'partial') toast.warning(summary);
+        else toast.success(summary);
+      }
+      invalidate('pull_log');
+      invalidate('order_counts');
+      invalidate('line_item_counts');
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setPulling(false);
+    }
+  };
+
   const handleInsertTestSource = async () => {
     try {
       const { data: account, error: acctErr } = await sb
@@ -208,6 +246,9 @@ export default function ShopifyDebug() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex gap-2">
+            <Button onClick={handleRunPullNow} disabled={pulling}>
+              {pulling ? 'Pulling…' : 'Run pull now'}
+            </Button>
             <Button onClick={handleInsertTestSource}>Insert test source</Button>
             <Button variant="destructive" onClick={handleDeleteTestSources}>
               Delete all test sources
