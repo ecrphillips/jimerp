@@ -878,7 +878,7 @@ export default function OrderDetail() {
         <Card>
           <CardHeader><CardTitle>Client Notes</CardTitle></CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">{order.client_notes || '—'}</p>
+            <p className="text-sm text-muted-foreground whitespace-pre-line">{order.client_notes || '—'}</p>
           </CardContent>
         </Card>
 

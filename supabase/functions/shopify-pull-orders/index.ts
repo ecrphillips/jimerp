@@ -22,7 +22,7 @@ import { corsHeadersFor } from '../_shared/cors.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '2.3-mapped_by';
+const FUNCTION_VERSION = '2.4-notes';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -38,6 +38,7 @@ interface ShopifyOrder {
   id: string; // legacy numeric id as text
   name: string; // e.g. #1001
   createdAt: string | null;
+  customerName: string | null; // null when Protected Customer Data access not granted
   lineItems: ShopifyLineItem[];
 }
 
@@ -107,6 +108,7 @@ async function fetchUnfulfilledOrders(
             id
             name
             createdAt
+            customer { displayName }
             lineItems(first: 100) {
               nodes {
                 sku
@@ -146,6 +148,7 @@ async function fetchUnfulfilledOrders(
         id: legacyId(node.id)!,
         name: node.name,
         createdAt: node.createdAt ?? null,
+        customerName: node.customer?.displayName ?? null,
         lineItems: (node.lineItems?.nodes ?? []).map((li: Record<string, unknown>) => ({
           sku: (li.sku as string) || null,
           title: (li.title as string) ?? '',
@@ -261,6 +264,7 @@ async function pullSource(
   source: {
     id: string;
     store_slug: string;
+    store_name: string;
     store_url: string;
     linked_account_id: string;
     api_access_token: string | null;
@@ -479,13 +483,19 @@ async function pullSource(
     }
 
     // Create the batched order.
-    const orderNames = included.map((o) => o.name).join(', ');
+    const orderLines = included
+      .map((o) => `${o.name}${o.customerName ? ` - ${o.customerName}` : ''}`)
+      .join('\n');
     const notes =
-      `Shopify daily pull (${source.store_slug}): ${included.length} unfulfilled order(s) — ${orderNames}` +
-      (newMappings.length > 0 ? `\nAuto-mapped ${newMappings.length} new Shopify variant(s) by name+size.` : '') +
-      (skuPushError ? `\nSKU write-back to Shopify failed (check write_products scope): ${skuPushError}` : '') +
+      `Shopify daily pull (${source.store_name})\n${included.length} unfulfilled order(s)\n${orderLines}` +
+      (newMappings.length > 0
+        ? `\n\nAuto-mapped ${newMappings.length} new Shopify variant(s) by name + size`
+        : '') +
+      (skuPushError
+        ? `\n\nSKU write-back to Shopify failed (check write_products scope): ${skuPushError}`
+        : '') +
       (quarantined.length > 0
-        ? `\nQuarantined (unmapped items, will retry next pull): ${quarantined.map((q) => `${q.order.name} [${q.unmapped.join(', ')}]`).join('; ')}`
+        ? `\n\nQuarantined (unmapped items, will retry next pull):\n${quarantined.map((q) => `${q.order.name} [${q.unmapped.join(', ')}]`).join('\n')}`
         : '');
 
     const { data: order, error: orderErr } = await admin
@@ -529,6 +539,7 @@ async function pullSource(
         shopify_order_id: o.id,
         shopify_order_number: o.name,
         shopify_created_at: o.createdAt,
+        customer_name: o.customerName,
         bundle_order_id: order.id,
         pull_log_id: pullLogId,
         line_items: o.lineItems.filter(producible).map((li) => ({
@@ -604,7 +615,7 @@ Deno.serve(async (req) => {
   let query = admin
     .from('shopify_sources')
     .select(
-      'id, store_slug, store_url, linked_account_id, api_access_token, oauth_client_id, oauth_client_secret, is_active',
+      'id, store_slug, store_name, store_url, linked_account_id, api_access_token, oauth_client_id, oauth_client_secret, is_active',
     )
     .eq('is_active', true);
   if (body.source_id) query = query.eq('id', body.source_id);
