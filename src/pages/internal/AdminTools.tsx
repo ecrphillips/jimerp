@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertTriangle, Trash2, Sparkles, RotateCcw, Bomb, Wand2, LineChart } from 'lucide-react';
+import { AlertTriangle, Trash2, Sparkles, RotateCcw, Bomb, Wand2, LineChart, ShoppingBag } from 'lucide-react';
 import { GenericLaneConversion } from '@/components/admin/GenericLaneConversion';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -365,6 +365,26 @@ export default function AdminTools() {
           <Button onClick={() => navigate('/admin/market-audit')} className="gap-2">
             <LineChart className="h-4 w-4" />
             Open Market Price Audit
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Shopify Sync */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <ShoppingBag className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Shopify Sync</CardTitle>
+          </div>
+          <CardDescription>
+            Daily 6am PT pull of unfulfilled No Smoke Coffee orders into a batched JIM order.
+            Inspect sources, pull history, and trigger a manual pull.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={() => navigate('/admin/shopify-debug')} className="gap-2">
+            <ShoppingBag className="h-4 w-4" />
+            Open Shopify Sync
           </Button>
         </CardContent>
       </Card>
