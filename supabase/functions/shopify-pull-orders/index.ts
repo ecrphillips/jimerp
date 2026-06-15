@@ -2,7 +2,7 @@
 //
 // Called two ways:
 //  - pg_cron (daily, 6am PDT) with the service_role key — trigger_type 'scheduled'
-//  - Admin UI with a user JWT (ADMIN role required) — trigger_type 'manual'
+//  - Admin/Ops UI with a user JWT (ADMIN or OPS role required) — trigger_type 'manual'
 //
 // Per active shopify_source:
 //  1. Fetch open, unfulfilled orders from the Shopify Admin GraphQL API.
@@ -584,7 +584,7 @@ Deno.serve(async (req) => {
     auth: { persistSession: false },
   });
 
-  // Auth: service_role key (cron) or ADMIN user JWT (manual trigger).
+  // Auth: service_role key (cron) or ADMIN/OPS user JWT (manual trigger).
   const authHeader = req.headers.get('Authorization') ?? '';
   const token = authHeader.replace('Bearer ', '');
   let triggerType: 'manual' | 'scheduled' = 'manual';

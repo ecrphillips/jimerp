@@ -22,6 +22,7 @@ import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
 import { SetDeadlineModal } from '@/components/orders/SetDeadlineModal';
 import { OrderProgressBar, DeadlineStatus } from '@/components/orders/OrderProgressBar';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
+import { NoSmokeShopifyPull } from '@/components/orders/NoSmokeShopifyPull';
 
 type SortDirection = 'asc' | 'desc';
 
@@ -277,6 +278,7 @@ export default function Orders() {
           Create Order
         </Button>
       </div>
+      <NoSmokeShopifyPull onPulled={() => refetch()} />
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="flex items-center gap-3">
