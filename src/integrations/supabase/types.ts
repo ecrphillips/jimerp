@@ -181,7 +181,9 @@ export type Database = {
           managed_sku_count: number | null
           monthly_service_fee: number | null
           notes_internal: string | null
+          order_cutoff_hour: number
           pricing_profile_id: string | null
+          production_weekdays: number[] | null
           programs: string[]
           pronouns: string | null
           prospect_selected_tier: string | null
@@ -224,7 +226,9 @@ export type Database = {
           managed_sku_count?: number | null
           monthly_service_fee?: number | null
           notes_internal?: string | null
+          order_cutoff_hour?: number
           pricing_profile_id?: string | null
+          production_weekdays?: number[] | null
           programs?: string[]
           pronouns?: string | null
           prospect_selected_tier?: string | null
@@ -267,7 +271,9 @@ export type Database = {
           managed_sku_count?: number | null
           monthly_service_fee?: number | null
           notes_internal?: string | null
+          order_cutoff_hour?: number
           pricing_profile_id?: string | null
+          production_weekdays?: number[] | null
           programs?: string[]
           pronouns?: string | null
           prospect_selected_tier?: string | null
@@ -5272,6 +5278,7 @@ export type Database = {
         Args: { _account_id: string }
         Returns: undefined
       }
+      _assert_internal_staff: { Args: never; Returns: undefined }
       _coroast_effective_booking_rules: {
         Args: { p_account_id: string }
         Returns: {
@@ -5375,6 +5382,15 @@ export type Database = {
         Args: { payload: Json; queue_name: string }
         Returns: number
       }
+      execute_blend: {
+        Args: {
+          p_batch_ids: string[]
+          p_blend_display_name: string
+          p_blend_roast_group: string
+          p_consume_kgs: number[]
+        }
+        Returns: number
+      }
       get_client_delete_preflight: {
         Args: { p_client_id: string }
         Returns: Json
@@ -5436,6 +5452,16 @@ export type Database = {
         Args: {
           p_from: Database["public"]["Enums"]["order_status"]
           p_to: Database["public"]["Enums"]["order_status"]
+        }
+        Returns: boolean
+      }
+      mark_batch_roasted: {
+        Args: {
+          p_actual_output_kg: number
+          p_batch_id: string
+          p_loss_kg?: number
+          p_loss_note?: string
+          p_lot_id?: string
         }
         Returns: boolean
       }
@@ -5531,6 +5557,10 @@ export type Database = {
         }[]
       }
       reverse_quote_to_sent: { Args: { p_quote_id: string }; Returns: Json }
+      revert_batch_to_planned: {
+        Args: { p_batch_id: string }
+        Returns: boolean
+      }
       submit_prospect_interest: {
         Args: {
           p_billing_address_line1?: string
@@ -5603,6 +5633,16 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      update_packing_units: {
+        Args: {
+          p_bag_size_g: number
+          p_new_units: number
+          p_product_id: string
+          p_roast_group: string
+          p_target_date: string
+        }
+        Returns: number
       }
     }
     Enums: {
