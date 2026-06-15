@@ -3048,6 +3048,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_inventory_transactions_roast_group"
+            columns: ["roast_group"]
+            isOneToOne: false
+            referencedRelation: "roast_groups"
+            referencedColumns: ["roast_group"]
+          },
+          {
             foreignKeyName: "inventory_transactions_lot_id_fkey"
             columns: ["lot_id"]
             isOneToOne: false
@@ -5206,7 +5213,15 @@ export type Database = {
           reason?: Database["public"]["Enums"]["wip_adjustment_reason"]
           roast_group?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_wip_adjustments_roast_group"
+            columns: ["roast_group"]
+            isOneToOne: false
+            referencedRelation: "roast_groups"
+            referencedColumns: ["roast_group"]
+          },
+        ]
       }
       wip_ledger: {
         Row: {
