@@ -22,7 +22,7 @@ import { corsHeadersFor } from '../_shared/cors.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '2.4-notes';
+const FUNCTION_VERSION = '2.5-ops-trigger';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -599,8 +599,8 @@ Deno.serve(async (req) => {
       .select('role')
       .eq('user_id', user.id)
       .maybeSingle();
-    if (roleData?.role !== 'ADMIN') {
-      return json({ error: 'Forbidden: ADMIN only' }, 403, corsHeaders);
+    if (roleData?.role !== 'ADMIN' && roleData?.role !== 'OPS') {
+      return json({ error: 'Forbidden: ADMIN or OPS only' }, 403, corsHeaders);
     }
   }
 
