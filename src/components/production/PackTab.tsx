@@ -324,33 +324,37 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       }
     }
 
-    // Calculate shortage, earliest ship date, unblocks orders, and WIP readiness
+    // Calculate shortage, earliest ship date, unblocks orders, and WIP readiness.
+    // "Effective packed" treats downstream picks as implicit packs — a picked bag
+    // physically exists, so the upstream demand is already satisfied even if the
+    // packer hasn't clicked through yet. This prevents the Pack tab from
+    // pressuring the user into over-packing a SKU the shipper has already grabbed.
     for (const product of Object.values(productMap)) {
       const packed = packingByProductUnits[product.product_id] ?? 0;
-      product.shortage = Math.max(0, product.demanded_units - packed);
-      
+      const picked = pickedByProductUnits?.[product.product_id] ?? 0;
+      const effectivePacked = Math.max(packed, picked);
+      product.shortage = Math.max(0, product.demanded_units - effectivePacked);
+
       // Get earliest ship date
       if (product.shipDates.length > 0) {
         product.earliestShipDate = product.shipDates.sort()[0];
       }
-      
+
       // Calculate how many orders this SKU unblocks if packed
       let unblocksCount = 0;
       for (const li of orderLineItems ?? []) {
         if (li.product_id !== product.product_id) continue;
-        const packedForProduct = packingByProductUnits[product.product_id] ?? 0;
-        if (packedForProduct < li.quantity_units) {
+        if (effectivePacked < li.quantity_units) {
           unblocksCount++;
         }
       }
       product.unblocksOrders = unblocksCount;
-      
+
       // Calculate WIP readiness - based purely on ledger WIP availability
-      // WIP is available if there's positive roasted coffee on hand for this roast group
       const wipAvailableKg = product.roast_group ? (roastedInventory[product.roast_group] ?? 0) : 0;
-      const remainingUnits = Math.max(0, product.demanded_units - packed);
+      const remainingUnits = Math.max(0, product.demanded_units - effectivePacked);
       const requiredKg = (remainingUnits * product.bag_size_g) / 1000;
-      
+
       product.wipAvailableKg = wipAvailableKg;
       product.requiredKg = requiredKg;
 
@@ -358,24 +362,20 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       const plannedInfo = product.roast_group ? plannedWip?.[product.roast_group] : undefined;
       product.plannedKg = plannedInfo?.planned_kg ?? 0;
       product.plannedCount = plannedInfo?.count ?? 0;
-      
-      // NEW: WIP status for color coding
-      // - 'full': enough WIP to complete entire row (wipAvailable >= requiredKg)
-      // - 'partial': some WIP available but not enough (0 < wipAvailable < requiredKg)
-      // - 'none': no WIP available or no remaining demand
+
       if (remainingUnits === 0) {
-        product.wipStatus = 'none'; // No remaining work = no color needed
+        product.wipStatus = 'none';
       } else if (wipAvailableKg >= requiredKg) {
-        product.wipStatus = 'full'; // GREEN: can complete entire row
+        product.wipStatus = 'full';
       } else if (wipAvailableKg > 0) {
-        product.wipStatus = 'partial'; // AMBER: some but not enough
+        product.wipStatus = 'partial';
       } else {
-        product.wipStatus = 'none'; // NO COLOR: no WIP at all
+        product.wipStatus = 'none';
       }
     }
 
     return Object.values(productMap).map(({ orderIds, shipDates, ...rest }) => rest);
-  }, [orderLineItems, checkmarks, packingByProductUnits, roastedInventory, products, plannedWip]);
+  }, [orderLineItems, checkmarks, packingByProductUnits, pickedByProductUnits, roastedInventory, products, plannedWip]);
 
   // Sort products by pack_display_order only (manual ordering)
   // NO automatic reprioritization - order is strictly user-controlled
