@@ -213,9 +213,16 @@ export function BulkEditGrid<TRow>({
           <span className="text-xs text-muted-foreground">{rows.length} row{rows.length !== 1 ? 's' : ''}</span>
         </div>
         <div className="flex items-center gap-2">
+          {group && grouped.length > 0 && (
+            <Button variant="outline" size="sm" onClick={toggleAllGroups} className="h-7 text-xs gap-1">
+              {allCollapsed ? <ChevronsUpDown className="h-3.5 w-3.5" /> : <ChevronsDownUp className="h-3.5 w-3.5" />}
+              {allCollapsed ? 'Expand all' : 'Collapse all'}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={handleUndo} disabled={undo.size === 0} className="h-7 text-xs gap-1">
             <Undo2 className="h-3.5 w-3.5" /> Undo last change ({undo.size})
           </Button>
+
           {csvFilename && (
             <>
               <Button variant="outline" size="sm" onClick={handleExport} className="h-7 text-xs gap-1">
