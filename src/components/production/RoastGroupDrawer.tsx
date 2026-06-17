@@ -947,9 +947,12 @@ export function RoastGroupDrawer({
                   ) : (
                     blendComponentsWithNames.map(comp => {
                       const compBatches = componentBatchesByGroup[comp.roastGroup] ?? [];
+                      const compBatches = componentBatchesByGroup[comp.roastGroup] ?? [];
+                      const compInfo = roastGroupsLookupMap.get(comp.roastGroup);
+                      const compYieldLossPct = compInfo?.expected_yield_loss_pct ?? yieldLossPct;
                       const plannedKg = compBatches
                         .filter(b => b.status === 'PLANNED')
-                        .reduce((sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - yieldLossPct / 100), 0);
+                        .reduce((sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - compYieldLossPct / 100), 0);
                       const roastedKg = compBatches
                         .filter(b => b.status === 'ROASTED')
                         .reduce((sum, b) => sum + b.actual_output_kg, 0);
