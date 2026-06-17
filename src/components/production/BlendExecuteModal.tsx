@@ -591,7 +591,13 @@ export function BlendExecuteModal({
                 Cancel
               </Button>
               <Button
-                onClick={() => blendMutation.mutate()}
+                onClick={() => {
+                  if (leftoverDetails.hasLeftover) {
+                    setConfirmReleaseOpen(true);
+                  } else {
+                    blendMutation.mutate();
+                  }
+                }}
                 disabled={!canBlend || blendMutation.isPending}
               >
                 {blendMutation.isPending ? (
@@ -607,6 +613,66 @@ export function BlendExecuteModal({
           </div>
         )}
       </DialogContent>
+
+      {/* Leftover confirmation: a selected component batch is being partially
+          consumed. The unblended remainder will lose its blend earmark and
+          become available in the component group for any single-origin product
+          to pack. */}
+      <AlertDialog open={confirmReleaseOpen} onOpenChange={setConfirmReleaseOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave unblended coffee for other products?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  You're using less than the full amount on{' '}
+                  {leftoverDetails.items.length === 1
+                    ? '1 batch'
+                    : `${leftoverDetails.items.length} batches`}{' '}
+                  earmarked for <strong>{blendDisplayName}</strong>.
+                </p>
+                <div className="rounded-md border bg-muted/50 p-2 space-y-1">
+                  {leftoverDetails.items.map(item => {
+                    const compName =
+                      configByGroup[item.componentRoastGroup]?.display_name?.trim()
+                      || item.componentRoastGroup.replace(/_/g, ' ');
+                    return (
+                      <div key={item.batchId} className="flex justify-between text-xs">
+                        <span className="font-mono text-muted-foreground">
+                          {item.batchId.slice(0, 8)}
+                        </span>
+                        <span>
+                          <strong>{item.leftoverKg.toFixed(1)} kg</strong> leftover &middot; {compName}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  <div className="pt-1 border-t flex justify-between text-xs font-medium">
+                    <span>Total leftover</span>
+                    <span>{leftoverDetails.totalLeftoverKg.toFixed(1)} kg</span>
+                  </div>
+                </div>
+                <p className="text-muted-foreground">
+                  Confirming will release this coffee back into the component roast group's
+                  WIP, where any other product can use it. The batches will no longer be
+                  reserved for {blendDisplayName}.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Back — adjust amounts</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmReleaseOpen(false);
+                blendMutation.mutate();
+              }}
+            >
+              Confirm &amp; blend
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }
