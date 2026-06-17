@@ -127,16 +127,17 @@ export function NoSmokeShopifyPull({ onPulled }: { onPulled?: () => void }) {
       : 'Never fetched';
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-      <Cloud className="h-5 w-5 shrink-0 text-emerald-600" />
+    <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 px-4 py-3">
+      <Cloud className="h-5 w-5 shrink-0 text-muted-foreground" />
       <div className="min-w-0">
-        <div className="text-sm font-semibold text-emerald-900">No Smoke Shopify orders</div>
-        <div className="text-xs text-emerald-700">{lastLabel}</div>
+        <div className="text-sm font-semibold text-foreground">No Smoke Shopify orders</div>
+        <div className="text-xs text-muted-foreground">{lastLabel}</div>
       </div>
       <Button
         onClick={handlePull}
         disabled={pulling || !sourceId}
-        className="ml-auto bg-emerald-600 hover:bg-emerald-700"
+        variant="secondary"
+        className="ml-auto"
       >
         <RefreshCw className={`mr-2 h-4 w-4 ${pulling ? 'animate-spin' : ''}`} />
         {pulling ? 'Fetching…' : 'Fetch No Smoke orders'}
