@@ -1,6 +1,7 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronRight, Download, Undo2, Upload, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Download, Undo2, Upload, X } from 'lucide-react';
+
 import { toast } from 'sonner';
 import { EditableCell } from './cells/EditableCell';
 import { useChangeHighlights } from './useChangeHighlights';
@@ -42,6 +43,7 @@ export function BulkEditGrid<TRow>({
   const { isHighlighted, markChanged, clearHighlight } = useChangeHighlights(tableKey);
   const undo = useUndoStack();
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const initializedCollapseRef = useRef(false);
   const undoingRef = useRef(false);
 
   const grouped = useMemo(() => {
@@ -56,6 +58,22 @@ export function BulkEditGrid<TRow>({
       .map(([key, groupRows]) => ({ key, label: group.getGroupLabel(key, groupRows), rows: groupRows }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [rows, group]);
+
+  // Default to all groups collapsed once data first loads.
+  useEffect(() => {
+    if (!group) return;
+    if (initializedCollapseRef.current) return;
+    if (grouped.length === 0) return;
+    setCollapsedGroups(new Set(grouped.map((g) => g.key)));
+    initializedCollapseRef.current = true;
+  }, [group, grouped]);
+
+  const allCollapsed = group ? grouped.length > 0 && grouped.every((g) => collapsedGroups.has(g.key)) : false;
+  const toggleAllGroups = () => {
+    if (allCollapsed) setCollapsedGroups(new Set());
+    else setCollapsedGroups(new Set(grouped.map((g) => g.key)));
+  };
+
 
   const handleSave = async (row: TRow, col: ColumnDef<TRow>, newValue: unknown): Promise<SaveResult> => {
     const prevValue = col.getValue(row);
@@ -104,9 +122,14 @@ export function BulkEditGrid<TRow>({
 
   const normalize = (v: unknown): string => {
     if (v === null || v === undefined) return '';
-    if (typeof v === 'boolean') return String(v);
-    return String(v).trim();
+    if (typeof v === 'boolean') return v ? 'true' : 'false';
+    const s = String(v).trim();
+    // Treat boolean-like strings case-insensitively so Excel's TRUE/FALSE
+    // doesn't get treated as a change against our exported "true"/"false".
+    if (/^(true|false)$/i.test(s)) return s.toLowerCase();
+    return s;
   };
+
 
   const handleImportClick = () => fileInputRef.current?.click();
 
@@ -190,9 +213,16 @@ export function BulkEditGrid<TRow>({
           <span className="text-xs text-muted-foreground">{rows.length} row{rows.length !== 1 ? 's' : ''}</span>
         </div>
         <div className="flex items-center gap-2">
+          {group && grouped.length > 0 && (
+            <Button variant="outline" size="sm" onClick={toggleAllGroups} className="h-7 text-xs gap-1">
+              {allCollapsed ? <ChevronsUpDown className="h-3.5 w-3.5" /> : <ChevronsDownUp className="h-3.5 w-3.5" />}
+              {allCollapsed ? 'Expand all' : 'Collapse all'}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={handleUndo} disabled={undo.size === 0} className="h-7 text-xs gap-1">
             <Undo2 className="h-3.5 w-3.5" /> Undo last change ({undo.size})
           </Button>
+
           {csvFilename && (
             <>
               <Button variant="outline" size="sm" onClick={handleExport} className="h-7 text-xs gap-1">

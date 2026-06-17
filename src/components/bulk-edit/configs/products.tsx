@@ -182,11 +182,19 @@ export function useProductsBulkEdit(enabled = true) {
 
       const updatePayload: Record<string, unknown> = {};
       if (column.key === 'is_active') {
-        updatePayload.is_active = newValue === 'true' || newValue === true;
+        const s = typeof newValue === 'string' ? newValue.trim().toLowerCase() : newValue;
+        if (s === true || s === 'true' || s === '1' || s === 'yes' || s === 'active') {
+          updatePayload.is_active = true;
+        } else if (s === false || s === 'false' || s === '0' || s === 'no' || s === 'inactive') {
+          updatePayload.is_active = false;
+        } else {
+          return { success: false, errorMessage: `Invalid status value: "${String(newValue)}"` };
+        }
       } else {
         const v = newValue === '' ? null : newValue;
         updatePayload[column.key] = v;
       }
+
 
       const { error } = await supabase
         .from('products')
