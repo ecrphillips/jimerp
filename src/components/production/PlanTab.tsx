@@ -388,15 +388,19 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
       const isoWeekday = jsDay === 0 ? 7 : jsDay; // 1=Mon..7=Sun
 
       // 1. Accounts that schedule production today
+      // Note: production_weekdays is smallint[] in the DB, which mismatches PostgREST's
+      // int[] coercion for .contains(). Filter client-side to avoid the type mismatch.
       const acctRes = await supabase
         .from('accounts')
         .select(
           'id, account_name, production_weekdays, account_locations(id, location_name, is_active)'
         )
-        .contains('production_weekdays', [isoWeekday])
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .not('production_weekdays', 'is', null);
       if (acctRes.error) throw acctRes.error;
-      const priorityAccounts = acctRes.data ?? [];
+      const priorityAccounts = (acctRes.data ?? []).filter((a) =>
+        (a.production_weekdays as number[] | null)?.includes(isoWeekday)
+      );
       const priorityIds = new Set(priorityAccounts.map((a) => a.id));
 
       // 2. All open orders (with line items + bag sizes for kg totals)
