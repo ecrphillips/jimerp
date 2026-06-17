@@ -72,6 +72,23 @@ const VARIANT_BAG_SIZES: Record<string, number> = {
   BULK_2KG: 2000,
 };
 
+// Suffixes used to build the new variant's product name. These MUST match
+// entries in PACKAGING_SUFFIXES below so the family grouper keeps the new
+// variant inside the same family as its source product.
+const VARIANT_NAME_SUFFIXES: Record<string, string> = {
+  RETAIL_250G: '250g Retail',
+  RETAIL_300G: '300g Retail',
+  RETAIL_340G: '340g Retail',
+  RETAIL_454G: '454g Retail',
+  CROWLER_200G: '200g Crowler',
+  CROWLER_250G: '250g Crowler',
+  CAN_125G: '125g Can',
+  BULK_2LB: '2lb Bulk',
+  BULK_1KG: '1kg Bulk',
+  BULK_5LB: '5lb Bulk',
+  BULK_2KG: '2kg Bulk',
+};
+
 function getTodayVancouver(): string {
   const now = new Date();
   const formatter = new Intl.DateTimeFormat('en-CA', {
