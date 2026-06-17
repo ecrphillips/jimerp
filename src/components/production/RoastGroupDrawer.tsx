@@ -947,7 +947,6 @@ export function RoastGroupDrawer({
                   ) : (
                     blendComponentsWithNames.map(comp => {
                       const compBatches = componentBatchesByGroup[comp.roastGroup] ?? [];
-                      const compBatches = componentBatchesByGroup[comp.roastGroup] ?? [];
                       const compInfo = roastGroupsLookupMap.get(comp.roastGroup);
                       const compYieldLossPct = compInfo?.expected_yield_loss_pct ?? yieldLossPct;
                       const plannedKg = compBatches
