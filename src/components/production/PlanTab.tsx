@@ -722,6 +722,65 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
         </div>
       </div>
 
+      {/* FUNK Coffee — import + today's deadline orders */}
+      {funkInfo && (
+        <div className="rounded-md border bg-card">
+          <div className="border-b px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CalendarClock className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">FUNK Coffee — today</h3>
+            </div>
+            <Link to="/funk-import" className="text-xs text-muted-foreground hover:underline">
+              Import CSV →
+            </Link>
+          </div>
+          <div className="px-4 py-3 space-y-2 text-xs">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <span className="font-medium text-foreground">Last import:</span>
+              {funkInfo.lastSession ? (
+                <span>
+                  {funkInfo.lastSession.file_name ?? 'unnamed'} ·{' '}
+                  {formatDistanceToNow(parseISO(funkInfo.lastSession.imported_at), { addSuffix: true })}
+                  {' '}({funkInfo.lastSession.orders_new} new, {funkInfo.lastSession.orders_skipped} skipped)
+                </span>
+              ) : (
+                <span className="italic">never</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Orders due today:</span>
+              {funkInfo.todayOrders.length === 0 ? (
+                <Badge variant="destructive" className="text-[10px] h-5">
+                  <AlertCircle className="h-3 w-3 mr-1" /> None — import or create one
+                </Badge>
+              ) : (
+                <span className="text-muted-foreground">
+                  {funkInfo.todayOrders.length} order{funkInfo.todayOrders.length === 1 ? '' : 's'} ·{' '}
+                  <span className="font-mono">
+                    {fmtKg(funkInfo.todayOrders.reduce((s, o) => s + o.kg, 0))}
+                  </span>
+                </span>
+              )}
+            </div>
+            {funkInfo.todayOrders.length > 0 && (
+              <ul className="space-y-1 pl-2">
+                {funkInfo.todayOrders.map((o) => (
+                  <li key={o.id} className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Link to={`/orders/${o.id}`} className="font-medium hover:underline">
+                        #{o.order_number}
+                      </Link>
+                      <Badge variant="outline" className="text-[10px] h-4">{o.status}</Badge>
+                    </div>
+                    <span className="font-mono text-muted-foreground">{fmtKg(o.kg)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Other open orders */}
       {priorityPlan && priorityPlan.otherOrders.length > 0 && (
         <div className="rounded-md border bg-card">
