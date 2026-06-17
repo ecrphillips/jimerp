@@ -1,19 +1,32 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { toZonedTime } from 'date-fns-tz';
-import { format, formatDistanceToNow, getDay, getHours, subDays, parseISO, isBefore, isToday } from 'date-fns';
-import { AlertTriangle, Info, X, Trash2, CheckCircle2, AlertCircle, CalendarClock } from 'lucide-react';
+import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
+import { format, formatDistanceToNow, getDay, getHours, subDays, parseISO } from 'date-fns';
+import {
+  AlertTriangle,
+  Info,
+  X,
+  Trash2,
+  CheckCircle2,
+  AlertCircle,
+  CalendarClock,
+  ChevronDown,
+  ChevronRight,
+  Upload,
+  PlusCircle,
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
+import { TIMEZONE, getVancouverNow } from '@/lib/productionScheduling';
 import {
-  TIMEZONE,
-  getVancouverDateString,
-  getVancouverNow,
-} from '@/lib/productionScheduling';
+  useAuthoritativeWip,
+  useAuthoritativeFg,
+} from '@/hooks/useAuthoritativeInventory';
 import type { DateFilterConfig } from '@/components/production/types';
 
 interface PlanTabProps {
@@ -21,38 +34,15 @@ interface PlanTabProps {
   today: string;
 }
 
-function resolveTargetDate(mode: DateFilterConfig['mode'], today: string): string | null {
-  if (mode === 'today') return today;
-  if (mode === 'tomorrow') return getVancouverDateString(1);
-  return null;
-}
-
-function dayShapeLabel(mode: DateFilterConfig['mode']): string {
-  if (mode === 'today') return 'Today';
-  if (mode === 'tomorrow') return 'Tomorrow';
-  return 'All open';
-}
-
-const pl = (n: number, singular: string, plural?: string) =>
-  `${n} ${n === 1 ? singular : (plural ?? singular + 's')}`;
-
 type Anomaly = {
   key: string;
   message: string;
   orderId?: string;
-  // Action descriptor — when set, an inline button is rendered
-  action?:
-    | { kind: 'delete-batch'; batchId: string }
-    | { kind: 'open-order'; orderId: string };
+  action?: { kind: 'delete-batch'; batchId: string } | { kind: 'open-order'; orderId: string };
 };
 
-type AnomaliesResult = {
-  orderSurprises: Anomaly[];
-};
-
-type OrphansResult = {
-  orphans: Anomaly[];
-};
+type AnomaliesResult = { orderSurprises: Anomaly[] };
+type OrphansResult = { orphans: Anomaly[] };
 
 const DISMISS_STORAGE_KEY = 'plan-tab-dismissed-orphans-v1';
 
@@ -60,44 +50,74 @@ function readDismissed(): Set<string> {
   try {
     const raw = sessionStorage.getItem(DISMISS_STORAGE_KEY);
     if (!raw) return new Set();
-    const arr = JSON.parse(raw) as string[];
-    return new Set(arr);
+    return new Set(JSON.parse(raw) as string[]);
   } catch {
     return new Set();
   }
 }
-
 function writeDismissed(set: Set<string>) {
   try {
     sessionStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify([...set]));
   } catch {
-    // ignore
+    /* ignore */
   }
 }
 
-export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
+/** Vancouver-local YYYY-MM-DD for a timestamp (or null). */
+function vDate(ts: string | null | undefined): string | null {
+  if (!ts) return null;
+  try {
+    return formatInTimeZone(new Date(ts), TIMEZONE, 'yyyy-MM-dd');
+  } catch {
+    return null;
+  }
+}
+
+const fmtKg = (kg: number) => `${kg.toFixed(1)} kg / ${(kg * 2.20462).toFixed(1)} lb`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared types for the plan data
+// ─────────────────────────────────────────────────────────────────────────────
+type OpenOrder = {
+  id: string;
+  order_number: string;
+  status: string;
+  account_id: string | null;
+  account_location_id: string | null;
+  accountName: string;
+  locationName: string | null;
+  workDeadlineDate: string | null;   // Vancouver YYYY-MM-DD
+  workDeadlineRaw: string | null;    // raw ts for display/sort
+  createdAt: string;
+  kg: number;
+  lines: Array<{ product_id: string; quantity_units: number; bag_size_g: number; roast_group: string | null }>;
+};
+
+type AccountRow = {
+  id: string;
+  account_name: string;
+  production_weekdays: number[] | null;
+  locations: Array<{ id: string; location_name: string; is_active: boolean }>;
+};
+
+export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabProps) {
   const queryClient = useQueryClient();
-  const targetDate = useMemo(
-    () => resolveTargetDate(dateFilterConfig.mode, today),
-    [dateFilterConfig.mode, today]
-  );
   const [dismissed, setDismissed] = useState<Set<string>>(() => readDismissed());
 
   useEffect(() => {
     writeDismissed(dismissed);
   }, [dismissed]);
 
-  const dismiss = (key: string) => {
+  const dismiss = (key: string) =>
     setDismissed((prev) => {
       const next = new Set(prev);
       next.add(key);
       return next;
     });
-  };
 
   const invalidateAfterMutation = () => {
     queryClient.invalidateQueries({ queryKey: ['plan-data-orphans'] });
-    queryClient.invalidateQueries({ queryKey: ['plan-day-shape'] });
+    queryClient.invalidateQueries({ queryKey: ['plan-data'] });
     queryClient.invalidateQueries({ queryKey: ['roast-tab-groups'] });
     queryClient.invalidateQueries({ queryKey: ['production-roast-groups'] });
   };
@@ -113,40 +133,236 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
     }
   };
 
-  const { data: dayShape, isLoading } = useQuery({
-    queryKey: ['plan-day-shape', dateFilterConfig.mode, targetDate],
+  // ─────────────────────────────────────────────────────────────────────────
+  // Core plan data: accounts + open orders + last FUNK import
+  // ─────────────────────────────────────────────────────────────────────────
+  const { data: planData, isLoading: planLoading } = useQuery({
+    queryKey: ['plan-data', today],
     queryFn: async () => {
-      let batchesQ = supabase
-        .from('roasted_batches')
-        .select('roast_group, planned_output_kg, target_date');
-      if (targetDate) batchesQ = batchesQ.eq('target_date', targetDate);
+      const [acctRes, ordersRes, funkSessRes] = await Promise.all([
+        supabase
+          .from('accounts')
+          .select('id, account_name, production_weekdays, account_locations(id, location_name, is_active)')
+          .eq('is_active', true),
+        supabase
+          .from('orders')
+          .select(
+            `id, order_number, status, created_at, work_deadline_at, work_deadline,
+             account_id, account_location_id, client_id,
+             accounts!orders_account_id_fkey(account_name),
+             account_locations!orders_account_location_id_fkey(location_name),
+             clients(name),
+             order_line_items(product_id, quantity_units, products(bag_size_g, roast_group))`
+          )
+          .not('status', 'in', '(SHIPPED,CANCELLED)'),
+        supabase
+          .from('funk_import_sessions')
+          .select('id, file_name, imported_at, orders_new, orders_skipped')
+          .order('imported_at', { ascending: false })
+          .limit(1),
+      ]);
 
-      let ordersQ = supabase
-        .from('orders')
-        .select('id, status, requested_ship_date')
-        .not('status', 'in', '(SHIPPED,CANCELLED)');
-      if (targetDate) ordersQ = ordersQ.eq('requested_ship_date', targetDate);
-
-      const [batchesRes, ordersRes] = await Promise.all([batchesQ, ordersQ]);
-      if (batchesRes.error) throw batchesRes.error;
+      if (acctRes.error) throw acctRes.error;
       if (ordersRes.error) throw ordersRes.error;
 
-      const batches = batchesRes.data ?? [];
-      const greenKg = batches.reduce(
-        (sum, b) => sum + (b.planned_output_kg ?? 0),
-        0
-      );
-      const roastGroupSet = new Set(batches.map((b) => b.roast_group));
+      const accounts: AccountRow[] = (acctRes.data ?? []).map((a) => ({
+        id: a.id,
+        account_name: a.account_name,
+        production_weekdays: (a.production_weekdays as number[] | null) ?? null,
+        locations: ((a.account_locations as Array<{ id: string; location_name: string; is_active: boolean }> | null) ?? []),
+      }));
+
+      const orders: OpenOrder[] = (ordersRes.data ?? []).map((o: any) => {
+        const lines = (o.order_line_items ?? []).map((li: any) => ({
+          product_id: li.product_id,
+          quantity_units: li.quantity_units ?? 0,
+          bag_size_g: li.products?.bag_size_g ?? 0,
+          roast_group: li.products?.roast_group ?? null,
+        }));
+        const kg = lines.reduce(
+          (s: number, li: { quantity_units: number; bag_size_g: number }) =>
+            s + (li.quantity_units * li.bag_size_g) / 1000,
+          0
+        );
+        const wd = o.work_deadline_at ?? o.work_deadline ?? null;
+        return {
+          id: o.id,
+          order_number: o.order_number,
+          status: o.status,
+          account_id: o.account_id ?? null,
+          account_location_id: o.account_location_id ?? null,
+          accountName:
+            (o.accounts as { account_name?: string } | null)?.account_name ??
+            (o.clients as { name?: string } | null)?.name ??
+            'Unknown',
+          locationName:
+            (o.account_locations as { location_name?: string } | null)?.location_name ?? null,
+          workDeadlineDate: vDate(wd) ?? (wd && wd.length === 10 ? wd : null),
+          workDeadlineRaw: wd,
+          createdAt: o.created_at,
+          kg,
+          lines,
+        };
+      });
+
+      // Last "order entry" per account (max created_at across open + recent closed not necessary —
+      // use ALL orders for completeness in a secondary query)
+      const lastOrderRes = await supabase
+        .from('orders')
+        .select('account_id, created_at')
+        .not('account_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      const lastOrderByAccount = new Map<string, string>();
+      for (const row of lastOrderRes.data ?? []) {
+        if (!row.account_id) continue;
+        if (!lastOrderByAccount.has(row.account_id)) {
+          lastOrderByAccount.set(row.account_id, row.created_at);
+        }
+      }
 
       return {
-        batches: batches.length,
-        roastGroups: roastGroupSet.size,
-        greenKg,
-        openOrders: (ordersRes.data ?? []).length,
+        accounts,
+        orders,
+        lastOrderByAccount,
+        lastFunkImport: (funkSessRes.data ?? [])[0] ?? null,
       };
     },
   });
 
+  const { data: wipByGroup } = useAuthoritativeWip();
+  const { data: fgByProduct } = useAuthoritativeFg();
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Bucket math
+  // ─────────────────────────────────────────────────────────────────────────
+  const buckets = useMemo(() => {
+    if (!planData) {
+      return null;
+    }
+    const vNow = getVancouverNow();
+    const jsDay = getDay(vNow); // 0=Sun..6=Sat — matches accounts.production_weekdays convention
+    const tomorrowStr = formatInTimeZone(
+      new Date(Date.now() + 24 * 60 * 60 * 1000),
+      TIMEZONE,
+      'yyyy-MM-dd'
+    );
+    const jsTomorrow = (jsDay + 1) % 7;
+
+    const priorityAccounts = planData.accounts.filter((a) =>
+      (a.production_weekdays ?? []).includes(jsDay)
+    );
+    const priorityAcctIds = new Set(priorityAccounts.map((a) => a.id));
+
+    const tomorrowPriorityIds = new Set(
+      planData.accounts
+        .filter((a) => (a.production_weekdays ?? []).includes(jsTomorrow))
+        .map((a) => a.id)
+    );
+
+    const todayOrders = planData.orders.filter((o) => o.workDeadlineDate === today);
+    const tomorrowOrders = planData.orders.filter((o) => o.workDeadlineDate === tomorrowStr);
+
+    // Bucket 1: per priority account, list today-deadline orders
+    type PriorityAcct = {
+      account: AccountRow;
+      orders: OpenOrder[];
+      kg: number;
+      lastOrderAt: string | null;
+    };
+    const bucket1: PriorityAcct[] = priorityAccounts
+      .map((acct) => {
+        const orders = todayOrders.filter((o) => o.account_id === acct.id);
+        const kg = orders.reduce((s, o) => s + o.kg, 0);
+        return {
+          account: acct,
+          orders,
+          kg,
+          lastOrderAt: planData.lastOrderByAccount.get(acct.id) ?? null,
+        };
+      })
+      .sort((a, b) => {
+        // Missing first, then by name
+        const aMissing = a.orders.length === 0 ? 0 : 1;
+        const bMissing = b.orders.length === 0 ? 0 : 1;
+        if (aMissing !== bMissing) return aMissing - bMissing;
+        return a.account.account_name.localeCompare(b.account.account_name);
+      });
+
+    // Bucket 2: today-deadline orders for non-priority accounts
+    const bucket2 = todayOrders
+      .filter((o) => !o.account_id || !priorityAcctIds.has(o.account_id))
+      .sort((a, b) => {
+        const ad = a.workDeadlineRaw ?? '';
+        const bd = b.workDeadlineRaw ?? '';
+        return ad.localeCompare(bd) || a.accountName.localeCompare(b.accountName);
+      });
+
+    // Bucket 3: tomorrow's orders, priority accounts first
+    const bucket3 = tomorrowOrders.slice().sort((a, b) => {
+      const aPrio = a.account_id && tomorrowPriorityIds.has(a.account_id) ? 0 : 1;
+      const bPrio = b.account_id && tomorrowPriorityIds.has(b.account_id) ? 0 : 1;
+      if (aPrio !== bPrio) return aPrio - bPrio;
+      const ad = a.workDeadlineRaw ?? '';
+      const bd = b.workDeadlineRaw ?? '';
+      return ad.localeCompare(bd) || a.accountName.localeCompare(b.accountName);
+    });
+
+    // Summary: total demand today + coverage (WIP/FG already on hand)
+    // Per roast group: demand_kg vs (wip_available + fg_available_kg).
+    // Coverage capped at demand per group so we don't over-credit.
+    const demandByGroup: Record<string, number> = {};
+    const fgKgByGroup: Record<string, number> = {};
+
+    for (const o of todayOrders) {
+      for (const li of o.lines) {
+        if (!li.roast_group) continue;
+        const kg = (li.quantity_units * li.bag_size_g) / 1000;
+        demandByGroup[li.roast_group] = (demandByGroup[li.roast_group] ?? 0) + kg;
+      }
+    }
+    if (fgByProduct) {
+      for (const fg of Object.values(fgByProduct)) {
+        if (!fg.roast_group) continue;
+        fgKgByGroup[fg.roast_group] =
+          (fgKgByGroup[fg.roast_group] ?? 0) + (fg.fg_available_units * fg.bag_size_g) / 1000;
+      }
+    }
+
+    let totalDemand = 0;
+    let totalWipCover = 0;
+    let totalFgCover = 0;
+    for (const [rg, demand] of Object.entries(demandByGroup)) {
+      totalDemand += demand;
+      const wipAv = wipByGroup?.[rg]?.wip_available_kg ?? 0;
+      const fgAv = fgKgByGroup[rg] ?? 0;
+      const wipCover = Math.min(demand, wipAv);
+      const fgCover = Math.min(Math.max(0, demand - wipCover), fgAv);
+      totalWipCover += wipCover;
+      totalFgCover += fgCover;
+    }
+    const netDemand = Math.max(0, totalDemand - totalWipCover - totalFgCover);
+
+    return {
+      bucket1,
+      bucket2,
+      bucket3,
+      tomorrowPriorityIds,
+      tomorrowStr,
+      summary: {
+        orderCount: todayOrders.length,
+        totalDemand,
+        wipCover: totalWipCover,
+        fgCover: totalFgCover,
+        netDemand,
+      },
+      weekdayName: format(vNow, 'EEEE'),
+    };
+  }, [planData, today, wipByGroup, fgByProduct]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Anomalies + orphans (unchanged from prior version)
+  // ─────────────────────────────────────────────────────────────────────────
   const { data: anomalies } = useQuery<AnomaliesResult>({
     queryKey: ['plan-anomalies'],
     queryFn: async () => {
@@ -176,13 +392,8 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
 
       const orderSurprises: Anomaly[] = [];
 
-      // Rule A — recurring missing (only after 11:00 Vancouver time)
       if (vHour >= 11) {
-        type ClientAgg = {
-          name: string;
-          matchDays: Set<string>;
-          hasToday: boolean;
-        };
+        type ClientAgg = { name: string; matchDays: Set<string>; hasToday: boolean };
         const byClient = new Map<string, ClientAgg>();
         for (const o of orders) {
           if (!o.client_id) continue;
@@ -213,7 +424,6 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
         }
       }
 
-      // Rule B — duplicate orders within last 24h
       type RecentAgg = { name: string; orders: { id: string; num: string }[] };
       const recentByClient = new Map<string, RecentAgg>();
       for (const o of orders) {
@@ -240,7 +450,6 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
         }
       }
 
-      // Rule C — discontinued product on open order
       const seenC = new Set<string>();
       for (const row of liRes.data ?? []) {
         const product = row.products as { product_name: string; is_active: boolean } | null;
@@ -270,7 +479,6 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
       const stuckCutoffIso = subDays(vNow, 1).toISOString();
       const orphans: Anomaly[] = [];
 
-      // Rule D — stuck batch (PLANNED status, created > 24h ago)
       const batchesRes = await supabase
         .from('roasted_batches')
         .select('id, roast_group, status, created_at, target_date')
@@ -286,7 +494,6 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
         });
       }
 
-      // Rule G — ghost batches: roasted_batches with no wip_ledger reference
       const allBatchesRes = await supabase
         .from('roasted_batches')
         .select('id, roast_group, target_date, status');
@@ -305,7 +512,6 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
         );
         for (const b of allBatches) {
           if (referenced.has(b.id)) continue;
-          // Skip PLANNED rows — Rule D already covers them; ghost = ROASTED/COMPLETED w/o ledger
           if (b.status === 'PLANNED') continue;
           orphans.push({
             key: `G-${b.id}`,
@@ -315,7 +521,6 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
         }
       }
 
-      // Rule F (picked > required)
       const picksRes = await supabase
         .from('ship_picks')
         .select(
@@ -377,202 +582,6 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
     },
   });
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // NEW: Priority accounts today + remaining open orders
-  // ─────────────────────────────────────────────────────────────────────────
-  const { data: priorityPlan, isLoading: priorityLoading } = useQuery({
-    queryKey: ['plan-priority-today', today],
-    queryFn: async () => {
-      const vNow = getVancouverNow();
-      const jsDay = getDay(vNow); // 0=Sun..6=Sat
-      const isoWeekday = jsDay === 0 ? 7 : jsDay; // 1=Mon..7=Sun
-
-      // 1. Accounts that schedule production today
-      // Note: production_weekdays is smallint[] in the DB, which mismatches PostgREST's
-      // int[] coercion for .contains(). Filter client-side to avoid the type mismatch.
-      const acctRes = await supabase
-        .from('accounts')
-        .select(
-          'id, account_name, production_weekdays, account_locations(id, location_name, is_active)'
-        )
-        .eq('is_active', true)
-        .not('production_weekdays', 'is', null);
-      if (acctRes.error) throw acctRes.error;
-      const priorityAccounts = (acctRes.data ?? []).filter((a) =>
-        (a.production_weekdays as number[] | null)?.includes(isoWeekday)
-      );
-      const priorityIds = new Set(priorityAccounts.map((a) => a.id));
-
-      // 2. All open orders (with line items + bag sizes for kg totals)
-      const ordersRes = await supabase
-        .from('orders')
-        .select(
-          `id, order_number, status, requested_ship_date, work_deadline, work_deadline_at,
-           account_id, account_location_id, client_id,
-           accounts!orders_account_id_fkey(account_name),
-           account_locations!orders_account_location_id_fkey(location_name),
-           clients(name),
-           order_line_items(quantity_units, products(bag_size_g))`
-        )
-        .not('status', 'in', '(SHIPPED,CANCELLED)');
-      if (ordersRes.error) throw ordersRes.error;
-      const allOpen = ordersRes.data ?? [];
-
-      // Helper — compute kg for an order from line items
-      const orderKg = (o: typeof allOpen[number]): number => {
-        const lines = (o.order_line_items ?? []) as Array<{
-          quantity_units: number | null;
-          products: { bag_size_g: number | null } | null;
-        }>;
-        return lines.reduce(
-          (sum, li) => sum + ((li.quantity_units ?? 0) * (li.products?.bag_size_g ?? 0)) / 1000,
-          0
-        );
-      };
-
-      // 3. Group orders by account for priority accounts (any open order counts as "covered" for the location)
-      type LocStatus = {
-        locationId: string;
-        locationName: string;
-        orders: Array<{ id: string; orderNumber: string; kg: number; status: string }>;
-      };
-      type AcctRow = {
-        accountId: string;
-        accountName: string;
-        locations: LocStatus[];
-        totalKg: number;
-        anyMissing: boolean;
-      };
-
-      const acctRows: AcctRow[] = priorityAccounts.map((a) => {
-        const locs = ((a.account_locations as Array<{
-          id: string;
-          location_name: string;
-          is_active: boolean;
-        }> | null) ?? []).filter((l) => l.is_active);
-        const acctOpen = allOpen.filter((o) => o.account_id === a.id);
-
-        // If the account has NO defined locations, treat as a single implicit location bucket
-        const locStatuses: LocStatus[] = locs.length === 0
-          ? [{
-              locationId: '__none__',
-              locationName: 'Default',
-              orders: acctOpen.map((o) => ({
-                id: o.id,
-                orderNumber: o.order_number,
-                kg: orderKg(o),
-                status: o.status,
-              })),
-            }]
-          : locs.map((l) => {
-              const matching = acctOpen.filter((o) => o.account_location_id === l.id);
-              return {
-                locationId: l.id,
-                locationName: l.location_name,
-                orders: matching.map((o) => ({
-                  id: o.id,
-                  orderNumber: o.order_number,
-                  kg: orderKg(o),
-                  status: o.status,
-                })),
-              };
-            });
-
-        const totalKg = locStatuses.reduce(
-          (sum, l) => sum + l.orders.reduce((s, o) => s + o.kg, 0),
-          0
-        );
-        const anyMissing = locStatuses.some((l) => l.orders.length === 0);
-        return {
-          accountId: a.id,
-          accountName: a.account_name,
-          locations: locStatuses,
-          totalKg,
-          anyMissing,
-        };
-      });
-
-      // Sort: missing first, then by name
-      acctRows.sort((a, b) => {
-        if (a.anyMissing !== b.anyMissing) return a.anyMissing ? -1 : 1;
-        return a.accountName.localeCompare(b.accountName);
-      });
-
-      // 4. Other open orders (not in priority accounts), sorted by work deadline
-      const otherOrders = allOpen
-        .filter((o) => !o.account_id || !priorityIds.has(o.account_id))
-        .map((o) => ({
-          id: o.id,
-          orderNumber: o.order_number,
-          status: o.status,
-          accountName:
-            (o.accounts as { account_name?: string } | null)?.account_name ??
-            (o.clients as { name?: string } | null)?.name ??
-            'Unknown',
-          locationName:
-            (o.account_locations as { location_name?: string } | null)?.location_name ?? null,
-          kg: orderKg(o),
-          workDeadline: o.work_deadline_at ?? o.work_deadline ?? null,
-          requestedShipDate: o.requested_ship_date ?? null,
-        }))
-        .sort((a, b) => {
-          const ad = a.workDeadline ?? a.requestedShipDate ?? '9999-12-31';
-          const bd = b.workDeadline ?? b.requestedShipDate ?? '9999-12-31';
-          return ad.localeCompare(bd);
-        });
-
-      return { acctRows, otherOrders, weekdayName: format(vNow, 'EEEE') };
-    },
-  });
-
-  // FUNK Coffee — last import + today's deadline orders summary
-  const { data: funkInfo } = useQuery({
-    queryKey: ['plan-funk-summary', today],
-    queryFn: async () => {
-      // Look up FUNK account
-      const acctRes = await supabase
-        .from('accounts')
-        .select('id, account_name')
-        .ilike('account_name', 'funk%')
-        .maybeSingle();
-      const funkAcct = acctRes.data;
-
-      // Last import session
-      const sessRes = await supabase
-        .from('funk_import_sessions')
-        .select('id, file_name, imported_at, orders_new, orders_skipped, bundle_order_id')
-        .order('imported_at', { ascending: false })
-        .limit(1);
-      const lastSession = (sessRes.data ?? [])[0] ?? null;
-
-      // FUNK orders with work deadline = today
-      let todayOrders: Array<{ id: string; order_number: string; status: string; kg: number }> = [];
-      if (funkAcct) {
-        const start = `${today}T00:00:00-07:00`;
-        const end = `${today}T23:59:59-07:00`;
-        const ordRes = await supabase
-          .from('orders')
-          .select('id, order_number, status, work_deadline_at, order_line_items(quantity_units, products(bag_size_g))')
-          .eq('account_id', funkAcct.id)
-          .gte('work_deadline_at', start)
-          .lte('work_deadline_at', end);
-        todayOrders = (ordRes.data ?? []).map((o: any) => ({
-          id: o.id,
-          order_number: o.order_number,
-          status: o.status,
-          kg: (o.order_line_items ?? []).reduce(
-            (s: number, li: any) => s + ((li.quantity_units ?? 0) * (li.products?.bag_size_g ?? 0)) / 1000,
-            0
-          ),
-        }));
-      }
-
-      return { funkAcct, lastSession, todayOrders };
-    },
-  });
-
-
-  const label = dayShapeLabel(dateFilterConfig.mode);
   const surprises = (anomalies?.orderSurprises ?? []).filter((a) => !dismissed.has(a.key));
   const visibleSurprises = surprises.slice(0, 2);
   const extraSurprises = surprises.length - visibleSurprises.length;
@@ -580,16 +589,6 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
   const visibleOrphans = orphans.slice(0, 5);
   const extraOrphans = orphans.length - visibleOrphans.length;
   const hasAnomalies = surprises.length > 0 || orphans.length > 0;
-
-  const fmtKg = (kg: number) => `${kg.toFixed(1)} kg / ${(kg * 2.20462).toFixed(1)} lb`;
-  const deadlineTone = (iso: string | null): 'overdue' | 'today' | 'soon' | 'later' => {
-    if (!iso) return 'later';
-    const d = iso.length === 10 ? parseISO(iso) : new Date(iso);
-    if (isToday(d)) return 'today';
-    if (isBefore(d, new Date())) return 'overdue';
-    const days = (d.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
-    return days < 3 ? 'soon' : 'later';
-  };
 
   const renderActionButton = (a: Anomaly) => {
     if (!a.action) return null;
@@ -609,246 +608,127 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
     return null;
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────
+  const isFunk = (acctName: string) => /funk/i.test(acctName);
+  const lastFunkImport = planData?.lastFunkImport ?? null;
+
   return (
     <div className="space-y-4">
+      {/* TOP SUMMARY — today's demand vs coverage */}
       <div className="rounded-md border bg-card px-4 py-3">
-        {isLoading || !dayShape ? (
-          <Skeleton className="h-6 w-3/4" />
+        {planLoading || !buckets ? (
+          <Skeleton className="h-12 w-full" />
         ) : (
-          <p className="text-base font-medium">
-            {label}: {pl(dayShape.batches, 'batch', 'batches')} across{' '}
-            {pl(dayShape.roastGroups, 'roast group')}, ~{Math.round(dayShape.greenKg)} kg green,{' '}
-            {pl(dayShape.openOrders, 'order')} open
-          </p>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold">
+                Today’s demand — {buckets.weekdayName}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {buckets.summary.orderCount} order
+                {buckets.summary.orderCount === 1 ? '' : 's'} with today’s work deadline
+              </p>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <Stat label="Total demand" value={fmtKg(buckets.summary.totalDemand)} />
+              <Stat label="WIP covers" value={fmtKg(buckets.summary.wipCover)} tone="ok" />
+              <Stat label="FG covers" value={fmtKg(buckets.summary.fgCover)} tone="ok" />
+              <Stat
+                label="Net to roast"
+                value={fmtKg(buckets.summary.netDemand)}
+                tone={buckets.summary.netDemand > 0 ? 'warn' : 'ok'}
+                emphasis
+              />
+            </div>
+          </div>
         )}
       </div>
 
-      {/* Priority accounts today */}
-      <div className="rounded-md border bg-card">
-        <div className="border-b px-4 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CalendarClock className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-semibold">
-              Priority accounts — {priorityPlan?.weekdayName ?? format(getVancouverNow(), 'EEEE')}
-            </h3>
-          </div>
-          {priorityPlan && (
+      {/* BUCKET 1 — Priority accounts (today is a set production day) */}
+      <BucketShell
+        icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
+        title={`Priority accounts — ${buckets?.weekdayName ?? ''}`}
+        right={
+          buckets ? (
             <span className="text-xs text-muted-foreground">
-              {priorityPlan.acctRows.length} account{priorityPlan.acctRows.length === 1 ? '' : 's'}
+              {buckets.bucket1.length} account{buckets.bucket1.length === 1 ? '' : 's'}
             </span>
-          )}
-        </div>
-        <div className="divide-y">
-          {priorityLoading ? (
-            <div className="px-4 py-3"><Skeleton className="h-12 w-full" /></div>
-          ) : !priorityPlan || priorityPlan.acctRows.length === 0 ? (
-            <div className="px-4 py-3 text-sm text-muted-foreground">
-              No accounts scheduled for production today.
-            </div>
-          ) : (
-            priorityPlan.acctRows.map((acct) => (
-              <div key={acct.accountId} className="px-4 py-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Link
-                      to={`/accounts/${acct.accountId}`}
-                      className="text-sm font-medium hover:underline truncate"
-                    >
-                      {acct.accountName}
-                    </Link>
-                    {acct.anyMissing ? (
-                      <Badge variant="destructive" className="text-[10px] h-5">
-                        <AlertCircle className="h-3 w-3 mr-1" /> Missing order
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-[10px] h-5 border-green-500 text-green-700 dark:text-green-400">
-                        <CheckCircle2 className="h-3 w-3 mr-1" /> Covered
-                      </Badge>
-                    )}
-                  </div>
-                  {acct.totalKg > 0 && (
-                    <span className="text-xs font-mono text-muted-foreground shrink-0">
-                      {fmtKg(acct.totalKg)}
-                    </span>
-                  )}
-                </div>
-                <ul className="space-y-1 pl-1">
-                  {acct.locations.map((loc) => {
-                    const locKg = loc.orders.reduce((s, o) => s + o.kg, 0);
-                    const hasOrder = loc.orders.length > 0;
-                    return (
-                      <li
-                        key={loc.locationId}
-                        className="flex items-center justify-between gap-2 text-xs"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          {hasOrder ? (
-                            <CheckCircle2 className="h-3 w-3 text-green-600 dark:text-green-400 shrink-0" />
-                          ) : (
-                            <AlertCircle className="h-3 w-3 text-destructive shrink-0" />
-                          )}
-                          <span className="text-muted-foreground truncate">{loc.locationName}</span>
-                          {hasOrder ? (
-                            <span className="text-foreground/80">
-                              ·{' '}
-                              {loc.orders.map((o, i) => (
-                                <React.Fragment key={o.id}>
-                                  {i > 0 && ', '}
-                                  <Link
-                                    to={`/orders/${o.id}`}
-                                    className="hover:underline"
-                                  >
-                                    #{o.orderNumber}
-                                  </Link>
-                                </React.Fragment>
-                              ))}
-                            </span>
-                          ) : (
-                            <span className="text-destructive">— no order entered</span>
-                          )}
-                        </div>
-                        {hasOrder && (
-                          <span className="font-mono text-muted-foreground shrink-0">
-                            {fmtKg(locKg)}
-                          </span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* FUNK Coffee — import + today's deadline orders */}
-      {funkInfo && (
-        <div className="rounded-md border bg-card">
-          <div className="border-b px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CalendarClock className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold">FUNK Coffee — today</h3>
-            </div>
-            <Link to="/admin/funk-import" className="text-xs text-muted-foreground hover:underline">
-              Import CSV →
-            </Link>
+          ) : null
+        }
+      >
+        {planLoading || !buckets ? (
+          <div className="px-4 py-3">
+            <Skeleton className="h-12 w-full" />
           </div>
-          <div className="px-4 py-3 space-y-2 text-xs">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <span className="font-medium text-foreground">Last import:</span>
-              {funkInfo.lastSession ? (
-                <span>
-                  {funkInfo.lastSession.file_name ?? 'unnamed'} ·{' '}
-                  {formatDistanceToNow(parseISO(funkInfo.lastSession.imported_at), { addSuffix: true })}
-                  {' '}({funkInfo.lastSession.orders_new} new, {funkInfo.lastSession.orders_skipped} skipped)
-                </span>
-              ) : (
-                <span className="italic">never</span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-medium">Orders due today:</span>
-              {funkInfo.todayOrders.length === 0 ? (
-                <Badge variant="destructive" className="text-[10px] h-5">
-                  <AlertCircle className="h-3 w-3 mr-1" /> None — import or create one
-                </Badge>
-              ) : (
-                <span className="text-muted-foreground">
-                  {funkInfo.todayOrders.length} order{funkInfo.todayOrders.length === 1 ? '' : 's'} ·{' '}
-                  <span className="font-mono">
-                    {fmtKg(funkInfo.todayOrders.reduce((s, o) => s + o.kg, 0))}
-                  </span>
-                </span>
-              )}
-            </div>
-            {funkInfo.todayOrders.length > 0 && (
-              <ul className="space-y-1 pl-2">
-                {funkInfo.todayOrders.map((o) => (
-                  <li key={o.id} className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Link to={`/orders/${o.id}`} className="font-medium hover:underline">
-                        #{o.order_number}
-                      </Link>
-                      <Badge variant="outline" className="text-[10px] h-4">{o.status}</Badge>
-                    </div>
-                    <span className="font-mono text-muted-foreground">{fmtKg(o.kg)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+        ) : buckets.bucket1.length === 0 ? (
+          <div className="px-4 py-3 text-sm text-muted-foreground">
+            No accounts have today as a standard production day.
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="divide-y">
+            {buckets.bucket1.map((row) => (
+              <PriorityAccountCard
+                key={row.account.id}
+                row={row}
+                lastFunkImport={isFunk(row.account.account_name) ? lastFunkImport : null}
+              />
+            ))}
+          </div>
+        )}
+      </BucketShell>
 
-      {/* Other open orders */}
-      {priorityPlan && priorityPlan.otherOrders.length > 0 && (
-        <div className="rounded-md border bg-card">
-          <div className="border-b px-4 py-2 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Other open orders</h3>
+      {/* BUCKET 2 — Other today */}
+      <BucketShell
+        title="Other orders due today"
+        right={
+          buckets ? (
             <span className="text-xs text-muted-foreground">
-              {priorityPlan.otherOrders.length} order
-              {priorityPlan.otherOrders.length === 1 ? '' : 's'} · sorted by work deadline
+              {buckets.bucket2.length} order{buckets.bucket2.length === 1 ? '' : 's'}
             </span>
+          ) : null
+        }
+      >
+        {planLoading || !buckets ? (
+          <div className="px-4 py-3">
+            <Skeleton className="h-12 w-full" />
           </div>
-          <ul className="divide-y">
-            {priorityPlan.otherOrders.slice(0, 25).map((o) => {
-              const tone = deadlineTone(o.workDeadline);
-              const toneClass =
-                tone === 'overdue'
-                  ? 'text-destructive font-medium'
-                  : tone === 'today'
-                  ? 'text-amber-600 dark:text-amber-400 font-medium'
-                  : tone === 'soon'
-                  ? 'text-amber-700/80 dark:text-amber-300/80'
-                  : 'text-muted-foreground';
-              return (
-                <li key={o.id} className="px-4 py-2 flex items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <Link
-                      to={`/orders/${o.id}`}
-                      className="font-medium hover:underline shrink-0"
-                    >
-                      #{o.orderNumber}
-                    </Link>
-                    <span className="text-foreground/80 truncate">
-                      {o.accountName}
-                      {o.locationName ? ` · ${o.locationName}` : ''}
-                    </span>
-                    <Badge variant="outline" className="text-[10px] h-4 shrink-0">
-                      {o.status}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    {o.kg > 0 && (
-                      <span className="font-mono text-muted-foreground">{fmtKg(o.kg)}</span>
-                    )}
-                    <span className={`font-mono ${toneClass}`}>
-                      {o.workDeadline
-                        ? format(
-                            o.workDeadline.length === 10
-                              ? parseISO(o.workDeadline)
-                              : new Date(o.workDeadline),
-                            'MMM d'
-                          )
-                        : '—'}
-                    </span>
-                  </div>
-                </li>
-              );
-            })}
-            {priorityPlan.otherOrders.length > 25 && (
-              <li className="px-4 py-2 text-[11px] text-muted-foreground text-center">
-                +{priorityPlan.otherOrders.length - 25} more — see{' '}
-                <Link to="/orders" className="hover:underline">Orders</Link>
-              </li>
-            )}
-          </ul>
-        </div>
-      )}
+        ) : buckets.bucket2.length === 0 ? (
+          <div className="px-4 py-3 text-xs text-muted-foreground">
+            None — every today-deadline order belongs to a priority account.
+          </div>
+        ) : (
+          <OrderList orders={buckets.bucket2} />
+        )}
+      </BucketShell>
 
+      {/* BUCKET 3 — Work ahead (tomorrow) */}
+      <BucketShell
+        title="Work ahead — tomorrow"
+        right={
+          buckets ? (
+            <span className="text-xs text-muted-foreground">
+              {buckets.bucket3.length} order{buckets.bucket3.length === 1 ? '' : 's'} · priority first
+            </span>
+          ) : null
+        }
+      >
+        {planLoading || !buckets ? (
+          <div className="px-4 py-3">
+            <Skeleton className="h-12 w-full" />
+          </div>
+        ) : buckets.bucket3.length === 0 ? (
+          <div className="px-4 py-3 text-xs text-muted-foreground">No orders for tomorrow yet.</div>
+        ) : (
+          <OrderList
+            orders={buckets.bucket3}
+            highlightAccountIds={buckets.tomorrowPriorityIds}
+          />
+        )}
+      </BucketShell>
 
-
+      {/* ANOMALIES (unchanged) */}
       {hasAnomalies && (
         <div className="space-y-3">
           {surprises.length > 0 && (
@@ -942,5 +822,250 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
         </div>
       )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Subcomponents
+// ─────────────────────────────────────────────────────────────────────────────
+function Stat({
+  label,
+  value,
+  tone,
+  emphasis,
+}: {
+  label: string;
+  value: string;
+  tone?: 'ok' | 'warn';
+  emphasis?: boolean;
+}) {
+  const toneClass =
+    tone === 'warn'
+      ? 'text-destructive'
+      : tone === 'ok'
+        ? 'text-green-700 dark:text-green-400'
+        : 'text-foreground';
+  return (
+    <div className="rounded border bg-background px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={`font-mono ${emphasis ? 'text-sm font-semibold' : 'text-xs'} ${toneClass}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function BucketShell({
+  icon,
+  title,
+  right,
+  children,
+}: {
+  icon?: React.ReactNode;
+  title: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-md border bg-card">
+      <div className="border-b px-4 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {icon}
+          <h3 className="text-sm font-semibold">{title}</h3>
+        </div>
+        {right}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function PriorityAccountCard({
+  row,
+  lastFunkImport,
+}: {
+  row: {
+    account: AccountRow;
+    orders: OpenOrder[];
+    kg: number;
+    lastOrderAt: string | null;
+  };
+  lastFunkImport: {
+    file_name: string | null;
+    imported_at: string;
+    orders_new: number;
+    orders_skipped: number;
+  } | null;
+}) {
+  const [open, setOpen] = useState(row.orders.length === 0);
+  const hasOrders = row.orders.length > 0;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="w-full px-4 py-3 flex items-center justify-between gap-3 hover:bg-muted/40 text-left"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            {open ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            )}
+            <Link
+              to={`/accounts/${row.account.id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="text-sm font-medium hover:underline truncate"
+            >
+              {row.account.account_name}
+            </Link>
+            {hasOrders ? (
+              <Badge
+                variant="outline"
+                className="text-[10px] h-5 border-green-500 text-green-700 dark:text-green-400"
+              >
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                {row.orders.length} order{row.orders.length === 1 ? '' : 's'}
+              </Badge>
+            ) : (
+              <Badge variant="destructive" className="text-[10px] h-5">
+                <AlertCircle className="h-3 w-3 mr-1" /> No order yet
+              </Badge>
+            )}
+          </div>
+          <span className="font-mono text-xs text-muted-foreground shrink-0">
+            {hasOrders ? fmtKg(row.kg) : '—'}
+          </span>
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="px-10 pb-3 pt-1 space-y-2 text-xs">
+          <div className="text-muted-foreground">
+            Last order entered:{' '}
+            {row.lastOrderAt ? (
+              <span title={row.lastOrderAt}>
+                {formatDistanceToNow(parseISO(row.lastOrderAt), { addSuffix: true })}
+              </span>
+            ) : (
+              <span className="italic">never</span>
+            )}
+            {lastFunkImport && (
+              <>
+                {' '}· Last CSV import:{' '}
+                <span title={lastFunkImport.imported_at}>
+                  {formatDistanceToNow(parseISO(lastFunkImport.imported_at), { addSuffix: true })}
+                </span>{' '}
+                ({lastFunkImport.orders_new} new, {lastFunkImport.orders_skipped} skipped)
+              </>
+            )}
+          </div>
+
+          {hasOrders ? (
+            <ul className="divide-y rounded border bg-background">
+              {row.orders.map((o) => (
+                <li key={o.id} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Link to={`/orders/${o.id}`} className="font-medium hover:underline">
+                      #{o.order_number}
+                    </Link>
+                    {o.locationName && (
+                      <span className="text-muted-foreground truncate">· {o.locationName}</span>
+                    )}
+                    <Badge variant="outline" className="text-[10px] h-4">
+                      {o.status}
+                    </Badge>
+                  </div>
+                  <span className="font-mono text-muted-foreground">{fmtKg(o.kg)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 rounded border border-dashed bg-background px-3 py-2">
+              <span className="text-destructive">
+                No order entered for {row.account.account_name} today.
+              </span>
+              {lastFunkImport !== null || /funk/i.test(row.account.account_name) ? (
+                <Button asChild size="sm" variant="outline" className="h-6 text-[11px]">
+                  <Link to="/admin/funk-import">
+                    <Upload className="h-3 w-3 mr-1" /> Import CSV
+                  </Link>
+                </Button>
+              ) : null}
+              <Button asChild size="sm" variant="outline" className="h-6 text-[11px]">
+                <Link to={`/orders/new?account=${row.account.id}`}>
+                  <PlusCircle className="h-3 w-3 mr-1" /> Create order
+                </Link>
+              </Button>
+            </div>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function OrderList({
+  orders,
+  highlightAccountIds,
+}: {
+  orders: OpenOrder[];
+  highlightAccountIds?: Set<string>;
+}) {
+  return (
+    <ul className="divide-y">
+      {orders.slice(0, 50).map((o) => {
+        const isPriority =
+          highlightAccountIds && o.account_id && highlightAccountIds.has(o.account_id);
+        return (
+          <li
+            key={o.id}
+            className="px-4 py-2 flex items-center justify-between gap-3 text-xs"
+          >
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <Link to={`/orders/${o.id}`} className="font-medium hover:underline shrink-0">
+                #{o.order_number}
+              </Link>
+              <span className="text-foreground/80 truncate">
+                {o.accountName}
+                {o.locationName ? ` · ${o.locationName}` : ''}
+              </span>
+              {isPriority && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] h-4 shrink-0 border-amber-500 text-amber-700 dark:text-amber-400"
+                >
+                  priority
+                </Badge>
+              )}
+              <Badge variant="outline" className="text-[10px] h-4 shrink-0">
+                {o.status}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              {o.kg > 0 && <span className="font-mono text-muted-foreground">{fmtKg(o.kg)}</span>}
+              <span className="font-mono text-muted-foreground">
+                {o.workDeadlineRaw
+                  ? format(
+                      o.workDeadlineRaw.length === 10
+                        ? parseISO(o.workDeadlineRaw)
+                        : new Date(o.workDeadlineRaw),
+                      'MMM d'
+                    )
+                  : '—'}
+              </span>
+            </div>
+          </li>
+        );
+      })}
+      {orders.length > 50 && (
+        <li className="px-4 py-2 text-[11px] text-muted-foreground text-center">
+          +{orders.length - 50} more — see{' '}
+          <Link to="/orders" className="hover:underline">
+            Orders
+          </Link>
+        </li>
+      )}
+    </ul>
   );
 }
