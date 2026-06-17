@@ -365,7 +365,8 @@ export function computeAuthoritativeWip(
     const adjusted = adjustmentsByGroup[rg] ?? 0;
     const reserved = reservedByGroup[rg] ?? 0;
 
-    const wipAvailable = roasted - consumed + adjusted - reserved;
+    const wipNet = roasted - consumed + adjusted;
+    const wipAvailable = wipNet - reserved;
 
     result[rg] = {
       roast_group: rg,
@@ -373,6 +374,7 @@ export function computeAuthoritativeWip(
       packed_consumed_kg: consumed,
       adjustments_kg: adjusted,
       reserved_for_blend_kg: reserved,
+      wip_net_kg: wipNet,
       wip_available_kg: Math.max(0, wipAvailable),
     };
   }
