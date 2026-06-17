@@ -325,6 +325,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
     const fgKgByGroup: Record<string, number> = {};
 
     for (const o of todayOrders) {
+      if (o.status === 'SHIPPED') continue; // shipped is fulfilled, no longer demand
       for (const li of o.lines) {
         if (!li.roast_group) continue;
         const kg = (li.quantity_units * li.bag_size_g) / 1000;
