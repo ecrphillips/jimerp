@@ -377,6 +377,149 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
     },
   });
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // NEW: Priority accounts today + remaining open orders
+  // ─────────────────────────────────────────────────────────────────────────
+  const { data: priorityPlan, isLoading: priorityLoading } = useQuery({
+    queryKey: ['plan-priority-today', today],
+    queryFn: async () => {
+      const vNow = getVancouverNow();
+      const jsDay = getDay(vNow); // 0=Sun..6=Sat
+      const isoWeekday = jsDay === 0 ? 7 : jsDay; // 1=Mon..7=Sun
+
+      // 1. Accounts that schedule production today
+      const acctRes = await supabase
+        .from('accounts')
+        .select(
+          'id, account_name, production_weekdays, account_locations(id, location_name, is_active)'
+        )
+        .contains('production_weekdays', [isoWeekday])
+        .eq('is_active', true);
+      if (acctRes.error) throw acctRes.error;
+      const priorityAccounts = acctRes.data ?? [];
+      const priorityIds = new Set(priorityAccounts.map((a) => a.id));
+
+      // 2. All open orders (with line items + bag sizes for kg totals)
+      const ordersRes = await supabase
+        .from('orders')
+        .select(
+          `id, order_number, status, requested_ship_date, work_deadline, work_deadline_at,
+           account_id, account_location_id, client_id,
+           accounts(account_name), account_locations(location_name),
+           clients(name),
+           order_line_items(quantity_units, products(bag_size_g))`
+        )
+        .not('status', 'in', '(SHIPPED,CANCELLED)');
+      if (ordersRes.error) throw ordersRes.error;
+      const allOpen = ordersRes.data ?? [];
+
+      // Helper — compute kg for an order from line items
+      const orderKg = (o: typeof allOpen[number]): number => {
+        const lines = (o.order_line_items ?? []) as Array<{
+          quantity_units: number | null;
+          products: { bag_size_g: number | null } | null;
+        }>;
+        return lines.reduce(
+          (sum, li) => sum + ((li.quantity_units ?? 0) * (li.products?.bag_size_g ?? 0)) / 1000,
+          0
+        );
+      };
+
+      // 3. Group orders by account for priority accounts (any open order counts as "covered" for the location)
+      type LocStatus = {
+        locationId: string;
+        locationName: string;
+        orders: Array<{ id: string; orderNumber: string; kg: number; status: string }>;
+      };
+      type AcctRow = {
+        accountId: string;
+        accountName: string;
+        locations: LocStatus[];
+        totalKg: number;
+        anyMissing: boolean;
+      };
+
+      const acctRows: AcctRow[] = priorityAccounts.map((a) => {
+        const locs = ((a.account_locations as Array<{
+          id: string;
+          location_name: string;
+          is_active: boolean;
+        }> | null) ?? []).filter((l) => l.is_active);
+        const acctOpen = allOpen.filter((o) => o.account_id === a.id);
+
+        // If the account has NO defined locations, treat as a single implicit location bucket
+        const locStatuses: LocStatus[] = locs.length === 0
+          ? [{
+              locationId: '__none__',
+              locationName: 'Default',
+              orders: acctOpen.map((o) => ({
+                id: o.id,
+                orderNumber: o.order_number,
+                kg: orderKg(o),
+                status: o.status,
+              })),
+            }]
+          : locs.map((l) => {
+              const matching = acctOpen.filter((o) => o.account_location_id === l.id);
+              return {
+                locationId: l.id,
+                locationName: l.location_name,
+                orders: matching.map((o) => ({
+                  id: o.id,
+                  orderNumber: o.order_number,
+                  kg: orderKg(o),
+                  status: o.status,
+                })),
+              };
+            });
+
+        const totalKg = locStatuses.reduce(
+          (sum, l) => sum + l.orders.reduce((s, o) => s + o.kg, 0),
+          0
+        );
+        const anyMissing = locStatuses.some((l) => l.orders.length === 0);
+        return {
+          accountId: a.id,
+          accountName: a.account_name,
+          locations: locStatuses,
+          totalKg,
+          anyMissing,
+        };
+      });
+
+      // Sort: missing first, then by name
+      acctRows.sort((a, b) => {
+        if (a.anyMissing !== b.anyMissing) return a.anyMissing ? -1 : 1;
+        return a.accountName.localeCompare(b.accountName);
+      });
+
+      // 4. Other open orders (not in priority accounts), sorted by work deadline
+      const otherOrders = allOpen
+        .filter((o) => !o.account_id || !priorityIds.has(o.account_id))
+        .map((o) => ({
+          id: o.id,
+          orderNumber: o.order_number,
+          status: o.status,
+          accountName:
+            (o.accounts as { account_name?: string } | null)?.account_name ??
+            (o.clients as { name?: string } | null)?.name ??
+            'Unknown',
+          locationName:
+            (o.account_locations as { location_name?: string } | null)?.location_name ?? null,
+          kg: orderKg(o),
+          workDeadline: o.work_deadline_at ?? o.work_deadline ?? null,
+          requestedShipDate: o.requested_ship_date ?? null,
+        }))
+        .sort((a, b) => {
+          const ad = a.workDeadline ?? a.requestedShipDate ?? '9999-12-31';
+          const bd = b.workDeadline ?? b.requestedShipDate ?? '9999-12-31';
+          return ad.localeCompare(bd);
+        });
+
+      return { acctRows, otherOrders, weekdayName: format(vNow, 'EEEE') };
+    },
+  });
+
   const label = dayShapeLabel(dateFilterConfig.mode);
   const surprises = (anomalies?.orderSurprises ?? []).filter((a) => !dismissed.has(a.key));
   const visibleSurprises = surprises.slice(0, 2);
@@ -385,6 +528,16 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
   const visibleOrphans = orphans.slice(0, 5);
   const extraOrphans = orphans.length - visibleOrphans.length;
   const hasAnomalies = surprises.length > 0 || orphans.length > 0;
+
+  const fmtKg = (kg: number) => `${kg.toFixed(1)} kg / ${(kg * 2.20462).toFixed(1)} lb`;
+  const deadlineTone = (iso: string | null): 'overdue' | 'today' | 'soon' | 'later' => {
+    if (!iso) return 'later';
+    const d = iso.length === 10 ? parseISO(iso) : new Date(iso);
+    if (isToday(d)) return 'today';
+    if (isBefore(d, new Date())) return 'overdue';
+    const days = (d.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+    return days < 3 ? 'soon' : 'later';
+  };
 
   const renderActionButton = (a: Anomaly) => {
     if (!a.action) return null;
