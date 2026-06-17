@@ -156,6 +156,20 @@ export function formatGramsSuffix(grams: number): string {
 }
 
 /**
+ * Derive a new variant SKU by cloning a sibling SKU and replacing its
+ * trailing 5-digit grams segment with the new packaging's grams.
+ * Example: ("FNK-BLD-DOWNT-00908", 250) -> "FNK-BLD-DOWNT-00250"
+ * Preserves any collision suffix (e.g. "-2") after the grams segment.
+ * Returns null if the source SKU doesn't match the expected pattern.
+ */
+export function deriveVariantSku(sourceSku: string | null | undefined, grams: number): string | null {
+  if (!sourceSku) return null;
+  const match = sourceSku.match(/^(.*-)\d{5}(-\d+)?$/);
+  if (!match) return null;
+  return `${match[1]}${formatGramsSuffix(grams)}${match[2] ?? ''}`;
+}
+
+/**
  * Packaging variant configurations (legacy, kept for reference)
  */
 export const PACKAGING_VARIANTS = [
