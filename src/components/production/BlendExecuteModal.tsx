@@ -327,8 +327,30 @@ export function BlendExecuteModal({
   
   // Check if we can blend
   const canBlend = totalBlendOutput > 0 && proportionCheck.valid && recipeValid;
-  
-  // Blend mutation — atomic SECURITY DEFINER RPC. The function locks the
+
+  // Leftover detection: any selected batch where the roaster is using less than
+  // the full available kg. That leftover stays in the component group's WIP
+  // (because consumed_by_blend_at is set on the batch, releasing the reservation),
+  // so we ask the roaster to confirm releasing it back to general use.
+  const leftoverDetails = useMemo(() => {
+    const items: Array<{ batchId: string; componentRoastGroup: string; leftoverKg: number }> = [];
+    for (const sel of Object.values(selectedBatches)) {
+      const leftover = sel.availableKg - sel.consumeKg;
+      if (leftover > 0.01) {
+        const batch = batchesWithAvailable.find(b => b.id === sel.batchId);
+        if (batch) {
+          items.push({
+            batchId: sel.batchId,
+            componentRoastGroup: batch.roast_group,
+            leftoverKg: leftover,
+          });
+        }
+      }
+    }
+    const totalLeftoverKg = items.reduce((sum, i) => sum + i.leftoverKg, 0);
+    return { items, totalLeftoverKg, hasLeftover: items.length > 0 };
+  }, [selectedBatches, batchesWithAvailable]);
+
   // selected batches, verifies none are already consumed (guards against a
   // concurrent blend), marks them consumed, and writes the balanced ledger
   // rows (positive blend output + negative component decrements) in a single
