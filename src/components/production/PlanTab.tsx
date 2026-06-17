@@ -525,6 +525,53 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
     },
   });
 
+  // FUNK Coffee — last import + today's deadline orders summary
+  const { data: funkInfo } = useQuery({
+    queryKey: ['plan-funk-summary', today],
+    queryFn: async () => {
+      // Look up FUNK account
+      const acctRes = await supabase
+        .from('accounts')
+        .select('id, account_name')
+        .ilike('account_name', 'funk%')
+        .maybeSingle();
+      const funkAcct = acctRes.data;
+
+      // Last import session
+      const sessRes = await supabase
+        .from('funk_import_sessions')
+        .select('id, file_name, imported_at, orders_new, orders_skipped, bundle_order_id')
+        .order('imported_at', { ascending: false })
+        .limit(1);
+      const lastSession = (sessRes.data ?? [])[0] ?? null;
+
+      // FUNK orders with work deadline = today
+      let todayOrders: Array<{ id: string; order_number: string; status: string; kg: number }> = [];
+      if (funkAcct) {
+        const start = `${today}T00:00:00-07:00`;
+        const end = `${today}T23:59:59-07:00`;
+        const ordRes = await supabase
+          .from('orders')
+          .select('id, order_number, status, work_deadline_at, order_line_items(quantity_units, products(bag_size_g))')
+          .eq('account_id', funkAcct.id)
+          .gte('work_deadline_at', start)
+          .lte('work_deadline_at', end);
+        todayOrders = (ordRes.data ?? []).map((o: any) => ({
+          id: o.id,
+          order_number: o.order_number,
+          status: o.status,
+          kg: (o.order_line_items ?? []).reduce(
+            (s: number, li: any) => s + ((li.quantity_units ?? 0) * (li.products?.bag_size_g ?? 0)) / 1000,
+            0
+          ),
+        }));
+      }
+
+      return { funkAcct, lastSession, todayOrders };
+    },
+  });
+
+
   const label = dayShapeLabel(dateFilterConfig.mode);
   const surprises = (anomalies?.orderSurprises ?? []).filter((a) => !dismissed.has(a.key));
   const visibleSurprises = surprises.slice(0, 2);
