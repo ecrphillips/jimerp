@@ -27,8 +27,12 @@ interface SortablePackRowProps {
   roastGroup: string | null;
   demandedUnits: number;
   packedUnits: number;
+  /** Downstream picks for open orders. Counted as implicit packs so the row
+   *  is flagged complete and won't pressure the packer to over-pack a SKU the
+   *  shipper has already grabbed. The numeric input still edits raw packs. */
+  pickedUnits?: number;
   hasTimeSensitive: boolean;
-  wipStatus: WipStatus; // 'full' = green, 'partial' = amber, 'none' = no color
+  wipStatus: WipStatus;
   unblocksOrders: number;
   wipAvailableKg: number;
   requiredKg: number;
@@ -50,6 +54,7 @@ export function SortablePackRow({
   roastGroup,
   demandedUnits,
   packedUnits,
+  pickedUnits = 0,
   hasTimeSensitive,
   wipStatus,
   unblocksOrders,
@@ -76,7 +81,13 @@ export function SortablePackRow({
     transition,
   };
 
-  const isComplete = packedUnits >= demandedUnits;
+  // Effective packed counts picks as implicit packs so the row can be marked
+  // complete when downstream has already grabbed bags faster than the packer
+  // has clicked through. The numeric input still shows the raw pack count so
+  // packers can keep recording physical work without it appearing double.
+  const effectivePacked = Math.max(packedUnits, pickedUnits);
+  const isComplete = effectivePacked >= demandedUnits;
+  const coveredByPicks = pickedUnits > packedUnits && isComplete;
 
   // Determine row styling based on wipStatus
   // - 'full': GREEN - enough WIP to complete entire row
