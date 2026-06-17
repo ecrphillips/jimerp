@@ -224,9 +224,9 @@ export function SortablePackRow({
               <Check className="h-3 w-3 mr-1" />
               Complete
             </Badge>
-          ) : packedUnits > 0 ? (
+          ) : effectivePacked > 0 ? (
             <Badge variant="secondary">
-              {Math.round((packedUnits / demandedUnits) * 100)}%
+              {Math.round((effectivePacked / demandedUnits) * 100)}%
             </Badge>
           ) : (
             <Badge variant="outline">
