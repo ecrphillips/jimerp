@@ -15,15 +15,16 @@ export function FunkImportLink() {
   if (!isInternal) return null;
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-      <Cloud className="h-5 w-5 shrink-0 text-amber-600" />
+    <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 px-4 py-3">
+      <Cloud className="h-5 w-5 shrink-0 text-muted-foreground" />
       <div className="min-w-0">
-        <div className="text-sm font-semibold text-amber-900">FUNK Shopify orders</div>
-        <div className="text-xs text-amber-700">Manual CSV import (Shopify auto-pull coming soon)</div>
+        <div className="text-sm font-semibold text-foreground">FUNK Shopify orders</div>
+        <div className="text-xs text-muted-foreground">Manual CSV import (Shopify auto-pull coming soon)</div>
       </div>
       <Button
         onClick={() => navigate('/admin/funk-import')}
-        className="ml-auto bg-amber-600 hover:bg-amber-700"
+        variant="secondary"
+        className="ml-auto"
       >
         <Upload className="mr-2 h-4 w-4" />
         Import FUNK orders
