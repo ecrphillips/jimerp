@@ -154,7 +154,9 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
              clients(name),
              order_line_items(product_id, quantity_units, products(bag_size_g, roast_group))`
           )
-          .not('status', 'in', '(SHIPPED,CANCELLED)'),
+          // Keep SHIPPED so today's already-finished priority orders still show as "covered".
+          // Cancelled is dropped — they are not real demand.
+          .neq('status', 'CANCELLED'),
         supabase
           .from('funk_import_sessions')
           .select('id, file_name, imported_at, orders_new, orders_skipped')
@@ -261,9 +263,12 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
     );
 
     const todayOrders = planData.orders.filter((o) => o.workDeadlineDate === today);
-    const tomorrowOrders = planData.orders.filter((o) => o.workDeadlineDate === tomorrowStr);
+    const tomorrowOrders = planData.orders.filter(
+      (o) => o.workDeadlineDate === tomorrowStr && o.status !== 'SHIPPED'
+    );
 
-    // Bucket 1: per priority account, list today-deadline orders
+    // Bucket 1: per priority account, list ALL today-deadline orders (including SHIPPED,
+    // so a completed order still proves the account is covered).
     type PriorityAcct = {
       account: AccountRow;
       orders: OpenOrder[];
@@ -289,14 +294,19 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
         return a.account.account_name.localeCompare(b.account.account_name);
       });
 
-    // Bucket 2: today-deadline orders for non-priority accounts
+    // Bucket 2: today-deadline orders for non-priority accounts (open only — shipped are done)
     const bucket2 = todayOrders
-      .filter((o) => !o.account_id || !priorityAcctIds.has(o.account_id))
+      .filter(
+        (o) =>
+          o.status !== 'SHIPPED' &&
+          (!o.account_id || !priorityAcctIds.has(o.account_id))
+      )
       .sort((a, b) => {
         const ad = a.workDeadlineRaw ?? '';
         const bd = b.workDeadlineRaw ?? '';
         return ad.localeCompare(bd) || a.accountName.localeCompare(b.accountName);
       });
+
 
     // Bucket 3: tomorrow's orders, priority accounts first
     const bucket3 = tomorrowOrders.slice().sort((a, b) => {
@@ -315,6 +325,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
     const fgKgByGroup: Record<string, number> = {};
 
     for (const o of todayOrders) {
+      if (o.status === 'SHIPPED') continue; // shipped is fulfilled, no longer demand
       for (const li of o.lines) {
         if (!li.roast_group) continue;
         const kg = (li.quantity_units * li.bag_size_g) / 1000;
