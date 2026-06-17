@@ -58,6 +58,7 @@ import MarketPricingAnalysis from "@/pages/shared/MarketPricingAnalysis";
 import UsersAccess from "@/pages/internal/UsersAccess";
 import AdminFeedback from "@/pages/internal/AdminFeedback";
 import ShopifyDebug from "@/pages/internal/ShopifyDebug";
+import FunkImport from "@/pages/internal/FunkImport";
 import Portal from "@/pages/client/Portal";
 import NewOrder from "@/pages/client/NewOrder";
 import OrderHistory from "@/pages/client/OrderHistory";
@@ -290,6 +291,11 @@ const App = () => (
             <Route path="/admin-tools" element={
               <ProtectedRoute allowedRoles={['ADMIN']}>
                 <InternalLayout><AdminTools /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/funk-import" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><FunkImport /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/settings/notifications" element={
