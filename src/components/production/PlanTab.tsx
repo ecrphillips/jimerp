@@ -2,11 +2,12 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { toZonedTime } from 'date-fns-tz';
-import { format, formatDistanceToNow, getDay, getHours, subDays } from 'date-fns';
-import { AlertTriangle, Info, X, Trash2 } from 'lucide-react';
+import { format, formatDistanceToNow, getDay, getHours, subDays, parseISO, isBefore, isToday } from 'date-fns';
+import { AlertTriangle, Info, X, Trash2, CheckCircle2, AlertCircle, CalendarClock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import {
   TIMEZONE,
