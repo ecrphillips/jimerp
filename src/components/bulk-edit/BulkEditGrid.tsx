@@ -1,11 +1,12 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronRight, Download, Undo2, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, Undo2, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { EditableCell } from './cells/EditableCell';
 import { useChangeHighlights } from './useChangeHighlights';
 import { useUndoStack } from './useUndoStack';
 import { exportRowsToCsv } from './csv';
+import { parseCsv } from '@/lib/csvParse';
 import type { ColumnDef, SaveResult } from './types';
 
 interface GroupConfig<TRow> {
@@ -98,6 +99,79 @@ export function BulkEditGrid<TRow>({
     exportRowsToCsv(rows, columns, getRowId, csvFilename);
   };
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+
+  const normalize = (v: unknown): string => {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'boolean') return String(v);
+    return String(v).trim();
+  };
+
+  const handleImportClick = () => fileInputRef.current?.click();
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const { header, rows: csvRows } = parseCsv(text);
+      if (!header.length || header[0] !== '__row_id') {
+        toast.error('CSV must include the __row_id column from Export CSV.');
+        return;
+      }
+      const colByKey = new Map(columns.map((c) => [c.key, c]));
+      const rowById = new Map(rows.map((r) => [getRowId(r), r]));
+      const headerColIdx: { key: string; idx: number }[] = [];
+      for (let i = 1; i < header.length; i++) {
+        const col = colByKey.get(header[i]);
+        if (col && !col.readOnly) headerColIdx.push({ key: header[i], idx: i });
+      }
+
+      let changed = 0;
+      let succeeded = 0;
+      let failed = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+
+      for (const csvRow of csvRows) {
+        const rowId = csvRow[0];
+        const row = rowById.get(rowId);
+        if (!row) { skipped++; continue; }
+        for (const { key, idx } of headerColIdx) {
+          const col = colByKey.get(key)!;
+          const newRaw = csvRow[idx] ?? '';
+          const currentNorm = normalize(col.getValue(row));
+          const newNorm = normalize(newRaw);
+          if (currentNorm === newNorm) continue;
+          if (newNorm === '' && !col.allowEmpty) { skipped++; continue; }
+          changed++;
+          const newValue: unknown = newNorm === '' ? null : newRaw;
+          const result = await handleSave(row, col, newValue);
+          if (result.success) succeeded++;
+          else {
+            failed++;
+            if (errors.length < 5) errors.push(`${rowId.slice(0, 8)}/${key}: ${result.errorMessage ?? 'failed'}`);
+          }
+        }
+      }
+
+      if (changed === 0) {
+        toast.info('No changes detected in CSV.');
+      } else if (failed === 0) {
+        toast.success(`Imported ${succeeded} change${succeeded !== 1 ? 's' : ''}.`);
+      } else {
+        toast.error(`Imported ${succeeded}; ${failed} failed. ${errors.join('; ')}`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'CSV import failed');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const toggleGroup = (key: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
@@ -120,9 +194,21 @@ export function BulkEditGrid<TRow>({
             <Undo2 className="h-3.5 w-3.5" /> Undo last change ({undo.size})
           </Button>
           {csvFilename && (
-            <Button variant="outline" size="sm" onClick={handleExport} className="h-7 text-xs gap-1">
-              <Download className="h-3.5 w-3.5" /> Export CSV
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={handleExport} className="h-7 text-xs gap-1">
+                <Download className="h-3.5 w-3.5" /> Export CSV
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleImportClick} disabled={importing} className="h-7 text-xs gap-1">
+                <Upload className="h-3.5 w-3.5" /> {importing ? 'Importing…' : 'Import CSV'}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+            </>
           )}
           <Button variant="ghost" size="sm" onClick={onClose} className="h-7 text-xs gap-1">
             <X className="h-3.5 w-3.5" /> Close
