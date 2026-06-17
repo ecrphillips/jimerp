@@ -409,7 +409,8 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
         .select(
           `id, order_number, status, requested_ship_date, work_deadline, work_deadline_at,
            account_id, account_location_id, client_id,
-           accounts(account_name), account_locations(location_name),
+           accounts!orders_account_id_fkey(account_name),
+           account_locations!orders_account_location_id_fkey(location_name),
            clients(name),
            order_line_items(quantity_units, products(bag_size_g))`
         )
