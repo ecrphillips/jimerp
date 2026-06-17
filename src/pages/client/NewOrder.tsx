@@ -399,11 +399,9 @@ export default function NewOrder() {
       return;
     }
 
-    const missingPrice = lineItems.find((li) => li.price === null);
-    if (missingPrice) {
-      toast.error(`"${missingPrice.displayName}" has no price set. Ask ops to set a price.`);
-      return;
-    }
+    // MVP: pricing isn't fully wired yet — missing prices save as $0 rather
+    // than blocking the client from placing the order.
+
 
     if (constraints.caseOnly && constraints.caseSize) {
       const invalidItem = lineItems.find((li) => {
@@ -567,7 +565,7 @@ export default function NewOrder() {
           product_id: li.productId,
           quantity_units: li.quantity,
           grind: null,
-          unit_price_locked: li.price!,
+          unit_price_locked: li.price ?? 0,
           shipment_id: targetShipmentId,
         };
       });
