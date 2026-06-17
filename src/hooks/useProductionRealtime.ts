@@ -43,6 +43,7 @@ const INVALIDATE_KEYS: string[] = [
   'roasted-batches',
   'packing-runs',
   'ship-picks',
+  'pack-tab-picks-by-product',
   'inventory-transactions',
   'inventory-ledger-wip',
   'roast-demand',
