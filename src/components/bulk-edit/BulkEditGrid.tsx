@@ -75,18 +75,30 @@ export function BulkEditGrid<TRow>({
   };
 
 
+  const [savedCount, setSavedCount] = useState(0);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [savingCount, setSavingCount] = useState(0);
+
   const handleSave = async (row: TRow, col: ColumnDef<TRow>, newValue: unknown): Promise<SaveResult> => {
     const prevValue = col.getValue(row);
-    const result = await onCellSave(row, col, newValue);
-    if (result.success) {
-      const rowId = getRowId(row);
-      markChanged(rowId, col.key);
-      if (!undoingRef.current) {
-        undo.push({ rowId, colKey: col.key, prevValue });
+    setSavingCount((c) => c + 1);
+    try {
+      const result = await onCellSave(row, col, newValue);
+      if (result.success) {
+        const rowId = getRowId(row);
+        markChanged(rowId, col.key);
+        if (!undoingRef.current) {
+          undo.push({ rowId, colKey: col.key, prevValue });
+        }
+        setSavedCount((c) => c + 1);
+        setLastSavedAt(new Date());
       }
+      return result;
+    } finally {
+      setSavingCount((c) => Math.max(0, c - 1));
     }
-    return result;
   };
+
 
   const handleUndo = async () => {
     const last = undo.pop();
