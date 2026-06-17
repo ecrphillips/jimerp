@@ -730,7 +730,7 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
               <CalendarClock className="h-4 w-4 text-muted-foreground" />
               <h3 className="text-sm font-semibold">FUNK Coffee — today</h3>
             </div>
-            <Link to="/funk-import" className="text-xs text-muted-foreground hover:underline">
+            <Link to="/admin/funk-import" className="text-xs text-muted-foreground hover:underline">
               Import CSV →
             </Link>
           </div>
