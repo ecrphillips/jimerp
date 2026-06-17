@@ -427,9 +427,12 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       groupsWithActivity.add(b.roast_group);
     }
     
-    // Groups with WIP inventory
+    // Groups with CURRENT WIP available. Historical roast/pack activity
+    // (roasted_completed_kg, packed_consumed_kg) is cumulative-forever and
+    // would keep long-since-emptied component groups pinned to the run sheet,
+    // so we only flag groups that still have available WIP today.
     for (const [rg, data] of Object.entries(authWip ?? {})) {
-      if (data.wip_available_kg > 0 || data.roasted_completed_kg > 0 || data.packed_consumed_kg > 0) {
+      if (data.wip_available_kg > 0) {
         groupsWithActivity.add(rg);
       }
     }
