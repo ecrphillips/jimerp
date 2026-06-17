@@ -1870,6 +1870,79 @@ export type Database = {
           },
         ]
       }
+      funk_drop_batches: {
+        Row: {
+          batch_month: number
+          batch_year: number
+          created_at: string
+          id: string
+          order_id: string | null
+          ship_date: string
+        }
+        Insert: {
+          batch_month: number
+          batch_year: number
+          created_at?: string
+          id?: string
+          order_id?: string | null
+          ship_date: string
+        }
+        Update: {
+          batch_month?: number
+          batch_year?: number
+          created_at?: string
+          id?: string
+          order_id?: string | null
+          ship_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funk_drop_batches_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funk_drop_slots: {
+        Row: {
+          batch_month: number
+          batch_year: number
+          created_at: string
+          id: string
+          product_id: string | null
+          slot_number: number
+          sourced_green_ref: string | null
+        }
+        Insert: {
+          batch_month: number
+          batch_year: number
+          created_at?: string
+          id?: string
+          product_id?: string | null
+          slot_number: number
+          sourced_green_ref?: string | null
+        }
+        Update: {
+          batch_month?: number
+          batch_year?: number
+          created_at?: string
+          id?: string
+          product_id?: string | null
+          slot_number?: number
+          sourced_green_ref?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funk_drop_slots_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       funk_import_product_mappings: {
         Row: {
           created_at: string
