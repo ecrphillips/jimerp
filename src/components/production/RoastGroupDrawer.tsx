@@ -992,7 +992,7 @@ export function RoastGroupDrawer({
                                 <BatchRow
                                   key={batch.id}
                                   batch={batch}
-                                  expectedYieldLossPct={yieldLossPct}
+                                  expectedYieldLossPct={compYieldLossPct}
                                   onMarkRoasted={(id, actual) => markRoastedMutation.mutate({ 
                                     id, 
                                     actual_output_kg: actual,
