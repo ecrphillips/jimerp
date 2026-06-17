@@ -108,7 +108,7 @@ async function fetchUnfulfilledOrders(
             id
             name
             createdAt
-            customer { displayName }
+            # customer { displayName }  # requires read_customers scope; omitted to avoid ACCESS_DENIED
             lineItems(first: 100) {
               nodes {
                 sku
