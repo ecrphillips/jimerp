@@ -395,11 +395,36 @@ export function SortableShipCard({
             <Clock className="h-4 w-4 mr-1" />
             {isTimeSensitive ? 'Urgent' : 'Normal'}
           </Button>
+          {order.isFirstShipmentInOrder && !allItemsFullyPicked && (() => {
+            const shortLines = order.lineItems.filter((li) => {
+              const picked = picksByLineItem[li.id] ?? 0;
+              const available = fgInventory[li.product_id] ?? 0;
+              return (available + picked) < li.quantity_units;
+            });
+            const canCoverAll = shortLines.length === 0;
+            const busy = isPickingAll || isShipping;
+            return (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handlePickAllAndShip}
+                disabled={busy || !canCoverAll}
+                title={
+                  !canCoverAll
+                    ? `Not enough FG for ${shortLines.length} line${shortLines.length === 1 ? '' : 's'} — pick manually`
+                    : 'Pick everything currently available and ship the order'
+                }
+              >
+                <Zap className="h-4 w-4 mr-1" />
+                {isPickingAll ? 'Picking…' : 'Pick all & Ship'}
+              </Button>
+            );
+          })()}
           {order.isFirstShipmentInOrder && (
             <Button
               size="sm"
               onClick={() => onMarkShipped(order)}
-              disabled={isShipping || !order.orderAllPicked}
+              disabled={isShipping || isPickingAll || !order.orderAllPicked}
               className={order.orderAllPicked ? 'bg-green-600 hover:bg-green-700' : ''}
               title={
                 !order.orderAllPicked
