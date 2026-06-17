@@ -214,7 +214,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
               <NavGroup label="Manufacturing" icon={Factory} open={cmOpen} onOpenChange={setCmOpen}>
                 
                 <NavItem to="/orders" icon={ShoppingCart} label="Orders" onClick={closeSidebar} />
-                <NavItem to="/admin/funk-import" icon={FileUp} label="FUNK Import" onClick={closeSidebar} />
+                
                 <NavItem to="/production" icon={Flame} label="Run Sheet" onClick={closeSidebar} end />
                 <NavItem to="/inventory" icon={Warehouse} label="Inventory Levels" onClick={closeSidebar} end />
                 <NavItem to="/products" icon={Package} label="Products" onClick={closeSidebar} />
