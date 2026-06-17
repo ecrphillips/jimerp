@@ -323,8 +323,10 @@ export default function CreateOrderForClient() {
     if (clientLocations && clientLocations.length > 0 && !selectedLocationId) missing.push('delivery location');
     if (lineItems.length === 0) missing.push('at least one product (set quantity > 0)');
     if (!workDeadlineAt) missing.push('work deadline');
-    const missingPrice = lineItems.find((li) => li.price === null);
-    if (missingPrice) missing.push(`price for "${missingPrice.displayName}"`);
+    // MVP: pricing is not yet wired everywhere — missing prices default to $0
+    // and never block order placement. Re-enable a missing-price gate once
+    // pricing is fully rolled out.
+
     return missing;
   }, [selectedClientId, clientLocations, selectedLocationId, lineItems, workDeadlineAt]);
 
