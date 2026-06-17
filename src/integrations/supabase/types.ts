@@ -1870,6 +1870,117 @@ export type Database = {
           },
         ]
       }
+      funk_import_product_mappings: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          csv_product_name: string
+          csv_sku: string | null
+          id: string
+          product_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          csv_product_name: string
+          csv_sku?: string | null
+          id?: string
+          product_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          csv_product_name?: string
+          csv_sku?: string | null
+          id?: string
+          product_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funk_import_product_mappings_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funk_import_sessions: {
+        Row: {
+          bundle_order_id: string | null
+          file_name: string | null
+          id: string
+          imported_at: string
+          imported_by: string | null
+          orders_new: number
+          orders_skipped: number
+        }
+        Insert: {
+          bundle_order_id?: string | null
+          file_name?: string | null
+          id?: string
+          imported_at?: string
+          imported_by?: string | null
+          orders_new?: number
+          orders_skipped?: number
+        }
+        Update: {
+          bundle_order_id?: string | null
+          file_name?: string | null
+          id?: string
+          imported_at?: string
+          imported_by?: string | null
+          orders_new?: number
+          orders_skipped?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funk_import_sessions_bundle_order_id_fkey"
+            columns: ["bundle_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funk_imported_orders: {
+        Row: {
+          destination: string
+          id: string
+          import_session_id: string | null
+          imported_at: string
+          shopify_order_id: string | null
+          shopify_order_name: string
+        }
+        Insert: {
+          destination?: string
+          id?: string
+          import_session_id?: string | null
+          imported_at?: string
+          shopify_order_id?: string | null
+          shopify_order_name: string
+        }
+        Update: {
+          destination?: string
+          id?: string
+          import_session_id?: string | null
+          imported_at?: string
+          shopify_order_id?: string | null
+          shopify_order_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funk_imported_orders_import_session_id_fkey"
+            columns: ["import_session_id"]
+            isOneToOne: false
+            referencedRelation: "funk_import_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       green_contract_notes: {
         Row: {
           contract_id: string
@@ -3969,6 +4080,7 @@ export type Database = {
           internal_packaging_notes: string | null
           is_active: boolean
           is_perennial: boolean
+          is_placeholder: boolean
           pack_display_order: number | null
           packaging_labour_override: number | null
           packaging_material_override: number | null
@@ -4002,6 +4114,7 @@ export type Database = {
           internal_packaging_notes?: string | null
           is_active?: boolean
           is_perennial?: boolean
+          is_placeholder?: boolean
           pack_display_order?: number | null
           packaging_labour_override?: number | null
           packaging_material_override?: number | null
@@ -4035,6 +4148,7 @@ export type Database = {
           internal_packaging_notes?: string | null
           is_active?: boolean
           is_perennial?: boolean
+          is_placeholder?: boolean
           pack_display_order?: number | null
           packaging_labour_override?: number | null
           packaging_material_override?: number | null
