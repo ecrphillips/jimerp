@@ -483,8 +483,22 @@ async function pullSource(
     }
 
     // Create the batched order.
+    const summarizeItems = (o: ShopifyOrder): string => {
+      const parts = o.lineItems
+        .filter((li) => (li.unfulfilledQuantity ?? li.quantity) > 0)
+        .map((li) => {
+          const qty = li.unfulfilledQuantity ?? li.quantity;
+          const label = [li.title, li.variantTitle].filter(Boolean).join(' / ');
+          return `${qty}× ${label}`;
+        });
+      return parts.join(', ');
+    };
     const orderLines = included
-      .map((o) => `${o.name}${o.customerName ? ` - ${o.customerName}` : ''}`)
+      .map((o) => {
+        const who = o.customerName ? ` - ${o.customerName}` : '';
+        const items = summarizeItems(o);
+        return `${o.name}${who}${items ? `: ${items}` : ''}`;
+      })
       .join('\n');
     const notes =
       `Shopify daily pull (${source.store_name})\n${included.length} unfulfilled order(s)\n${orderLines}` +
