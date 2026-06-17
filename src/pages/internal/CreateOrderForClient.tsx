@@ -366,11 +366,8 @@ export default function CreateOrderForClient() {
       return;
     }
 
-    const missingPrice = lineItems.find((li) => li.price === null);
-    if (missingPrice) {
-      toast.error(`"${missingPrice.displayName}" has no price set.`);
-      return;
-    }
+    // MVP: missing price no longer blocks submission — saved as $0.
+
 
     if (isShipDateInPast) {
       const ok = window.confirm('Requested Ship Date is in the past. Create order anyway?');
