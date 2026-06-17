@@ -186,10 +186,13 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   const { data: roastGroupsConfig } = useQuery({
     queryKey: ['roast-groups-config'],
     queryFn: async () => {
+      // Load ALL roast groups (including inactive) so config (standard_batch_kg,
+      // expected_yield_loss_pct, default_roaster) is available for any group that
+      // shows up with demand or planned batches. Filtering by is_active here caused
+      // inactive groups to silently fall back to 20kg / 16% defaults on Add Batch.
       const { data, error } = await supabase
         .from('roast_groups')
         .select('*')
-        .eq('is_active', true)
         .order('display_order', { ascending: true, nullsFirst: false })
         .order('roast_group', { ascending: true });
       if (error) throw error;
