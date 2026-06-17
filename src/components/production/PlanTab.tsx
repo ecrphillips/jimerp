@@ -1,11 +1,13 @@
-import React, { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { toZonedTime } from 'date-fns-tz';
 import { format, formatDistanceToNow, getDay, getHours, subDays } from 'date-fns';
-import { AlertTriangle, Info } from 'lucide-react';
+import { AlertTriangle, Info, X, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 import {
   TIMEZONE,
   getVancouverDateString,
@@ -37,6 +39,10 @@ type Anomaly = {
   key: string;
   message: string;
   orderId?: string;
+  // Action descriptor — when set, an inline button is rendered
+  action?:
+    | { kind: 'delete-batch'; batchId: string }
+    | { kind: 'open-order'; orderId: string };
 };
 
 type AnomaliesResult = {
@@ -47,17 +53,68 @@ type OrphansResult = {
   orphans: Anomaly[];
 };
 
+const DISMISS_STORAGE_KEY = 'plan-tab-dismissed-orphans-v1';
+
+function readDismissed(): Set<string> {
+  try {
+    const raw = sessionStorage.getItem(DISMISS_STORAGE_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as string[];
+    return new Set(arr);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeDismissed(set: Set<string>) {
+  try {
+    sessionStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify([...set]));
+  } catch {
+    // ignore
+  }
+}
+
 export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
+  const queryClient = useQueryClient();
   const targetDate = useMemo(
     () => resolveTargetDate(dateFilterConfig.mode, today),
     [dateFilterConfig.mode, today]
   );
+  const [dismissed, setDismissed] = useState<Set<string>>(() => readDismissed());
+
+  useEffect(() => {
+    writeDismissed(dismissed);
+  }, [dismissed]);
+
+  const dismiss = (key: string) => {
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  };
+
+  const invalidateAfterMutation = () => {
+    queryClient.invalidateQueries({ queryKey: ['plan-data-orphans'] });
+    queryClient.invalidateQueries({ queryKey: ['plan-day-shape'] });
+    queryClient.invalidateQueries({ queryKey: ['roast-tab-groups'] });
+    queryClient.invalidateQueries({ queryKey: ['production-roast-groups'] });
+  };
+
+  const handleDeleteBatch = async (batchId: string) => {
+    try {
+      const { error } = await supabase.from('roasted_batches').delete().eq('id', batchId);
+      if (error) throw error;
+      toast.success('Batch deleted');
+      invalidateAfterMutation();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
 
   const { data: dayShape, isLoading } = useQuery({
     queryKey: ['plan-day-shape', dateFilterConfig.mode, targetDate],
     queryFn: async () => {
-      // planned_output_kg on roasted_batches represents inbound green kg
-      // per the existing RoastTab convention.
       let batchesQ = supabase
         .from('roasted_batches')
         .select('roast_group, planned_output_kg, target_date');
@@ -99,8 +156,6 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
       const past28Iso = subDays(new Date(), 28).toISOString();
       const past24hIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-      // NOTE: Rules A and B currently only consider orders.client_id, not
-      // orders.account_id. Extend to account-scoped orders in a later pass.
       const ordersRes = await supabase
         .from('orders')
         .select('id, order_number, client_id, created_at, status, clients(name)')
@@ -226,13 +281,40 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
         orphans.push({
           key: `D-${b.id}`,
           message: `Batch ${b.roast_group} (${b.target_date}) stuck in PLANNED ${rel}`,
+          action: { kind: 'delete-batch', batchId: b.id },
         });
       }
 
-      // Rule E (shipped but no timestamp) intentionally skipped — orders table has no shipped_at column.
-      // Future migration: add orders.shipped_at timestamptz, populate on status transition to SHIPPED, then implement this rule.
+      // Rule G — ghost batches: roasted_batches with no wip_ledger reference
+      const allBatchesRes = await supabase
+        .from('roasted_batches')
+        .select('id, roast_group, target_date, status');
+      if (allBatchesRes.error) throw allBatchesRes.error;
+      const allBatches = allBatchesRes.data ?? [];
 
-      // Rule F (picked > required) — sum ship_picks.units_picked per order_line_item_id, compare to quantity_units
+      if (allBatches.length > 0) {
+        const ids = allBatches.map((b) => b.id);
+        const wipRes = await supabase
+          .from('wip_ledger')
+          .select('related_batch_id')
+          .in('related_batch_id', ids);
+        if (wipRes.error) throw wipRes.error;
+        const referenced = new Set(
+          (wipRes.data ?? []).map((r) => r.related_batch_id).filter((v): v is string => !!v)
+        );
+        for (const b of allBatches) {
+          if (referenced.has(b.id)) continue;
+          // Skip PLANNED rows — Rule D already covers them; ghost = ROASTED/COMPLETED w/o ledger
+          if (b.status === 'PLANNED') continue;
+          orphans.push({
+            key: `G-${b.id}`,
+            message: `Ghost batch ${b.roast_group} (${b.target_date}) — no inventory ledger entries`,
+            action: { kind: 'delete-batch', batchId: b.id },
+          });
+        }
+      }
+
+      // Rule F (picked > required)
       const picksRes = await supabase
         .from('ship_picks')
         .select(
@@ -285,25 +367,41 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
             key: `F-${lineId}`,
             message: `${agg.clientName} order #${agg.orderNumber} — ${agg.productName} picked ${agg.totalPicked}, required ${agg.required}`,
             orderId: agg.orderId,
+            action: { kind: 'open-order', orderId: agg.orderId },
           });
         }
       }
-
-      // Rule F yield sub-check skipped — roasted_batches has no planned roasted output column.
-      // actual_output_kg exists but there's no expected baseline to compare against.
 
       return { orphans };
     },
   });
 
   const label = dayShapeLabel(dateFilterConfig.mode);
-  const surprises = anomalies?.orderSurprises ?? [];
+  const surprises = (anomalies?.orderSurprises ?? []).filter((a) => !dismissed.has(a.key));
   const visibleSurprises = surprises.slice(0, 2);
   const extraSurprises = surprises.length - visibleSurprises.length;
-  const orphans = orphansData?.orphans ?? [];
-  const visibleOrphans = orphans.slice(0, 2);
+  const orphans = (orphansData?.orphans ?? []).filter((a) => !dismissed.has(a.key));
+  const visibleOrphans = orphans.slice(0, 5);
   const extraOrphans = orphans.length - visibleOrphans.length;
   const hasAnomalies = surprises.length > 0 || orphans.length > 0;
+
+  const renderActionButton = (a: Anomaly) => {
+    if (!a.action) return null;
+    if (a.action.kind === 'delete-batch') {
+      const batchId = a.action.batchId;
+      return (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-6 px-2 text-xs"
+          onClick={() => handleDeleteBatch(batchId)}
+        >
+          <Trash2 className="h-3 w-3 mr-1" /> Delete
+        </Button>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="space-y-4">
@@ -329,17 +427,26 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
               </div>
               <ul className="space-y-1 text-sm">
                 {visibleSurprises.map((a) => (
-                  <li key={a.key}>
-                    {a.orderId ? (
-                      <Link
-                        to={`/orders/${a.orderId}`}
-                        className="text-amber-900 hover:underline dark:text-amber-100"
-                      >
-                        {a.message}
-                      </Link>
-                    ) : (
-                      <span className="text-amber-900 dark:text-amber-100">{a.message}</span>
-                    )}
+                  <li key={a.key} className="flex items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      {a.orderId ? (
+                        <Link
+                          to={`/orders/${a.orderId}`}
+                          className="text-amber-900 hover:underline dark:text-amber-100"
+                        >
+                          {a.message}
+                        </Link>
+                      ) : (
+                        <span className="text-amber-900 dark:text-amber-100">{a.message}</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => dismiss(a.key)}
+                      className="shrink-0 rounded p-1 text-amber-800/70 hover:bg-amber-100 hover:text-amber-900 dark:text-amber-200/60 dark:hover:bg-amber-900/40"
+                      aria-label="Dismiss"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   </li>
                 ))}
                 {extraSurprises > 0 && (
@@ -359,24 +466,36 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
               </div>
               <ul className="space-y-1 text-xs">
                 {visibleOrphans.map((a) => {
-                  const isBatch = a.key.startsWith('D-');
+                  const isBatch = a.key.startsWith('D-') || a.key.startsWith('G-');
                   const target = a.orderId
                     ? `/orders/${a.orderId}`
                     : isBatch
                       ? '/production'
                       : null;
                   return (
-                    <li key={a.key}>
-                      {target ? (
-                        <Link
-                          to={target}
-                          className="text-slate-700 hover:underline dark:text-slate-300"
+                    <li key={a.key} className="flex items-center justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        {target ? (
+                          <Link
+                            to={target}
+                            className="text-slate-700 hover:underline dark:text-slate-300"
+                          >
+                            {a.message}
+                          </Link>
+                        ) : (
+                          <span className="text-slate-700 dark:text-slate-300">{a.message}</span>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {renderActionButton(a)}
+                        <button
+                          onClick={() => dismiss(a.key)}
+                          className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                          aria-label="Dismiss"
                         >
-                          {a.message}
-                        </Link>
-                      ) : (
-                        <span className="text-slate-700 dark:text-slate-300">{a.message}</span>
-                      )}
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </li>
                   );
                 })}
