@@ -581,9 +581,9 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         body: { order_id: orderId, event_type: 'ORDER_SHIPPED' },
       }).catch((e) => console.warn('[notify-order-event] SHIPPED failed:', e));
     },
-    onError: (err) => {
+    onError: (err: any) => {
       console.error(err);
-      toast.error('Failed to mark order as shipped');
+      toast.error(err?.message || 'Failed to mark order as shipped');
     },
   });
 
