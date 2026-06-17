@@ -245,6 +245,33 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     return map;
   }, [packingRuns]);
 
+  // Fetch ship_picks for OPEN orders, aggregated by product.
+  // A pick is physical evidence that a bag was packed — the downstream station
+  // can't pick a bag that wasn't produced. We treat each picked unit as an
+  // *implicit* packed unit for shortage / completeness so a packer who's lagging
+  // on data entry doesn't get nudged to over-pack what the shipper already grabbed.
+  const { data: pickedByProductUnits } = useQuery<Record<string, number>>({
+    queryKey: ['pack-tab-picks-by-product'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ship_picks')
+        .select(`
+          units_picked,
+          order:orders!inner(status),
+          order_line_item:order_line_items!inner(product_id)
+        `)
+        .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      for (const row of (data ?? []) as any[]) {
+        const pid = row.order_line_item?.product_id;
+        if (!pid) continue;
+        map[pid] = (map[pid] ?? 0) + Number(row.units_picked ?? 0);
+      }
+      return map;
+    },
+  });
+
   // Aggregate demand by product with urgency info
   const demandByProduct = useMemo((): ProductDemand[] => {
     const productMap: Record<string, ProductDemand & { orderIds: Set<string>; shipDates: string[] }> = {};
