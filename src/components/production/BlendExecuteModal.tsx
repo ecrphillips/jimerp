@@ -351,6 +351,7 @@ export function BlendExecuteModal({
     return { items, totalLeftoverKg, hasLeftover: items.length > 0 };
   }, [selectedBatches, batchesWithAvailable]);
 
+  // Blend mutation — atomic SECURITY DEFINER RPC. The function locks the
   // selected batches, verifies none are already consumed (guards against a
   // concurrent blend), marks them consumed, and writes the balanced ledger
   // rows (positive blend output + negative component decrements) in a single
