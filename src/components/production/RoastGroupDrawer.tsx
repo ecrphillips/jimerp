@@ -98,7 +98,7 @@ interface RoastGroupDrawerProps {
   onPlanDirectBatch?: () => void;
   onBlendBatches?: () => void;
   components: RoastGroupComponent[];
-  roastGroupsLookupMap: Map<string, { display_name: string | null; origin: string | null }>;
+  roastGroupsLookupMap: Map<string, { display_name: string | null; origin: string | null; expected_yield_loss_pct?: number | null; standard_batch_kg?: number | null }>;
 }
 
 export function RoastGroupDrawer({
