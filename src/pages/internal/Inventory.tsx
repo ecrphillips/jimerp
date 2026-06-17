@@ -22,6 +22,7 @@ import { format } from 'date-fns';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { WipAdjustmentModal } from '@/components/inventory/WipAdjustmentModal';
 import { WipFloorCountModal, type WipFloorRow } from '@/components/inventory/WipFloorCountModal';
+import { computeAuthoritativeWip } from '@/hooks/useAuthoritativeInventory';
 
 type WipAdjustmentReason = 'LOSS' | 'COUNT_ADJUSTMENT' | 'CONTAMINATION' | 'OTHER';
 
@@ -146,119 +147,38 @@ export default function Inventory() {
 
   const activeRoastGroupKeys = useMemo(() => new Set(roastGroups ?? []), [roastGroups]);
 
-  // Calculate WIP by roast group for DISPLAY purposes
-  // This shows the full picture: what was roasted, what was consumed, what was manually adjusted
-  // 
-  // All calculations are based on the inventory_transactions ledger (source of truth):
-  // - "Roasted/Blended" = ROAST_OUTPUT + blend credits ("Created blend" ADJUSTMENT)
-  // - "Consumed" = PACK_CONSUME_WIP + blend consumption ("Blended into" ADJUSTMENT)
-  // - "Adjustments" = ONLY manual adjustments from wip_adjustments table
+  // Calculate WIP by roast group using the SINGLE SOURCE OF TRUTH:
+  // computeAuthoritativeWip — the same reducer used by AuthoritativeTotals everywhere
+  // else in the app. This ensures floor-count baselines, the WIP table on this page,
+  // and the production-tab dropdowns all agree.
+  //
+  // Formula (per group):
+  //   wip_net_kg = sum(ROAST_OUTPUT) - sum(|PACK_CONSUME_WIP|) + sum(ADJUSTMENT + LOSS) + sum(wip_adjustments.kg_delta)
   const wipByRoastGroup = useMemo((): WipByRoastGroup[] => {
-    const groupMap: Record<string, { 
-      roasted: number;      // From ROAST_OUTPUT transactions
-      blendCredit: number;  // Blend output credits (for parent blends, from ADJUSTMENT "Created blend")
-      packConsumed: number; // From PACK_CONSUME_WIP transactions (negative values)
-      blendConsumed: number;// Blend consumption (for components, from ADJUSTMENT "Blended into")
-      manualAdj: number;    // Manual adjustments from wip_adjustments table
-    }> = {};
-    
-    // Identify blend roast groups
-    const blendGroups = new Set<string>();
-    for (const rg of roastGroupsInfo ?? []) {
-      if (rg.is_blend) {
-        blendGroups.add(rg.roast_group);
-      }
-    }
+    const computed = computeAuthoritativeWip(
+      (inventoryTransactions ?? []).map((tx) => ({
+        roast_group: tx.roast_group,
+        quantity_kg: tx.quantity_kg,
+        transaction_type: tx.transaction_type,
+      })),
+      (wipAdjustments ?? []).map((a) => ({
+        roast_group: a.roast_group,
+        kg_delta: a.kg_delta,
+      })),
+      [], // no reservation accounting in the inventory-page table
+    );
 
-    // Process all inventory transactions from the ledger
-    for (const tx of inventoryTransactions ?? []) {
-      if (!tx.roast_group) continue;
-      
-      if (!groupMap[tx.roast_group]) {
-        groupMap[tx.roast_group] = { roasted: 0, blendCredit: 0, packConsumed: 0, blendConsumed: 0, manualAdj: 0 };
-      }
-      
-      const kg = Number(tx.quantity_kg) || 0;
-      const notes = tx.notes || '';
-      
-      switch (tx.transaction_type) {
-        case 'ROAST_OUTPUT':
-          // Direct roast output
-          groupMap[tx.roast_group].roasted += kg;
-          break;
-          
-        case 'PACK_CONSUME_WIP':
-          // Packing consumption: negative kg = consumed, positive kg = reversal
-          if (kg < 0) {
-            groupMap[tx.roast_group].packConsumed += Math.abs(kg);
-          } else {
-            // Reversal - subtract from consumed
-            groupMap[tx.roast_group].packConsumed -= kg;
-          }
-          break;
-          
-        case 'ADJUSTMENT':
-          // Categorize adjustment by notes content
-          if (notes.includes('Blended into') && kg < 0) {
-            // Component consumed by blend
-            groupMap[tx.roast_group].blendConsumed += Math.abs(kg);
-          } else if (notes.includes('Created blend') && kg > 0) {
-            // Parent blend output credit
-            groupMap[tx.roast_group].blendCredit += kg;
-          } else if (notes.includes('Reverted batch') && kg < 0) {
-            // Roast reversal - subtract from roasted output
-            groupMap[tx.roast_group].roasted += kg; // kg is negative
-          } else if (notes.includes('Reversed') && kg > 0) {
-            // Pack reversal - subtract from consumed
-            groupMap[tx.roast_group].packConsumed -= kg;
-          } else {
-            // Other adjustments - treat as manual (shouldn't happen often)
-            // Skip here - manual adjustments come from wip_adjustments table
-          }
-          break;
-          
-        case 'LOSS':
-          // Loss transactions count as consumption
-          groupMap[tx.roast_group].packConsumed += Math.abs(kg);
-          break;
-      }
-    }
-
-    // Add manual WIP adjustments (from wip_adjustments table ONLY)
-    for (const adj of wipAdjustments ?? []) {
-      if (!groupMap[adj.roast_group]) {
-        groupMap[adj.roast_group] = { roasted: 0, blendCredit: 0, packConsumed: 0, blendConsumed: 0, manualAdj: 0 };
-      }
-      groupMap[adj.roast_group].manualAdj += Number(adj.kg_delta) || 0;
-    }
-
-    return Object.entries(groupMap)
-      .map(([roast_group, data]) => {
-        const isBlend = blendGroups.has(roast_group);
-        
-        // Roasted/Blended column:
-        // - For blends: show blend credit (from "Created blend" ADJUSTMENT)
-        // - For single origins: show direct roast output from ROAST_OUTPUT transactions
-        const roastedDisplay = isBlend ? data.blendCredit : data.roasted;
-        
-        // Consumed column:
-        // - Packing consumption + blend consumption (for components)
-        const consumedDisplay = data.packConsumed + data.blendConsumed;
-        
-        // Net WIP = Roasted - Consumed + Manual Adjustments
-        const netWip = roastedDisplay - consumedDisplay + data.manualAdj;
-        
-        return {
-          roast_group,
-          roasted_kg: roastedDisplay,
-          consumed_kg: consumedDisplay,
-          adjusted_kg: data.manualAdj,
-          net_wip_kg: netWip,
-        };
-      })
-      .filter(row => row.roasted_kg !== 0 || row.consumed_kg !== 0 || row.adjusted_kg !== 0)
+    return Object.values(computed)
+      .map((w) => ({
+        roast_group: w.roast_group,
+        roasted_kg: w.roasted_completed_kg,
+        consumed_kg: w.packed_consumed_kg,
+        adjusted_kg: w.adjustments_kg,
+        net_wip_kg: w.wip_net_kg,
+      }))
+      .filter((row) => row.roasted_kg !== 0 || row.consumed_kg !== 0 || row.adjusted_kg !== 0)
       .sort((a, b) => a.roast_group.localeCompare(b.roast_group));
-  }, [inventoryTransactions, wipAdjustments, roastGroupsInfo]);
+  }, [inventoryTransactions, wipAdjustments]);
 
   // WIP adjustment mutation
   const createWipAdjustment = useMutation({

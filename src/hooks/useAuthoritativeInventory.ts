@@ -23,7 +23,8 @@ export interface AuthoritativeWip {
   packed_consumed_kg: number;    // sum(kg_consumed) from packing_runs
   adjustments_kg: number;        // sum(ADJUSTMENT/LOSS transactions) - includes blend outputs
   reserved_for_blend_kg: number; // kg of ROASTED batches earmarked for a blend, not yet consumed
-  wip_available_kg: number;      // roasted_completed_kg - packed_consumed_kg + adjustments_kg - reserved_for_blend_kg
+  wip_net_kg: number;            // unclamped net (can be negative — used by Inventory page & floor count)
+  wip_available_kg: number;      // max(0, wip_net_kg - reserved_for_blend_kg) — used by production UX
 }
 
 export interface AuthoritativeFg {
@@ -364,7 +365,8 @@ export function computeAuthoritativeWip(
     const adjusted = adjustmentsByGroup[rg] ?? 0;
     const reserved = reservedByGroup[rg] ?? 0;
 
-    const wipAvailable = roasted - consumed + adjusted - reserved;
+    const wipNet = roasted - consumed + adjusted;
+    const wipAvailable = wipNet - reserved;
 
     result[rg] = {
       roast_group: rg,
@@ -372,6 +374,7 @@ export function computeAuthoritativeWip(
       packed_consumed_kg: consumed,
       adjustments_kg: adjusted,
       reserved_for_blend_kg: reserved,
+      wip_net_kg: wipNet,
       wip_available_kg: Math.max(0, wipAvailable),
     };
   }
