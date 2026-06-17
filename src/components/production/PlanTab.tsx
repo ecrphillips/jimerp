@@ -409,7 +409,8 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
         .select(
           `id, order_number, status, requested_ship_date, work_deadline, work_deadline_at,
            account_id, account_location_id, client_id,
-           accounts(account_name), account_locations(location_name),
+           accounts!orders_account_id_fkey(account_name),
+           account_locations!orders_account_location_id_fkey(location_name),
            clients(name),
            order_line_items(quantity_units, products(bag_size_g))`
         )
@@ -523,6 +524,53 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
       return { acctRows, otherOrders, weekdayName: format(vNow, 'EEEE') };
     },
   });
+
+  // FUNK Coffee — last import + today's deadline orders summary
+  const { data: funkInfo } = useQuery({
+    queryKey: ['plan-funk-summary', today],
+    queryFn: async () => {
+      // Look up FUNK account
+      const acctRes = await supabase
+        .from('accounts')
+        .select('id, account_name')
+        .ilike('account_name', 'funk%')
+        .maybeSingle();
+      const funkAcct = acctRes.data;
+
+      // Last import session
+      const sessRes = await supabase
+        .from('funk_import_sessions')
+        .select('id, file_name, imported_at, orders_new, orders_skipped, bundle_order_id')
+        .order('imported_at', { ascending: false })
+        .limit(1);
+      const lastSession = (sessRes.data ?? [])[0] ?? null;
+
+      // FUNK orders with work deadline = today
+      let todayOrders: Array<{ id: string; order_number: string; status: string; kg: number }> = [];
+      if (funkAcct) {
+        const start = `${today}T00:00:00-07:00`;
+        const end = `${today}T23:59:59-07:00`;
+        const ordRes = await supabase
+          .from('orders')
+          .select('id, order_number, status, work_deadline_at, order_line_items(quantity_units, products(bag_size_g))')
+          .eq('account_id', funkAcct.id)
+          .gte('work_deadline_at', start)
+          .lte('work_deadline_at', end);
+        todayOrders = (ordRes.data ?? []).map((o: any) => ({
+          id: o.id,
+          order_number: o.order_number,
+          status: o.status,
+          kg: (o.order_line_items ?? []).reduce(
+            (s: number, li: any) => s + ((li.quantity_units ?? 0) * (li.products?.bag_size_g ?? 0)) / 1000,
+            0
+          ),
+        }));
+      }
+
+      return { funkAcct, lastSession, todayOrders };
+    },
+  });
+
 
   const label = dayShapeLabel(dateFilterConfig.mode);
   const surprises = (anomalies?.orderSurprises ?? []).filter((a) => !dismissed.has(a.key));
@@ -673,6 +721,65 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
           )}
         </div>
       </div>
+
+      {/* FUNK Coffee — import + today's deadline orders */}
+      {funkInfo && (
+        <div className="rounded-md border bg-card">
+          <div className="border-b px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CalendarClock className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">FUNK Coffee — today</h3>
+            </div>
+            <Link to="/admin/funk-import" className="text-xs text-muted-foreground hover:underline">
+              Import CSV →
+            </Link>
+          </div>
+          <div className="px-4 py-3 space-y-2 text-xs">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <span className="font-medium text-foreground">Last import:</span>
+              {funkInfo.lastSession ? (
+                <span>
+                  {funkInfo.lastSession.file_name ?? 'unnamed'} ·{' '}
+                  {formatDistanceToNow(parseISO(funkInfo.lastSession.imported_at), { addSuffix: true })}
+                  {' '}({funkInfo.lastSession.orders_new} new, {funkInfo.lastSession.orders_skipped} skipped)
+                </span>
+              ) : (
+                <span className="italic">never</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Orders due today:</span>
+              {funkInfo.todayOrders.length === 0 ? (
+                <Badge variant="destructive" className="text-[10px] h-5">
+                  <AlertCircle className="h-3 w-3 mr-1" /> None — import or create one
+                </Badge>
+              ) : (
+                <span className="text-muted-foreground">
+                  {funkInfo.todayOrders.length} order{funkInfo.todayOrders.length === 1 ? '' : 's'} ·{' '}
+                  <span className="font-mono">
+                    {fmtKg(funkInfo.todayOrders.reduce((s, o) => s + o.kg, 0))}
+                  </span>
+                </span>
+              )}
+            </div>
+            {funkInfo.todayOrders.length > 0 && (
+              <ul className="space-y-1 pl-2">
+                {funkInfo.todayOrders.map((o) => (
+                  <li key={o.id} className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Link to={`/orders/${o.id}`} className="font-medium hover:underline">
+                        #{o.order_number}
+                      </Link>
+                      <Badge variant="outline" className="text-[10px] h-4">{o.status}</Badge>
+                    </div>
+                    <span className="font-mono text-muted-foreground">{fmtKg(o.kg)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Other open orders */}
       {priorityPlan && priorityPlan.otherOrders.length > 0 && (
