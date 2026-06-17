@@ -214,11 +214,13 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
 
   // Create a map of roast_group -> { display_name, origin } for component display lookup
   const roastGroupsLookupMap = useMemo(() => {
-    const map = new Map<string, { display_name: string | null; origin: string | null }>();
+    const map = new Map<string, { display_name: string | null; origin: string | null; expected_yield_loss_pct: number | null; standard_batch_kg: number | null }>();
     for (const rg of roastGroupsConfig ?? []) {
       map.set(rg.roast_group, {
         display_name: rg.display_name ?? null,
         origin: (rg as any).origin ?? null,
+        expected_yield_loss_pct: (rg as any).expected_yield_loss_pct ?? null,
+        standard_batch_kg: (rg as any).standard_batch_kg ?? null,
       });
     }
     return map;
