@@ -621,7 +621,8 @@ export function ProductsListTab() {
 
   const variantBaseName = variantSource ? stripPackagingSuffix(variantSource.product_name) : '';
   const variantLabel = variantPackaging ? PACKAGING_OPTIONS.find(o => o.value === variantPackaging)?.label ?? '' : '';
-  const variantNewName = variantPackaging ? `${variantBaseName} ${variantLabel}` : '';
+  const variantNameSuffix = variantPackaging ? VARIANT_NAME_SUFFIXES[variantPackaging] ?? variantLabel : '';
+  const variantNewName = variantNameSuffix ? `${variantBaseName} ${variantNameSuffix}` : '';
 
   const addVariantMutation = useMutation({
     mutationFn: async () => {
