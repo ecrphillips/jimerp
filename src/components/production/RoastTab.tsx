@@ -78,6 +78,7 @@ interface RoastBatch {
   cropster_batch_id: string | null;
   created_at?: string;
   updated_at?: string;
+  planned_for_blend_roast_group?: string | null;
 }
 
 interface RoastGroupConfig {
