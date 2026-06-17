@@ -43,6 +43,7 @@ export function BulkEditGrid<TRow>({
   const { isHighlighted, markChanged, clearHighlight } = useChangeHighlights(tableKey);
   const undo = useUndoStack();
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const initializedCollapseRef = useRef(false);
   const undoingRef = useRef(false);
 
   const grouped = useMemo(() => {
@@ -57,6 +58,22 @@ export function BulkEditGrid<TRow>({
       .map(([key, groupRows]) => ({ key, label: group.getGroupLabel(key, groupRows), rows: groupRows }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [rows, group]);
+
+  // Default to all groups collapsed once data first loads.
+  useEffect(() => {
+    if (!group) return;
+    if (initializedCollapseRef.current) return;
+    if (grouped.length === 0) return;
+    setCollapsedGroups(new Set(grouped.map((g) => g.key)));
+    initializedCollapseRef.current = true;
+  }, [group, grouped]);
+
+  const allCollapsed = group ? grouped.length > 0 && grouped.every((g) => collapsedGroups.has(g.key)) : false;
+  const toggleAllGroups = () => {
+    if (allCollapsed) setCollapsedGroups(new Set());
+    else setCollapsedGroups(new Set(grouped.map((g) => g.key)));
+  };
+
 
   const handleSave = async (row: TRow, col: ColumnDef<TRow>, newValue: unknown): Promise<SaveResult> => {
     const prevValue = col.getValue(row);
