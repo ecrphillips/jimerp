@@ -599,7 +599,7 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <Link
-                      to={`/internal/accounts/${acct.accountId}`}
+                      to={`/accounts/${acct.accountId}`}
                       className="text-sm font-medium hover:underline truncate"
                     >
                       {acct.accountName}
@@ -643,7 +643,7 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
                                 <React.Fragment key={o.id}>
                                   {i > 0 && ', '}
                                   <Link
-                                    to={`/internal/orders/${o.id}`}
+                                    to={`/orders/${o.id}`}
                                     className="hover:underline"
                                   >
                                     #{o.orderNumber}
@@ -695,7 +695,7 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
                 <li key={o.id} className="px-4 py-2 flex items-center justify-between gap-3 text-xs">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     <Link
-                      to={`/internal/orders/${o.id}`}
+                      to={`/orders/${o.id}`}
                       className="font-medium hover:underline shrink-0"
                     >
                       #{o.orderNumber}
@@ -729,7 +729,7 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
             {priorityPlan.otherOrders.length > 25 && (
               <li className="px-4 py-2 text-[11px] text-muted-foreground text-center">
                 +{priorityPlan.otherOrders.length - 25} more — see{' '}
-                <Link to="/internal/orders" className="hover:underline">Orders</Link>
+                <Link to="/orders" className="hover:underline">Orders</Link>
               </li>
             )}
           </ul>
