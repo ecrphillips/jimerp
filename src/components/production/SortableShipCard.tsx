@@ -192,6 +192,31 @@ export function SortableShipCard({
     upsertPickMutation.mutate({ lineItemId, unitsPicked: clamped, previousPicked, productId });
   }, [upsertPickMutation, picksByLineItem]);
 
+  const [isPickingAll, setIsPickingAll] = useState(false);
+
+  const handlePickAllAndShip = useCallback(async () => {
+    setIsPickingAll(true);
+    try {
+      for (const li of order.lineItems) {
+        const previousPicked = picksByLineItem[li.id] ?? 0;
+        const available = fgInventory[li.product_id] ?? 0;
+        const target = Math.min(li.quantity_units, available + previousPicked);
+        if (target === previousPicked) continue;
+        await upsertPickMutation.mutateAsync({
+          lineItemId: li.id,
+          unitsPicked: target,
+          previousPicked,
+          productId: li.product_id,
+        });
+      }
+      onMarkShipped(order);
+    } catch (e) {
+      // toast handled by mutation
+    } finally {
+      setIsPickingAll(false);
+    }
+  }, [order, picksByLineItem, fgInventory, upsertPickMutation, onMarkShipped]);
+
   // Calculate if all items are fully picked
   const allItemsFullyPicked = order.lineItems.every((li) => {
     const picked = picksByLineItem[li.id] ?? 0;
