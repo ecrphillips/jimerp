@@ -65,13 +65,15 @@ export function BlendExecuteModal({
   const [selectedBatches, setSelectedBatches] = useState<Record<string, SelectedBatch>>({});
   const [showSuccess, setShowSuccess] = useState(false);
   const [blendedAmount, setBlendedAmount] = useState<number>(0);
-  
+  const [confirmReleaseOpen, setConfirmReleaseOpen] = useState(false);
+
   // Reset state when modal opens
   React.useEffect(() => {
     if (open) {
       setSelectedBatches({});
       setShowSuccess(false);
       setBlendedAmount(0);
+      setConfirmReleaseOpen(false);
     }
   }, [open]);
   
