@@ -628,10 +628,41 @@ export function ProductsListTab() {
     mutationFn: async () => {
       if (!variantSource || !variantPackaging) throw new Error('Missing data');
       const bagSizeG = VARIANT_BAG_SIZES[variantPackaging] ?? 0;
+
+      // Derive SKU from a sibling in the same family: clone source SKU and
+      // swap its trailing 5-digit grams segment for the new packaging size.
+      let derivedSku: string | null = deriveVariantSku(variantSource.sku, bagSizeG);
+      if (!derivedSku && variantSource.roast_group) {
+        const { data: sibling } = await supabase
+          .from('products')
+          .select('sku')
+          .eq('roast_group', variantSource.roast_group)
+          .not('sku', 'is', null)
+          .limit(1)
+          .maybeSingle();
+        derivedSku = deriveVariantSku(sibling?.sku ?? null, bagSizeG);
+      }
+      // Collision check: if SKU already exists, suffix -2, -3, ...
+      if (derivedSku) {
+        const baseSku = derivedSku;
+        let attempt = baseSku;
+        let n = 2;
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { data: clash } = await supabase
+            .from('products').select('id').eq('sku', attempt).maybeSingle();
+          if (!clash) break;
+          attempt = `${baseSku}-${n++}`;
+          if (n > 20) { attempt = baseSku; break; }
+        }
+        derivedSku = attempt;
+      }
+
       const { data: newProduct, error } = await supabase.from('products').insert({
         account_id: variantSource.account_id, product_name: variantNewName, roast_group: variantSource.roast_group,
         packaging_variant: variantPackaging, bag_size_g: bagSizeG, format: variantSource.format as any,
         grind_options: variantSource.grind_options as any, is_perennial: variantSource.is_perennial, is_active: true,
+        sku: derivedSku,
       }).select('id').single();
       if (error) throw error;
       const priceValue = parseFloat(variantPrice);
