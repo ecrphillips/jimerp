@@ -779,6 +779,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                     {displayProducts.map((product, index) => {
                       const packing = packingByProduct[product.product_id];
                       const packed = packing?.units_packed ?? 0;
+                      const picked = pickedByProductUnits?.[product.product_id] ?? 0;
                       const isExpanded = expandedProductId === product.product_id;
                       const prevRoastGroup = index > 0 ? displayProducts[index - 1].roast_group : undefined;
                       const showHeader = product.roast_group !== prevRoastGroup;
