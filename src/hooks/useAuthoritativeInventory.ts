@@ -22,7 +22,8 @@ export interface AuthoritativeWip {
   roasted_completed_kg: number;  // sum(actual_output_kg) for ROASTED batches
   packed_consumed_kg: number;    // sum(kg_consumed) from packing_runs
   adjustments_kg: number;        // sum(ADJUSTMENT/LOSS transactions) - includes blend outputs
-  wip_available_kg: number;      // roasted_completed_kg - packed_consumed_kg + adjustments_kg
+  reserved_for_blend_kg: number; // kg of ROASTED batches earmarked for a blend, not yet consumed
+  wip_available_kg: number;      // roasted_completed_kg - packed_consumed_kg + adjustments_kg - reserved_for_blend_kg
 }
 
 export interface AuthoritativeFg {
