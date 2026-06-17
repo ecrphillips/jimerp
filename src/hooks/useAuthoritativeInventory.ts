@@ -22,7 +22,8 @@ export interface AuthoritativeWip {
   roasted_completed_kg: number;  // sum(actual_output_kg) for ROASTED batches
   packed_consumed_kg: number;    // sum(kg_consumed) from packing_runs
   adjustments_kg: number;        // sum(ADJUSTMENT/LOSS transactions) - includes blend outputs
-  wip_available_kg: number;      // roasted_completed_kg - packed_consumed_kg + adjustments_kg
+  reserved_for_blend_kg: number; // kg of ROASTED batches earmarked for a blend, not yet consumed
+  wip_available_kg: number;      // roasted_completed_kg - packed_consumed_kg + adjustments_kg - reserved_for_blend_kg
 }
 
 export interface AuthoritativeFg {
@@ -255,7 +256,6 @@ function useOpenOrderLines() {
 // COMPUTED HOOKS
 // ============================================================================
 
-/** Minimal shapes the pure WIP reducer needs (a subset of the DB rows). */
 export interface WipLedgerTx {
   roast_group: string | null;
   quantity_kg: number | null;
@@ -264,6 +264,15 @@ export interface WipLedgerTx {
 export interface WipManualAdjustmentRow {
   roast_group: string | null;
   kg_delta: number | null;
+}
+
+/** Minimal batch shape for blend-reservation accounting. */
+export interface BlendReservationBatch {
+  roast_group: string | null;
+  status: 'PLANNED' | 'ROASTED' | string;
+  actual_output_kg: number | null;
+  planned_for_blend_roast_group: string | null;
+  consumed_by_blend_at: string | null;
 }
 
 /**
@@ -281,15 +290,26 @@ export interface WipManualAdjustmentRow {
  * to the blend group AND a matching negative ADJUSTMENT to each component group, so the
  * kg blended away is removed from component WIP (otherwise it is double-counted and a
  * sibling product in the component group can consume coffee already in the blend).
+ *
+ * Blend earmark moat: ROASTED component batches that carry a
+ * planned_for_blend_roast_group AND have not yet been consumed by a blend are
+ * physically present in the component group's WIP, but are conceptually 100%
+ * reserved for the parent blend. They are subtracted from wip_available_kg so
+ * sibling single-origin products cannot pack coffee that's earmarked for a blend.
+ * The reservation is released when the blend is executed: the consumed kg is
+ * deducted via a negative ADJUSTMENT and consumed_by_blend_at is set on the batch,
+ * which removes it from this reservation (any unblended remainder becomes available).
  */
 export function computeAuthoritativeWip(
   wipTransactions: WipLedgerTx[],
   manualAdjustments: WipManualAdjustmentRow[] = [],
+  reservationBatches: BlendReservationBatch[] = [],
 ): Record<string, AuthoritativeWip> {
   // Aggregate transactions by roast group and type
   const roastedByGroup: Record<string, number> = {};
   const consumedByGroup: Record<string, number> = {};
   const adjustmentsByGroup: Record<string, number> = {};
+  const reservedByGroup: Record<string, number> = {};
 
   for (const tx of wipTransactions) {
     if (!tx.roast_group) continue;
@@ -297,41 +317,44 @@ export function computeAuthoritativeWip(
 
     switch (tx.transaction_type) {
       case 'ROAST_OUTPUT':
-        // Direct roast output - positive kg
         roastedByGroup[tx.roast_group] = (roastedByGroup[tx.roast_group] ?? 0) + kg;
         break;
       case 'PACK_CONSUME_WIP':
-        // Packing consumption - typically negative, but track absolute consumed
         if (kg < 0) {
           consumedByGroup[tx.roast_group] = (consumedByGroup[tx.roast_group] ?? 0) + Math.abs(kg);
         } else {
-          // Reversal - reduce consumed
           consumedByGroup[tx.roast_group] = (consumedByGroup[tx.roast_group] ?? 0) - kg;
         }
         break;
       case 'ADJUSTMENT':
-        // Adjustments can be positive (blend output, reverts) or negative (blend consume)
         adjustmentsByGroup[tx.roast_group] = (adjustmentsByGroup[tx.roast_group] ?? 0) + kg;
         break;
       case 'LOSS':
-        // Losses are negative
         adjustmentsByGroup[tx.roast_group] = (adjustmentsByGroup[tx.roast_group] ?? 0) + kg;
         break;
     }
   }
 
-  // Add manual adjustments from wip_adjustments table (opening balances, recounts, etc.)
-  // These are NOT in inventory_transactions but must be included for correct authoritative WIP.
   for (const adj of manualAdjustments) {
     if (!adj.roast_group) continue;
     adjustmentsByGroup[adj.roast_group] = (adjustmentsByGroup[adj.roast_group] ?? 0) + Number(adj.kg_delta ?? 0);
   }
 
-  // Combine into authoritative WIP
+  // Reservation: ROASTED component batches earmarked for a blend, not yet consumed.
+  for (const b of reservationBatches) {
+    if (!b.roast_group) continue;
+    if (b.status !== 'ROASTED') continue;
+    if (!b.planned_for_blend_roast_group) continue;
+    if (b.consumed_by_blend_at) continue;
+    reservedByGroup[b.roast_group] =
+      (reservedByGroup[b.roast_group] ?? 0) + Number(b.actual_output_kg ?? 0);
+  }
+
   const allGroups = new Set([
     ...Object.keys(roastedByGroup),
     ...Object.keys(consumedByGroup),
     ...Object.keys(adjustmentsByGroup),
+    ...Object.keys(reservedByGroup),
   ]);
   const result: Record<string, AuthoritativeWip> = {};
 
@@ -339,15 +362,16 @@ export function computeAuthoritativeWip(
     const roasted = roastedByGroup[rg] ?? 0;
     const consumed = consumedByGroup[rg] ?? 0;
     const adjusted = adjustmentsByGroup[rg] ?? 0;
+    const reserved = reservedByGroup[rg] ?? 0;
 
-    // WIP = roasted - consumed + adjustments (includes manual adjustments from wip_adjustments)
-    const wipAvailable = roasted - consumed + adjusted;
+    const wipAvailable = roasted - consumed + adjusted - reserved;
 
     result[rg] = {
       roast_group: rg,
       roasted_completed_kg: roasted,
       packed_consumed_kg: consumed,
       adjustments_kg: adjusted,
+      reserved_for_blend_kg: reserved,
       wip_available_kg: Math.max(0, wipAvailable),
     };
   }
@@ -363,15 +387,20 @@ export function useAuthoritativeWip() {
   const { data: wipTransactions, isLoading: wipLoading } = useWipLedgerTransactions();
   const { data: manualAdjustments, isLoading: manualLoading } = useWipManualAdjustments();
   const { data: roastGroups, isLoading: roastGroupsLoading } = useRoastGroupsInfo();
+  const { data: batches, isLoading: batchesLoading } = useRoastedBatches();
 
   const wip = useMemo((): Record<string, AuthoritativeWip> => {
     if (!wipTransactions) return {};
-    return computeAuthoritativeWip(wipTransactions, manualAdjustments ?? []);
-  }, [wipTransactions, manualAdjustments]);
+    return computeAuthoritativeWip(
+      wipTransactions,
+      manualAdjustments ?? [],
+      (batches ?? []) as BlendReservationBatch[],
+    );
+  }, [wipTransactions, manualAdjustments, batches]);
 
   return {
     data: wip,
-    isLoading: wipLoading || manualLoading || roastGroupsLoading,
+    isLoading: wipLoading || manualLoading || roastGroupsLoading || batchesLoading,
   };
 }
 
