@@ -571,6 +571,173 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
         )}
       </div>
 
+      {/* Priority accounts today */}
+      <div className="rounded-md border bg-card">
+        <div className="border-b px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold">
+              Priority accounts — {priorityPlan?.weekdayName ?? format(getVancouverNow(), 'EEEE')}
+            </h3>
+          </div>
+          {priorityPlan && (
+            <span className="text-xs text-muted-foreground">
+              {priorityPlan.acctRows.length} account{priorityPlan.acctRows.length === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
+        <div className="divide-y">
+          {priorityLoading ? (
+            <div className="px-4 py-3"><Skeleton className="h-12 w-full" /></div>
+          ) : !priorityPlan || priorityPlan.acctRows.length === 0 ? (
+            <div className="px-4 py-3 text-sm text-muted-foreground">
+              No accounts scheduled for production today.
+            </div>
+          ) : (
+            priorityPlan.acctRows.map((acct) => (
+              <div key={acct.accountId} className="px-4 py-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Link
+                      to={`/internal/accounts/${acct.accountId}`}
+                      className="text-sm font-medium hover:underline truncate"
+                    >
+                      {acct.accountName}
+                    </Link>
+                    {acct.anyMissing ? (
+                      <Badge variant="destructive" className="text-[10px] h-5">
+                        <AlertCircle className="h-3 w-3 mr-1" /> Missing order
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] h-5 border-green-500 text-green-700 dark:text-green-400">
+                        <CheckCircle2 className="h-3 w-3 mr-1" /> Covered
+                      </Badge>
+                    )}
+                  </div>
+                  {acct.totalKg > 0 && (
+                    <span className="text-xs font-mono text-muted-foreground shrink-0">
+                      {fmtKg(acct.totalKg)}
+                    </span>
+                  )}
+                </div>
+                <ul className="space-y-1 pl-1">
+                  {acct.locations.map((loc) => {
+                    const locKg = loc.orders.reduce((s, o) => s + o.kg, 0);
+                    const hasOrder = loc.orders.length > 0;
+                    return (
+                      <li
+                        key={loc.locationId}
+                        className="flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          {hasOrder ? (
+                            <CheckCircle2 className="h-3 w-3 text-green-600 dark:text-green-400 shrink-0" />
+                          ) : (
+                            <AlertCircle className="h-3 w-3 text-destructive shrink-0" />
+                          )}
+                          <span className="text-muted-foreground truncate">{loc.locationName}</span>
+                          {hasOrder ? (
+                            <span className="text-foreground/80">
+                              ·{' '}
+                              {loc.orders.map((o, i) => (
+                                <React.Fragment key={o.id}>
+                                  {i > 0 && ', '}
+                                  <Link
+                                    to={`/internal/orders/${o.id}`}
+                                    className="hover:underline"
+                                  >
+                                    #{o.orderNumber}
+                                  </Link>
+                                </React.Fragment>
+                              ))}
+                            </span>
+                          ) : (
+                            <span className="text-destructive">— no order entered</span>
+                          )}
+                        </div>
+                        {hasOrder && (
+                          <span className="font-mono text-muted-foreground shrink-0">
+                            {fmtKg(locKg)}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Other open orders */}
+      {priorityPlan && priorityPlan.otherOrders.length > 0 && (
+        <div className="rounded-md border bg-card">
+          <div className="border-b px-4 py-2 flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Other open orders</h3>
+            <span className="text-xs text-muted-foreground">
+              {priorityPlan.otherOrders.length} order
+              {priorityPlan.otherOrders.length === 1 ? '' : 's'} · sorted by work deadline
+            </span>
+          </div>
+          <ul className="divide-y">
+            {priorityPlan.otherOrders.slice(0, 25).map((o) => {
+              const tone = deadlineTone(o.workDeadline);
+              const toneClass =
+                tone === 'overdue'
+                  ? 'text-destructive font-medium'
+                  : tone === 'today'
+                  ? 'text-amber-600 dark:text-amber-400 font-medium'
+                  : tone === 'soon'
+                  ? 'text-amber-700/80 dark:text-amber-300/80'
+                  : 'text-muted-foreground';
+              return (
+                <li key={o.id} className="px-4 py-2 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <Link
+                      to={`/internal/orders/${o.id}`}
+                      className="font-medium hover:underline shrink-0"
+                    >
+                      #{o.orderNumber}
+                    </Link>
+                    <span className="text-foreground/80 truncate">
+                      {o.accountName}
+                      {o.locationName ? ` · ${o.locationName}` : ''}
+                    </span>
+                    <Badge variant="outline" className="text-[10px] h-4 shrink-0">
+                      {o.status}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {o.kg > 0 && (
+                      <span className="font-mono text-muted-foreground">{fmtKg(o.kg)}</span>
+                    )}
+                    <span className={`font-mono ${toneClass}`}>
+                      {o.workDeadline
+                        ? format(
+                            o.workDeadline.length === 10
+                              ? parseISO(o.workDeadline)
+                              : new Date(o.workDeadline),
+                            'MMM d'
+                          )
+                        : '—'}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+            {priorityPlan.otherOrders.length > 25 && (
+              <li className="px-4 py-2 text-[11px] text-muted-foreground text-center">
+                +{priorityPlan.otherOrders.length - 25} more — see{' '}
+                <Link to="/internal/orders" className="hover:underline">Orders</Link>
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+
+
+
       {hasAnomalies && (
         <div className="space-y-3">
           {surprises.length > 0 && (
