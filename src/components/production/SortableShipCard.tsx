@@ -12,7 +12,7 @@ import { DueBadge, getDueBucket } from './OverdueBadge';
 import { format, parseISO } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { TIMEZONE } from '@/lib/productionScheduling';
-import { Truck, Clock, ChevronDown, ChevronRight, MessageSquare, AlertTriangle, ExternalLink, Layers, CheckCircle2, GripVertical, MapPin } from 'lucide-react';
+import { Truck, Clock, ChevronDown, ChevronRight, MessageSquare, AlertTriangle, ExternalLink, Layers, CheckCircle2, GripVertical, MapPin, CalendarDays } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -58,6 +58,7 @@ interface ShippableShipment {
   missingUnitsTotal: number;
   ship_display_order: number | null;
   manually_deprioritized?: boolean;
+  isPriorityProductionDay?: boolean;
 }
 
 interface ShipPick {
@@ -262,6 +263,18 @@ export function SortableShipCard({
               <MapPin className="h-3 w-3" />
               {order.shipToLabel}
             </span>
+
+            {/* Quiet cue: today is this account's standard production day, so the
+                order is floated to the top of the run sheet by default. */}
+            {order.isPriorityProductionDay && (
+              <Badge
+                variant="outline"
+                className="text-xs border-hi-sand/60 bg-hi-sand/10 text-hi-steel-blue"
+              >
+                <CalendarDays className="h-3 w-3 mr-1" />
+                Today
+              </Badge>
+            )}
 
             {/* Due-day cue - calm, replaces noisy LATE badge */}
             <DueBadge workDeadlineAt={order.work_deadline} />

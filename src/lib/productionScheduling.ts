@@ -596,6 +596,29 @@ export function computeDefaultWorkDeadline(
 }
 
 /**
+ * Is TODAY one of an account's standard production days?
+ *
+ * `productionWeekdays` uses the same JS getDay() convention (0=Sun … 6=Sat) as
+ * the rest of this module and the per-account config UI. Returns false when the
+ * account has no standard production days configured.
+ *
+ * Used by the run sheet (to float today's production orders to the top) and by
+ * the Plan-tab data helper.
+ *
+ * @param productionWeekdays Standard production weekdays, or null/empty.
+ * @param fromTime           Override "now" (Vancouver-zoned Date) for testing.
+ */
+export function isProductionDayToday(
+  productionWeekdays: number[] | null | undefined,
+  fromTime?: Date
+): boolean {
+  const days = (productionWeekdays ?? []).filter(d => d >= 0 && d <= 6);
+  if (days.length === 0) return false;
+  const now = fromTime ?? getVancouverNow();
+  return days.includes(getDay(now));
+}
+
+/**
  * Snap a date to the next valid business day if it falls on a weekend
  * Used by WorkDeadlinePicker to enforce Mon-Fri only
  */

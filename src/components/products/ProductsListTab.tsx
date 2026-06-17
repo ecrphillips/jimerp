@@ -45,6 +45,7 @@ interface Product {
   grind_options: GrindOption[];
   is_active: boolean;
   is_perennial: boolean;
+  is_placeholder?: boolean | null;
   client_id: string | null;
   account_id: string | null;
   packaging_variant: PackagingVariant | null;
@@ -220,9 +221,9 @@ export function ProductsListTab() {
   const { data: products, isLoading } = useQuery({
     queryKey: ['all-products'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, client_id, account_id, packaging_variant, roast_group, packaging_material_override, packaging_labour_override, client:clients(name), account:accounts(account_name)')
+        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, is_placeholder, client_id, account_id, packaging_variant, roast_group, packaging_material_override, packaging_labour_override, client:clients(name), account:accounts(account_name)')
         .order('product_name');
 
       if (error) throw error;
@@ -929,6 +930,9 @@ export function ProductsListTab() {
                                     <Badge variant={p.is_active ? 'default' : 'secondary'} className="text-xs">
                                       {p.is_active ? 'Active' : 'Inactive'}
                                     </Badge>
+                                    {p.is_placeholder && (
+                                      <Badge variant="outline" className="ml-1 text-[10px]">PLACEHOLDER</Badge>
+                                    )}
                                   </td>
                                   <td className="py-1.5 px-2">
                                     <div className="flex items-center gap-1">
