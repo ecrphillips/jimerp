@@ -96,7 +96,7 @@ export function useTodaysProductionPlan() {
       const { data, error } = await supabase
         .from('orders')
         .select('id, account_id, work_deadline_at, line_items:order_line_items(quantity_units)')
-        .in('status', OPEN_ORDER_STATUSES as unknown as string[]);
+        .in('status', OPEN_ORDER_STATUSES as unknown as readonly ('SUBMITTED' | 'CONFIRMED' | 'IN_PRODUCTION' | 'READY')[]);
       if (error) throw error;
       return (data ?? []) as unknown as OrderRow[];
     },
