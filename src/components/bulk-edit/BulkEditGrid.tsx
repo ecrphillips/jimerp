@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Download, Undo2, Upload, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Download, Undo2, Upload, X } from 'lucide-react';
 
 import { toast } from 'sonner';
 import { EditableCell } from './cells/EditableCell';
