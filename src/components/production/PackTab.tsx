@@ -829,6 +829,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                           roastGroup={product.roast_group}
                           demandedUnits={product.demanded_units}
                           packedUnits={packed}
+                          pickedUnits={picked}
                           hasTimeSensitive={product.hasTimeSensitive}
                           wipStatus={product.wipStatus}
                           unblocksOrders={product.unblocksOrders}
