@@ -27,6 +27,7 @@ import { useProductsBulkEdit } from '@/components/bulk-edit/configs/products';
 import { useBulkEditLogoutCleanup } from '@/components/bulk-edit/useChangeHighlights';
 import { MixingConsole, buildEmptyMixingConsoleValue, stripRedundantOverrides, hasMixingConsoleErrors, type MixingConsoleValue, type PricingProfilePreset } from '@/components/pricing/MixingConsole';
 import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
+import { deriveVariantSku } from '@/lib/skuGenerator';
 
 const FALLBACK_PRESET: PricingProfilePreset = {
   yield_loss_pct: 16,
