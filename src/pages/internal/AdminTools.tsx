@@ -620,6 +620,45 @@ export default function AdminTools() {
             </CardContent>
           </Card>
 
+          {/* DEV ONLY: Purge ghost production rows */}
+          <Card className="border-amber-500/50 bg-amber-500/5">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Trash2 className="h-5 w-5 text-amber-500" />
+                <CardTitle className="text-lg">Purge ghost production rows</CardTitle>
+              </div>
+              <CardDescription>
+                Removes roasted_batches, packing_runs, and ship_picks whose corresponding
+                wip_ledger / fg_inventory_log entries have been deleted. Safe to run any time —
+                only touches rows already inconsistent with the inventory ledger.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const { data, error } = await supabase.rpc('dev_purge_ghost_production_rows' as never);
+                    if (error) throw error;
+                    const counts = (data ?? {}) as Record<string, number>;
+                    toast.success(
+                      `Purged ${counts.roasted_batches ?? 0} batches, ${counts.packing_runs ?? 0} runs, ${counts.ship_picks ?? 0} picks`
+                    );
+                    queryClient.invalidateQueries();
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  }
+                }}
+                className="gap-2 border-amber-500 text-amber-600 hover:bg-amber-500/10"
+              >
+                <Trash2 className="h-4 w-4" />
+                Purge ghosts now
+              </Button>
+            </CardContent>
+          </Card>
+
+
+
           {/* DEV ONLY: Nuclear Reset - Clear ALL Master Data */}
           <Card className="border-red-600/50 bg-red-500/5">
             <CardHeader>
