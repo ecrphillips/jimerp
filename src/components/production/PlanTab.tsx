@@ -154,7 +154,9 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
              clients(name),
              order_line_items(product_id, quantity_units, products(bag_size_g, roast_group))`
           )
-          .not('status', 'in', '(SHIPPED,CANCELLED)'),
+          // Keep SHIPPED so today's already-finished priority orders still show as "covered".
+          // Cancelled is dropped — they are not real demand.
+          .neq('status', 'CANCELLED'),
         supabase
           .from('funk_import_sessions')
           .select('id, file_name, imported_at, orders_new, orders_skipped')
