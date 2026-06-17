@@ -565,7 +565,7 @@ export default function NewOrder() {
           product_id: li.productId,
           quantity_units: li.quantity,
           grind: null,
-          unit_price_locked: li.price!,
+          unit_price_locked: li.price ?? 0,
           shipment_id: targetShipmentId,
         };
       });
