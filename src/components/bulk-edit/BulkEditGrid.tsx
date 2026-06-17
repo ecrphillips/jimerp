@@ -122,9 +122,14 @@ export function BulkEditGrid<TRow>({
 
   const normalize = (v: unknown): string => {
     if (v === null || v === undefined) return '';
-    if (typeof v === 'boolean') return String(v);
-    return String(v).trim();
+    if (typeof v === 'boolean') return v ? 'true' : 'false';
+    const s = String(v).trim();
+    // Treat boolean-like strings case-insensitively so Excel's TRUE/FALSE
+    // doesn't get treated as a change against our exported "true"/"false".
+    if (/^(true|false)$/i.test(s)) return s.toLowerCase();
+    return s;
   };
+
 
   const handleImportClick = () => fileInputRef.current?.click();
 
