@@ -223,7 +223,26 @@ export function BulkEditGrid<TRow>({
         <div className="flex items-center gap-3">
           <h3 className="font-semibold text-sm">{title}</h3>
           <span className="text-xs text-muted-foreground">{rows.length} row{rows.length !== 1 ? 's' : ''}</span>
+          {savingCount > 0 ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-950/40 border border-amber-300/60 dark:border-amber-800 rounded-full px-2 py-0.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+              Saving…
+            </span>
+          ) : lastSavedAt ? (
+            <span
+              className="inline-flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/40 border border-emerald-300/60 dark:border-emerald-800 rounded-full px-2 py-0.5"
+              title="Every edit is written to the database as soon as you leave the cell. It's safe to navigate away."
+            >
+              <Check className="h-3 w-3" />
+              {savedCount} change{savedCount !== 1 ? 's' : ''} saved · {lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground italic">
+              Edits auto-save as you leave each cell — safe to navigate away.
+            </span>
+          )}
         </div>
+
         <div className="flex items-center gap-2">
           {group && grouped.length > 0 && (
             <Button variant="outline" size="sm" onClick={toggleAllGroups} className="h-7 text-xs gap-1">
