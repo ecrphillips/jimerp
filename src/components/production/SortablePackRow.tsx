@@ -153,10 +153,19 @@ export function SortablePackRow({
                 Urgent
               </Badge>
             )}
-            {unblocksOrders > 0 && (demandedUnits - packedUnits) > 0 && (
+            {unblocksOrders > 0 && (demandedUnits - effectivePacked) > 0 && (
               <Badge variant="outline" className="text-xs">
                 <ShoppingCart className="h-3 w-3 mr-1" />
                 Unblocks: {unblocksOrders} order{unblocksOrders !== 1 ? 's' : ''}
+              </Badge>
+            )}
+            {coveredByPicks && (
+              <Badge
+                variant="outline"
+                className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800"
+                title="The shipper has already picked enough bags of this SKU. The pack is covered — record any remaining physical packs if you want, but no shortage exists."
+              >
+                Covered by picks ({pickedUnits})
               </Badge>
             )}
             {/* WIP status badges */}
