@@ -93,11 +93,19 @@ type OpenOrder = {
   lines: Array<{ product_id: string; quantity_units: number; bag_size_g: number; roast_group: string | null }>;
 };
 
+type AccountLocationRow = {
+  id: string;
+  location_name: string;
+  location_code: string;
+  is_active: boolean;
+  production_weekdays: number[] | null;
+};
+
 type AccountRow = {
   id: string;
   account_name: string;
   production_weekdays: number[] | null;
-  locations: Array<{ id: string; location_name: string; is_active: boolean }>;
+  locations: Array<AccountLocationRow>;
 };
 
 export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabProps) {
@@ -142,7 +150,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
       const [acctRes, ordersRes, funkSessRes] = await Promise.all([
         supabase
           .from('accounts')
-          .select('id, account_name, production_weekdays, account_locations(id, location_name, is_active)')
+          .select('id, account_name, production_weekdays, account_locations(id, location_name, location_code, is_active, production_weekdays)')
           .eq('is_active', true),
         supabase
           .from('orders')
@@ -171,7 +179,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
         id: a.id,
         account_name: a.account_name,
         production_weekdays: (a.production_weekdays as number[] | null) ?? null,
-        locations: ((a.account_locations as Array<{ id: string; location_name: string; is_active: boolean }> | null) ?? []),
+        locations: ((a.account_locations as AccountLocationRow[] | null) ?? []),
       }));
 
       const orders: OpenOrder[] = (ordersRes.data ?? []).map((o: any) => {
@@ -251,48 +259,99 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
     );
     const jsTomorrow = (jsDay + 1) % 7;
 
-    const priorityAccounts = planData.accounts.filter((a) =>
-      (a.production_weekdays ?? []).includes(jsDay)
-    );
-    const priorityAcctIds = new Set(priorityAccounts.map((a) => a.id));
-
-    const tomorrowPriorityIds = new Set(
-      planData.accounts
-        .filter((a) => (a.production_weekdays ?? []).includes(jsTomorrow))
-        .map((a) => a.id)
-    );
-
     const todayOrders = planData.orders.filter((o) => o.workDeadlineDate === today);
     const tomorrowOrders = planData.orders.filter(
       (o) => o.workDeadlineDate === tomorrowStr && o.status !== 'SHIPPED'
     );
 
-    // Bucket 1: per priority account, list ALL today-deadline orders (including SHIPPED,
-    // so a completed order still proves the account is covered).
-    type PriorityAcct = {
+    // Compute effective production weekdays for a location (override → account default).
+    const effectiveDaysFor = (
+      acct: AccountRow,
+      loc: AccountLocationRow | null
+    ): number[] => {
+      if (loc && loc.production_weekdays && loc.production_weekdays.length > 0) {
+        return loc.production_weekdays;
+      }
+      return acct.production_weekdays ?? [];
+    };
+
+    // Resolve a "primary" location per account for orders that have no
+    // account_location_id (legacy data). Primary = alphabetically-first active
+    // location by code; falls back to alphabetically-first if none active.
+    const primaryLocationByAccount = new Map<string, AccountLocationRow | null>();
+    for (const a of planData.accounts) {
+      const sorted = [...a.locations].sort((x, y) => x.location_code.localeCompare(y.location_code));
+      const active = sorted.find((l) => l.is_active) ?? sorted[0] ?? null;
+      primaryLocationByAccount.set(a.id, active);
+    }
+
+    // Build the priority rows: one row per (account, location) where today is
+    // a production day for that location. Accounts with no locations still
+    // produce a single (account, null) row using account-level days.
+    type PriorityRow = {
       account: AccountRow;
+      location: AccountLocationRow | null; // null = account has no locations
       orders: OpenOrder[];
       kg: number;
       lastOrderAt: string | null;
     };
-    const bucket1: PriorityAcct[] = priorityAccounts
-      .map((acct) => {
-        const orders = todayOrders.filter((o) => o.account_id === acct.id);
-        const kg = orders.reduce((s, o) => s + o.kg, 0);
-        return {
-          account: acct,
-          orders,
-          kg,
-          lastOrderAt: planData.lastOrderByAccount.get(acct.id) ?? null,
-        };
-      })
-      .sort((a, b) => {
-        // Missing first, then by name
-        const aMissing = a.orders.length === 0 ? 0 : 1;
-        const bMissing = b.orders.length === 0 ? 0 : 1;
-        if (aMissing !== bMissing) return aMissing - bMissing;
-        return a.account.account_name.localeCompare(b.account.account_name);
-      });
+
+    const priorityAcctIds = new Set<string>();
+    const tomorrowPriorityIds = new Set<string>();
+
+    const bucket1: PriorityRow[] = [];
+    for (const acct of planData.accounts) {
+      const acctOrdersToday = todayOrders.filter((o) => o.account_id === acct.id);
+      const primary = primaryLocationByAccount.get(acct.id) ?? null;
+
+      if (acct.locations.length === 0) {
+        // No locations — fall back to account-level scheduling.
+        const days = acct.production_weekdays ?? [];
+        if (days.includes(jsDay)) {
+          priorityAcctIds.add(acct.id);
+          bucket1.push({
+            account: acct,
+            location: null,
+            orders: acctOrdersToday,
+            kg: acctOrdersToday.reduce((s, o) => s + o.kg, 0),
+            lastOrderAt: planData.lastOrderByAccount.get(acct.id) ?? null,
+          });
+        }
+        if (days.includes(jsTomorrow)) tomorrowPriorityIds.add(acct.id);
+        continue;
+      }
+
+      for (const loc of acct.locations) {
+        if (!loc.is_active) continue;
+        const days = effectiveDaysFor(acct, loc);
+
+        if (days.includes(jsDay)) {
+          priorityAcctIds.add(acct.id);
+          const locOrders = acctOrdersToday.filter((o) => {
+            if (o.account_location_id) return o.account_location_id === loc.id;
+            // Legacy un-located orders attribute to the account's primary location.
+            return primary?.id === loc.id;
+          });
+          bucket1.push({
+            account: acct,
+            location: loc,
+            orders: locOrders,
+            kg: locOrders.reduce((s, o) => s + o.kg, 0),
+            lastOrderAt: planData.lastOrderByAccount.get(acct.id) ?? null,
+          });
+        }
+        if (days.includes(jsTomorrow)) tomorrowPriorityIds.add(acct.id);
+      }
+    }
+
+    bucket1.sort((a, b) => {
+      const aMissing = a.orders.length === 0 ? 0 : 1;
+      const bMissing = b.orders.length === 0 ? 0 : 1;
+      if (aMissing !== bMissing) return aMissing - bMissing;
+      const nameCmp = a.account.account_name.localeCompare(b.account.account_name);
+      if (nameCmp !== 0) return nameCmp;
+      return (a.location?.location_code ?? '').localeCompare(b.location?.location_code ?? '');
+    });
 
     // Bucket 2: today-deadline orders for non-priority accounts (open only — shipped are done)
     const bucket2 = todayOrders
@@ -664,7 +723,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
         right={
           buckets ? (
             <span className="text-xs text-muted-foreground">
-              {buckets.bucket1.length} account{buckets.bucket1.length === 1 ? '' : 's'}
+              {buckets.bucket1.length} location{buckets.bucket1.length === 1 ? '' : 's'}
             </span>
           ) : null
         }
@@ -681,7 +740,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
           <div className="divide-y">
             {buckets.bucket1.map((row) => (
               <PriorityAccountCard
-                key={row.account.id}
+                key={`${row.account.id}:${row.location?.id ?? '-'}`}
                 row={row}
                 lastFunkImport={isFunk(row.account.account_name) ? lastFunkImport : null}
               />
@@ -897,6 +956,7 @@ function PriorityAccountCard({
 }: {
   row: {
     account: AccountRow;
+    location: AccountLocationRow | null;
     orders: OpenOrder[];
     kg: number;
     lastOrderAt: string | null;
@@ -910,6 +970,15 @@ function PriorityAccountCard({
 }) {
   const [open, setOpen] = useState(row.orders.length === 0);
   const hasOrders = row.orders.length > 0;
+  const locLabel = row.location
+    ? `${row.location.location_name} (${row.location.location_code})`
+    : null;
+  const subjectLabel = locLabel
+    ? `${row.account.account_name} — ${locLabel}`
+    : row.account.account_name;
+  const newOrderHref = row.location
+    ? `/orders/new?account=${row.account.id}&location=${row.location.id}`
+    : `/orders/new?account=${row.account.id}`;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -931,6 +1000,16 @@ function PriorityAccountCard({
             >
               {row.account.account_name}
             </Link>
+            {locLabel && (
+              <Badge variant="outline" className="text-[10px] h-5 shrink-0">
+                {row.location?.location_code}
+              </Badge>
+            )}
+            {locLabel && (
+              <span className="text-xs text-muted-foreground truncate">
+                {row.location?.location_name}
+              </span>
+            )}
             {hasOrders ? (
               <Badge
                 variant="outline"
@@ -953,7 +1032,7 @@ function PriorityAccountCard({
       <CollapsibleContent>
         <div className="px-10 pb-3 pt-1 space-y-2 text-xs">
           <div className="text-muted-foreground">
-            Last order entered:{' '}
+            Last order entered for this account:{' '}
             {row.lastOrderAt ? (
               <span title={row.lastOrderAt}>
                 {formatDistanceToNow(parseISO(row.lastOrderAt), { addSuffix: true })}
@@ -994,7 +1073,7 @@ function PriorityAccountCard({
           ) : (
             <div className="flex flex-wrap items-center gap-2 rounded border border-dashed bg-background px-3 py-2">
               <span className="text-destructive">
-                No order entered for {row.account.account_name} today.
+                No order entered for {subjectLabel} today.
               </span>
               {lastFunkImport !== null || /funk/i.test(row.account.account_name) ? (
                 <Button asChild size="sm" variant="outline" className="h-6 text-[11px]">
@@ -1004,7 +1083,7 @@ function PriorityAccountCard({
                 </Button>
               ) : null}
               <Button asChild size="sm" variant="outline" className="h-6 text-[11px]">
-                <Link to={`/orders/new?account=${row.account.id}`}>
+                <Link to={newOrderHref}>
                   <PlusCircle className="h-3 w-3 mr-1" /> Create order
                 </Link>
               </Button>

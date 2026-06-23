@@ -23,6 +23,7 @@ export type Database = {
           is_active: boolean
           location_code: string
           location_name: string
+          production_weekdays: number[] | null
           qbo_billing_entity: string | null
           updated_at: string
         }
@@ -34,6 +35,7 @@ export type Database = {
           is_active?: boolean
           location_code: string
           location_name: string
+          production_weekdays?: number[] | null
           qbo_billing_entity?: string | null
           updated_at?: string
         }
@@ -45,6 +47,7 @@ export type Database = {
           is_active?: boolean
           location_code?: string
           location_name?: string
+          production_weekdays?: number[] | null
           qbo_billing_entity?: string | null
           updated_at?: string
         }
