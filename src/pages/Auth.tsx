@@ -12,7 +12,7 @@ import homeIslandLogo from '@/assets/home-island-logo.png';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
 const emailSchema = z.object({
@@ -205,14 +205,27 @@ export default function Auth() {
         return;
       }
 
-      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      const { data: updated, error: updateError } = await supabase.auth.updateUser({ password: newPassword });
       if (updateError) {
         setError(updateError.message);
         setIsSubmitting(false);
         return;
       }
 
-      navigate('/dashboard', { replace: true });
+      // Route by role — CLIENT users must land in the portal, not the internal dashboard
+      const userId = updated?.user?.id;
+      let destination = '/';
+      if (userId) {
+        const { data: roleRow } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', userId)
+          .maybeSingle();
+        if (roleRow?.role === 'CLIENT') destination = '/portal';
+        else if (roleRow?.role === 'ADMIN') destination = '/dashboard';
+        else if (roleRow?.role === 'OPS') destination = '/production';
+      }
+      navigate(destination, { replace: true });
     } catch (err) {
       setError('An unexpected error occurred');
     } finally {

@@ -106,6 +106,8 @@ export function LocationManagementSection({ accountId, canManage }: Props) {
                         Billed separately as: <span className="font-medium">{loc.qbo_billing_entity}</span>
                       </p>
                     )}
+                    {/* qbo_billing_entity is shown as a customer-friendly billing label;
+                        the underlying accounting-system mapping stays internal. */}
                   </div>
                 </div>
               ))}
@@ -165,7 +167,7 @@ export function LocationManagementSection({ accountId, canManage }: Props) {
             {form.bill_separately && (
               <>
                 <div className="space-y-1">
-                  <Label>QuickBooks Billing Name <span className="text-destructive">*</span></Label>
+                  <Label>Billing Entity Name <span className="text-destructive">*</span></Label>
                   <Input
                     value={form.qbo_billing_entity}
                     onChange={(e) => setForm({ ...form, qbo_billing_entity: e.target.value })}
@@ -175,7 +177,7 @@ export function LocationManagementSection({ accountId, canManage }: Props) {
                 <Alert>
                   <Info className="h-4 w-4" />
                   <AlertDescription className="text-xs">
-                    Our team will set up a separate QuickBooks billing entry for this location.
+                    Our team will set up a separate billing record for this location.
                     Invoices for this location will be sent separately once it's configured.
                   </AlertDescription>
                 </Alert>
