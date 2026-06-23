@@ -735,7 +735,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
         right={
           buckets ? (
             <span className="text-xs text-muted-foreground">
-              {buckets.bucket1.length} location{buckets.bucket1.length === 1 ? '' : 's'}
+              {buckets.bucket1.length} account{buckets.bucket1.length === 1 ? '' : 's'}
             </span>
           ) : null
         }
@@ -752,13 +752,14 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
           <div className="divide-y">
             {buckets.bucket1.map((row) => (
               <PriorityAccountCard
-                key={`${row.account.id}:${row.location?.id ?? '-'}`}
+                key={row.account.id}
                 row={row}
                 lastFunkImport={isFunk(row.account.account_name) ? lastFunkImport : null}
               />
             ))}
           </div>
         )}
+
       </BucketShell>
 
       {/* BUCKET 2 — Other today */}
