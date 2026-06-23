@@ -259,6 +259,11 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
     );
     const jsTomorrow = (jsDay + 1) % 7;
 
+    const todayOrders = planData.orders.filter((o) => o.workDeadlineDate === today);
+    const tomorrowOrders = planData.orders.filter(
+      (o) => o.workDeadlineDate === tomorrowStr && o.status !== 'SHIPPED'
+    );
+
     // Compute effective production weekdays for a location (override → account default).
     const effectiveDaysFor = (
       acct: AccountRow,
