@@ -969,10 +969,15 @@ function PriorityAccountCard({
 }: {
   row: {
     account: AccountRow;
-    location: AccountLocationRow | null;
-    orders: OpenOrder[];
-    kg: number;
+    locations: Array<{
+      location: AccountLocationRow | null;
+      orders: OpenOrder[];
+      kg: number;
+    }>;
+    totalKg: number;
+    totalOrders: number;
     lastOrderAt: string | null;
+    allCovered: boolean;
   };
   lastFunkImport: {
     file_name: string | null;
@@ -981,17 +986,9 @@ function PriorityAccountCard({
     orders_skipped: number;
   } | null;
 }) {
-  const [open, setOpen] = useState(row.orders.length === 0);
-  const hasOrders = row.orders.length > 0;
-  const locLabel = row.location
-    ? `${row.location.location_name} (${row.location.location_code})`
-    : null;
-  const subjectLabel = locLabel
-    ? `${row.account.account_name} — ${locLabel}`
-    : row.account.account_name;
-  const newOrderHref = row.location
-    ? `/orders/new?account=${row.account.id}&location=${row.location.id}`
-    : `/orders/new?account=${row.account.id}`;
+  const [open, setOpen] = useState(!row.allCovered);
+  const missingCount = row.locations.filter((l) => l.orders.length === 0).length;
+  const hasMultipleLocations = row.locations.length > 1 || row.locations[0]?.location != null;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -1013,37 +1010,33 @@ function PriorityAccountCard({
             >
               {row.account.account_name}
             </Link>
-            {locLabel && (
-              <Badge variant="outline" className="text-[10px] h-5 shrink-0">
-                {row.location?.location_code}
-              </Badge>
-            )}
-            {locLabel && (
-              <span className="text-xs text-muted-foreground truncate">
-                {row.location?.location_name}
+            {hasMultipleLocations && (
+              <span className="text-[11px] text-muted-foreground shrink-0">
+                {row.locations.length} location{row.locations.length === 1 ? '' : 's'}
               </span>
             )}
-            {hasOrders ? (
+            {row.allCovered ? (
               <Badge
                 variant="outline"
                 className="text-[10px] h-5 border-green-500 text-green-700 dark:text-green-400"
               >
                 <CheckCircle2 className="h-3 w-3 mr-1" />
-                {row.orders.length} order{row.orders.length === 1 ? '' : 's'}
+                {row.totalOrders} order{row.totalOrders === 1 ? '' : 's'}
               </Badge>
             ) : (
               <Badge variant="destructive" className="text-[10px] h-5">
-                <AlertCircle className="h-3 w-3 mr-1" /> No order yet
+                <AlertCircle className="h-3 w-3 mr-1" />
+                {missingCount} missing
               </Badge>
             )}
           </div>
           <span className="font-mono text-xs text-muted-foreground shrink-0">
-            {hasOrders ? fmtKg(row.kg) : '—'}
+            {row.totalKg > 0 ? fmtKg(row.totalKg) : '—'}
           </span>
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="px-10 pb-3 pt-1 space-y-2 text-xs">
+        <div className="px-10 pb-3 pt-1 space-y-3 text-xs">
           <div className="text-muted-foreground">
             Last order entered for this account:{' '}
             {row.lastOrderAt ? (
@@ -1064,49 +1057,104 @@ function PriorityAccountCard({
             )}
           </div>
 
-          {hasOrders ? (
-            <ul className="divide-y rounded border bg-background">
-              {row.orders.map((o) => (
-                <li key={o.id} className="flex items-center justify-between gap-2 px-3 py-1.5">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Link to={`/orders/${o.id}`} className="font-medium hover:underline">
-                      #{o.order_number}
-                    </Link>
-                    {o.locationName && (
-                      <span className="text-muted-foreground truncate">· {o.locationName}</span>
-                    )}
-                    <Badge variant="outline" className="text-[10px] h-4">
-                      {o.status}
-                    </Badge>
+          <div className="space-y-2">
+            {row.locations.map((locRow, idx) => {
+              const loc = locRow.location;
+              const hasOrders = locRow.orders.length > 0;
+              const subjectLabel = loc
+                ? `${row.account.account_name} — ${loc.location_name} (${loc.location_code})`
+                : row.account.account_name;
+              const newOrderHref = loc
+                ? `/orders/new?account=${row.account.id}&location=${loc.id}`
+                : `/orders/new?account=${row.account.id}`;
+
+              return (
+                <div
+                  key={loc?.id ?? `acct-${idx}`}
+                  className="rounded border bg-background"
+                >
+                  <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b bg-muted/30">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {loc ? (
+                        <>
+                          <Badge variant="outline" className="text-[10px] h-5 shrink-0">
+                            {loc.location_code}
+                          </Badge>
+                          <span className="font-medium truncate">{loc.location_name}</span>
+                        </>
+                      ) : (
+                        <span className="font-medium text-muted-foreground">Account</span>
+                      )}
+                      {hasOrders ? (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] h-4 border-green-500 text-green-700 dark:text-green-400"
+                        >
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          {locRow.orders.length} order{locRow.orders.length === 1 ? '' : 's'}
+                        </Badge>
+                      ) : (
+                        <Badge variant="destructive" className="text-[10px] h-4">
+                          <AlertCircle className="h-3 w-3 mr-1" /> No order yet
+                        </Badge>
+                      )}
+                    </div>
+                    <span className="font-mono text-muted-foreground shrink-0">
+                      {hasOrders ? fmtKg(locRow.kg) : '—'}
+                    </span>
                   </div>
-                  <span className="font-mono text-muted-foreground">{fmtKg(o.kg)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2 rounded border border-dashed bg-background px-3 py-2">
-              <span className="text-destructive">
-                No order entered for {subjectLabel} today.
-              </span>
-              {lastFunkImport !== null || /funk/i.test(row.account.account_name) ? (
-                <Button asChild size="sm" variant="outline" className="h-6 text-[11px]">
-                  <Link to="/admin/funk-import">
-                    <Upload className="h-3 w-3 mr-1" /> Import CSV
-                  </Link>
-                </Button>
-              ) : null}
-              <Button asChild size="sm" variant="outline" className="h-6 text-[11px]">
-                <Link to={newOrderHref}>
-                  <PlusCircle className="h-3 w-3 mr-1" /> Create order
-                </Link>
-              </Button>
-            </div>
-          )}
+
+                  {hasOrders ? (
+                    <ul className="divide-y">
+                      {locRow.orders.map((o) => (
+                        <li
+                          key={o.id}
+                          className="flex items-center justify-between gap-2 px-3 py-1.5"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Link
+                              to={`/orders/${o.id}`}
+                              className="font-medium hover:underline"
+                            >
+                              #{o.order_number}
+                            </Link>
+                            <Badge variant="outline" className="text-[10px] h-4">
+                              {o.status}
+                            </Badge>
+                          </div>
+                          <span className="font-mono text-muted-foreground">{fmtKg(o.kg)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+                      <span className="text-destructive">
+                        No order entered for {subjectLabel} today.
+                      </span>
+                      {lastFunkImport !== null || /funk/i.test(row.account.account_name) ? (
+                        <Button asChild size="sm" variant="outline" className="h-6 text-[11px]">
+                          <Link to="/admin/funk-import">
+                            <Upload className="h-3 w-3 mr-1" /> Import CSV
+                          </Link>
+                        </Button>
+                      ) : null}
+                      <Button asChild size="sm" variant="outline" className="h-6 text-[11px]">
+                        <Link to={newOrderHref}>
+                          <PlusCircle className="h-3 w-3 mr-1" /> Create order
+                        </Link>
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </CollapsibleContent>
     </Collapsible>
   );
 }
+
 
 function OrderList({
   orders,
