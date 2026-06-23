@@ -624,11 +624,48 @@ function ProfileTab({ account, refetch }: { account: any; refetch: () => void })
 }
 
 // ─── Locations Tab ─────────────────────────────────────────────
+// Production weekdays use JS getDay() (0=Sun..6=Sat); production tooling
+// restricts the picker to Mon–Fri.
+const LOCATION_PRODUCTION_DAY_OPTIONS = WEEKDAY_LABELS.filter(d => d.value >= 1 && d.value <= 5);
+
+function formatDayList(values: number[] | null | undefined): string {
+  if (!values || values.length === 0) return '—';
+  return [...values].sort((a, b) => a - b)
+    .map(v => WEEKDAY_LABELS.find(d => d.value === v)?.short)
+    .filter(Boolean)
+    .join(', ');
+}
+
 function LocationsTab({ accountId }: { accountId: string }) {
   const queryClient = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState({ location_name: '', location_code: '', address: '', qbo_billing_entity: '', is_active: true });
+  const [form, setForm] = useState<{
+    location_name: string;
+    location_code: string;
+    address: string;
+    qbo_billing_entity: string;
+    is_active: boolean;
+    inherit_days: boolean;
+    production_weekdays: number[];
+  }>({
+    location_name: '', location_code: '', address: '', qbo_billing_entity: '',
+    is_active: true, inherit_days: true, production_weekdays: [],
+  });
+
+  // Parent account default — shown as the inherited fallback for each location.
+  const { data: accountDays } = useQuery({
+    queryKey: ['account-default-production-days', accountId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('accounts')
+        .select('production_weekdays')
+        .eq('id', accountId)
+        .maybeSingle();
+      if (error) throw error;
+      return (data?.production_weekdays as number[] | null) ?? null;
+    },
+  });
 
   const { data: locations = [] } = useQuery({
     queryKey: ['account-locations', accountId],
@@ -645,17 +682,36 @@ function LocationsTab({ accountId }: { accountId: string }) {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const payload = { ...form, account_id: accountId };
+      // Inherit-days OR empty selection → null (falls back to account default).
+      const weekdaysPayload =
+        form.inherit_days || form.production_weekdays.length === 0
+          ? null
+          : [...form.production_weekdays].sort((a, b) => a - b);
+      const payload = {
+        location_name: form.location_name,
+        location_code: form.location_code,
+        address: form.address,
+        qbo_billing_entity: form.qbo_billing_entity,
+        is_active: form.is_active,
+        production_weekdays: weekdaysPayload,
+        account_id: accountId,
+      };
       if (editId) {
-        const { error } = await supabase.from('account_locations').update(payload).eq('id', editId);
+        const { error } = await supabase
+          .from('account_locations')
+          .update(payload as any)
+          .eq('id', editId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('account_locations').insert(payload);
+        const { error } = await supabase
+          .from('account_locations')
+          .insert(payload as any);
         if (error) throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['account-locations'] });
+      queryClient.invalidateQueries({ queryKey: ['plan-data'] });
       toast.success(editId ? 'Location updated' : 'Location added');
       resetForm();
     },
@@ -665,13 +721,34 @@ function LocationsTab({ accountId }: { accountId: string }) {
   const resetForm = () => {
     setShowAdd(false);
     setEditId(null);
-    setForm({ location_name: '', location_code: '', address: '', qbo_billing_entity: '', is_active: true });
+    setForm({
+      location_name: '', location_code: '', address: '', qbo_billing_entity: '',
+      is_active: true, inherit_days: true, production_weekdays: [],
+    });
   };
 
   const startEdit = (loc: any) => {
     setEditId(loc.id);
-    setForm({ location_name: loc.location_name, location_code: loc.location_code, address: loc.address || '', qbo_billing_entity: loc.qbo_billing_entity || '', is_active: loc.is_active });
+    const locDays = (loc.production_weekdays as number[] | null) ?? null;
+    setForm({
+      location_name: loc.location_name,
+      location_code: loc.location_code,
+      address: loc.address || '',
+      qbo_billing_entity: loc.qbo_billing_entity || '',
+      is_active: loc.is_active,
+      inherit_days: locDays === null,
+      production_weekdays: locDays ?? [],
+    });
     setShowAdd(true);
+  };
+
+  const toggleFormDay = (value: number) => {
+    setForm(f => ({
+      ...f,
+      production_weekdays: f.production_weekdays.includes(value)
+        ? f.production_weekdays.filter(d => d !== value)
+        : [...f.production_weekdays, value].sort((a, b) => a - b),
+    }));
   };
 
   return (
@@ -690,21 +767,33 @@ function LocationsTab({ accountId }: { accountId: string }) {
               <tr className="border-b bg-muted/50">
                 <th className="text-left px-3 py-2 font-medium">Name</th>
                 <th className="text-left px-3 py-2 font-medium">Code</th>
+                <th className="text-left px-3 py-2 font-medium">Production Days</th>
                 <th className="text-left px-3 py-2 font-medium">QBO Entity</th>
                 <th className="text-left px-3 py-2 font-medium">Status</th>
                 <th className="px-3 py-2 w-10" />
               </tr>
             </thead>
             <tbody>
-              {locations.map((loc: any) => (
-                <tr key={loc.id} className="border-b last:border-0">
-                  <td className="px-3 py-2">{loc.location_name}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{loc.location_code}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{loc.qbo_billing_entity || '—'}</td>
-                  <td className="px-3 py-2">{loc.is_active ? <Badge variant="outline" className="text-green-600 border-green-500 text-[10px]">Active</Badge> : <Badge variant="destructive" className="text-[10px]">Inactive</Badge>}</td>
-                  <td className="px-3 py-2"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(loc)}><Pencil className="h-3 w-3" /></Button></td>
-                </tr>
-              ))}
+              {locations.map((loc: any) => {
+                const override = (loc.production_weekdays as number[] | null) ?? null;
+                const inherited = override === null;
+                const effective = inherited ? (accountDays ?? []) : override;
+                return (
+                  <tr key={loc.id} className="border-b last:border-0">
+                    <td className="px-3 py-2">{loc.location_name}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{loc.location_code}</td>
+                    <td className="px-3 py-2 text-xs">
+                      <span>{formatDayList(effective)}</span>
+                      {inherited && (
+                        <span className="ml-1.5 text-muted-foreground italic">(inherits account default)</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">{loc.qbo_billing_entity || '—'}</td>
+                    <td className="px-3 py-2">{loc.is_active ? <Badge variant="outline" className="text-green-600 border-green-500 text-[10px]">Active</Badge> : <Badge variant="destructive" className="text-[10px]">Inactive</Badge>}</td>
+                    <td className="px-3 py-2"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(loc)}><Pencil className="h-3 w-3" /></Button></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -730,6 +819,42 @@ function LocationsTab({ accountId }: { accountId: string }) {
               </div>
               <Input value={form.qbo_billing_entity} onChange={e => setForm({ ...form, qbo_billing_entity: e.target.value })} />
             </div>
+
+            {/* Production days override */}
+            <div className="border rounded-md p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Standard Production Days</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Default: inherits the account-wide setting
+                    {accountDays && accountDays.length > 0
+                      ? ` (${formatDayList(accountDays)})`
+                      : ' (none set)'}.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={!form.inherit_days}
+                    onCheckedChange={v => setForm(f => ({ ...f, inherit_days: !v }))}
+                  />
+                  <Label className="text-xs">Override</Label>
+                </div>
+              </div>
+              {!form.inherit_days && (
+                <div className="flex flex-wrap gap-3 pt-1">
+                  {LOCATION_PRODUCTION_DAY_OPTIONS.map(opt => (
+                    <label key={opt.value} className="flex items-center gap-1.5 text-sm">
+                      <Checkbox
+                        checked={form.production_weekdays.includes(opt.value)}
+                        onCheckedChange={() => toggleFormDay(opt.value)}
+                      />
+                      {opt.short}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center gap-2">
               <Switch checked={form.is_active} onCheckedChange={v => setForm({ ...form, is_active: v })} />
               <Label>Active</Label>
