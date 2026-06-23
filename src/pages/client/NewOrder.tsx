@@ -173,7 +173,7 @@ export default function NewOrder() {
   });
 
   const { data: prices } = useQuery({
-    queryKey: ['client-prices'],
+    queryKey: ['client-prices', effectiveAccountId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('price_list')

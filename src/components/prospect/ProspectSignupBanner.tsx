@@ -79,7 +79,7 @@ export function ProspectSignupBanner() {
             selected_tier: picked,
             company_name: acct?.account_name ?? null,
             contact_email: authUser?.email ?? null,
-            notes: `Existing prospect-portal account (${accountId}) signalled tier intent: ${picked} [source: portal-banner]`,
+            notes: `Tier intent signalled from portal banner: ${picked}`,
           })
           .select('id')
           .single();
@@ -112,13 +112,13 @@ export function ProspectSignupBanner() {
         <div className="space-y-0.5">
           <div className="text-sm font-semibold text-foreground">
             {submitted
-              ? "We've got your tier selection — Ted and Aaron will follow up shortly."
+              ? "We've got your tier selection — our team will follow up shortly."
               : "You're previewing the member portal."}
           </div>
           <div className="text-xs text-muted-foreground">
             {submitted
               ? `Your selection: ${TIER_RATES[selectedTier!]?.label ?? selectedTier}`
-              : 'Pick a tier to sign up — Ted and Aaron will follow up to finalize.'}
+              : 'Pick a tier to sign up — our team will follow up to finalize.'}
           </div>
         </div>
 

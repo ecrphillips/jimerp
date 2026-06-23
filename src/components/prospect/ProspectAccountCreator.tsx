@@ -179,11 +179,8 @@ export function ProspectAccountCreator() {
       toast.success('Prospect account created — invitation sent');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('[ProspectAccountCreator] flow failed:', msg, {
-        prospectId,
-        accountId,
-        invitationId,
-      });
+      // Don't log internal DB row IDs to the browser console
+      console.error('[ProspectAccountCreator] flow failed:', msg);
       toast.error(`Couldn't create prospect: ${msg}`);
     } finally {
       setSubmitting(false);

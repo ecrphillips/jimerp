@@ -53,7 +53,7 @@ export default function AuthCallback() {
           return;
         }
 
-        console.log('[AuthCallback] Token type:', type);
+        
 
         // If we have tokens in the hash, set the session
         if (accessToken && refreshToken) {
@@ -70,7 +70,6 @@ export default function AuthCallback() {
 
           // Check if this is an invite (type=invite or type=signup) - user needs to set password
           if (type === 'invite' || type === 'signup' || type === 'recovery') {
-            console.log('[AuthCallback] Invite/recovery flow - redirecting to set password');
             navigate('/auth/set-password', { replace: true });
             return;
           }
