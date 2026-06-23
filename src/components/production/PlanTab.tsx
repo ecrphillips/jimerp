@@ -956,6 +956,7 @@ function PriorityAccountCard({
 }: {
   row: {
     account: AccountRow;
+    location: AccountLocationRow | null;
     orders: OpenOrder[];
     kg: number;
     lastOrderAt: string | null;
@@ -969,6 +970,15 @@ function PriorityAccountCard({
 }) {
   const [open, setOpen] = useState(row.orders.length === 0);
   const hasOrders = row.orders.length > 0;
+  const locLabel = row.location
+    ? `${row.location.location_name} (${row.location.location_code})`
+    : null;
+  const subjectLabel = locLabel
+    ? `${row.account.account_name} — ${locLabel}`
+    : row.account.account_name;
+  const newOrderHref = row.location
+    ? `/orders/new?account=${row.account.id}&location=${row.location.id}`
+    : `/orders/new?account=${row.account.id}`;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -990,6 +1000,16 @@ function PriorityAccountCard({
             >
               {row.account.account_name}
             </Link>
+            {locLabel && (
+              <Badge variant="outline" className="text-[10px] h-5 shrink-0">
+                {row.location?.location_code}
+              </Badge>
+            )}
+            {locLabel && (
+              <span className="text-xs text-muted-foreground truncate">
+                {row.location?.location_name}
+              </span>
+            )}
             {hasOrders ? (
               <Badge
                 variant="outline"
@@ -1012,7 +1032,7 @@ function PriorityAccountCard({
       <CollapsibleContent>
         <div className="px-10 pb-3 pt-1 space-y-2 text-xs">
           <div className="text-muted-foreground">
-            Last order entered:{' '}
+            Last order entered for this account:{' '}
             {row.lastOrderAt ? (
               <span title={row.lastOrderAt}>
                 {formatDistanceToNow(parseISO(row.lastOrderAt), { addSuffix: true })}
@@ -1053,7 +1073,7 @@ function PriorityAccountCard({
           ) : (
             <div className="flex flex-wrap items-center gap-2 rounded border border-dashed bg-background px-3 py-2">
               <span className="text-destructive">
-                No order entered for {row.account.account_name} today.
+                No order entered for {subjectLabel} today.
               </span>
               {lastFunkImport !== null || /funk/i.test(row.account.account_name) ? (
                 <Button asChild size="sm" variant="outline" className="h-6 text-[11px]">
@@ -1063,7 +1083,7 @@ function PriorityAccountCard({
                 </Button>
               ) : null}
               <Button asChild size="sm" variant="outline" className="h-6 text-[11px]">
-                <Link to={`/orders/new?account=${row.account.id}`}>
+                <Link to={newOrderHref}>
                   <PlusCircle className="h-3 w-3 mr-1" /> Create order
                 </Link>
               </Button>
