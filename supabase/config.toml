@@ -4,13 +4,13 @@ project_id = "cgdzjkryygwlyygeznrb"
   [functions.auth-email-hook]
     verify_jwt = false
   [functions.invite-account-user]
-    verify_jwt = false
+    verify_jwt = true
   [functions.invite-user]
     verify_jwt = false
   [functions.owner-invite-user]
-    verify_jwt = false
+    verify_jwt = true
   [functions.notify-new-order]
-    verify_jwt = false
+    verify_jwt = true
   [functions.notify-booking-event]
     verify_jwt = false
   [functions.process-email-queue]
