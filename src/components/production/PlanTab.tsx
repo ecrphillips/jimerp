@@ -93,11 +93,19 @@ type OpenOrder = {
   lines: Array<{ product_id: string; quantity_units: number; bag_size_g: number; roast_group: string | null }>;
 };
 
+type AccountLocationRow = {
+  id: string;
+  location_name: string;
+  location_code: string;
+  is_active: boolean;
+  production_weekdays: number[] | null;
+};
+
 type AccountRow = {
   id: string;
   account_name: string;
   production_weekdays: number[] | null;
-  locations: Array<{ id: string; location_name: string; is_active: boolean }>;
+  locations: Array<AccountLocationRow>;
 };
 
 export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabProps) {
