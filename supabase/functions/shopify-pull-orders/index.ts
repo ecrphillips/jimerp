@@ -22,7 +22,7 @@ import { corsHeadersFor } from '../_shared/cors.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '2.5-ops-trigger';
+const FUNCTION_VERSION = '2.6-customer-in-notes';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -108,7 +108,7 @@ async function fetchUnfulfilledOrders(
             id
             name
             createdAt
-            # customer { displayName }  # requires read_customers scope; omitted to avoid ACCESS_DENIED
+            customer { displayName }  # requires read_customers scope
             lineItems(first: 100) {
               nodes {
                 sku
