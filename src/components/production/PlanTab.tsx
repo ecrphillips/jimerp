@@ -150,7 +150,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
       const [acctRes, ordersRes, funkSessRes] = await Promise.all([
         supabase
           .from('accounts')
-          .select('id, account_name, production_weekdays, account_locations(id, location_name, is_active)')
+          .select('id, account_name, production_weekdays, account_locations(id, location_name, location_code, is_active, production_weekdays)')
           .eq('is_active', true),
         supabase
           .from('orders')
@@ -179,7 +179,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
         id: a.id,
         account_name: a.account_name,
         production_weekdays: (a.production_weekdays as number[] | null) ?? null,
-        locations: ((a.account_locations as Array<{ id: string; location_name: string; is_active: boolean }> | null) ?? []),
+        locations: ((a.account_locations as AccountLocationRow[] | null) ?? []),
       }));
 
       const orders: OpenOrder[] = (ordersRes.data ?? []).map((o: any) => {
