@@ -21,7 +21,7 @@ export type NotificationEventType =
   | 'BOOKING_CREATED'
   | 'BOOKING_CANCELLED';
 
-const FROM_DISPLAY = 'Home Island Manufacturing <noreply@homeislandcoffee.com>';
+const FROM_DISPLAY = 'Home Island Coffee Partners <noreply@homeislandcoffee.com>';
 const FROM_DOMAIN = 'homeislandcoffee.com';
 
 export interface EmailContent {

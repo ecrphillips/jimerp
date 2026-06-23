@@ -20,7 +20,7 @@ interface NotifyRequest {
 }
 
 const SHARED_MAILBOX = "orders@homeislandcoffee.com";
-const FROM_DISPLAY = "Home Island Manufacturing <noreply@homeislandcoffee.com>";
+const FROM_DISPLAY = "Home Island Coffee Partners <noreply@homeislandcoffee.com>";
 const FROM_DOMAIN = "homeislandcoffee.com";
 
 function escapeHtml(s: string): string {

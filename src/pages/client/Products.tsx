@@ -31,7 +31,7 @@ export default function Products() {
   const { data: allowedProducts, isLoading: productsLoading } = useQuery({
     queryKey: ['client-allowed-products-list', effectiveAccountId],
     queryFn: async () => {
-      const { data: allowed, error: allowedErr } = await (supabase as any)
+      const { data: allowed, error: allowedErr } = await supabase
         .from('client_allowed_products')
         .select('product_id, products(id, product_name, sku, bag_size_g, format, packaging_variant)')
         .eq('account_id', effectiveAccountId!);
