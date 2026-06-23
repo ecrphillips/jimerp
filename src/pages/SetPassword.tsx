@@ -86,7 +86,6 @@ export default function SetPassword() {
             .single();
 
           if (roleData?.role === 'CLIENT') {
-            void user;
             navigate('/portal', { replace: true });
           } else {
             navigate('/production', { replace: true });
