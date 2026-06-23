@@ -285,15 +285,21 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
       primaryLocationByAccount.set(a.id, active);
     }
 
-    // Build the priority rows: one row per (account, location) where today is
-    // a production day for that location. Accounts with no locations still
-    // produce a single (account, null) row using account-level days.
-    type PriorityRow = {
-      account: AccountRow;
-      location: AccountLocationRow | null; // null = account has no locations
+    // Build the priority rows: one row per account, containing a sub-row for
+    // each location scheduled today. Accounts with no locations get a single
+    // (location=null) sub-row using account-level days.
+    type PriorityLocationRow = {
+      location: AccountLocationRow | null;
       orders: OpenOrder[];
       kg: number;
+    };
+    type PriorityRow = {
+      account: AccountRow;
+      locations: PriorityLocationRow[];
+      totalKg: number;
+      totalOrders: number;
       lastOrderAt: string | null;
+      allCovered: boolean;
     };
 
     const priorityAcctIds = new Set<string>();
@@ -303,55 +309,61 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
     for (const acct of planData.accounts) {
       const acctOrdersToday = todayOrders.filter((o) => o.account_id === acct.id);
       const primary = primaryLocationByAccount.get(acct.id) ?? null;
+      const scheduledLocs: PriorityLocationRow[] = [];
 
       if (acct.locations.length === 0) {
-        // No locations — fall back to account-level scheduling.
         const days = acct.production_weekdays ?? [];
         if (days.includes(jsDay)) {
-          priorityAcctIds.add(acct.id);
-          bucket1.push({
-            account: acct,
+          scheduledLocs.push({
             location: null,
             orders: acctOrdersToday,
             kg: acctOrdersToday.reduce((s, o) => s + o.kg, 0),
-            lastOrderAt: planData.lastOrderByAccount.get(acct.id) ?? null,
           });
         }
         if (days.includes(jsTomorrow)) tomorrowPriorityIds.add(acct.id);
-        continue;
-      }
-
-      for (const loc of acct.locations) {
-        if (!loc.is_active) continue;
-        const days = effectiveDaysFor(acct, loc);
-
-        if (days.includes(jsDay)) {
-          priorityAcctIds.add(acct.id);
-          const locOrders = acctOrdersToday.filter((o) => {
-            if (o.account_location_id) return o.account_location_id === loc.id;
-            // Legacy un-located orders attribute to the account's primary location.
-            return primary?.id === loc.id;
-          });
-          bucket1.push({
-            account: acct,
-            location: loc,
-            orders: locOrders,
-            kg: locOrders.reduce((s, o) => s + o.kg, 0),
-            lastOrderAt: planData.lastOrderByAccount.get(acct.id) ?? null,
-          });
+      } else {
+        for (const loc of acct.locations) {
+          if (!loc.is_active) continue;
+          const days = effectiveDaysFor(acct, loc);
+          if (days.includes(jsDay)) {
+            const locOrders = acctOrdersToday.filter((o) => {
+              if (o.account_location_id) return o.account_location_id === loc.id;
+              return primary?.id === loc.id;
+            });
+            scheduledLocs.push({
+              location: loc,
+              orders: locOrders,
+              kg: locOrders.reduce((s, o) => s + o.kg, 0),
+            });
+          }
+          if (days.includes(jsTomorrow)) tomorrowPriorityIds.add(acct.id);
         }
-        if (days.includes(jsTomorrow)) tomorrowPriorityIds.add(acct.id);
       }
+
+      if (scheduledLocs.length === 0) continue;
+      priorityAcctIds.add(acct.id);
+
+      scheduledLocs.sort((a, b) =>
+        (a.location?.location_code ?? '').localeCompare(b.location?.location_code ?? '')
+      );
+
+      bucket1.push({
+        account: acct,
+        locations: scheduledLocs,
+        totalKg: scheduledLocs.reduce((s, l) => s + l.kg, 0),
+        totalOrders: scheduledLocs.reduce((s, l) => s + l.orders.length, 0),
+        lastOrderAt: planData.lastOrderByAccount.get(acct.id) ?? null,
+        allCovered: scheduledLocs.every((l) => l.orders.length > 0),
+      });
     }
 
     bucket1.sort((a, b) => {
-      const aMissing = a.orders.length === 0 ? 0 : 1;
-      const bMissing = b.orders.length === 0 ? 0 : 1;
+      const aMissing = a.allCovered ? 1 : 0;
+      const bMissing = b.allCovered ? 1 : 0;
       if (aMissing !== bMissing) return aMissing - bMissing;
-      const nameCmp = a.account.account_name.localeCompare(b.account.account_name);
-      if (nameCmp !== 0) return nameCmp;
-      return (a.location?.location_code ?? '').localeCompare(b.location?.location_code ?? '');
+      return a.account.account_name.localeCompare(b.account.account_name);
     });
+
 
     // Bucket 2: today-deadline orders for non-priority accounts (open only — shipped are done)
     const bucket2 = todayOrders
