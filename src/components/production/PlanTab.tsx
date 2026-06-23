@@ -259,48 +259,94 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
     );
     const jsTomorrow = (jsDay + 1) % 7;
 
-    const priorityAccounts = planData.accounts.filter((a) =>
-      (a.production_weekdays ?? []).includes(jsDay)
-    );
-    const priorityAcctIds = new Set(priorityAccounts.map((a) => a.id));
+    // Compute effective production weekdays for a location (override → account default).
+    const effectiveDaysFor = (
+      acct: AccountRow,
+      loc: AccountLocationRow | null
+    ): number[] => {
+      if (loc && loc.production_weekdays && loc.production_weekdays.length > 0) {
+        return loc.production_weekdays;
+      }
+      return acct.production_weekdays ?? [];
+    };
 
-    const tomorrowPriorityIds = new Set(
-      planData.accounts
-        .filter((a) => (a.production_weekdays ?? []).includes(jsTomorrow))
-        .map((a) => a.id)
-    );
+    // Resolve a "primary" location per account for orders that have no
+    // account_location_id (legacy data). Primary = alphabetically-first active
+    // location by code; falls back to alphabetically-first if none active.
+    const primaryLocationByAccount = new Map<string, AccountLocationRow | null>();
+    for (const a of planData.accounts) {
+      const sorted = [...a.locations].sort((x, y) => x.location_code.localeCompare(y.location_code));
+      const active = sorted.find((l) => l.is_active) ?? sorted[0] ?? null;
+      primaryLocationByAccount.set(a.id, active);
+    }
 
-    const todayOrders = planData.orders.filter((o) => o.workDeadlineDate === today);
-    const tomorrowOrders = planData.orders.filter(
-      (o) => o.workDeadlineDate === tomorrowStr && o.status !== 'SHIPPED'
-    );
-
-    // Bucket 1: per priority account, list ALL today-deadline orders (including SHIPPED,
-    // so a completed order still proves the account is covered).
-    type PriorityAcct = {
+    // Build the priority rows: one row per (account, location) where today is
+    // a production day for that location. Accounts with no locations still
+    // produce a single (account, null) row using account-level days.
+    type PriorityRow = {
       account: AccountRow;
+      location: AccountLocationRow | null; // null = account has no locations
       orders: OpenOrder[];
       kg: number;
       lastOrderAt: string | null;
     };
-    const bucket1: PriorityAcct[] = priorityAccounts
-      .map((acct) => {
-        const orders = todayOrders.filter((o) => o.account_id === acct.id);
-        const kg = orders.reduce((s, o) => s + o.kg, 0);
-        return {
-          account: acct,
-          orders,
-          kg,
-          lastOrderAt: planData.lastOrderByAccount.get(acct.id) ?? null,
-        };
-      })
-      .sort((a, b) => {
-        // Missing first, then by name
-        const aMissing = a.orders.length === 0 ? 0 : 1;
-        const bMissing = b.orders.length === 0 ? 0 : 1;
-        if (aMissing !== bMissing) return aMissing - bMissing;
-        return a.account.account_name.localeCompare(b.account.account_name);
-      });
+
+    const priorityAcctIds = new Set<string>();
+    const tomorrowPriorityIds = new Set<string>();
+
+    const bucket1: PriorityRow[] = [];
+    for (const acct of planData.accounts) {
+      const acctOrdersToday = todayOrders.filter((o) => o.account_id === acct.id);
+      const primary = primaryLocationByAccount.get(acct.id) ?? null;
+
+      if (acct.locations.length === 0) {
+        // No locations — fall back to account-level scheduling.
+        const days = acct.production_weekdays ?? [];
+        if (days.includes(jsDay)) {
+          priorityAcctIds.add(acct.id);
+          bucket1.push({
+            account: acct,
+            location: null,
+            orders: acctOrdersToday,
+            kg: acctOrdersToday.reduce((s, o) => s + o.kg, 0),
+            lastOrderAt: planData.lastOrderByAccount.get(acct.id) ?? null,
+          });
+        }
+        if (days.includes(jsTomorrow)) tomorrowPriorityIds.add(acct.id);
+        continue;
+      }
+
+      for (const loc of acct.locations) {
+        if (!loc.is_active) continue;
+        const days = effectiveDaysFor(acct, loc);
+
+        if (days.includes(jsDay)) {
+          priorityAcctIds.add(acct.id);
+          const locOrders = acctOrdersToday.filter((o) => {
+            if (o.account_location_id) return o.account_location_id === loc.id;
+            // Legacy un-located orders attribute to the account's primary location.
+            return primary?.id === loc.id;
+          });
+          bucket1.push({
+            account: acct,
+            location: loc,
+            orders: locOrders,
+            kg: locOrders.reduce((s, o) => s + o.kg, 0),
+            lastOrderAt: planData.lastOrderByAccount.get(acct.id) ?? null,
+          });
+        }
+        if (days.includes(jsTomorrow)) tomorrowPriorityIds.add(acct.id);
+      }
+    }
+
+    bucket1.sort((a, b) => {
+      const aMissing = a.orders.length === 0 ? 0 : 1;
+      const bMissing = b.orders.length === 0 ? 0 : 1;
+      if (aMissing !== bMissing) return aMissing - bMissing;
+      const nameCmp = a.account.account_name.localeCompare(b.account.account_name);
+      if (nameCmp !== 0) return nameCmp;
+      return (a.location?.location_code ?? '').localeCompare(b.location?.location_code ?? '');
+    });
 
     // Bucket 2: today-deadline orders for non-priority accounts (open only — shipped are done)
     const bucket2 = todayOrders
