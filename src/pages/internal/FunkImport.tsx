@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import {
   Upload, Check, ChevronsUpDown, ChevronDown, ChevronRight, Package, Box, AlertTriangle, Truck,
 } from 'lucide-react';
+import PackagingBadge from '@/components/PackagingBadge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -758,11 +759,16 @@ function ContributingRows({ group }: { group: ReviewGroup }) {
 
 function MatchedRow({ group, productById }: { group: ReviewGroup; productById: Map<string, ProductLite> }) {
   const product = productById.get(group.match.productId!);
+  const parsedVariant = parseBagSize(group.rawName).variant;
+  const variant = product?.packaging_variant ?? parsedVariant;
   return (
     <div className="rounded border px-3 py-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-medium">{product?.product_name ?? '(unknown product)'}</span>
-        <span className="text-sm font-semibold">{group.totalQuantity} units</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-medium truncate">{product?.product_name ?? '(unknown product)'}</span>
+          <PackagingBadge variant={variant} />
+        </div>
+        <span className="shrink-0 text-sm font-semibold">{group.totalQuantity} units</span>
       </div>
       <ContributingRows group={group} />
     </div>
@@ -786,7 +792,10 @@ function DecisionRow({
     <div className="rounded border px-3 py-2">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="truncate font-medium">{group.cleanedName}</div>
+          <div className="flex items-center gap-2">
+            <div className="truncate font-medium">{group.cleanedName}</div>
+            <PackagingBadge variant={parseBagSize(group.rawName).variant} />
+          </div>
           {group.csvSku && <div className="text-xs text-muted-foreground">SKU {group.csvSku}</div>}
         </div>
         <span className="shrink-0 text-sm font-semibold">{group.totalQuantity} units</span>
@@ -844,6 +853,7 @@ function ProductCombobox({ products, value, onChange }: { products: ProductLite[
                 >
                   <Check className={cn('shrink-0 h-4 w-4', value === p.id ? 'opacity-100' : 'opacity-0')} />
                   <span className="flex-1 truncate">{p.product_name}</span>
+                  {p.packaging_variant && <PackagingBadge variant={p.packaging_variant} className="shrink-0" />}
                   {p.sku && <span className="shrink-0 text-xs text-muted-foreground font-mono">{p.sku}</span>}
                 </CommandItem>
               ))}
