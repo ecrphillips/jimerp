@@ -829,18 +829,22 @@ function ProductCombobox({ products, value, onChange }: { products: ProductLite[
           <ChevronsUpDown className="h-3 w-3 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="start">
+      <PopoverContent className="w-[28rem] p-0" align="start">
         <Command>
           <CommandInput placeholder="Search products…" />
           <CommandList>
             <CommandEmpty>No product found.</CommandEmpty>
             <CommandGroup>
               {products.map((p) => (
-                <CommandItem key={p.id} value={`${p.product_name} ${p.sku ?? ''}`}
-                  onSelect={() => { onChange(p.id); setOpen(false); }}>
-                  <Check className={cn('mr-2 h-4 w-4', value === p.id ? 'opacity-100' : 'opacity-0')} />
-                  <span className="truncate">{p.product_name}</span>
-                  {p.sku && <span className="ml-2 text-xs text-muted-foreground">{p.sku}</span>}
+                <CommandItem
+                  key={p.id}
+                  value={`${p.product_name} ${p.sku ?? ''}`}
+                  className="flex items-center gap-2"
+                  onSelect={() => { onChange(p.id); setOpen(false); }}
+                >
+                  <Check className={cn('shrink-0 h-4 w-4', value === p.id ? 'opacity-100' : 'opacity-0')} />
+                  <span className="flex-1 truncate">{p.product_name}</span>
+                  {p.sku && <span className="shrink-0 text-xs text-muted-foreground font-mono">{p.sku}</span>}
                 </CommandItem>
               ))}
             </CommandGroup>
