@@ -571,6 +571,8 @@ export function RoastGroupDrawer({
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
       queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-manual-adjustments'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
       refreshFrozenBatches();
     },
