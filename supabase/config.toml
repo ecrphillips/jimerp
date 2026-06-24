@@ -45,3 +45,7 @@ project_id = "cgdzjkryygwlyygeznrb"
     verify_jwt = true
   [functions.shopify-pull-orders]
     verify_jwt = true
+  [functions.shopify-oauth-start]
+    verify_jwt = false
+  [functions.shopify-oauth-callback]
+    verify_jwt = false
