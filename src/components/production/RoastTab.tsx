@@ -1642,13 +1642,25 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                     queryClient.invalidateQueries({ queryKey: ['roast-groups-config'] });
                   }
 
-                  const plannedKg = addBatchKg ? parseFloat(addBatchKg) : 0;
+                  const inputKg = addBatchInputKg ? parseFloat(addBatchInputKg) : 0;
+                  const yieldLoss = addBatchYieldLoss ? parseFloat(addBatchYieldLoss) : 0;
+                  if (!inputKg || inputKg <= 0) {
+                    toast.error('Input kg is required.');
+                    setAddBatchSaving(false);
+                    return;
+                  }
+                  if (!(yieldLoss >= 0 && yieldLoss < 100)) {
+                    toast.error('Yield loss % must be between 0 and 99.');
+                    setAddBatchSaving(false);
+                    return;
+                  }
+                  const plannedKg = inputKg * (1 - yieldLoss / 100);
 
                   const performInsert = async (swaps: DepletionSwap[] = []) => {
                     const { error } = await supabase.from('roasted_batches').insert({
                       roast_group: roastGroupKey,
-                      target_date: addBatchDate,
-                      planned_output_kg: addBatchKg ? parseFloat(addBatchKg) : null,
+                      target_date: today,
+                      planned_output_kg: plannedKg,
                       actual_output_kg: 0,
                       status: 'PLANNED' as const,
                       assigned_roaster: addBatchRoaster || null,
