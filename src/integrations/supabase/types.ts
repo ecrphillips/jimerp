@@ -5176,6 +5176,8 @@ export type Database = {
           linked_account_id: string
           oauth_client_id: string | null
           oauth_client_secret: string | null
+          oauth_state: string | null
+          oauth_state_expires_at: string | null
           owner_notes: string | null
           pull_cadence: string
           pull_schedule_cron: string | null
@@ -5195,6 +5197,8 @@ export type Database = {
           linked_account_id: string
           oauth_client_id?: string | null
           oauth_client_secret?: string | null
+          oauth_state?: string | null
+          oauth_state_expires_at?: string | null
           owner_notes?: string | null
           pull_cadence?: string
           pull_schedule_cron?: string | null
@@ -5214,6 +5218,8 @@ export type Database = {
           linked_account_id?: string
           oauth_client_id?: string | null
           oauth_client_secret?: string | null
+          oauth_state?: string | null
+          oauth_state_expires_at?: string | null
           owner_notes?: string | null
           pull_cadence?: string
           pull_schedule_cron?: string | null
