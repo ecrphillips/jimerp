@@ -271,10 +271,50 @@ export interface MatchResult {
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
 /**
+ * Whitelist of qualifiers we strip when fuzzy-matching product names. Anything
+ * outside this list is left alone so we don't accidentally collapse two
+ * genuinely different products.
+ */
+const QUALIFIER_WHITELIST = [
+  'wholesale - case',
+  'wholesale-case',
+  'wholesale case',
+  'wholesale',
+  'subscription',
+  'sub',
+  'retail',
+];
+
+/**
+ * Normalize a product name for fuzzy comparison:
+ *  - lowercase, collapse whitespace
+ *  - strip parenthetical qualifiers that match the whitelist
+ *  - normalize bag-size tokens ("5 LB"/"5lb"/"5 lb bag" -> "5lb", "1 kg" -> "1kg")
+ * Grind tokens ("/ ground", "/ whole beans") are intentionally NOT collapsed —
+ * grind variants stay distinct until the grind-management feature ships.
+ */
+export function fuzzyNormalizeName(name: string): string {
+  let s = (name ?? '').toLowerCase();
+  // Strip whitelisted parentheticals: "(Wholesale)", "(wholesale - case)", etc.
+  s = s.replace(/\(([^()]*)\)/g, (_, inner) => {
+    const v = inner.trim().toLowerCase();
+    return QUALIFIER_WHITELIST.includes(v) ? ' ' : `(${inner})`;
+  });
+  // Normalize bag sizes: "5 LB", "5lb", "5 lb bag" -> "5lb"; "1 kg" -> "1kg".
+  s = s.replace(/\b(\d+)\s?lb\b(?:\s*bag)?/g, '$1lb');
+  s = s.replace(/\b(\d+)\s?kg\b/g, '$1kg');
+  s = s.replace(/\b(\d+)\s?g\b/g, '$1g');
+  // Tidy: collapse whitespace and dangling separators.
+  s = s.replace(/\s+-\s+-\s+/g, ' - ').replace(/\s+/g, ' ').trim();
+  return s;
+}
+
+/**
  * Match one cleaned line against saved mappings then products.
  *  1. Saved mapping (by sku when present, else by cleaned name) -> matched.
  *  2. Auto-guess: exact sku or exact name against products -> needs_confirmation.
- *  3. Else unmatched.
+ *  3. Fuzzy auto-guess (whitelist qualifiers stripped, bag-size normalized) -> needs_confirmation.
+ *  4. Else unmatched.
  * A mapping/guess pointing at a placeholder product is never treated as final.
  */
 export function matchLineItem(
@@ -302,8 +342,44 @@ export function matchLineItem(
   const byName = products.find((p) => !p.is_placeholder && norm(p.product_name) === norm(cleanedName));
   if (byName) return { kind: 'needs_confirmation', productId: byName.id };
 
-  // 3. Unmatched.
+  // 3. Fuzzy auto-guess: whitelist qualifiers stripped + bag-size normalized.
+  const fuzz = fuzzyNormalizeName(cleanedName);
+  if (fuzz) {
+    const byFuzzy = products.find(
+      (p) => !p.is_placeholder && fuzzyNormalizeName(p.product_name) === fuzz,
+    );
+    if (byFuzzy) return { kind: 'needs_confirmation', productId: byFuzzy.id };
+  }
+
+  // 4. Unmatched.
   return { kind: 'unmatched', productId: null };
+}
+
+// ---------------------------------------------------------------------------
+// Grind variant detection (Phase 1 — count only)
+// ---------------------------------------------------------------------------
+
+/**
+ * True when a line name explicitly calls out a non-whole-bean grind, e.g.
+ * "... / Ground", "... / Espresso", "... / Filter". Whole-bean lines return
+ * false. Used to surface a hard-to-miss banner so the operator double-checks
+ * grind handling before confirming the import.
+ */
+export function isGrindVariantName(name: string): boolean {
+  const n = (name ?? '').toLowerCase();
+  if (/\bwhole\s*beans?\b/.test(n)) return false;
+  return /\b(ground|grind|espresso|filter|drip|french\s*press|aeropress|moka|pour[-\s]?over)\b/.test(n);
+}
+
+/** Count CSV line items across all orders that look like a grind variant. */
+export function countGrindVariantLines(orders: CsvOrder[]): number {
+  let n = 0;
+  for (const o of orders) {
+    for (const li of o.lineItems) {
+      if (!li.isDrop && isGrindVariantName(li.rawName)) n++;
+    }
+  }
+  return n;
 }
 
 // ---------------------------------------------------------------------------
