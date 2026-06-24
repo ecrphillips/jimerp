@@ -1,0 +1,20 @@
+# Shopify app configuration (standalone, non-embedded) for the JIM ERP
+# integration. Syncs with the Partner dashboard via `shopify app deploy`.
+#
+# IMPORTANT: replace client_id with your SHOPIFY_API_KEY, and ensure the
+# redirect URL below matches ${SUPABASE_URL}/functions/v1/shopify-oauth-callback
+# byte-for-byte (no trailing slash, correct project ref) or Shopify rejects the
+# callback with "redirect_uri is not whitelisted".
+
+client_id = "YOUR_SHOPIFY_API_KEY"
+name = "JIM ERP Integration"
+application_url = "https://cgdzjkryygwlyygeznrb.supabase.co/functions/v1/shopify-oauth-start"
+embedded = false
+
+[access_scopes]
+scopes = "read_orders,read_products,read_customers"
+
+[auth]
+redirect_urls = [
+  "https://cgdzjkryygwlyygeznrb.supabase.co/functions/v1/shopify-oauth-callback"
+]

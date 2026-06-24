@@ -19,6 +19,7 @@
 
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeadersFor } from '../_shared/cors.ts';
+import { decryptSecret, looksEncrypted } from '../_shared/crypto.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
@@ -80,7 +81,15 @@ async function resolveAccessToken(source: {
     if (!payload.access_token) throw new Error('token exchange returned no access_token');
     return payload.access_token as string;
   }
-  if (source.api_access_token) return source.api_access_token;
+  if (source.api_access_token) {
+    const raw = source.api_access_token;
+    // Tokens from the OAuth install flow are AES-256-GCM encrypted with the
+    // bare shop host as AAD; legacy custom-app shpat_ tokens are plaintext.
+    if (looksEncrypted(raw)) {
+      return await decryptSecret(raw, shopHost(source.store_url));
+    }
+    return raw;
+  }
   throw new Error('No credentials: set oauth_client_id/oauth_client_secret or api_access_token');
 }
 
