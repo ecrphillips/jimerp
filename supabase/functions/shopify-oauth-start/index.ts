@@ -44,10 +44,20 @@ serve(async (req) => {
       return errorPage("Missing or invalid shop parameter (must be *.myshopify.com).");
     }
 
-    // Verify the install request actually came from Shopify (HMAC over the query).
-    const hmacOk = await verifyShopifyHmac(url.searchParams);
-    if (!hmacOk) {
-      return errorPage("Request signature (HMAC) verification failed.");
+    // Two entry paths:
+    //  1. Shopify-initiated install — carries an `hmac` we MUST verify (request
+    //     authenticity over the query string).
+    //  2. Admin-initiated direct start for an already-registered store — no hmac
+    //     (e.g. Shopify's link generator is misrouting). Security here comes from
+    //     the registration gate below: we only ever write a state nonce onto a row
+    //     that already exists, and no token is issued until the callback completes
+    //     OAuth against the real app secret.
+    // If an hmac IS present we always verify it (a forged/garbage hmac still fails).
+    if (url.searchParams.has("hmac")) {
+      const hmacOk = await verifyShopifyHmac(url.searchParams);
+      if (!hmacOk) {
+        return errorPage("Request signature (HMAC) verification failed.");
+      }
     }
 
     const supabase = getServiceClient();
