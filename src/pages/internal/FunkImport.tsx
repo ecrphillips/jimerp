@@ -533,7 +533,7 @@ export default function FunkImport() {
               </div>
               <Button
                 className="ml-auto"
-                disabled={submitting || pendingGroups > 0 || summary.decisionsLeft > 0}
+                disabled={submitting || pendingGroups > 0 || summary.decisionsLeft > 0 || (parsed.grindCount > 0 && !grindAck)}
                 onClick={handleConfirm}
               >
                 {submitting ? 'Creating…' : 'Confirm & create orders'}
@@ -547,6 +547,44 @@ export default function FunkImport() {
               Resolve these before creating orders.
             </p>
           )}
+
+          {parsed.grindCount > 0 && (
+            <Card className={cn('border-2', grindAck ? 'border-emerald-500/60 bg-emerald-500/5' : 'border-amber-500 bg-amber-500/10')}>
+              <CardContent className="flex flex-wrap items-start gap-3 pt-6">
+                <AlertTriangle className={cn('h-5 w-5 shrink-0 mt-0.5', grindAck ? 'text-emerald-600' : 'text-amber-600')} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">
+                    There {parsed.grindCount === 1 ? 'is' : 'are'} {parsed.grindCount} product{parsed.grindCount === 1 ? '' : 's'} that need to be ground. Make sure you double check which ones and make a note.
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Grind variants aren't tracked separately yet — they'll be folded into the matched/placeholder products. Note the grind on the order before it goes to production.
+                  </p>
+                  <details className="mt-2 text-xs">
+                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                      Show {parsed.grindCount} grind line{parsed.grindCount === 1 ? '' : 's'}
+                    </summary>
+                    <ul className="mt-1 space-y-0.5 pl-4">
+                      {parsed.grindOrders.flatMap((o) =>
+                        o.lineItems
+                          .filter((li) => !li.isDrop && isGrindVariantName(li.rawName))
+                          .map((li, i) => (
+                            <li key={`${o.name}-${i}`}>{o.name} — {li.quantity}× {li.rawName}</li>
+                          )),
+                      )}
+                    </ul>
+                  </details>
+                </div>
+                <Button
+                  size="sm"
+                  variant={grindAck ? 'secondary' : 'default'}
+                  onClick={() => setGrindAck((v) => !v)}
+                >
+                  {grindAck ? <><Check className="mr-1 h-3 w-3" /> Acknowledged</> : 'I will note the grinds'}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
 
           {/* SHIP NOW */}
           <Card>
