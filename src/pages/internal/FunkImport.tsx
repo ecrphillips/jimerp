@@ -56,6 +56,8 @@ interface ParsedState {
   classification: Classification;
   products: ProductLite[];
   mappings: MappingLite[];
+  grindCount: number;
+  grindOrders: CsvOrder[];
 }
 
 const seedRes = (g: ReviewGroup): Resolution => {
