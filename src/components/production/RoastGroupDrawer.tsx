@@ -694,7 +694,7 @@ export function RoastGroupDrawer({
           ${isFullyRoasted || isCompleted ? 'opacity-60' : ''}
           ${hasTimeSensitive && !isFullyRoasted && !isCompleted ? 'bg-destructive/5' : ''} 
           ${isCompleted && !isExpanded ? 'bg-muted/30' : ''}
-          ${isExpanded ? 'bg-accent/40 border-l-2 border-l-primary' : 'hover:bg-muted/50'}
+          ${isExpanded ? 'bg-muted/50 border-l-2 border-l-primary' : 'hover:bg-muted/50'}
           ${isDragging ? 'opacity-50' : ''}`}
         onClick={() => setIsExpanded(!isExpanded)}
       >
