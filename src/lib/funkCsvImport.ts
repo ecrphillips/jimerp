@@ -367,8 +367,16 @@ export function matchLineItem(
  */
 export function isGrindVariantName(name: string): boolean {
   const n = (name ?? '').toLowerCase();
-  if (/\bwhole\s*beans?\b/.test(n)) return false;
-  return /\b(ground|grind|espresso|filter|drip|french\s*press|aeropress|moka|pour[-\s]?over)\b/.test(n);
+  // Shopify variant grinds always live after a "/" separator, e.g.
+  // "Sunday Morning - 2LB bag / Ground". Only inspect the text after the
+  // LAST slash so words like "Filter" or "Drip" in the product name itself
+  // don't trigger a false positive.
+  const slash = n.lastIndexOf('/');
+  if (slash < 0) return false;
+  const variant = n.slice(slash + 1).trim();
+  if (!variant) return false;
+  if (/\bwhole\s*beans?\b/.test(variant)) return false;
+  return /\b(ground|grind|espresso|filter|drip|french\s*press|aeropress|moka|pour[-\s]?over)\b/.test(variant);
 }
 
 /** Count CSV line items across all orders that look like a grind variant. */
