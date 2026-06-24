@@ -2,18 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   computeAuthoritativeWip,
   type WipLedgerTx,
+  type BlendReservationBatch,
 } from '@/hooks/useAuthoritativeInventory';
 
-/**
- * Regression guard for "post-roast blend WIP stealing".
- *
- * Mechanic: marking a component batch ROASTED writes a positive ROAST_OUTPUT to the
- * component's OWN roast group, so that kg counts as component WIP. Executing a blend
- * must write BOTH a positive ADJUSTMENT to the blend group AND a matching negative
- * ADJUSTMENT to each component group. Without the negative leg the kg is double-counted
- * and a sibling single-origin product in the component group can "steal" coffee that is
- * physically already in the blend.
- */
 describe('blend WIP stealing', () => {
   const COMPONENT = 'ETHIOPIA';
   const BLEND = 'HOUSE_BLEND';
@@ -28,31 +19,12 @@ describe('blend WIP stealing', () => {
 
   it('executing a blend moves kg out of component WIP and into blend WIP (no double count)', () => {
     const ledger: WipLedgerTx[] = [
-      // component roasted -> +10 to component
       { roast_group: COMPONENT, quantity_kg: 10, transaction_type: 'ROAST_OUTPUT' },
-      // blend executed: +10 to blend group (output)
       { roast_group: BLEND, quantity_kg: 10, transaction_type: 'ADJUSTMENT' },
-      // blend executed: -10 from component group (the fix — the previously-skipped leg)
       { roast_group: COMPONENT, quantity_kg: -10, transaction_type: 'ADJUSTMENT' },
     ];
     const wip = computeAuthoritativeWip(ledger);
-
-    // Component WIP is now zero — a sibling product can no longer pack it.
     expect(wip[COMPONENT].wip_available_kg).toBe(0);
-    // The kg lives in the blend instead.
-    expect(wip[BLEND].wip_available_kg).toBe(10);
-  });
-
-  it('demonstrates the bug it prevents: skipping the component decrement double-counts kg', () => {
-    const buggyLedger: WipLedgerTx[] = [
-      { roast_group: COMPONENT, quantity_kg: 10, transaction_type: 'ROAST_OUTPUT' },
-      { roast_group: BLEND, quantity_kg: 10, transaction_type: 'ADJUSTMENT' },
-      // (missing the -10 component decrement)
-    ];
-    const wip = computeAuthoritativeWip(buggyLedger);
-
-    // 10 kg appears in BOTH groups = 20 kg total from 10 kg of coffee. This is the steal.
-    expect(wip[COMPONENT].wip_available_kg).toBe(10);
     expect(wip[BLEND].wip_available_kg).toBe(10);
   });
 
@@ -65,5 +37,44 @@ describe('blend WIP stealing', () => {
     const wip = computeAuthoritativeWip(ledger);
     expect(wip[COMPONENT].wip_available_kg).toBe(4);
     expect(wip[BLEND].wip_available_kg).toBe(6);
+  });
+
+  it('a ROASTED, blend-earmarked, not-yet-consumed batch is reserved out of component WIP', () => {
+    const ledger: WipLedgerTx[] = [
+      { roast_group: COMPONENT, quantity_kg: 10, transaction_type: 'ROAST_OUTPUT' },
+    ];
+    const batches: BlendReservationBatch[] = [
+      {
+        roast_group: COMPONENT,
+        status: 'ROASTED',
+        actual_output_kg: 10,
+        planned_for_blend_roast_group: BLEND,
+        consumed_by_blend_at: null,
+      },
+    ];
+    const wip = computeAuthoritativeWip(ledger, [], batches);
+    expect(wip[COMPONENT].reserved_for_blend_kg).toBe(10);
+    expect(wip[COMPONENT].wip_available_kg).toBe(0);
+  });
+
+  it('reservation releases once the batch is consumed by the blend', () => {
+    const ledger: WipLedgerTx[] = [
+      { roast_group: COMPONENT, quantity_kg: 10, transaction_type: 'ROAST_OUTPUT' },
+      { roast_group: BLEND, quantity_kg: 6, transaction_type: 'ADJUSTMENT' },
+      { roast_group: COMPONENT, quantity_kg: -6, transaction_type: 'ADJUSTMENT' },
+    ];
+    const batches: BlendReservationBatch[] = [
+      {
+        roast_group: COMPONENT,
+        status: 'ROASTED',
+        actual_output_kg: 10,
+        planned_for_blend_roast_group: BLEND,
+        consumed_by_blend_at: '2026-06-17T12:00:00Z',
+      },
+    ];
+    const wip = computeAuthoritativeWip(ledger, [], batches);
+    expect(wip[COMPONENT].reserved_for_blend_kg).toBe(0);
+    // 4 kg leftover from the partial blend is now available to the component
+    expect(wip[COMPONENT].wip_available_kg).toBe(4);
   });
 });

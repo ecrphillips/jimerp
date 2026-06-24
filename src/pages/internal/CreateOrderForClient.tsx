@@ -323,8 +323,10 @@ export default function CreateOrderForClient() {
     if (clientLocations && clientLocations.length > 0 && !selectedLocationId) missing.push('delivery location');
     if (lineItems.length === 0) missing.push('at least one product (set quantity > 0)');
     if (!workDeadlineAt) missing.push('work deadline');
-    const missingPrice = lineItems.find((li) => li.price === null);
-    if (missingPrice) missing.push(`price for "${missingPrice.displayName}"`);
+    // MVP: pricing is not yet wired everywhere — missing prices default to $0
+    // and never block order placement. Re-enable a missing-price gate once
+    // pricing is fully rolled out.
+
     return missing;
   }, [selectedClientId, clientLocations, selectedLocationId, lineItems, workDeadlineAt]);
 
@@ -364,11 +366,8 @@ export default function CreateOrderForClient() {
       return;
     }
 
-    const missingPrice = lineItems.find((li) => li.price === null);
-    if (missingPrice) {
-      toast.error(`"${missingPrice.displayName}" has no price set.`);
-      return;
-    }
+    // MVP: missing price no longer blocks submission — saved as $0.
+
 
     if (isShipDateInPast) {
       const ok = window.confirm('Requested Ship Date is in the past. Create order anyway?');
@@ -424,7 +423,7 @@ export default function CreateOrderForClient() {
         product_id: li.productId,
         quantity_units: li.quantity,
         grind: null,
-        unit_price_locked: li.price!,
+        unit_price_locked: li.price ?? 0,
         shipment_id: defaultShipment?.id ?? null,
       }));
 

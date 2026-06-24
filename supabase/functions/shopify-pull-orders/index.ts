@@ -23,7 +23,7 @@ import { decryptSecret, looksEncrypted } from '../_shared/crypto.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '2.5-ops-trigger';
+const FUNCTION_VERSION = '2.6-customer-in-notes';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -117,7 +117,7 @@ async function fetchUnfulfilledOrders(
             id
             name
             createdAt
-            customer { displayName }
+            customer { displayName }  # requires read_customers scope
             lineItems(first: 100) {
               nodes {
                 sku
@@ -492,8 +492,22 @@ async function pullSource(
     }
 
     // Create the batched order.
+    const summarizeItems = (o: ShopifyOrder): string => {
+      const parts = o.lineItems
+        .filter((li) => (li.unfulfilledQuantity ?? li.quantity) > 0)
+        .map((li) => {
+          const qty = li.unfulfilledQuantity ?? li.quantity;
+          const label = [li.title, li.variantTitle].filter(Boolean).join(' / ');
+          return `${qty}× ${label}`;
+        });
+      return parts.join(', ');
+    };
     const orderLines = included
-      .map((o) => `${o.name}${o.customerName ? ` - ${o.customerName}` : ''}`)
+      .map((o) => {
+        const who = o.customerName ? ` - ${o.customerName}` : '';
+        const items = summarizeItems(o);
+        return `${o.name}${who}${items ? `: ${items}` : ''}`;
+      })
       .join('\n');
     const notes =
       `Shopify daily pull (${source.store_name})\n${included.length} unfulfilled order(s)\n${orderLines}` +

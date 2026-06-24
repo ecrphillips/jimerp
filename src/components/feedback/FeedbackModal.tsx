@@ -26,8 +26,14 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const MAX_MESSAGE_LENGTH = 2000;
+
   const handleSubmit = async () => {
     if (!category || !message.trim() || !authUser) return;
+    if (message.trim().length > MAX_MESSAGE_LENGTH) {
+      toast({ title: 'Too long', description: `Please keep feedback under ${MAX_MESSAGE_LENGTH} characters.`, variant: 'destructive' });
+      return;
+    }
     setSubmitting(true);
     try {
       const { error } = await supabase
@@ -35,7 +41,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
         .insert({
           created_by: authUser.id,
           category,
-          message: message.trim(),
+          message: message.trim().slice(0, MAX_MESSAGE_LENGTH),
         });
       if (error) throw error;
       toast({ title: 'Got it — thanks!', description: 'Your feedback has been submitted.' });
@@ -77,7 +83,11 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             rows={4}
+            maxLength={MAX_MESSAGE_LENGTH}
           />
+          <p className="text-[10px] text-muted-foreground text-right">
+            {message.length} / {MAX_MESSAGE_LENGTH}
+          </p>
           <div className="flex justify-end">
             <Button
               onClick={handleSubmit}

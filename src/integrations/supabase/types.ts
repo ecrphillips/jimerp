@@ -23,6 +23,7 @@ export type Database = {
           is_active: boolean
           location_code: string
           location_name: string
+          production_weekdays: number[] | null
           qbo_billing_entity: string | null
           updated_at: string
         }
@@ -34,6 +35,7 @@ export type Database = {
           is_active?: boolean
           location_code: string
           location_name: string
+          production_weekdays?: number[] | null
           qbo_billing_entity?: string | null
           updated_at?: string
         }
@@ -45,6 +47,7 @@ export type Database = {
           is_active?: boolean
           location_code?: string
           location_name?: string
+          production_weekdays?: number[] | null
           qbo_billing_entity?: string | null
           updated_at?: string
         }
@@ -181,7 +184,9 @@ export type Database = {
           managed_sku_count: number | null
           monthly_service_fee: number | null
           notes_internal: string | null
+          order_cutoff_hour: number
           pricing_profile_id: string | null
+          production_weekdays: number[] | null
           programs: string[]
           pronouns: string | null
           prospect_selected_tier: string | null
@@ -224,7 +229,9 @@ export type Database = {
           managed_sku_count?: number | null
           monthly_service_fee?: number | null
           notes_internal?: string | null
+          order_cutoff_hour?: number
           pricing_profile_id?: string | null
+          production_weekdays?: number[] | null
           programs?: string[]
           pronouns?: string | null
           prospect_selected_tier?: string | null
@@ -267,7 +274,9 @@ export type Database = {
           managed_sku_count?: number | null
           monthly_service_fee?: number | null
           notes_internal?: string | null
+          order_cutoff_hour?: number
           pricing_profile_id?: string | null
+          production_weekdays?: number[] | null
           programs?: string[]
           pronouns?: string | null
           prospect_selected_tier?: string | null
@@ -1864,6 +1873,190 @@ export type Database = {
           },
         ]
       }
+      funk_drop_batches: {
+        Row: {
+          batch_month: number
+          batch_year: number
+          created_at: string
+          id: string
+          order_id: string | null
+          ship_date: string
+        }
+        Insert: {
+          batch_month: number
+          batch_year: number
+          created_at?: string
+          id?: string
+          order_id?: string | null
+          ship_date: string
+        }
+        Update: {
+          batch_month?: number
+          batch_year?: number
+          created_at?: string
+          id?: string
+          order_id?: string | null
+          ship_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funk_drop_batches_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funk_drop_slots: {
+        Row: {
+          batch_month: number
+          batch_year: number
+          created_at: string
+          id: string
+          product_id: string | null
+          slot_number: number
+          sourced_green_ref: string | null
+        }
+        Insert: {
+          batch_month: number
+          batch_year: number
+          created_at?: string
+          id?: string
+          product_id?: string | null
+          slot_number: number
+          sourced_green_ref?: string | null
+        }
+        Update: {
+          batch_month?: number
+          batch_year?: number
+          created_at?: string
+          id?: string
+          product_id?: string | null
+          slot_number?: number
+          sourced_green_ref?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funk_drop_slots_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funk_import_product_mappings: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          csv_product_name: string
+          csv_sku: string | null
+          id: string
+          product_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          csv_product_name: string
+          csv_sku?: string | null
+          id?: string
+          product_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          csv_product_name?: string
+          csv_sku?: string | null
+          id?: string
+          product_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funk_import_product_mappings_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funk_import_sessions: {
+        Row: {
+          bundle_order_id: string | null
+          file_name: string | null
+          id: string
+          imported_at: string
+          imported_by: string | null
+          orders_new: number
+          orders_skipped: number
+        }
+        Insert: {
+          bundle_order_id?: string | null
+          file_name?: string | null
+          id?: string
+          imported_at?: string
+          imported_by?: string | null
+          orders_new?: number
+          orders_skipped?: number
+        }
+        Update: {
+          bundle_order_id?: string | null
+          file_name?: string | null
+          id?: string
+          imported_at?: string
+          imported_by?: string | null
+          orders_new?: number
+          orders_skipped?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funk_import_sessions_bundle_order_id_fkey"
+            columns: ["bundle_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funk_imported_orders: {
+        Row: {
+          destination: string
+          id: string
+          import_session_id: string | null
+          imported_at: string
+          shopify_order_id: string | null
+          shopify_order_name: string
+        }
+        Insert: {
+          destination?: string
+          id?: string
+          import_session_id?: string | null
+          imported_at?: string
+          shopify_order_id?: string | null
+          shopify_order_name: string
+        }
+        Update: {
+          destination?: string
+          id?: string
+          import_session_id?: string | null
+          imported_at?: string
+          shopify_order_id?: string | null
+          shopify_order_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funk_imported_orders_import_session_id_fkey"
+            columns: ["import_session_id"]
+            isOneToOne: false
+            referencedRelation: "funk_import_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       green_contract_notes: {
         Row: {
           contract_id: string
@@ -3042,6 +3235,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_inventory_transactions_roast_group"
+            columns: ["roast_group"]
+            isOneToOne: false
+            referencedRelation: "roast_groups"
+            referencedColumns: ["roast_group"]
+          },
+          {
             foreignKeyName: "inventory_transactions_lot_id_fkey"
             columns: ["lot_id"]
             isOneToOne: false
@@ -3956,6 +4156,7 @@ export type Database = {
           internal_packaging_notes: string | null
           is_active: boolean
           is_perennial: boolean
+          is_placeholder: boolean
           pack_display_order: number | null
           packaging_labour_override: number | null
           packaging_material_override: number | null
@@ -3989,6 +4190,7 @@ export type Database = {
           internal_packaging_notes?: string | null
           is_active?: boolean
           is_perennial?: boolean
+          is_placeholder?: boolean
           pack_display_order?: number | null
           packaging_labour_override?: number | null
           packaging_material_override?: number | null
@@ -4022,6 +4224,7 @@ export type Database = {
           internal_packaging_notes?: string | null
           is_active?: boolean
           is_perennial?: boolean
+          is_placeholder?: boolean
           pack_display_order?: number | null
           packaging_labour_override?: number | null
           packaging_material_override?: number | null
@@ -5200,7 +5403,15 @@ export type Database = {
           reason?: Database["public"]["Enums"]["wip_adjustment_reason"]
           roast_group?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_wip_adjustments_roast_group"
+            columns: ["roast_group"]
+            isOneToOne: false
+            referencedRelation: "roast_groups"
+            referencedColumns: ["roast_group"]
+          },
+        ]
       }
       wip_ledger: {
         Row: {
@@ -5272,6 +5483,7 @@ export type Database = {
         Args: { _account_id: string }
         Returns: undefined
       }
+      _assert_internal_staff: { Args: never; Returns: undefined }
       _coroast_effective_booking_rules: {
         Args: { p_account_id: string }
         Returns: {
@@ -5367,12 +5579,22 @@ export type Database = {
         Args: { p_force?: boolean; p_roast_group: string }
         Returns: Json
       }
+      dev_purge_ghost_production_rows: { Args: never; Returns: Json }
       dev_reset_master_data: { Args: never; Returns: Json }
       dev_reset_test_day: { Args: never; Returns: Json }
       dev_test_reset: { Args: never; Returns: Json }
       dev_test_seed_minimal: { Args: never; Returns: undefined }
       enqueue_email: {
         Args: { payload: Json; queue_name: string }
+        Returns: number
+      }
+      execute_blend: {
+        Args: {
+          p_batch_ids: string[]
+          p_blend_display_name: string
+          p_blend_roast_group: string
+          p_consume_kgs: number[]
+        }
         Returns: number
       }
       get_client_delete_preflight: {
@@ -5436,6 +5658,16 @@ export type Database = {
         Args: {
           p_from: Database["public"]["Enums"]["order_status"]
           p_to: Database["public"]["Enums"]["order_status"]
+        }
+        Returns: boolean
+      }
+      mark_batch_roasted: {
+        Args: {
+          p_actual_output_kg: number
+          p_batch_id: string
+          p_loss_kg?: number
+          p_loss_note?: string
+          p_lot_id?: string
         }
         Returns: boolean
       }
@@ -5531,6 +5763,10 @@ export type Database = {
         }[]
       }
       reverse_quote_to_sent: { Args: { p_quote_id: string }; Returns: Json }
+      revert_batch_to_planned: {
+        Args: { p_batch_id: string }
+        Returns: boolean
+      }
       submit_prospect_interest: {
         Args: {
           p_billing_address_line1?: string
@@ -5603,6 +5839,16 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      update_packing_units: {
+        Args: {
+          p_bag_size_g: number
+          p_new_units: number
+          p_product_id: string
+          p_roast_group: string
+          p_target_date: string
+        }
+        Returns: number
       }
     }
     Enums: {

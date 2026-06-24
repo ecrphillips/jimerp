@@ -27,8 +27,12 @@ interface SortablePackRowProps {
   roastGroup: string | null;
   demandedUnits: number;
   packedUnits: number;
+  /** Downstream picks for open orders. Counted as implicit packs so the row
+   *  is flagged complete and won't pressure the packer to over-pack a SKU the
+   *  shipper has already grabbed. The numeric input still edits raw packs. */
+  pickedUnits?: number;
   hasTimeSensitive: boolean;
-  wipStatus: WipStatus; // 'full' = green, 'partial' = amber, 'none' = no color
+  wipStatus: WipStatus;
   unblocksOrders: number;
   wipAvailableKg: number;
   requiredKg: number;
@@ -50,6 +54,7 @@ export function SortablePackRow({
   roastGroup,
   demandedUnits,
   packedUnits,
+  pickedUnits = 0,
   hasTimeSensitive,
   wipStatus,
   unblocksOrders,
@@ -76,7 +81,13 @@ export function SortablePackRow({
     transition,
   };
 
-  const isComplete = packedUnits >= demandedUnits;
+  // Effective packed counts picks as implicit packs so the row can be marked
+  // complete when downstream has already grabbed bags faster than the packer
+  // has clicked through. The numeric input still shows the raw pack count so
+  // packers can keep recording physical work without it appearing double.
+  const effectivePacked = Math.max(packedUnits, pickedUnits);
+  const isComplete = effectivePacked >= demandedUnits;
+  const coveredByPicks = pickedUnits > packedUnits && isComplete;
 
   // Determine row styling based on wipStatus
   // - 'full': GREEN - enough WIP to complete entire row
@@ -142,10 +153,19 @@ export function SortablePackRow({
                 Urgent
               </Badge>
             )}
-            {unblocksOrders > 0 && (demandedUnits - packedUnits) > 0 && (
+            {unblocksOrders > 0 && (demandedUnits - effectivePacked) > 0 && (
               <Badge variant="outline" className="text-xs">
                 <ShoppingCart className="h-3 w-3 mr-1" />
                 Unblocks: {unblocksOrders} order{unblocksOrders !== 1 ? 's' : ''}
+              </Badge>
+            )}
+            {coveredByPicks && (
+              <Badge
+                variant="outline"
+                className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800"
+                title="The shipper has already picked enough bags of this SKU. The pack is covered — record any remaining physical packs if you want, but no shortage exists."
+              >
+                Covered by picks ({pickedUnits})
               </Badge>
             )}
             {/* WIP status badges */}
@@ -204,9 +224,9 @@ export function SortablePackRow({
               <Check className="h-3 w-3 mr-1" />
               Complete
             </Badge>
-          ) : packedUnits > 0 ? (
+          ) : effectivePacked > 0 ? (
             <Badge variant="secondary">
-              {Math.round((packedUnits / demandedUnits) * 100)}%
+              {Math.round((effectivePacked / demandedUnits) * 100)}%
             </Badge>
           ) : (
             <Badge variant="outline">

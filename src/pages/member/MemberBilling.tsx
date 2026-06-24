@@ -65,9 +65,10 @@ export default function MemberBilling() {
   const { data: auditRows = [] } = useQuery({
     queryKey: ['coroast-pricing-audit-member', accountId],
     queryFn: async () => {
+      // Narrow column list — never select '*' on audit tables (avoids leaking internal IDs)
       const { data, error } = await supabase
         .from('coroast_account_pricing_audit')
-        .select('*')
+        .select('id, account_id, changed_at, change_reason, snapshot')
         .eq('account_id', accountId!)
         .order('changed_at', { ascending: false })
         .limit(5);

@@ -178,7 +178,8 @@ export default function MemberSchedule() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_bookings')
-        .select('id, member_id, account_id, billing_period_id, booking_date, start_time, end_time, duration_hours, status, recurring_block_id, notes_internal, notes_member')
+        // notes_internal intentionally excluded — members must never see internal staff notes
+        .select('id, member_id, account_id, billing_period_id, booking_date, start_time, end_time, duration_hours, status, recurring_block_id, notes_member')
         .in('status', ['CONFIRMED', 'COMPLETED', 'NO_SHOW']);
       if (error) throw error;
       return data as (BookingRow & { notes_member: string | null })[];
