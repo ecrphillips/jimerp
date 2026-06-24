@@ -853,6 +853,7 @@ function ProductCombobox({ products, value, onChange }: { products: ProductLite[
                 >
                   <Check className={cn('shrink-0 h-4 w-4', value === p.id ? 'opacity-100' : 'opacity-0')} />
                   <span className="flex-1 truncate">{p.product_name}</span>
+                  {p.packaging_variant && <PackagingBadge variant={p.packaging_variant} className="shrink-0" />}
                   {p.sku && <span className="shrink-0 text-xs text-muted-foreground font-mono">{p.sku}</span>}
                 </CommandItem>
               ))}
