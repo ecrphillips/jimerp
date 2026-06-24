@@ -140,9 +140,9 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   const [showAddBatchModal, setShowAddBatchModal] = useState(false);
   const [addBatchRgKey, setAddBatchRgKey] = useState('');
   
-  const [addBatchKg, setAddBatchKg] = useState('');
+  const [addBatchInputKg, setAddBatchInputKg] = useState('');
+  const [addBatchYieldLoss, setAddBatchYieldLoss] = useState('');
   const [addBatchRoaster, setAddBatchRoaster] = useState<'SAMIAC' | 'LORING' | ''>('');
-  const [addBatchDate, setAddBatchDate] = useState(today);
   const [addBatchCropster, setAddBatchCropster] = useState('');
   const [addBatchMode, setAddBatchMode] = useState<'existing' | 'new'>('existing');
   const [addBatchSaving, setAddBatchSaving] = useState(false);
@@ -152,9 +152,9 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     setShowAddBatchModal(false);
     setAddBatchRgKey('');
     setAddBatchNewName('');
-    setAddBatchKg('');
+    setAddBatchInputKg('');
+    setAddBatchYieldLoss('');
     setAddBatchRoaster('');
-    setAddBatchDate(today);
     setAddBatchCropster('');
     setAddBatchMode('existing');
     setAddBatchSaving(false);
