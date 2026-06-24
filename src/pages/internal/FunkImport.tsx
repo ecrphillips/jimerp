@@ -20,9 +20,10 @@ import {
   parseFunkCsv, classifyOrders, buildShipNowGroups, aggregateBatchMonths,
   parseBagSize, placeholderName, nextPlaceholderSeq, matchLineItem,
   funkReferenceBase, nextBusinessDayDeadline, slotProductName, dropShipDate,
-  dateStamp, noonIso, dropBatchReference, monthShortYY,
+  dateStamp, noonIso, dropBatchReference, monthShortYY, countGrindVariantLines,
+  isGrindVariantName,
   type ProductLite, type MappingLite, type ReviewGroup, type Classification,
-  type BatchClass, type BatchMonth,
+  type BatchClass, type BatchMonth, type CsvOrder,
 } from '@/lib/funkCsvImport';
 
 // funk_* tables + products.is_placeholder are not yet in the generated Supabase
@@ -55,6 +56,8 @@ interface ParsedState {
   classification: Classification;
   products: ProductLite[];
   mappings: MappingLite[];
+  grindCount: number;
+  grindOrders: CsvOrder[];
 }
 
 const seedRes = (g: ReviewGroup): Resolution => {
@@ -74,6 +77,7 @@ export default function FunkImport() {
   const [decisions, setDecisions] = useState<Record<string, DecisionChoice>>({});
   const [workDeadline, setWorkDeadline] = useState<string>(nextBusinessDayDeadline());
   const [submitting, setSubmitting] = useState(false);
+  const [grindAck, setGrindAck] = useState(false);
 
   const productsQ = useQuery({
     queryKey: ['funk-import', 'products'],
@@ -129,8 +133,11 @@ export default function FunkImport() {
       const mappings = (mapRows ?? []) as MappingLite[];
 
       const classification = classifyOrders(newOrders);
+      const grindCount = countGrindVariantLines(newOrders);
+      const grindOrders = newOrders.filter((o) => o.lineItems.some((li) => !li.isDrop && isGrindVariantName(li.rawName)));
       setResolutions({});
       setDecisions({});
+      setGrindAck(false);
       setParsed({
         fileName: file.name,
         newCount: newOrders.length,
@@ -138,6 +145,8 @@ export default function FunkImport() {
         classification,
         products: productsQ.data,
         mappings,
+        grindCount,
+        grindOrders,
       });
       if (newOrders.length === 0) toast.info(`${orders.length} orders, all already imported (skipped).`);
       else toast.success(`${newOrders.length} new, ${skippedCount} already imported (skipped).`);
@@ -226,6 +235,10 @@ export default function FunkImport() {
       return;
     }
     if (pendingGroups > 0) { toast.error(`${pendingGroups} guessed match(es) need confirming.`); return; }
+    if (parsed.grindCount > 0 && !grindAck) {
+      toast.error('Acknowledge the grind-variant warning before confirming.');
+      return;
+    }
     if (!workDeadline) { toast.error('Set a work deadline before confirming.'); return; }
 
     setSubmitting(true);
@@ -520,7 +533,7 @@ export default function FunkImport() {
               </div>
               <Button
                 className="ml-auto"
-                disabled={submitting || pendingGroups > 0 || summary.decisionsLeft > 0}
+                disabled={submitting || pendingGroups > 0 || summary.decisionsLeft > 0 || (parsed.grindCount > 0 && !grindAck)}
                 onClick={handleConfirm}
               >
                 {submitting ? 'Creating…' : 'Confirm & create orders'}
@@ -534,6 +547,44 @@ export default function FunkImport() {
               Resolve these before creating orders.
             </p>
           )}
+
+          {parsed.grindCount > 0 && (
+            <Card className={cn('border-2', grindAck ? 'border-emerald-500/60 bg-emerald-500/5' : 'border-amber-500 bg-amber-500/10')}>
+              <CardContent className="flex flex-wrap items-start gap-3 pt-6">
+                <AlertTriangle className={cn('h-5 w-5 shrink-0 mt-0.5', grindAck ? 'text-emerald-600' : 'text-amber-600')} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">
+                    There {parsed.grindCount === 1 ? 'is' : 'are'} {parsed.grindCount} product{parsed.grindCount === 1 ? '' : 's'} that need to be ground. Make sure you double check which ones and make a note.
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Grind variants aren't tracked separately yet — they'll be folded into the matched/placeholder products. Note the grind on the order before it goes to production.
+                  </p>
+                  <details className="mt-2 text-xs">
+                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                      Show {parsed.grindCount} grind line{parsed.grindCount === 1 ? '' : 's'}
+                    </summary>
+                    <ul className="mt-1 space-y-0.5 pl-4">
+                      {parsed.grindOrders.flatMap((o) =>
+                        o.lineItems
+                          .filter((li) => !li.isDrop && isGrindVariantName(li.rawName))
+                          .map((li, i) => (
+                            <li key={`${o.name}-${i}`}>{o.name} — {li.quantity}× {li.rawName}</li>
+                          )),
+                      )}
+                    </ul>
+                  </details>
+                </div>
+                <Button
+                  size="sm"
+                  variant={grindAck ? 'secondary' : 'default'}
+                  onClick={() => setGrindAck((v) => !v)}
+                >
+                  {grindAck ? <><Check className="mr-1 h-3 w-3" /> Acknowledged</> : 'I will note the grinds'}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
 
           {/* SHIP NOW */}
           <Card>
