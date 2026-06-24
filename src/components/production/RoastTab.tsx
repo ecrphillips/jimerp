@@ -1533,27 +1533,48 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
 
 
 
-            {/* Shared fields */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Target date</Label>
-                <Input
-                  type="date"
-                  value={addBatchDate}
-                  onChange={(e) => setAddBatchDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Planned output (kg)</Label>
-                <Input
-                  type="number"
-                  value={addBatchKg}
-                  onChange={(e) => setAddBatchKg(e.target.value)}
-                  placeholder="Optional"
-                  min={0}
-                />
-              </div>
-            </div>
+            {/* Input & yield loss */}
+            {(() => {
+              const inputNum = parseFloat(addBatchInputKg);
+              const yieldNum = parseFloat(addBatchYieldLoss);
+              const validInput = Number.isFinite(inputNum) && inputNum > 0;
+              const validYield = Number.isFinite(yieldNum) && yieldNum >= 0 && yieldNum < 100;
+              const expectedOutput = validInput && validYield ? inputNum * (1 - yieldNum / 100) : null;
+              return (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Input (kg green)</Label>
+                      <Input
+                        type="number"
+                        value={addBatchInputKg}
+                        onChange={(e) => setAddBatchInputKg(e.target.value)}
+                        placeholder="e.g. 20"
+                        min={0}
+                        step="0.1"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Expected yield loss (%)</Label>
+                      <Input
+                        type="number"
+                        value={addBatchYieldLoss}
+                        onChange={(e) => setAddBatchYieldLoss(e.target.value)}
+                        placeholder="e.g. 16"
+                        min={0}
+                        max={99}
+                        step="0.1"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-sm text-muted-foreground bg-muted/40 rounded-md px-3 py-2">
+                    {expectedOutput !== null
+                      ? <>Expected output: <span className="font-semibold text-foreground">{expectedOutput.toFixed(2)} kg</span> roasted</>
+                      : <>Enter input kg and yield loss % to see expected output.</>}
+                  </div>
+                </>
+              );
+            })()}
 
             <div className="space-y-2">
               <Label>Roaster</Label>
