@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import {
   Upload, Check, ChevronsUpDown, ChevronDown, ChevronRight, Package, Box, AlertTriangle, Truck,
 } from 'lucide-react';
+import PackagingBadge from '@/components/PackagingBadge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
