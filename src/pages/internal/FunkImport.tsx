@@ -133,8 +133,11 @@ export default function FunkImport() {
       const mappings = (mapRows ?? []) as MappingLite[];
 
       const classification = classifyOrders(newOrders);
+      const grindCount = countGrindVariantLines(newOrders);
+      const grindOrders = newOrders.filter((o) => o.lineItems.some((li) => !li.isDrop && isGrindVariantName(li.rawName)));
       setResolutions({});
       setDecisions({});
+      setGrindAck(false);
       setParsed({
         fileName: file.name,
         newCount: newOrders.length,
@@ -142,6 +145,8 @@ export default function FunkImport() {
         classification,
         products: productsQ.data,
         mappings,
+        grindCount,
+        grindOrders,
       });
       if (newOrders.length === 0) toast.info(`${orders.length} orders, all already imported (skipped).`);
       else toast.success(`${newOrders.length} new, ${skippedCount} already imported (skipped).`);
