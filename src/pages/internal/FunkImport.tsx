@@ -759,11 +759,16 @@ function ContributingRows({ group }: { group: ReviewGroup }) {
 
 function MatchedRow({ group, productById }: { group: ReviewGroup; productById: Map<string, ProductLite> }) {
   const product = productById.get(group.match.productId!);
+  const parsedVariant = parseBagSize(group.rawName).variant;
+  const variant = product?.packaging_variant ?? parsedVariant;
   return (
     <div className="rounded border px-3 py-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-medium">{product?.product_name ?? '(unknown product)'}</span>
-        <span className="text-sm font-semibold">{group.totalQuantity} units</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-medium truncate">{product?.product_name ?? '(unknown product)'}</span>
+          <PackagingBadge variant={variant} />
+        </div>
+        <span className="shrink-0 text-sm font-semibold">{group.totalQuantity} units</span>
       </div>
       <ContributingRows group={group} />
     </div>
