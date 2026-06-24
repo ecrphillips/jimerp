@@ -209,6 +209,21 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     return map;
   }, [roastGroupsConfig]);
 
+  // Prefill Add Batch input kg + yield loss from the selected roast group's config.
+  // For "new" mode (no config yet), fall back to 20 kg / 16% defaults.
+  useEffect(() => {
+    if (!showAddBatchModal) return;
+    if (addBatchMode === 'existing') {
+      if (!addBatchRgKey) return;
+      const cfg = configByGroup[addBatchRgKey];
+      setAddBatchInputKg(String(cfg?.standard_batch_kg ?? 20));
+      setAddBatchYieldLoss(String(cfg?.expected_yield_loss_pct ?? 16));
+    } else {
+      setAddBatchInputKg('20');
+      setAddBatchYieldLoss('16');
+    }
+  }, [showAddBatchModal, addBatchMode, addBatchRgKey, configByGroup]);
+
   // Fetch roast group components (blend recipes)
   const { data: roastGroupComponents } = useRoastGroupComponents();
 
