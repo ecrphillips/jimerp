@@ -77,6 +77,7 @@ export default function FunkImport() {
   const [decisions, setDecisions] = useState<Record<string, DecisionChoice>>({});
   const [workDeadline, setWorkDeadline] = useState<string>(nextBusinessDayDeadline());
   const [submitting, setSubmitting] = useState(false);
+  const [grindAck, setGrindAck] = useState(false);
 
   const productsQ = useQuery({
     queryKey: ['funk-import', 'products'],
