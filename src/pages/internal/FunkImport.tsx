@@ -20,9 +20,10 @@ import {
   parseFunkCsv, classifyOrders, buildShipNowGroups, aggregateBatchMonths,
   parseBagSize, placeholderName, nextPlaceholderSeq, matchLineItem,
   funkReferenceBase, nextBusinessDayDeadline, slotProductName, dropShipDate,
-  dateStamp, noonIso, dropBatchReference, monthShortYY,
+  dateStamp, noonIso, dropBatchReference, monthShortYY, countGrindVariantLines,
+  isGrindVariantName,
   type ProductLite, type MappingLite, type ReviewGroup, type Classification,
-  type BatchClass, type BatchMonth,
+  type BatchClass, type BatchMonth, type CsvOrder,
 } from '@/lib/funkCsvImport';
 
 // funk_* tables + products.is_placeholder are not yet in the generated Supabase
