@@ -16,6 +16,7 @@ import {
   exchangeShopifyCode,
   hasRequiredScopes,
   storeShopifyToken,
+  shopHost,
   SHOPIFY_SCOPE,
 } from "../_shared/shopify.ts";
 
@@ -67,15 +68,20 @@ serve(async (req) => {
     }
 
     const supabase = getServiceClient();
+    // Look up the install by the single-use state nonce itself — NOT by shop
+    // domain. The nonce is globally unique, so this matches exactly the row that
+    // shopify-oauth-start wrote, regardless of how store_url is formatted or
+    // whether Shopify echoes a different (permanent vs vanity) myshopify host
+    // than the one the install was started with. Keying off `shop` here was the
+    // bug: the lookup missed and reported a false "Invalid or expired state".
     const { data: source, error: loadErr } = await supabase
       .from("shopify_sources")
-      .select("id, oauth_state, oauth_state_expires_at")
-      .eq("store_url", `https://${shop}`)
+      .select("id, store_url, oauth_state_expires_at")
+      .eq("oauth_state", state)
       .maybeSingle();
     if (loadErr) throw loadErr;
 
-    const stateValid = source?.oauth_state &&
-      source.oauth_state === state &&
+    const stateValid = source &&
       source.oauth_state_expires_at &&
       new Date(source.oauth_state_expires_at).getTime() > Date.now();
     if (!stateValid) {
@@ -86,7 +92,11 @@ serve(async (req) => {
       );
     }
 
-    const { access_token, scope } = await exchangeShopifyCode(shop, code);
+    // Canonical host = the registered store's host. The pull pipeline and the
+    // token-encryption AAD both key off store_url, so exchange + encrypt against
+    // the SAME host to keep everything consistent (and decryptable at pull time).
+    const host = shopHost(source.store_url);
+    const { access_token, scope } = await exchangeShopifyCode(host, code);
 
     // A merchant can alter the requested scope mid-flow — verify the granted
     // scope actually covers everything we need before trusting the token.
@@ -99,7 +109,7 @@ serve(async (req) => {
       );
     }
 
-    await storeShopifyToken(supabase, shop, access_token, scope);
+    await storeShopifyToken(supabase, source.id, host, access_token, scope);
 
     const siteUrl = Deno.env.get("SITE_URL") || "https://homeislandcoffeepartners.lovable.app";
     return new Response(null, {

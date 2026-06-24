@@ -52,6 +52,13 @@ export function isValidShop(shop: string): boolean {
   return SHOP_RE.test(shop);
 }
 
+// Bare host from a stored store_url (e.g. "https://foo.myshopify.com" -> "foo.myshopify.com").
+// This is the canonical shop identity used across the pull pipeline and as the
+// token-encryption AAD, so OAuth must key off the SAME value (see shopify-pull-orders).
+export function shopHost(storeUrl: string): string {
+  return storeUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+}
+
 async function hmacSha256Hex(message: string, secret: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -125,16 +132,18 @@ export function hasRequiredScopes(grantedScope: string): boolean {
   return SHOPIFY_REQUIRED_SCOPES.every((s) => granted.has(s));
 }
 
-// Persists the access token ENCRYPTED (AAD = bare shop host) into the existing
-// shopify_sources.api_access_token column and clears the single-use state.
-// Upserts so a freshly-installing merchant with no row yet still works.
+// Persists the access token ENCRYPTED (AAD = bare shop host, must match the host
+// the puller decrypts with — see shopify-pull-orders) into the matched source
+// row and clears the single-use state. Updates by row id so it can never miss
+// due to a store_url / callback-shop format divergence.
 export async function storeShopifyToken(
   supabase: SupabaseClient,
-  shop: string,
+  sourceId: string,
+  aadHost: string,
   accessToken: string,
   scope: string,
 ): Promise<void> {
-  const encrypted = await encryptSecret(accessToken, shop);
+  const encrypted = await encryptSecret(accessToken, aadHost);
   const { error } = await supabase
     .from("shopify_sources")
     .update({
@@ -145,6 +154,6 @@ export async function storeShopifyToken(
       oauth_state_expires_at: null,
       updated_at: new Date().toISOString(),
     })
-    .eq("store_url", `https://${shop}`);
+    .eq("id", sourceId);
   if (error) throw error;
 }
