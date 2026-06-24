@@ -694,7 +694,7 @@ export function RoastGroupDrawer({
           ${isFullyRoasted || isCompleted ? 'opacity-60' : ''}
           ${hasTimeSensitive && !isFullyRoasted && !isCompleted ? 'bg-destructive/5' : ''} 
           ${isCompleted && !isExpanded ? 'bg-muted/30' : ''}
-          ${isExpanded ? 'bg-accent/40 border-l-2 border-l-primary' : 'hover:bg-muted/50'}
+          ${isExpanded ? 'bg-muted/50 border-l-2 border-l-primary' : 'hover:bg-muted/50'}
           ${isDragging ? 'opacity-50' : ''}`}
         onClick={() => setIsExpanded(!isExpanded)}
       >
@@ -802,7 +802,7 @@ export function RoastGroupDrawer({
 
       {/* Expanded Drawer */}
       {isExpanded && (
-        <tr className="bg-accent/30 border-l-2 border-l-primary">
+          <tr className="bg-muted/30 border-l-2 border-l-primary">
           <td colSpan={7} className="py-3 px-4 pl-8">
             <div className="space-y-3">
               {/* Header with config and WIP/FG buttons */}
