@@ -235,6 +235,10 @@ export default function FunkImport() {
       return;
     }
     if (pendingGroups > 0) { toast.error(`${pendingGroups} guessed match(es) need confirming.`); return; }
+    if (parsed.grindCount > 0 && !grindAck) {
+      toast.error('Acknowledge the grind-variant warning before confirming.');
+      return;
+    }
     if (!workDeadline) { toast.error('Set a work deadline before confirming.'); return; }
 
     setSubmitting(true);
