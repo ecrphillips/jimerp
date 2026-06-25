@@ -98,7 +98,7 @@ interface RoastGroupDrawerProps {
   onPlanDirectBatch?: () => void;
   onBlendBatches?: () => void;
   components: RoastGroupComponent[];
-  roastGroupsLookupMap: Map<string, { display_name: string | null; origin: string | null }>;
+  roastGroupsLookupMap: Map<string, { display_name: string | null; origin: string | null; expected_yield_loss_pct?: number | null; standard_batch_kg?: number | null }>;
 }
 
 export function RoastGroupDrawer({
@@ -527,6 +527,8 @@ export function RoastGroupDrawer({
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
       queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-manual-adjustments'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
       setUndoConfirmBatchId(null);
       // Refresh frozen batch order to reflect new status positions
@@ -569,6 +571,8 @@ export function RoastGroupDrawer({
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
       queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-manual-adjustments'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
       refreshFrozenBatches();
     },
@@ -694,7 +698,7 @@ export function RoastGroupDrawer({
           ${isFullyRoasted || isCompleted ? 'opacity-60' : ''}
           ${hasTimeSensitive && !isFullyRoasted && !isCompleted ? 'bg-destructive/5' : ''} 
           ${isCompleted && !isExpanded ? 'bg-muted/30' : ''}
-          ${isExpanded ? 'bg-accent/40 border-l-2 border-l-primary' : 'hover:bg-muted/50'}
+          ${isExpanded ? 'bg-muted/50 border-l-2 border-l-primary' : 'hover:bg-muted/50'}
           ${isDragging ? 'opacity-50' : ''}`}
         onClick={() => setIsExpanded(!isExpanded)}
       >
@@ -802,7 +806,7 @@ export function RoastGroupDrawer({
 
       {/* Expanded Drawer */}
       {isExpanded && (
-        <tr className="bg-accent/30 border-l-2 border-l-primary">
+          <tr className="bg-muted/30 border-l-2 border-l-primary">
           <td colSpan={7} className="py-3 px-4 pl-8">
             <div className="space-y-3">
               {/* Header with config and WIP/FG buttons */}
@@ -947,9 +951,11 @@ export function RoastGroupDrawer({
                   ) : (
                     blendComponentsWithNames.map(comp => {
                       const compBatches = componentBatchesByGroup[comp.roastGroup] ?? [];
+                      const compInfo = roastGroupsLookupMap.get(comp.roastGroup);
+                      const compYieldLossPct = compInfo?.expected_yield_loss_pct ?? yieldLossPct;
                       const plannedKg = compBatches
                         .filter(b => b.status === 'PLANNED')
-                        .reduce((sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - yieldLossPct / 100), 0);
+                        .reduce((sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - compYieldLossPct / 100), 0);
                       const roastedKg = compBatches
                         .filter(b => b.status === 'ROASTED')
                         .reduce((sum, b) => sum + b.actual_output_kg, 0);
@@ -990,7 +996,7 @@ export function RoastGroupDrawer({
                                 <BatchRow
                                   key={batch.id}
                                   batch={batch}
-                                  expectedYieldLossPct={yieldLossPct}
+                                  expectedYieldLossPct={compYieldLossPct}
                                   onMarkRoasted={(id, actual) => markRoastedMutation.mutate({ 
                                     id, 
                                     actual_output_kg: actual,

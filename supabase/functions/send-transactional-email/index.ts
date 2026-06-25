@@ -36,9 +36,10 @@ Deno.serve(async (req) => {
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
-  if (!supabaseUrl || !supabaseServiceKey) {
+  if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
     console.error('Missing required environment variables')
     return new Response(
       JSON.stringify({ error: 'Server configuration error' }),
@@ -47,6 +48,44 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     )
+  }
+
+  // Caller authorization: only service_role OR signed-in ADMIN/OPS may invoke
+  // this function. Without this gate any authenticated CLIENT can send
+  // branded email to arbitrary addresses (phishing vector).
+  const authHeader = req.headers.get('Authorization') ?? ''
+  const bearer = authHeader.replace(/^Bearer\s+/i, '')
+  const isServiceRole = bearer && bearer === supabaseServiceKey
+  if (!isServiceRole) {
+    if (!bearer) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    })
+    const { data: userData, error: userErr } = await userClient.auth.getUser()
+    if (userErr || !userData.user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey)
+    const { data: roleRows } = await adminClient
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userData.user.id)
+    const roles = (roleRows ?? []).map((r: { role: string }) => r.role)
+    if (!roles.includes('ADMIN') && !roles.includes('OPS')) {
+      console.warn('send-transactional-email: forbidden caller', { userId: userData.user.id, roles })
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
   }
 
   // Parse request body

@@ -86,8 +86,9 @@ export default function OrderHistory() {
   });
 
   // Fetch line item summaries for all orders in the list view
+  const orderIdsKey = (orders ?? []).map(o => o.id).join(',');
   const { data: allLineItems } = useQuery({
-    queryKey: ['client-orders-line-items', orders?.map(o => o.id)],
+    queryKey: ['client-orders-line-items', orderIdsKey],
     queryFn: async () => {
       const orderIds = (orders ?? []).map(o => o.id);
       if (orderIds.length === 0) return [] as LineItemSummary[];
@@ -138,7 +139,7 @@ export default function OrderHistory() {
 
       if (error) {
         console.error('Cancel error:', error.code, error.message, error.details);
-        throw new Error(`${error.code}: ${error.message}`);
+        throw new Error("Couldn't cancel this order. Please refresh and try again, or contact us if it persists.");
       }
 
       if (!data || data.length === 0) {
@@ -150,7 +151,9 @@ export default function OrderHistory() {
     },
     onSuccess: (data) => {
       toast.success('Order cancelled');
-      queryClient.invalidateQueries({ queryKey: ['client-orders'] });
+      // Prefix-match invalidates ['client-orders', accountId, locationIds]
+      queryClient.invalidateQueries({ queryKey: ['client-orders'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['client-orders-line-items'], exact: false });
       const orderId = (data?.[0] as { id?: string } | undefined)?.id;
       if (orderId) {
         supabase.functions.invoke('notify-order-event', {

@@ -30,7 +30,7 @@ import type { DateFilterConfig } from './types';
 // Use AUTHORITATIVE inventory hooks - computed from source-of-truth tables
 import { useAuthoritativeFg, useAuthoritativeShortList } from '@/hooks/useAuthoritativeInventory';
 import { AuthoritativeSummaryPanel } from './AuthoritativeTotals';
-import { filterOrderByWorkStart, computeNudgedDeadline } from '@/lib/productionScheduling';
+import { filterOrderByWorkStart, computeNudgedDeadline, isProductionDayToday, getVancouverNow } from '@/lib/productionScheduling';
 
 type ShipPriority = 'NORMAL' | 'TIME_SENSITIVE';
 
@@ -91,6 +91,9 @@ interface ShippableShipment {
   missingUnitsTotal: number;
   ship_display_order: number | null;
   manually_deprioritized?: boolean;
+  // True when today is one of the account's standard production days. Used to
+  // float these orders to the top of the default sort (manual overrides win).
+  isPriorityProductionDay: boolean;
 }
 
 // ShortListItem type now comes from useAuthoritativeShortList hook
@@ -192,7 +195,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           ship_display_order,
           manually_deprioritized,
           client:clients(name),
-          account:accounts(account_name),
+          account:accounts(account_name, production_weekdays),
           location:account_locations!orders_location_id_fkey(name:location_name, location_code),
           shipments:order_shipments(
             id,
@@ -334,6 +337,8 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     };
 
     const cards: ShippableShipment[] = [];
+    // Compute "now" once so every order tests against the same Vancouver weekday.
+    const nowVan = getVancouverNow();
 
     for (const order of ordersForShipping) {
       const allLines: RawLine[] = (order.line_items ?? []) as RawLine[];
@@ -357,10 +362,12 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
             },
           ];
 
-      const clientName =
-        (order as { account?: { account_name?: string } }).account?.account_name ??
-        order.client?.name ??
-        'Unknown';
+      const account = (order as { account?: { account_name?: string; production_weekdays?: number[] | null } }).account;
+      const clientName = account?.account_name ?? order.client?.name ?? 'Unknown';
+
+      // Priority production order: today is one of this account's standard
+      // production days. Drives the default top-of-list sort below.
+      const isPriorityProductionDay = isProductionDayToday(account?.production_weekdays, nowVan);
 
       // Order-level priority lookup
       let orderPriority: ShipPriority = 'NORMAL';
@@ -452,16 +459,28 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           missingUnitsTotal,
           ship_display_order: order.ship_display_order ?? null,
           manually_deprioritized: order.manually_deprioritized ?? false,
+          isPriorityProductionDay,
         });
       });
     }
 
-    // Sort by parent order's display order, then shipment_number so an order's
-    // shipments stay adjacent.
+    // Default sort, with manual overrides winning:
+    //  1. Manually positioned orders (ship_display_order set) keep their exact
+    //     rank — drag-to-reorder always wins.
+    //  2. Untouched priority production orders (today is the account's production
+    //     day, and not manually deprioritized) float to the top.
+    //  3. Everything else falls to the bottom.
+    // Within each bucket the existing secondary sort (order_number, then
+    // shipment_number to keep an order's shipments adjacent) is preserved.
+    const rankOf = (o: ShippableShipment): number => {
+      if (o.ship_display_order != null) return o.ship_display_order;
+      if (o.isPriorityProductionDay && !o.manually_deprioritized) return 500000;
+      return 999999;
+    };
     return cards.sort((a, b) => {
-      const orderA = a.ship_display_order ?? 999999;
-      const orderB = b.ship_display_order ?? 999999;
-      if (orderA !== orderB) return orderA - orderB;
+      const ra = rankOf(a);
+      const rb = rankOf(b);
+      if (ra !== rb) return ra - rb;
       const oncmp = a.order_number.localeCompare(b.order_number);
       if (oncmp !== 0) return oncmp;
       return a.shipment_number - b.shipment_number;
@@ -562,9 +581,9 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         body: { order_id: orderId, event_type: 'ORDER_SHIPPED' },
       }).catch((e) => console.warn('[notify-order-event] SHIPPED failed:', e));
     },
-    onError: (err) => {
+    onError: (err: any) => {
       console.error(err);
-      toast.error('Failed to mark order as shipped');
+      toast.error(err?.message || 'Failed to mark order as shipped');
     },
   });
 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { z } from 'zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ownerRpc } from './ownerRpc';
@@ -8,6 +9,26 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { Pencil, Save, X } from 'lucide-react';
+
+const accountInfoSchema = z.object({
+  account_name: z.string().trim().min(1, 'Business name is required').max(200),
+  billing_contact_name: z.string().trim().max(200).nullable(),
+  billing_email: z
+    .string()
+    .trim()
+    .max(255)
+    .email('Enter a valid email address')
+    .nullable()
+    .or(z.literal('').transform(() => null)),
+  billing_phone: z
+    .string()
+    .trim()
+    .max(40)
+    .regex(/^[0-9+()\-.\s]*$/, 'Phone can only contain digits, spaces, and + - . ( )')
+    .nullable()
+    .or(z.literal('').transform(() => null)),
+  billing_address: z.string().trim().max(1000).nullable(),
+});
 
 export interface AccountInfoValues {
   account_name: string;
@@ -57,16 +78,23 @@ export function AccountInfoForm({ accountId, initialValues, canEdit }: AccountIn
   };
 
   const handleSave = () => {
-    if (!values.account_name.trim()) {
-      toast.error('Account name is required');
+    const parsed = accountInfoSchema.safeParse({
+      account_name: values.account_name,
+      billing_contact_name: values.billing_contact_name ?? null,
+      billing_email: values.billing_email ?? null,
+      billing_phone: values.billing_phone ?? null,
+      billing_address: values.billing_address ?? null,
+    });
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message ?? 'Invalid input');
       return;
     }
     mutation.mutate({
-      account_name: values.account_name.trim(),
-      billing_contact_name: values.billing_contact_name?.trim() || null,
-      billing_email: values.billing_email?.trim() || null,
-      billing_phone: values.billing_phone?.trim() || null,
-      billing_address: values.billing_address?.trim() || null,
+      account_name: parsed.data.account_name,
+      billing_contact_name: parsed.data.billing_contact_name?.trim() || null,
+      billing_email: parsed.data.billing_email,
+      billing_phone: parsed.data.billing_phone,
+      billing_address: parsed.data.billing_address?.trim() || null,
     });
   };
 

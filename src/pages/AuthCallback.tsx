@@ -53,7 +53,7 @@ export default function AuthCallback() {
           return;
         }
 
-        console.log('[AuthCallback] Token type:', type);
+        
 
         // If we have tokens in the hash, set the session
         if (accessToken && refreshToken) {
@@ -70,7 +70,6 @@ export default function AuthCallback() {
 
           // Check if this is an invite (type=invite or type=signup) - user needs to set password
           if (type === 'invite' || type === 'signup' || type === 'recovery') {
-            console.log('[AuthCallback] Invite/recovery flow - redirecting to set password');
             navigate('/auth/set-password', { replace: true });
             return;
           }
@@ -100,22 +99,22 @@ export default function AuthCallback() {
         }
 
         // No tokens - check if already logged in
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
           const { data: roleData, error: roleError } = await supabase
             .from('user_roles')
             .select('role')
-            .eq('user_id', session.user.id)
+            .eq('user_id', user.id)
             .single();
 
           if (roleError || !roleData) {
-            console.error('[AuthCallback] No role found for session user:', session.user.id);
+            console.error('[AuthCallback] No role found for session user:', user.id);
             setNoRole(true);
             return;
           }
 
           if (roleData.role === 'CLIENT') {
-            const landing = await resolveClientLanding(session.user.id);
+            const landing = await resolveClientLanding(user.id);
             navigate(landing, { replace: true });
           } else {
             navigate('/production', { replace: true });

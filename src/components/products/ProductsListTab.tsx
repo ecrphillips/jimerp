@@ -27,6 +27,7 @@ import { useProductsBulkEdit } from '@/components/bulk-edit/configs/products';
 import { useBulkEditLogoutCleanup } from '@/components/bulk-edit/useChangeHighlights';
 import { MixingConsole, buildEmptyMixingConsoleValue, stripRedundantOverrides, hasMixingConsoleErrors, type MixingConsoleValue, type PricingProfilePreset } from '@/components/pricing/MixingConsole';
 import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
+import { deriveVariantSku } from '@/lib/skuGenerator';
 
 const FALLBACK_PRESET: PricingProfilePreset = {
   yield_loss_pct: 16,
@@ -44,6 +45,7 @@ interface Product {
   grind_options: GrindOption[];
   is_active: boolean;
   is_perennial: boolean;
+  is_placeholder?: boolean | null;
   client_id: string | null;
   account_id: string | null;
   packaging_variant: PackagingVariant | null;
@@ -70,6 +72,23 @@ const VARIANT_BAG_SIZES: Record<string, number> = {
   BULK_1KG: 1000,
   BULK_5LB: 2268,
   BULK_2KG: 2000,
+};
+
+// Suffixes used to build the new variant's product name. These MUST match
+// entries in PACKAGING_SUFFIXES below so the family grouper keeps the new
+// variant inside the same family as its source product.
+const VARIANT_NAME_SUFFIXES: Record<string, string> = {
+  RETAIL_250G: '250g Retail',
+  RETAIL_300G: '300g Retail',
+  RETAIL_340G: '340g Retail',
+  RETAIL_454G: '454g Retail',
+  CROWLER_200G: '200g Crowler',
+  CROWLER_250G: '250g Crowler',
+  CAN_125G: '125g Can',
+  BULK_2LB: '2lb Bulk',
+  BULK_1KG: '1kg Bulk',
+  BULK_5LB: '5lb Bulk',
+  BULK_2KG: '2kg Bulk',
 };
 
 function getTodayVancouver(): string {
@@ -202,9 +221,9 @@ export function ProductsListTab() {
   const { data: products, isLoading } = useQuery({
     queryKey: ['all-products'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, client_id, account_id, packaging_variant, roast_group, packaging_material_override, packaging_labour_override, client:clients(name), account:accounts(account_name)')
+        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, is_placeholder, client_id, account_id, packaging_variant, roast_group, packaging_material_override, packaging_labour_override, client:clients(name), account:accounts(account_name)')
         .order('product_name');
 
       if (error) throw error;
@@ -604,16 +623,48 @@ export function ProductsListTab() {
 
   const variantBaseName = variantSource ? stripPackagingSuffix(variantSource.product_name) : '';
   const variantLabel = variantPackaging ? PACKAGING_OPTIONS.find(o => o.value === variantPackaging)?.label ?? '' : '';
-  const variantNewName = variantPackaging ? `${variantBaseName} ${variantLabel}` : '';
+  const variantNameSuffix = variantPackaging ? VARIANT_NAME_SUFFIXES[variantPackaging] ?? variantLabel : '';
+  const variantNewName = variantNameSuffix ? `${variantBaseName} ${variantNameSuffix}` : '';
 
   const addVariantMutation = useMutation({
     mutationFn: async () => {
       if (!variantSource || !variantPackaging) throw new Error('Missing data');
       const bagSizeG = VARIANT_BAG_SIZES[variantPackaging] ?? 0;
+
+      // Derive SKU from a sibling in the same family: clone source SKU and
+      // swap its trailing 5-digit grams segment for the new packaging size.
+      let derivedSku: string | null = deriveVariantSku(variantSource.sku, bagSizeG);
+      if (!derivedSku && variantSource.roast_group) {
+        const { data: sibling } = await supabase
+          .from('products')
+          .select('sku')
+          .eq('roast_group', variantSource.roast_group)
+          .not('sku', 'is', null)
+          .limit(1)
+          .maybeSingle();
+        derivedSku = deriveVariantSku(sibling?.sku ?? null, bagSizeG);
+      }
+      // Collision check: if SKU already exists, suffix -2, -3, ...
+      if (derivedSku) {
+        const baseSku = derivedSku;
+        let attempt = baseSku;
+        let n = 2;
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { data: clash } = await supabase
+            .from('products').select('id').eq('sku', attempt).maybeSingle();
+          if (!clash) break;
+          attempt = `${baseSku}-${n++}`;
+          if (n > 20) { attempt = baseSku; break; }
+        }
+        derivedSku = attempt;
+      }
+
       const { data: newProduct, error } = await supabase.from('products').insert({
         account_id: variantSource.account_id, product_name: variantNewName, roast_group: variantSource.roast_group,
         packaging_variant: variantPackaging, bag_size_g: bagSizeG, format: variantSource.format as any,
         grind_options: variantSource.grind_options as any, is_perennial: variantSource.is_perennial, is_active: true,
+        sku: derivedSku,
       }).select('id').single();
       if (error) throw error;
       const priceValue = parseFloat(variantPrice);
@@ -879,6 +930,9 @@ export function ProductsListTab() {
                                     <Badge variant={p.is_active ? 'default' : 'secondary'} className="text-xs">
                                       {p.is_active ? 'Active' : 'Inactive'}
                                     </Badge>
+                                    {p.is_placeholder && (
+                                      <Badge variant="outline" className="ml-1 text-[10px]">PLACEHOLDER</Badge>
+                                    )}
                                   </td>
                                   <td className="py-1.5 px-2">
                                     <div className="flex items-center gap-1">

@@ -113,6 +113,12 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   
   // Removed sortBy state - order is now manual only via pack_display_order
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+
+  // Snapshot of product IDs that were already complete when this session/view started.
+  // These rows render de-emphasized so the packer's eye lands on outstanding work.
+  // Resets on remount (nav away + back, refresh, new session). The "Refresh complete"
+  // button below lets the packer fold newly-completed rows in without leaving the tab.
+  const [deemphasizedIds, setDeemphasizedIds] = useState<Set<string> | null>(null);
   
   // Local order state for optimistic DnD updates
   const [localProducts, setLocalProducts] = useState<ProductDemand[]>([]);
@@ -245,6 +251,33 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     return map;
   }, [packingRuns]);
 
+  // Fetch ship_picks for OPEN orders, aggregated by product.
+  // A pick is physical evidence that a bag was packed — the downstream station
+  // can't pick a bag that wasn't produced. We treat each picked unit as an
+  // *implicit* packed unit for shortage / completeness so a packer who's lagging
+  // on data entry doesn't get nudged to over-pack what the shipper already grabbed.
+  const { data: pickedByProductUnits } = useQuery<Record<string, number>>({
+    queryKey: ['pack-tab-picks-by-product'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ship_picks')
+        .select(`
+          units_picked,
+          order:orders!inner(status),
+          order_line_item:order_line_items!inner(product_id)
+        `)
+        .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      for (const row of (data ?? []) as any[]) {
+        const pid = row.order_line_item?.product_id;
+        if (!pid) continue;
+        map[pid] = (map[pid] ?? 0) + Number(row.units_picked ?? 0);
+      }
+      return map;
+    },
+  });
+
   // Aggregate demand by product with urgency info
   const demandByProduct = useMemo((): ProductDemand[] => {
     const productMap: Record<string, ProductDemand & { orderIds: Set<string>; shipDates: string[] }> = {};
@@ -297,33 +330,37 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       }
     }
 
-    // Calculate shortage, earliest ship date, unblocks orders, and WIP readiness
+    // Calculate shortage, earliest ship date, unblocks orders, and WIP readiness.
+    // "Effective packed" treats downstream picks as implicit packs — a picked bag
+    // physically exists, so the upstream demand is already satisfied even if the
+    // packer hasn't clicked through yet. This prevents the Pack tab from
+    // pressuring the user into over-packing a SKU the shipper has already grabbed.
     for (const product of Object.values(productMap)) {
       const packed = packingByProductUnits[product.product_id] ?? 0;
-      product.shortage = Math.max(0, product.demanded_units - packed);
-      
+      const picked = pickedByProductUnits?.[product.product_id] ?? 0;
+      const effectivePacked = Math.max(packed, picked);
+      product.shortage = Math.max(0, product.demanded_units - effectivePacked);
+
       // Get earliest ship date
       if (product.shipDates.length > 0) {
         product.earliestShipDate = product.shipDates.sort()[0];
       }
-      
+
       // Calculate how many orders this SKU unblocks if packed
       let unblocksCount = 0;
       for (const li of orderLineItems ?? []) {
         if (li.product_id !== product.product_id) continue;
-        const packedForProduct = packingByProductUnits[product.product_id] ?? 0;
-        if (packedForProduct < li.quantity_units) {
+        if (effectivePacked < li.quantity_units) {
           unblocksCount++;
         }
       }
       product.unblocksOrders = unblocksCount;
-      
+
       // Calculate WIP readiness - based purely on ledger WIP availability
-      // WIP is available if there's positive roasted coffee on hand for this roast group
       const wipAvailableKg = product.roast_group ? (roastedInventory[product.roast_group] ?? 0) : 0;
-      const remainingUnits = Math.max(0, product.demanded_units - packed);
+      const remainingUnits = Math.max(0, product.demanded_units - effectivePacked);
       const requiredKg = (remainingUnits * product.bag_size_g) / 1000;
-      
+
       product.wipAvailableKg = wipAvailableKg;
       product.requiredKg = requiredKg;
 
@@ -331,41 +368,46 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       const plannedInfo = product.roast_group ? plannedWip?.[product.roast_group] : undefined;
       product.plannedKg = plannedInfo?.planned_kg ?? 0;
       product.plannedCount = plannedInfo?.count ?? 0;
-      
-      // NEW: WIP status for color coding
-      // - 'full': enough WIP to complete entire row (wipAvailable >= requiredKg)
-      // - 'partial': some WIP available but not enough (0 < wipAvailable < requiredKg)
-      // - 'none': no WIP available or no remaining demand
+
       if (remainingUnits === 0) {
-        product.wipStatus = 'none'; // No remaining work = no color needed
+        product.wipStatus = 'none';
       } else if (wipAvailableKg >= requiredKg) {
-        product.wipStatus = 'full'; // GREEN: can complete entire row
+        product.wipStatus = 'full';
       } else if (wipAvailableKg > 0) {
-        product.wipStatus = 'partial'; // AMBER: some but not enough
+        product.wipStatus = 'partial';
       } else {
-        product.wipStatus = 'none'; // NO COLOR: no WIP at all
+        product.wipStatus = 'none';
       }
     }
 
     return Object.values(productMap).map(({ orderIds, shipDates, ...rest }) => rest);
-  }, [orderLineItems, checkmarks, packingByProductUnits, roastedInventory, products, plannedWip]);
+  }, [orderLineItems, checkmarks, packingByProductUnits, pickedByProductUnits, roastedInventory, products, plannedWip]);
 
-  // Sort products by pack_display_order only (manual ordering)
-  // NO automatic reprioritization - order is strictly user-controlled
+  // Sort products by completion first, then pack_display_order, then name.
+  // Incomplete rows surface to the top so the packer's eye lands on outstanding
+  // work; completed rows sink to the bottom (de-emphasized or not).
   const computedSortedProducts = useMemo(() => {
     const sorted = [...demandByProduct];
-    
-    // Sort ONLY by pack_display_order (manual), then by name as tie-breaker
+
     sorted.sort((a, b) => {
+      const packedA = packingByProductUnits[a.product_id] ?? 0;
+      const pickedA = pickedByProductUnits?.[a.product_id] ?? 0;
+      const completeA = a.demanded_units > 0 && Math.max(packedA, pickedA) >= a.demanded_units;
+
+      const packedB = packingByProductUnits[b.product_id] ?? 0;
+      const pickedB = pickedByProductUnits?.[b.product_id] ?? 0;
+      const completeB = b.demanded_units > 0 && Math.max(packedB, pickedB) >= b.demanded_units;
+
+      if (completeA !== completeB) return completeA ? 1 : -1;
+
       const orderA = a.pack_display_order ?? 999999;
       const orderB = b.pack_display_order ?? 999999;
-      
       if (orderA !== orderB) return orderA - orderB;
       return a.product_name.localeCompare(b.product_name);
     });
-    
+
     return sorted;
-  }, [demandByProduct]);
+  }, [demandByProduct, packingByProductUnits, pickedByProductUnits]);
 
   // Sync local state from server data, but only when not actively reordering
   useEffect(() => {
@@ -500,6 +542,72 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     }
     return out;
   }, [sortedProducts, groupOrder, groupKeyOf]);
+
+  // Compute which products are currently complete (effective packed >= demanded).
+  // Mirrors the SortablePackRow logic so the two never disagree.
+  const completeProductIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const p of displayProducts) {
+      const packed = packingByProductUnits[p.product_id] ?? 0;
+      const picked = pickedByProductUnits?.[p.product_id] ?? 0;
+      const effective = Math.max(packed, picked);
+      if (p.demanded_units > 0 && effective >= p.demanded_units) {
+        ids.add(p.product_id);
+      }
+    }
+    return ids;
+  }, [displayProducts, packingByProductUnits, pickedByProductUnits]);
+
+  // First time we get a populated list, snapshot what was already complete.
+  useEffect(() => {
+    if (deemphasizedIds === null && displayProducts.length > 0) {
+      setDeemphasizedIds(new Set(completeProductIds));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayProducts.length]);
+
+  // Manual refresh: fold all currently-complete rows into the de-emphasized set,
+  // re-sort so incomplete work surfaces to the top, and collapse any drawer that
+  // just got de-emphasized.
+  const handleRefreshComplete = useCallback(() => {
+    setDeemphasizedIds(new Set(completeProductIds));
+    hasUserReorderedRef.current = false;
+    setLocalProducts(computedSortedProducts);
+    if (expandedProductId && completeProductIds.has(expandedProductId)) {
+      setExpandedProductId(null);
+    }
+    // Sink any group whose remaining work is fully complete to the bottom of the
+    // frozen group order. Groups with any incomplete row keep their relative order.
+    setFrozenGroupOrder((prev) => {
+      const current = prev ?? orderPackGroups(groupMetas, sortMode, manualGroupOrder);
+      const productsByGroup = new Map<string, ProductDemand[]>();
+      for (const p of displayProducts) {
+        const key = groupKeyOf(p.roast_group);
+        const arr = productsByGroup.get(key) ?? [];
+        arr.push(p);
+        productsByGroup.set(key, arr);
+      }
+      const isGroupDone = (key: string) => {
+        const prods = productsByGroup.get(key) ?? [];
+        if (prods.length === 0) return true;
+        return prods.every(
+          (p) => p.demanded_units === 0 || completeProductIds.has(p.product_id),
+        );
+      };
+      const incomplete = current.filter((k) => !isGroupDone(k));
+      const done = current.filter((k) => isGroupDone(k));
+      return [...incomplete, ...done];
+    });
+  }, [
+    completeProductIds,
+    computedSortedProducts,
+    expandedProductId,
+    displayProducts,
+    groupKeyOf,
+    groupMetas,
+    sortMode,
+    manualGroupOrder,
+  ]);
 
   // Drag-reorder of the group-order bar.
   const handleGroupDragEnd = useCallback((event: DragEndEvent) => {
@@ -665,6 +773,15 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                   </button>
                 ))}
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefreshComplete}
+                title="Fold completed rows into the de-emphasized state without reloading"
+              >
+                <RotateCcw className="h-4 w-4 mr-1" />
+                Refresh complete
+              </Button>
               <Button variant="outline" size="sm" asChild>
                 <Link to="/inventory?tab=wip&from=pack">
                   <Layers className="h-4 w-4 mr-1" />
@@ -752,6 +869,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                     {displayProducts.map((product, index) => {
                       const packing = packingByProduct[product.product_id];
                       const packed = packing?.units_packed ?? 0;
+                      const picked = pickedByProductUnits?.[product.product_id] ?? 0;
                       const isExpanded = expandedProductId === product.product_id;
                       const prevRoastGroup = index > 0 ? displayProducts[index - 1].roast_group : undefined;
                       const showHeader = product.roast_group !== prevRoastGroup;
@@ -801,6 +919,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                           roastGroup={product.roast_group}
                           demandedUnits={product.demanded_units}
                           packedUnits={packed}
+                          pickedUnits={picked}
                           hasTimeSensitive={product.hasTimeSensitive}
                           wipStatus={product.wipStatus}
                           unblocksOrders={product.unblocksOrders}
@@ -809,7 +928,8 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                           plannedKg={product.plannedKg}
                           plannedCount={product.plannedCount}
                           packingRun={packing}
-                          isExpanded={isExpanded}
+                          isExpanded={isExpanded && !(deemphasizedIds?.has(product.product_id) ?? false)}
+                          deemphasized={deemphasizedIds?.has(product.product_id) ?? false}
                           onToggleExpand={() => setExpandedProductId(isExpanded ? null : product.product_id)}
                           onUpdatePackedUnits={(newValue) => updatePackingUnits(
                             product.product_id, 

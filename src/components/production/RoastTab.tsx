@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -78,6 +78,7 @@ interface RoastBatch {
   cropster_batch_id: string | null;
   created_at?: string;
   updated_at?: string;
+  planned_for_blend_roast_group?: string | null;
 }
 
 interface RoastGroupConfig {
@@ -139,9 +140,9 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   const [showAddBatchModal, setShowAddBatchModal] = useState(false);
   const [addBatchRgKey, setAddBatchRgKey] = useState('');
   
-  const [addBatchKg, setAddBatchKg] = useState('');
+  const [addBatchInputKg, setAddBatchInputKg] = useState('');
+  const [addBatchYieldLoss, setAddBatchYieldLoss] = useState('');
   const [addBatchRoaster, setAddBatchRoaster] = useState<'SAMIAC' | 'LORING' | ''>('');
-  const [addBatchDate, setAddBatchDate] = useState(today);
   const [addBatchCropster, setAddBatchCropster] = useState('');
   const [addBatchMode, setAddBatchMode] = useState<'existing' | 'new'>('existing');
   const [addBatchSaving, setAddBatchSaving] = useState(false);
@@ -151,9 +152,9 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     setShowAddBatchModal(false);
     setAddBatchRgKey('');
     setAddBatchNewName('');
-    setAddBatchKg('');
+    setAddBatchInputKg('');
+    setAddBatchYieldLoss('');
     setAddBatchRoaster('');
-    setAddBatchDate(today);
     setAddBatchCropster('');
     setAddBatchMode('existing');
     setAddBatchSaving(false);
@@ -185,10 +186,13 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   const { data: roastGroupsConfig } = useQuery({
     queryKey: ['roast-groups-config'],
     queryFn: async () => {
+      // Load ALL roast groups (including inactive) so config (standard_batch_kg,
+      // expected_yield_loss_pct, default_roaster) is available for any group that
+      // shows up with demand or planned batches. Filtering by is_active here caused
+      // inactive groups to silently fall back to 20kg / 16% defaults on Add Batch.
       const { data, error } = await supabase
         .from('roast_groups')
         .select('*')
-        .eq('is_active', true)
         .order('display_order', { ascending: true, nullsFirst: false })
         .order('roast_group', { ascending: true });
       if (error) throw error;
@@ -205,16 +209,33 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     return map;
   }, [roastGroupsConfig]);
 
+  // Prefill Add Batch input kg + yield loss from the selected roast group's config.
+  // For "new" mode (no config yet), fall back to 20 kg / 16% defaults.
+  useEffect(() => {
+    if (!showAddBatchModal) return;
+    if (addBatchMode === 'existing') {
+      if (!addBatchRgKey) return;
+      const cfg = configByGroup[addBatchRgKey];
+      setAddBatchInputKg(String(cfg?.standard_batch_kg ?? 20));
+      setAddBatchYieldLoss(String(cfg?.expected_yield_loss_pct ?? 16));
+    } else {
+      setAddBatchInputKg('20');
+      setAddBatchYieldLoss('16');
+    }
+  }, [showAddBatchModal, addBatchMode, addBatchRgKey, configByGroup]);
+
   // Fetch roast group components (blend recipes)
   const { data: roastGroupComponents } = useRoastGroupComponents();
 
   // Create a map of roast_group -> { display_name, origin } for component display lookup
   const roastGroupsLookupMap = useMemo(() => {
-    const map = new Map<string, { display_name: string | null; origin: string | null }>();
+    const map = new Map<string, { display_name: string | null; origin: string | null; expected_yield_loss_pct: number | null; standard_batch_kg: number | null }>();
     for (const rg of roastGroupsConfig ?? []) {
       map.set(rg.roast_group, {
         display_name: rg.display_name ?? null,
         origin: (rg as any).origin ?? null,
+        expected_yield_loss_pct: (rg as any).expected_yield_loss_pct ?? null,
+        standard_batch_kg: (rg as any).standard_batch_kg ?? null,
       });
     }
     return map;
@@ -410,14 +431,25 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     // These should still appear on the run sheet for visibility and editing
     const groupsWithActivity = new Set<string>();
     
-    // Groups with batches (planned or roasted)
+    // Groups with batches (planned or roasted).
+    // For PLANNED batches earmarked for a post-roast blend, the activity
+    // belongs to the PARENT blend drawer — not the component RG. Without this
+    // remap, adding component batches from inside the Technicolour drawer
+    // causes each component to spawn its own drawer at the top level.
     for (const b of batches ?? []) {
+      if (b.status === 'PLANNED' && b.planned_for_blend_roast_group) {
+        groupsWithActivity.add(b.planned_for_blend_roast_group);
+        continue;
+      }
       groupsWithActivity.add(b.roast_group);
     }
     
-    // Groups with WIP inventory
+    // Groups with CURRENT WIP available. Historical roast/pack activity
+    // (roasted_completed_kg, packed_consumed_kg) is cumulative-forever and
+    // would keep long-since-emptied component groups pinned to the run sheet,
+    // so we only flag groups that still have available WIP today.
     for (const [rg, data] of Object.entries(authWip ?? {})) {
-      if (data.wip_available_kg > 0 || data.roasted_completed_kg > 0 || data.packed_consumed_kg > 0) {
+      if (data.wip_available_kg > 0) {
         groupsWithActivity.add(rg);
       }
     }
@@ -483,9 +515,16 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   }, [products]);
 
   // Group batches by roast_group
+  // Exclude PLANNED batches that are earmarked for a post-roast blend — those
+  // belong conceptually to the blend's drawer (which fetches them separately
+  // via planned_for_blend_roast_group). Showing them in the component RG's
+  // drawer too is confusing and double-counts coverage. Once roasted they
+  // remain visible here because the WIP physically belongs to the component RG
+  // until the blend consumes it.
   const batchesByGroup = useMemo(() => {
     const grouped: Record<string, RoastBatch[]> = {};
     for (const b of batches ?? []) {
+      if (b.status === 'PLANNED' && b.planned_for_blend_roast_group) continue;
       if (!grouped[b.roast_group]) grouped[b.roast_group] = [];
       grouped[b.roast_group].push(b);
     }
@@ -1509,27 +1548,48 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
 
 
 
-            {/* Shared fields */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Target date</Label>
-                <Input
-                  type="date"
-                  value={addBatchDate}
-                  onChange={(e) => setAddBatchDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Planned output (kg)</Label>
-                <Input
-                  type="number"
-                  value={addBatchKg}
-                  onChange={(e) => setAddBatchKg(e.target.value)}
-                  placeholder="Optional"
-                  min={0}
-                />
-              </div>
-            </div>
+            {/* Input & yield loss */}
+            {(() => {
+              const inputNum = parseFloat(addBatchInputKg);
+              const yieldNum = parseFloat(addBatchYieldLoss);
+              const validInput = Number.isFinite(inputNum) && inputNum > 0;
+              const validYield = Number.isFinite(yieldNum) && yieldNum >= 0 && yieldNum < 100;
+              const expectedOutput = validInput && validYield ? inputNum * (1 - yieldNum / 100) : null;
+              return (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Input (kg green)</Label>
+                      <Input
+                        type="number"
+                        value={addBatchInputKg}
+                        onChange={(e) => setAddBatchInputKg(e.target.value)}
+                        placeholder="e.g. 20"
+                        min={0}
+                        step="0.1"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Expected yield loss (%)</Label>
+                      <Input
+                        type="number"
+                        value={addBatchYieldLoss}
+                        onChange={(e) => setAddBatchYieldLoss(e.target.value)}
+                        placeholder="e.g. 16"
+                        min={0}
+                        max={99}
+                        step="0.1"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-sm text-muted-foreground bg-muted/40 rounded-md px-3 py-2">
+                    {expectedOutput !== null
+                      ? <>Expected output: <span className="font-semibold text-foreground">{expectedOutput.toFixed(2)} kg</span> roasted</>
+                      : <>Enter input kg and yield loss % to see expected output.</>}
+                  </div>
+                </>
+              );
+            })()}
 
             <div className="space-y-2">
               <Label>Roaster</Label>
@@ -1597,13 +1657,25 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                     queryClient.invalidateQueries({ queryKey: ['roast-groups-config'] });
                   }
 
-                  const plannedKg = addBatchKg ? parseFloat(addBatchKg) : 0;
+                  const inputKg = addBatchInputKg ? parseFloat(addBatchInputKg) : 0;
+                  const yieldLoss = addBatchYieldLoss ? parseFloat(addBatchYieldLoss) : 0;
+                  if (!inputKg || inputKg <= 0) {
+                    toast.error('Input kg is required.');
+                    setAddBatchSaving(false);
+                    return;
+                  }
+                  if (!(yieldLoss >= 0 && yieldLoss < 100)) {
+                    toast.error('Yield loss % must be between 0 and 99.');
+                    setAddBatchSaving(false);
+                    return;
+                  }
+                  const plannedKg = inputKg * (1 - yieldLoss / 100);
 
                   const performInsert = async (swaps: DepletionSwap[] = []) => {
                     const { error } = await supabase.from('roasted_batches').insert({
                       roast_group: roastGroupKey,
-                      target_date: addBatchDate,
-                      planned_output_kg: addBatchKg ? parseFloat(addBatchKg) : null,
+                      target_date: today,
+                      planned_output_kg: plannedKg,
                       actual_output_kg: 0,
                       status: 'PLANNED' as const,
                       assigned_roaster: addBatchRoaster || null,

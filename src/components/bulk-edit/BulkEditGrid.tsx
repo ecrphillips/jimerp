@@ -1,11 +1,13 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronRight, Download, Undo2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Download, Undo2, Upload, X } from 'lucide-react';
+
 import { toast } from 'sonner';
 import { EditableCell } from './cells/EditableCell';
 import { useChangeHighlights } from './useChangeHighlights';
 import { useUndoStack } from './useUndoStack';
 import { exportRowsToCsv } from './csv';
+import { parseCsv } from '@/lib/csvParse';
 import type { ColumnDef, SaveResult } from './types';
 
 interface GroupConfig<TRow> {
@@ -41,6 +43,7 @@ export function BulkEditGrid<TRow>({
   const { isHighlighted, markChanged, clearHighlight } = useChangeHighlights(tableKey);
   const undo = useUndoStack();
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const initializedCollapseRef = useRef(false);
   const undoingRef = useRef(false);
 
   const grouped = useMemo(() => {
@@ -56,18 +59,46 @@ export function BulkEditGrid<TRow>({
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [rows, group]);
 
+  // Default to all groups collapsed once data first loads.
+  useEffect(() => {
+    if (!group) return;
+    if (initializedCollapseRef.current) return;
+    if (grouped.length === 0) return;
+    setCollapsedGroups(new Set(grouped.map((g) => g.key)));
+    initializedCollapseRef.current = true;
+  }, [group, grouped]);
+
+  const allCollapsed = group ? grouped.length > 0 && grouped.every((g) => collapsedGroups.has(g.key)) : false;
+  const toggleAllGroups = () => {
+    if (allCollapsed) setCollapsedGroups(new Set());
+    else setCollapsedGroups(new Set(grouped.map((g) => g.key)));
+  };
+
+
+  const [savedCount, setSavedCount] = useState(0);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [savingCount, setSavingCount] = useState(0);
+
   const handleSave = async (row: TRow, col: ColumnDef<TRow>, newValue: unknown): Promise<SaveResult> => {
     const prevValue = col.getValue(row);
-    const result = await onCellSave(row, col, newValue);
-    if (result.success) {
-      const rowId = getRowId(row);
-      markChanged(rowId, col.key);
-      if (!undoingRef.current) {
-        undo.push({ rowId, colKey: col.key, prevValue });
+    setSavingCount((c) => c + 1);
+    try {
+      const result = await onCellSave(row, col, newValue);
+      if (result.success) {
+        const rowId = getRowId(row);
+        markChanged(rowId, col.key);
+        if (!undoingRef.current) {
+          undo.push({ rowId, colKey: col.key, prevValue });
+        }
+        setSavedCount((c) => c + 1);
+        setLastSavedAt(new Date());
       }
+      return result;
+    } finally {
+      setSavingCount((c) => Math.max(0, c - 1));
     }
-    return result;
   };
+
 
   const handleUndo = async () => {
     const last = undo.pop();
@@ -98,6 +129,84 @@ export function BulkEditGrid<TRow>({
     exportRowsToCsv(rows, columns, getRowId, csvFilename);
   };
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+
+  const normalize = (v: unknown): string => {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'boolean') return v ? 'true' : 'false';
+    const s = String(v).trim();
+    // Treat boolean-like strings case-insensitively so Excel's TRUE/FALSE
+    // doesn't get treated as a change against our exported "true"/"false".
+    if (/^(true|false)$/i.test(s)) return s.toLowerCase();
+    return s;
+  };
+
+
+  const handleImportClick = () => fileInputRef.current?.click();
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const { header, rows: csvRows } = parseCsv(text);
+      if (!header.length || header[0] !== '__row_id') {
+        toast.error('CSV must include the __row_id column from Export CSV.');
+        return;
+      }
+      const colByKey = new Map(columns.map((c) => [c.key, c]));
+      const rowById = new Map(rows.map((r) => [getRowId(r), r]));
+      const headerColIdx: { key: string; idx: number }[] = [];
+      for (let i = 1; i < header.length; i++) {
+        const col = colByKey.get(header[i]);
+        if (col && !col.readOnly) headerColIdx.push({ key: header[i], idx: i });
+      }
+
+      let changed = 0;
+      let succeeded = 0;
+      let failed = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+
+      for (const csvRow of csvRows) {
+        const rowId = csvRow[0];
+        const row = rowById.get(rowId);
+        if (!row) { skipped++; continue; }
+        for (const { key, idx } of headerColIdx) {
+          const col = colByKey.get(key)!;
+          const newRaw = csvRow[idx] ?? '';
+          const currentNorm = normalize(col.getValue(row));
+          const newNorm = normalize(newRaw);
+          if (currentNorm === newNorm) continue;
+          if (newNorm === '' && !col.allowEmpty) { skipped++; continue; }
+          changed++;
+          const newValue: unknown = newNorm === '' ? null : newRaw;
+          const result = await handleSave(row, col, newValue);
+          if (result.success) succeeded++;
+          else {
+            failed++;
+            if (errors.length < 5) errors.push(`${rowId.slice(0, 8)}/${key}: ${result.errorMessage ?? 'failed'}`);
+          }
+        }
+      }
+
+      if (changed === 0) {
+        toast.info('No changes detected in CSV.');
+      } else if (failed === 0) {
+        toast.success(`Imported ${succeeded} change${succeeded !== 1 ? 's' : ''}.`);
+      } else {
+        toast.error(`Imported ${succeeded}; ${failed} failed. ${errors.join('; ')}`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'CSV import failed');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const toggleGroup = (key: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
@@ -114,15 +223,53 @@ export function BulkEditGrid<TRow>({
         <div className="flex items-center gap-3">
           <h3 className="font-semibold text-sm">{title}</h3>
           <span className="text-xs text-muted-foreground">{rows.length} row{rows.length !== 1 ? 's' : ''}</span>
+          {savingCount > 0 ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-950/40 border border-amber-300/60 dark:border-amber-800 rounded-full px-2 py-0.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+              Saving…
+            </span>
+          ) : lastSavedAt ? (
+            <span
+              className="inline-flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/40 border border-emerald-300/60 dark:border-emerald-800 rounded-full px-2 py-0.5"
+              title="Every edit is written to the database as soon as you leave the cell. It's safe to navigate away."
+            >
+              <Check className="h-3 w-3" />
+              {savedCount} change{savedCount !== 1 ? 's' : ''} saved · {lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground italic">
+              Edits auto-save as you leave each cell — safe to navigate away.
+            </span>
+          )}
         </div>
+
         <div className="flex items-center gap-2">
+          {group && grouped.length > 0 && (
+            <Button variant="outline" size="sm" onClick={toggleAllGroups} className="h-7 text-xs gap-1">
+              {allCollapsed ? <ChevronsUpDown className="h-3.5 w-3.5" /> : <ChevronsDownUp className="h-3.5 w-3.5" />}
+              {allCollapsed ? 'Expand all' : 'Collapse all'}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={handleUndo} disabled={undo.size === 0} className="h-7 text-xs gap-1">
             <Undo2 className="h-3.5 w-3.5" /> Undo last change ({undo.size})
           </Button>
+
           {csvFilename && (
-            <Button variant="outline" size="sm" onClick={handleExport} className="h-7 text-xs gap-1">
-              <Download className="h-3.5 w-3.5" /> Export CSV
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={handleExport} className="h-7 text-xs gap-1">
+                <Download className="h-3.5 w-3.5" /> Export CSV
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleImportClick} disabled={importing} className="h-7 text-xs gap-1">
+                <Upload className="h-3.5 w-3.5" /> {importing ? 'Importing…' : 'Import CSV'}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+            </>
           )}
           <Button variant="ghost" size="sm" onClick={onClose} className="h-7 text-xs gap-1">
             <X className="h-3.5 w-3.5" /> Close

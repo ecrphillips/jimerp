@@ -1,6 +1,10 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -61,13 +65,15 @@ export function BlendExecuteModal({
   const [selectedBatches, setSelectedBatches] = useState<Record<string, SelectedBatch>>({});
   const [showSuccess, setShowSuccess] = useState(false);
   const [blendedAmount, setBlendedAmount] = useState<number>(0);
-  
+  const [confirmReleaseOpen, setConfirmReleaseOpen] = useState(false);
+
   // Reset state when modal opens
   React.useEffect(() => {
     if (open) {
       setSelectedBatches({});
       setShowSuccess(false);
       setBlendedAmount(0);
+      setConfirmReleaseOpen(false);
     }
   }, [open]);
   
@@ -321,7 +327,30 @@ export function BlendExecuteModal({
   
   // Check if we can blend
   const canBlend = totalBlendOutput > 0 && proportionCheck.valid && recipeValid;
-  
+
+  // Leftover detection: any selected batch where the roaster is using less than
+  // the full available kg. That leftover stays in the component group's WIP
+  // (because consumed_by_blend_at is set on the batch, releasing the reservation),
+  // so we ask the roaster to confirm releasing it back to general use.
+  const leftoverDetails = useMemo(() => {
+    const items: Array<{ batchId: string; componentRoastGroup: string; leftoverKg: number }> = [];
+    for (const sel of Object.values(selectedBatches)) {
+      const leftover = sel.availableKg - sel.consumeKg;
+      if (leftover > 0.01) {
+        const batch = batchesWithAvailable.find(b => b.id === sel.batchId);
+        if (batch) {
+          items.push({
+            batchId: sel.batchId,
+            componentRoastGroup: batch.roast_group,
+            leftoverKg: leftover,
+          });
+        }
+      }
+    }
+    const totalLeftoverKg = items.reduce((sum, i) => sum + i.leftoverKg, 0);
+    return { items, totalLeftoverKg, hasLeftover: items.length > 0 };
+  }, [selectedBatches, batchesWithAvailable]);
+
   // Blend mutation — atomic SECURITY DEFINER RPC. The function locks the
   // selected batches, verifies none are already consumed (guards against a
   // concurrent blend), marks them consumed, and writes the balanced ledger
@@ -562,7 +591,13 @@ export function BlendExecuteModal({
                 Cancel
               </Button>
               <Button
-                onClick={() => blendMutation.mutate()}
+                onClick={() => {
+                  if (leftoverDetails.hasLeftover) {
+                    setConfirmReleaseOpen(true);
+                  } else {
+                    blendMutation.mutate();
+                  }
+                }}
                 disabled={!canBlend || blendMutation.isPending}
               >
                 {blendMutation.isPending ? (
@@ -578,6 +613,66 @@ export function BlendExecuteModal({
           </div>
         )}
       </DialogContent>
+
+      {/* Leftover confirmation: a selected component batch is being partially
+          consumed. The unblended remainder will lose its blend earmark and
+          become available in the component group for any single-origin product
+          to pack. */}
+      <AlertDialog open={confirmReleaseOpen} onOpenChange={setConfirmReleaseOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave unblended coffee for other products?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  You're using less than the full amount on{' '}
+                  {leftoverDetails.items.length === 1
+                    ? '1 batch'
+                    : `${leftoverDetails.items.length} batches`}{' '}
+                  earmarked for <strong>{blendDisplayName}</strong>.
+                </p>
+                <div className="rounded-md border bg-muted/50 p-2 space-y-1">
+                  {leftoverDetails.items.map(item => {
+                    const compName =
+                      configByGroup[item.componentRoastGroup]?.display_name?.trim()
+                      || item.componentRoastGroup.replace(/_/g, ' ');
+                    return (
+                      <div key={item.batchId} className="flex justify-between text-xs">
+                        <span className="font-mono text-muted-foreground">
+                          {item.batchId.slice(0, 8)}
+                        </span>
+                        <span>
+                          <strong>{item.leftoverKg.toFixed(1)} kg</strong> leftover &middot; {compName}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  <div className="pt-1 border-t flex justify-between text-xs font-medium">
+                    <span>Total leftover</span>
+                    <span>{leftoverDetails.totalLeftoverKg.toFixed(1)} kg</span>
+                  </div>
+                </div>
+                <p className="text-muted-foreground">
+                  Confirming will release this coffee back into the component roast group's
+                  WIP, where any other product can use it. The batches will no longer be
+                  reserved for {blendDisplayName}.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Back — adjust amounts</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmReleaseOpen(false);
+                blendMutation.mutate();
+              }}
+            >
+              Confirm &amp; blend
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

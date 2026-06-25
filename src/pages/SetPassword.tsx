@@ -29,17 +29,18 @@ export default function SetPassword() {
   useEffect(() => {
     // Verify we have a valid session from the invite link
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
+      // Use getUser() — re-validates with the auth server rather than trusting cached session
+      const { data: { user }, error } = await supabase.auth.getUser();
+
+      if (error || !user) {
         setIsValidSession(false);
         return;
       }
 
       setIsValidSession(true);
-      
+
       // Get user name from metadata
-      const name = session.user.user_metadata?.name || session.user.email?.split('@')[0];
+      const name = user.user_metadata?.name || user.email?.split('@')[0];
       setUserName(name);
     };
 
@@ -75,13 +76,13 @@ export default function SetPassword() {
 
       // Wait a moment then redirect based on role
       setTimeout(async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session) {
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (user) {
           const { data: roleData } = await supabase
             .from('user_roles')
             .select('role')
-            .eq('user_id', session.user.id)
+            .eq('user_id', user.id)
             .single();
 
           if (roleData?.role === 'CLIENT') {
