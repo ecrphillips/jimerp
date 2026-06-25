@@ -40,6 +40,10 @@ interface SortablePackRowProps {
   plannedCount: number;
   packingRun: PackingRun | undefined;
   isExpanded: boolean;
+  /** When true, the row was already complete at session/snapshot time and is
+   *  visually de-emphasized so the packer's eye lands on outstanding work.
+   *  The drawer is also force-collapsed for de-emphasized rows. */
+  deemphasized?: boolean;
   onToggleExpand: () => void;
   onUpdatePackedUnits: (newValue: number) => Promise<void>;
   onEditingChange: (isEditing: boolean) => void;
