@@ -40,6 +40,10 @@ interface SortablePackRowProps {
   plannedCount: number;
   packingRun: PackingRun | undefined;
   isExpanded: boolean;
+  /** When true, the row was already complete at session/snapshot time and is
+   *  visually de-emphasized so the packer's eye lands on outstanding work.
+   *  The drawer is also force-collapsed for de-emphasized rows. */
+  deemphasized?: boolean;
   onToggleExpand: () => void;
   onUpdatePackedUnits: (newValue: number) => Promise<void>;
   onEditingChange: (isEditing: boolean) => void;
@@ -64,6 +68,7 @@ export function SortablePackRow({
   plannedCount,
   packingRun,
   isExpanded,
+  deemphasized = false,
   onToggleExpand,
   onUpdatePackedUnits,
   onEditingChange,
@@ -95,7 +100,13 @@ export function SortablePackRow({
   // - 'none': NO COLOR - no WIP at all
   const getRowClasses = () => {
     const baseClasses = 'border-b last:border-0 cursor-pointer transition-colors';
-    
+
+    // De-emphasized rows (already complete at snapshot time) drop all colored
+    // accents and fade so the eye lands on outstanding work. Click still expands.
+    if (deemphasized) {
+      return `${baseClasses} opacity-50 hover:opacity-100 hover:bg-muted/40`;
+    }
+
     if (hasTimeSensitive) {
       // Urgent items keep their destructive background but can have WIP indicator
       if (wipStatus === 'full') {
