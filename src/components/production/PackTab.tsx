@@ -383,22 +383,31 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     return Object.values(productMap).map(({ orderIds, shipDates, ...rest }) => rest);
   }, [orderLineItems, checkmarks, packingByProductUnits, pickedByProductUnits, roastedInventory, products, plannedWip]);
 
-  // Sort products by pack_display_order only (manual ordering)
-  // NO automatic reprioritization - order is strictly user-controlled
+  // Sort products by completion first, then pack_display_order, then name.
+  // Incomplete rows surface to the top so the packer's eye lands on outstanding
+  // work; completed rows sink to the bottom (de-emphasized or not).
   const computedSortedProducts = useMemo(() => {
     const sorted = [...demandByProduct];
-    
-    // Sort ONLY by pack_display_order (manual), then by name as tie-breaker
+
     sorted.sort((a, b) => {
+      const packedA = packingByProductUnits[a.product_id] ?? 0;
+      const pickedA = pickedByProductUnits?.[a.product_id] ?? 0;
+      const completeA = a.demanded_units > 0 && Math.max(packedA, pickedA) >= a.demanded_units;
+
+      const packedB = packingByProductUnits[b.product_id] ?? 0;
+      const pickedB = pickedByProductUnits?.[b.product_id] ?? 0;
+      const completeB = b.demanded_units > 0 && Math.max(packedB, pickedB) >= b.demanded_units;
+
+      if (completeA !== completeB) return completeA ? 1 : -1;
+
       const orderA = a.pack_display_order ?? 999999;
       const orderB = b.pack_display_order ?? 999999;
-      
       if (orderA !== orderB) return orderA - orderB;
       return a.product_name.localeCompare(b.product_name);
     });
-    
+
     return sorted;
-  }, [demandByProduct]);
+  }, [demandByProduct, packingByProductUnits, pickedByProductUnits]);
 
   // Sync local state from server data, but only when not actively reordering
   useEffect(() => {
@@ -557,14 +566,17 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayProducts.length]);
 
-  // Manual refresh: fold all currently-complete rows into the de-emphasized set
-  // and collapse the drawer if it just got de-emphasized.
+  // Manual refresh: fold all currently-complete rows into the de-emphasized set,
+  // re-sort so incomplete work surfaces to the top, and collapse any drawer that
+  // just got de-emphasized.
   const handleRefreshComplete = useCallback(() => {
     setDeemphasizedIds(new Set(completeProductIds));
+    hasUserReorderedRef.current = false;
+    setLocalProducts(computedSortedProducts);
     if (expandedProductId && completeProductIds.has(expandedProductId)) {
       setExpandedProductId(null);
     }
-  }, [completeProductIds, expandedProductId]);
+  }, [completeProductIds, computedSortedProducts, expandedProductId]);
 
   // Drag-reorder of the group-order bar.
   const handleGroupDragEnd = useCallback((event: DragEndEvent) => {
