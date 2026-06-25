@@ -68,6 +68,7 @@ export function SortablePackRow({
   plannedCount,
   packingRun,
   isExpanded,
+  deemphasized = false,
   onToggleExpand,
   onUpdatePackedUnits,
   onEditingChange,
