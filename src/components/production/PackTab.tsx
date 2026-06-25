@@ -566,14 +566,17 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayProducts.length]);
 
-  // Manual refresh: fold all currently-complete rows into the de-emphasized set
-  // and collapse the drawer if it just got de-emphasized.
+  // Manual refresh: fold all currently-complete rows into the de-emphasized set,
+  // re-sort so incomplete work surfaces to the top, and collapse any drawer that
+  // just got de-emphasized.
   const handleRefreshComplete = useCallback(() => {
     setDeemphasizedIds(new Set(completeProductIds));
+    hasUserReorderedRef.current = false;
+    setLocalProducts(computedSortedProducts);
     if (expandedProductId && completeProductIds.has(expandedProductId)) {
       setExpandedProductId(null);
     }
-  }, [completeProductIds, expandedProductId]);
+  }, [completeProductIds, computedSortedProducts, expandedProductId]);
 
   // Drag-reorder of the group-order bar.
   const handleGroupDragEnd = useCallback((event: DragEndEvent) => {
