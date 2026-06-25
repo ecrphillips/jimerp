@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { usePaginatedQuery } from '@/hooks/usePaginatedQuery';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -22,6 +21,7 @@ import { format } from 'date-fns';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { WipAdjustmentModal } from '@/components/inventory/WipAdjustmentModal';
 import { WipFloorCountModal, type WipFloorRow } from '@/components/inventory/WipFloorCountModal';
+import { useAuthoritativeFg } from '@/hooks/useAuthoritativeInventory';
 
 type WipAdjustmentReason = 'LOSS' | 'COUNT_ADJUSTMENT' | 'CONTAMINATION' | 'OTHER';
 
@@ -326,42 +326,11 @@ export default function Inventory() {
 
   // ===== Finished Goods Tab =====
   
-  // Fetch FG inventory with product details (paginated).
-  const {
-    rows: fgInventory,
-    hasMore: fgHasMore,
-    loadMore: loadMoreFg,
-    isFetching: fgIsFetching,
-    total: fgTotal,
-  } = usePaginatedQuery<FgInventoryRow>({
-    queryKey: ['fg-inventory'],
-    pageSize: 50,
-    fetchPage: async ({ offset, limit }) => {
-      const { data, error, count } = await supabase
-        .from('fg_inventory')
-        .select(
-          `
-          id,
-          product_id,
-          units_on_hand,
-          notes,
-          updated_at,
-          product:products(
-            id,
-            product_name,
-            bag_size_g,
-            packaging_variant,
-            client:clients(name)
-          )
-        `,
-          { count: 'exact' }
-        )
-        .order('updated_at', { ascending: false })
-        .range(offset, offset + limit - 1);
-      if (error) throw error;
-      return { rows: (data ?? []) as unknown as FgInventoryRow[], count };
-    },
-  });
+  // FG on-hand is derived from the SAME authoritative source as the production
+  // tabs / Authoritative Totals box (sum of packing_runs.units_packed minus
+  // ship_picks.units_picked per product) so every surface agrees. This replaces
+  // the old, unused fg_inventory.units_on_hand snapshot which read as empty.
+  const { data: authoritativeFg } = useAuthoritativeFg();
 
   // Fetch all active products (for adding new FG entries)
   const { data: allProducts } = useQuery({
@@ -458,12 +427,31 @@ export default function Inventory() {
     [wipAvailableRows],
   );
 
+  // One row per active product, units sourced from the authoritative FG map.
+  const fgRows = useMemo<FgInventoryRow[]>(() => {
+    const fg = authoritativeFg ?? {};
+    return (allProducts ?? []).map((p) => ({
+      id: p.id,
+      product_id: p.id,
+      units_on_hand: fg[p.id]?.fg_available_units ?? 0,
+      notes: null,
+      updated_at: '',
+      product: {
+        id: p.id,
+        product_name: p.product_name,
+        bag_size_g: p.bag_size_g,
+        packaging_variant: p.packaging_variant,
+        client: p.client,
+      },
+    })) as unknown as FgInventoryRow[];
+  }, [allProducts, authoritativeFg]);
+
   // Finished-not-picked view: products with packed units on hand not yet shipped.
   const fgAvailableRows = useMemo(
-    () => (fgInventory ?? []).filter((r) => r.units_on_hand > 0),
-    [fgInventory],
+    () => fgRows.filter((r) => r.units_on_hand > 0),
+    [fgRows],
   );
-  const fgDisplayRows = fgAvailableOnly ? fgAvailableRows : (fgInventory ?? []);
+  const fgDisplayRows = fgAvailableOnly ? fgAvailableRows : fgRows;
   const fgAvailableUnits = useMemo(
     () => fgAvailableRows.reduce((sum, r) => sum + r.units_on_hand, 0),
     [fgAvailableRows],
@@ -661,7 +649,7 @@ export default function Inventory() {
                 <p className="text-muted-foreground py-4">
                   No finished goods are currently awaiting pick. Toggle “Show all” to see every product.
                 </p>
-              ) : !fgAvailableOnly && fgInventory?.length === 0 && allProducts?.length === 0 ? (
+              ) : !fgAvailableOnly && fgRows.length === 0 ? (
                 <p className="text-muted-foreground py-4">No products configured.</p>
               ) : (
                 <table className="w-full text-sm">
@@ -675,7 +663,6 @@ export default function Inventory() {
                     </tr>
                   </thead>
                   <tbody>
-                    {/* Show products that have FG inventory */}
                     {fgDisplayRows.map((row) => (
                       <FgInventoryRow
                         key={row.id}
@@ -684,60 +671,8 @@ export default function Inventory() {
                         onSet={(value) => handleFgSet(row.product_id, row.units_on_hand, value)}
                       />
                     ))}
-                    {/* Show products without FG inventory (units = 0) — only in the "show all" view */}
-                    {!fgAvailableOnly && allProducts
-                      ?.filter(p => !fgInventory?.some(fg => fg.product_id === p.id))
-                      .map((product) => (
-                        <tr key={product.id} className="border-b text-muted-foreground">
-                          <td className="py-3">{product.product_name}</td>
-                          <td className="py-3">{(product.client as any)?.name ?? '—'}</td>
-                          <td className="py-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs">{product.bag_size_g}g</span>
-                              {product.packaging_variant && (
-                                <PackagingBadge variant={product.packaging_variant as any} />
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-3 text-right">0</td>
-                          <td className="py-3 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 w-7 p-0"
-                                onClick={() => handleFgAdjust(product.id, 0, 1)}
-                              >
-                                <Plus className="h-3 w-3" />
-                              </Button>
-                              <Input
-                                type="number"
-                                className="w-16 h-7 text-center text-sm"
-                                value={0}
-                                onChange={(e) => handleFgSet(product.id, 0, e.target.value)}
-                                min={0}
-                              />
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
                   </tbody>
                 </table>
-              )}
-              {fgHasMore && (
-                <div className="pt-4 flex justify-center">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                    onClick={loadMoreFg}
-                    disabled={fgIsFetching}
-                  >
-                    {fgIsFetching
-                      ? 'Loading…'
-                      : `Load more${fgTotal ? ` (${fgInventory.length} of ${fgTotal})` : ''}`}
-                  </Button>
-                </div>
               )}
             </CardContent>
           </Card>
