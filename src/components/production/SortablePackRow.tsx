@@ -100,7 +100,13 @@ export function SortablePackRow({
   // - 'none': NO COLOR - no WIP at all
   const getRowClasses = () => {
     const baseClasses = 'border-b last:border-0 cursor-pointer transition-colors';
-    
+
+    // De-emphasized rows (already complete at snapshot time) drop all colored
+    // accents and fade so the eye lands on outstanding work. Click still expands.
+    if (deemphasized) {
+      return `${baseClasses} opacity-50 hover:opacity-100 hover:bg-muted/40`;
+    }
+
     if (hasTimeSensitive) {
       // Urgent items keep their destructive background but can have WIP indicator
       if (wipStatus === 'full') {
