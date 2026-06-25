@@ -576,7 +576,38 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     if (expandedProductId && completeProductIds.has(expandedProductId)) {
       setExpandedProductId(null);
     }
-  }, [completeProductIds, computedSortedProducts, expandedProductId]);
+    // Sink any group whose remaining work is fully complete to the bottom of the
+    // frozen group order. Groups with any incomplete row keep their relative order.
+    setFrozenGroupOrder((prev) => {
+      const current = prev ?? orderPackGroups(groupMetas, sortMode, manualGroupOrder);
+      const productsByGroup = new Map<string, ProductDemand[]>();
+      for (const p of displayProducts) {
+        const key = groupKeyOf(p.roast_group);
+        const arr = productsByGroup.get(key) ?? [];
+        arr.push(p);
+        productsByGroup.set(key, arr);
+      }
+      const isGroupDone = (key: string) => {
+        const prods = productsByGroup.get(key) ?? [];
+        if (prods.length === 0) return true;
+        return prods.every(
+          (p) => p.demanded_units === 0 || completeProductIds.has(p.product_id),
+        );
+      };
+      const incomplete = current.filter((k) => !isGroupDone(k));
+      const done = current.filter((k) => isGroupDone(k));
+      return [...incomplete, ...done];
+    });
+  }, [
+    completeProductIds,
+    computedSortedProducts,
+    expandedProductId,
+    displayProducts,
+    groupKeyOf,
+    groupMetas,
+    sortMode,
+    manualGroupOrder,
+  ]);
 
   // Drag-reorder of the group-order bar.
   const handleGroupDragEnd = useCallback((event: DragEndEvent) => {
