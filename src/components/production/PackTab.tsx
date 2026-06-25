@@ -730,6 +730,15 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                   </button>
                 ))}
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefreshComplete}
+                title="Fold completed rows into the de-emphasized state without reloading"
+              >
+                <RotateCcw className="h-4 w-4 mr-1" />
+                Refresh complete
+              </Button>
               <Button variant="outline" size="sm" asChild>
                 <Link to="/inventory?tab=wip&from=pack">
                   <Layers className="h-4 w-4 mr-1" />
