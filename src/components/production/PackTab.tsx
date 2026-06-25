@@ -113,6 +113,12 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   
   // Removed sortBy state - order is now manual only via pack_display_order
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+
+  // Snapshot of product IDs that were already complete when this session/view started.
+  // These rows render de-emphasized so the packer's eye lands on outstanding work.
+  // Resets on remount (nav away + back, refresh, new session). The "Refresh complete"
+  // button below lets the packer fold newly-completed rows in without leaving the tab.
+  const [deemphasizedIds, setDeemphasizedIds] = useState<Set<string> | null>(null);
   
   // Local order state for optimistic DnD updates
   const [localProducts, setLocalProducts] = useState<ProductDemand[]>([]);
