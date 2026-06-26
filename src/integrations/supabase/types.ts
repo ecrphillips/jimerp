@@ -5030,6 +5030,30 @@ export type Database = {
           },
         ]
       }
+      shopify_oauth_debug: {
+        Row: {
+          created_at: string
+          detail: string | null
+          id: string
+          shop: string | null
+          step: string | null
+        }
+        Insert: {
+          created_at?: string
+          detail?: string | null
+          id?: string
+          shop?: string | null
+          step?: string | null
+        }
+        Update: {
+          created_at?: string
+          detail?: string | null
+          id?: string
+          shop?: string | null
+          step?: string | null
+        }
+        Relationships: []
+      }
       shopify_product_mappings: {
         Row: {
           created_at: string
