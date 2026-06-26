@@ -118,19 +118,6 @@ export default function Inventory() {
     },
   });
 
-  // Fetch WIP adjustments from wip_adjustments table (manual adjustments ONLY)
-  const { data: wipAdjustments } = useQuery({
-    queryKey: ['wip-adjustments'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('wip_adjustments')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-
   // Fetch all roast groups
   const { data: roastGroups } = useQuery({
     queryKey: ['all-roast-groups'],
@@ -152,17 +139,15 @@ export default function Inventory() {
   // and the production-tab dropdowns all agree.
   //
   // Formula (per group):
-  //   wip_net_kg = sum(ROAST_OUTPUT) - sum(|PACK_CONSUME_WIP|) + sum(ADJUSTMENT + LOSS) + sum(wip_adjustments.kg_delta)
+  //   wip_net_kg = sum(ROAST_OUTPUT) - sum(|PACK_CONSUME_WIP|) + sum(ADJUSTMENT + LOSS)
+  // Manual adjustments (floor counts, recounts, opening balances) are ADJUSTMENT rows
+  // in inventory_transactions now — the separate wip_adjustments table is retired.
   const wipByRoastGroup = useMemo((): WipByRoastGroup[] => {
     const computed = computeAuthoritativeWip(
       (inventoryTransactions ?? []).map((tx) => ({
         roast_group: tx.roast_group,
         quantity_kg: tx.quantity_kg,
         transaction_type: tx.transaction_type,
-      })),
-      (wipAdjustments ?? []).map((a) => ({
-        roast_group: a.roast_group,
-        kg_delta: a.kg_delta,
       })),
       [], // no reservation accounting in the inventory-page table
     );
@@ -177,28 +162,35 @@ export default function Inventory() {
       }))
       .filter((row) => row.roasted_kg !== 0 || row.consumed_kg !== 0 || row.adjusted_kg !== 0)
       .sort((a, b) => a.roast_group.localeCompare(b.roast_group));
-  }, [inventoryTransactions, wipAdjustments]);
+  }, [inventoryTransactions]);
 
-  // WIP adjustment mutation
+  // WIP adjustment mutation — writes a balancing ADJUSTMENT row to the
+  // inventory_transactions ledger (the single source of truth). The reason is
+  // folded into notes; the row is stamped with the logged-in user and now().
   const createWipAdjustment = useMutation({
     mutationFn: async () => {
       const delta = parseFloat(adjustKgDelta);
       if (isNaN(delta) || delta === 0) throw new Error('Invalid kg delta');
-      
+
+      const note = adjustNotes?.trim()
+        ? `WIP adjustment (${adjustReason}): ${adjustNotes.trim()}`
+        : `WIP adjustment (${adjustReason})`;
       const { error } = await supabase
-        .from('wip_adjustments')
+        .from('inventory_transactions')
         .insert({
+          transaction_type: 'ADJUSTMENT',
           roast_group: adjustRoastGroup,
-          kg_delta: delta,
-          reason: adjustReason,
-          notes: adjustNotes,
+          quantity_kg: delta,
+          notes: note,
           created_by: authUser?.id,
+          is_system_generated: false,
         });
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success('WIP adjustment recorded');
-      queryClient.invalidateQueries({ queryKey: ['wip-adjustments'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-transactions-wip'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
       setShowWipAdjust(false);
       setAdjustKgDelta('');
       setAdjustNotes('');
@@ -209,7 +201,8 @@ export default function Inventory() {
     },
   });
 
-  // WIP history delete mutation (orphaned roast groups only)
+  // WIP history delete mutation (orphaned roast groups only).
+  // inventory_transactions is the only live WIP ledger now.
   const deleteWipHistory = useMutation({
     mutationFn: async (roastGroupKey: string) => {
       const { error: e1 } = await supabase
@@ -217,25 +210,12 @@ export default function Inventory() {
         .delete()
         .eq('roast_group', roastGroupKey);
       if (e1) throw e1;
-
-      const { error: e2 } = await supabase
-        .from('wip_adjustments')
-        .delete()
-        .eq('roast_group', roastGroupKey);
-      if (e2) throw e2;
-
-      const { error: e3 } = await supabase
-        .from('wip_ledger')
-        .delete()
-        .eq('roast_group', roastGroupKey);
-      if (e3) throw e3;
     },
     onSuccess: () => {
       toast.success('WIP history cleared');
       setConfirmClearWip(null);
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions-wip'] });
-      queryClient.invalidateQueries({ queryKey: ['wip-adjustments'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
     },
     onError: (err: any) => {
       console.error(err);
@@ -246,9 +226,9 @@ export default function Inventory() {
   // ===== Finished Goods Tab =====
   
   // FG on-hand is derived from the SAME authoritative source as the production
-  // tabs / Authoritative Totals box (sum of packing_runs.units_packed minus
-  // ship_picks.units_picked per product) so every surface agrees. This replaces
-  // the old, unused fg_inventory.units_on_hand snapshot which read as empty.
+  // tabs / Authoritative Totals box: the inventory_transactions ledger
+  // (PACK_PRODUCE_FG + SHIP_CONSUME_FG + ADJUSTMENT units per product) so every
+  // surface agrees and a floor-count ADJUSTMENT row moves the on-hand number.
   const { data: authoritativeFg } = useAuthoritativeFg();
 
   // Fetch all active products (for adding new FG entries)
@@ -265,39 +245,31 @@ export default function Inventory() {
     },
   });
 
-  // Upsert FG inventory mutation
+  // FG floor count — writes ONE balancing ADJUSTMENT row to the
+  // inventory_transactions ledger (product-scoped, quantity_units = counted −
+  // current ledger balance). No writes to the retired fg_inventory /
+  // fg_inventory_log tables. Stamped with the logged-in user and now().
   const upsertFgInventory = useMutation({
-    mutationFn: async ({ productId, unitsDelta, newUnits }: { 
-      productId: string; 
+    mutationFn: async ({ productId, unitsDelta, newUnits }: {
+      productId: string;
       unitsDelta: number;
       newUnits: number;
     }) => {
-      // Upsert fg_inventory
-      const { error: upsertError } = await supabase
-        .from('fg_inventory')
-        .upsert({
-          product_id: productId,
-          units_on_hand: newUnits,
-          updated_at: new Date().toISOString(),
-          updated_by: authUser?.id,
-        }, {
-          onConflict: 'product_id',
-        });
-      if (upsertError) throw upsertError;
-
-      // Log the change
-      const { error: logError } = await supabase
-        .from('fg_inventory_log')
+      if (!unitsDelta) return;
+      const { error } = await supabase
+        .from('inventory_transactions')
         .insert({
+          transaction_type: 'ADJUSTMENT',
           product_id: productId,
-          units_delta: unitsDelta,
-          units_after: newUnits,
+          quantity_units: unitsDelta,
+          notes: `FG floor count: counted ${newUnits} units (delta ${unitsDelta >= 0 ? '+' : ''}${unitsDelta})`,
           created_by: authUser?.id,
+          is_system_generated: false,
         });
-      if (logError) throw logError;
+      if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fg-inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-fg-ledger'] });
     },
     onError: (err) => {
       console.error(err);
@@ -307,7 +279,8 @@ export default function Inventory() {
 
   const handleFgAdjust = (productId: string, currentUnits: number, delta: number) => {
     const newUnits = Math.max(0, currentUnits + delta);
-    upsertFgInventory.mutate({ productId, unitsDelta: delta, newUnits });
+    // Balancing delta against the current ledger balance (clamped at 0).
+    upsertFgInventory.mutate({ productId, unitsDelta: newUnits - currentUnits, newUnits });
   };
 
   const handleFgSet = (productId: string, currentUnits: number, newValue: string) => {

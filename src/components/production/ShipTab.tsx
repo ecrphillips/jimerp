@@ -158,8 +158,8 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     });
   }, [allOrderLineItems, dateFilterConfig.mode]);
 
-  // ========== AUTHORITATIVE FG INVENTORY (from source-of-truth tables) ==========
-  // FG = sum(packing_runs.units_packed) - sum(ship_picks.units_picked for open orders)
+  // ========== AUTHORITATIVE FG INVENTORY (from the inventory_transactions ledger) ==========
+  // FG = sum(quantity_units) over PACK_PRODUCE_FG + SHIP_CONSUME_FG + ADJUSTMENT, per product
   const { data: authFg } = useAuthoritativeFg();
   const { data: authShortList } = useAuthoritativeShortList();
   

@@ -1,12 +1,15 @@
 /**
  * Authoritative Inventory Hooks
- * 
- * These hooks compute inventory from SOURCE-OF-TRUTH tables:
- * - WIP = sum(roasted_batches.actual_output_kg where status='ROASTED') - sum(packing_runs.kg_consumed)
- * - FG = sum(packing_runs.units_packed) - sum(ship_picks.units_picked)
- * - Demand = CONFIRMED orders only (not DRAFT/SUBMITTED/CANCELLED)
- * 
- * These replace any cached "levels" tables for production UX.
+ *
+ * These hooks compute inventory from the inventory_transactions ledger — the
+ * single source of truth that triggers/RPCs maintain and that manual floor
+ * counts append balancing ADJUSTMENT rows to:
+ * - WIP per roast_group = sum(quantity_kg) over ROAST_OUTPUT + PACK_CONSUME_WIP + ADJUSTMENT + LOSS
+ * - FG per product      = sum(quantity_units) over PACK_PRODUCE_FG + SHIP_CONSUME_FG + ADJUSTMENT
+ * - Demand = CONFIRMED/open orders (order_line_items + ship_picks for picked progress)
+ *
+ * These replace the older packing_runs − ship_picks and wip_adjustments
+ * derivations and any cached "levels" tables for production UX.
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -95,22 +98,6 @@ function useRoastedBatches() {
 }
 
 /**
- * Fetch all packing runs (for WIP consumption and FG creation)
- */
-function usePackingRuns() {
-  return useQuery({
-    queryKey: ['authoritative-packing-runs'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('packing_runs')
-        .select('id, product_id, units_packed, kg_consumed');
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-}
-
-/**
  * Fetch WIP-related transactions from inventory_transactions ledger
  * This includes ROAST_OUTPUT (positive), PACK_CONSUME_WIP (negative), ADJUSTMENT, and LOSS
  * The ledger is the single source of truth for all WIP movements
@@ -131,16 +118,22 @@ function useWipLedgerTransactions() {
 }
 
 /**
- * Fetch manual WIP adjustments (opening balances, recounts, losses, etc.)
- * These are separate from inventory_transactions and must be included for correct WIP totals.
+ * Fetch FG-related transactions from the inventory_transactions ledger.
+ * FG on-hand per product = sum(quantity_units) over PACK_PRODUCE_FG (+),
+ * SHIP_CONSUME_FG (−, written on pick/return), and ADJUSTMENT (floor count).
+ * This ledger is the single source of truth for FG, replacing the old
+ * packing_runs − ship_picks derivation so floor-count ADJUSTMENT rows move
+ * the on-hand number.
  */
-function useWipManualAdjustments() {
+function useFgLedgerTransactions() {
   return useQuery({
-    queryKey: ['authoritative-wip-manual-adjustments'],
+    queryKey: ['authoritative-fg-ledger'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('wip_adjustments')
-        .select('roast_group, kg_delta');
+        .from('inventory_transactions')
+        .select('product_id, quantity_units, transaction_type')
+        .not('product_id', 'is', null)
+        .in('transaction_type', ['PACK_PRODUCE_FG', 'SHIP_CONSUME_FG', 'ADJUSTMENT']);
       if (error) throw error;
       return data ?? [];
     },
@@ -262,11 +255,6 @@ export interface WipLedgerTx {
   quantity_kg: number | null;
   transaction_type: string | null;
 }
-export interface WipManualAdjustmentRow {
-  roast_group: string | null;
-  kg_delta: number | null;
-}
-
 /** Minimal batch shape for blend-reservation accounting. */
 export interface BlendReservationBatch {
   roast_group: string | null;
@@ -284,7 +272,9 @@ export interface BlendReservationBatch {
  * - ROAST_OUTPUT: positive kg added (roasted batches, INCLUDING blend component batches,
  *   which write a ROAST_OUTPUT to their own component roast group when roasted)
  * - PACK_CONSUME_WIP: negative kg removed (packing consumed)
- * - ADJUSTMENT: +/- kg (blend output +, blend component decrement -, reverts, manual)
+ * - ADJUSTMENT: +/- kg (blend output +, blend component decrement -, reverts, and the
+ *   manual floor-count / recount / opening-balance adjustments — these were formerly in
+ *   the separate wip_adjustments table, now backfilled into inventory_transactions)
  * - LOSS: negative kg (recorded losses)
  *
  * Blend bookkeeping must stay balanced: executing a blend writes a positive ADJUSTMENT
@@ -303,7 +293,6 @@ export interface BlendReservationBatch {
  */
 export function computeAuthoritativeWip(
   wipTransactions: WipLedgerTx[],
-  manualAdjustments: WipManualAdjustmentRow[] = [],
   reservationBatches: BlendReservationBatch[] = [],
 ): Record<string, AuthoritativeWip> {
   // Aggregate transactions by roast group and type
@@ -334,11 +323,6 @@ export function computeAuthoritativeWip(
         adjustmentsByGroup[tx.roast_group] = (adjustmentsByGroup[tx.roast_group] ?? 0) + kg;
         break;
     }
-  }
-
-  for (const adj of manualAdjustments) {
-    if (!adj.roast_group) continue;
-    adjustmentsByGroup[adj.roast_group] = (adjustmentsByGroup[adj.roast_group] ?? 0) + Number(adj.kg_delta ?? 0);
   }
 
   // Reservation: ROASTED component batches earmarked for a blend, not yet consumed.
@@ -388,7 +372,6 @@ export function computeAuthoritativeWip(
  */
 export function useAuthoritativeWip() {
   const { data: wipTransactions, isLoading: wipLoading } = useWipLedgerTransactions();
-  const { data: manualAdjustments, isLoading: manualLoading } = useWipManualAdjustments();
   const { data: roastGroups, isLoading: roastGroupsLoading } = useRoastGroupsInfo();
   const { data: batches, isLoading: batchesLoading } = useRoastedBatches();
 
@@ -396,14 +379,13 @@ export function useAuthoritativeWip() {
     if (!wipTransactions) return {};
     return computeAuthoritativeWip(
       wipTransactions,
-      manualAdjustments ?? [],
       (batches ?? []) as BlendReservationBatch[],
     );
-  }, [wipTransactions, manualAdjustments, batches]);
+  }, [wipTransactions, batches]);
 
   return {
     data: wip,
-    isLoading: wipLoading || manualLoading || roastGroupsLoading || batchesLoading,
+    isLoading: wipLoading || roastGroupsLoading || batchesLoading,
   };
 }
 
@@ -439,22 +421,96 @@ export function useAuthoritativePlannedWip() {
   return { data: planned, isLoading };
 }
 
+export interface FgLedgerTx {
+  product_id: string | null;
+  quantity_units: number | null;
+  transaction_type: string | null;
+}
+
+/** Per-product FG metadata used to decorate the ledger sums. */
+export interface FgProductInfo {
+  name: string;
+  sku: string | null;
+  bag_size_g: number;
+  roast_group: string | null;
+}
+
 /**
- * Authoritative FG by product
- * FG = sum(units_packed) - sum(units_picked for OPEN orders)
+ * Pure FG reducer — single source of truth for authoritative FG, computed
+ * ENTIRELY from the inventory_transactions ledger (quantity_units):
+ * - PACK_PRODUCE_FG: +units packed (negative when a pack is reversed)
+ * - SHIP_CONSUME_FG: −units when picked/shipped (positive when returned)
+ * - ADJUSTMENT: +/- units from a manual FG floor count / recount
+ *
+ * fg_available_units = created + ship(net, signed) + adjustments. This is true
+ * physical on-hand: every pick reduces it immediately and stays reduced once the
+ * order ships; a cancel must write a returning SHIP_CONSUME_FG (+units) for the
+ * coffee to re-enter FG. Extracted so it can be unit-tested without Supabase.
+ */
+export function computeAuthoritativeFg(
+  fgTransactions: FgLedgerTx[],
+  productInfo: Record<string, FgProductInfo> = {},
+): Record<string, AuthoritativeFg> {
+  const createdByProduct: Record<string, number> = {};   // PACK_PRODUCE_FG (signed)
+  const shipByProduct: Record<string, number> = {};       // SHIP_CONSUME_FG (signed, usually ≤ 0)
+  const adjustByProduct: Record<string, number> = {};      // ADJUSTMENT units (signed)
+
+  for (const tx of fgTransactions) {
+    if (!tx.product_id) continue;
+    const units = Number(tx.quantity_units ?? 0);
+    if (!units) continue;
+    switch (tx.transaction_type) {
+      case 'PACK_PRODUCE_FG':
+        createdByProduct[tx.product_id] = (createdByProduct[tx.product_id] ?? 0) + units;
+        break;
+      case 'SHIP_CONSUME_FG':
+        shipByProduct[tx.product_id] = (shipByProduct[tx.product_id] ?? 0) + units;
+        break;
+      case 'ADJUSTMENT':
+        adjustByProduct[tx.product_id] = (adjustByProduct[tx.product_id] ?? 0) + units;
+        break;
+    }
+  }
+
+  const allProducts = new Set([
+    ...Object.keys(createdByProduct),
+    ...Object.keys(shipByProduct),
+    ...Object.keys(adjustByProduct),
+  ]);
+  const result: Record<string, AuthoritativeFg> = {};
+
+  for (const pid of allProducts) {
+    const info = productInfo[pid];
+    const created = createdByProduct[pid] ?? 0;
+    const shipNet = shipByProduct[pid] ?? 0;   // signed (consumption is negative)
+    const adjust = adjustByProduct[pid] ?? 0;
+    result[pid] = {
+      product_id: pid,
+      product_name: info?.name ?? '',
+      sku: info?.sku ?? null,
+      bag_size_g: info?.bag_size_g ?? 0,
+      roast_group: info?.roast_group ?? null,
+      fg_created_units: created,
+      fg_allocated_units: -shipNet,            // total units consumed (picked/shipped), positive
+      fg_available_units: Math.max(0, created + shipNet + adjust),
+    };
+  }
+
+  return result;
+}
+
+/**
+ * Authoritative FG by product — thin React-Query wrapper around
+ * computeAuthoritativeFg (the pure ledger reducer above).
  */
 export function useAuthoritativeFg() {
-  const { data: packingRuns, isLoading: packingLoading } = usePackingRuns();
-  const { data: shipPicks, isLoading: picksLoading } = useShipPicks();
+  const { data: fgTransactions, isLoading: ledgerLoading } = useFgLedgerTransactions();
   const { data: products, isLoading: productsLoading } = useProductsWithRoastGroup();
-  const { data: orderLines, isLoading: linesLoading } = useOpenOrderLines();
-  
+
   const fg = useMemo((): Record<string, AuthoritativeFg> => {
-    if (!packingRuns || !shipPicks || !products) return {};
-    
-    // Map product info
-    const productInfo: Record<string, { name: string; sku: string | null; bag_size_g: number; roast_group: string | null }> = {};
-    for (const p of products) {
+    if (!fgTransactions) return {};
+    const productInfo: Record<string, FgProductInfo> = {};
+    for (const p of products ?? []) {
       productInfo[p.id] = {
         name: p.product_name,
         sku: p.sku,
@@ -462,56 +518,12 @@ export function useAuthoritativeFg() {
         roast_group: p.roast_group,
       };
     }
-    
-    // Map order_line_item_id to product_id
-    const lineToProduct: Record<string, string> = {};
-    for (const li of orderLines ?? []) {
-      lineToProduct[li.id] = li.product_id;
-    }
-    
-    // Calculate FG created by product
-    const createdByProduct: Record<string, number> = {};
-    for (const pr of packingRuns) {
-      createdByProduct[pr.product_id] = (createdByProduct[pr.product_id] ?? 0) + pr.units_packed;
-    }
-    
-    // Calculate FG allocated (picked) by product
-    const allocatedByProduct: Record<string, number> = {};
-    for (const pick of shipPicks) {
-      const productId = lineToProduct[pick.order_line_item_id];
-      if (productId) {
-        allocatedByProduct[productId] = (allocatedByProduct[productId] ?? 0) + pick.units_picked;
-      }
-    }
-    
-    // Combine into authoritative FG
-    const allProducts = new Set([...Object.keys(createdByProduct), ...Object.keys(allocatedByProduct)]);
-    const result: Record<string, AuthoritativeFg> = {};
-    
-    for (const pid of allProducts) {
-      const info = productInfo[pid];
-      if (!info) continue;
-      
-      const created = createdByProduct[pid] ?? 0;
-      const allocated = allocatedByProduct[pid] ?? 0;
-      result[pid] = {
-        product_id: pid,
-        product_name: info.name,
-        sku: info.sku,
-        bag_size_g: info.bag_size_g,
-        roast_group: info.roast_group,
-        fg_created_units: created,
-        fg_allocated_units: allocated,
-        fg_available_units: Math.max(0, created - allocated),
-      };
-    }
-    
-    return result;
-  }, [packingRuns, shipPicks, products, orderLines]);
-  
+    return computeAuthoritativeFg(fgTransactions as FgLedgerTx[], productInfo);
+  }, [fgTransactions, products]);
+
   return {
     data: fg,
-    isLoading: packingLoading || picksLoading || productsLoading || linesLoading,
+    isLoading: ledgerLoading || productsLoading,
   };
 }
 
@@ -670,17 +682,22 @@ export function useAuthoritativeRoastDemand() {
  * Picks are progress tracking, not shortage reduction
  */
 export function useAuthoritativeShortList() {
-  const { data: packingRuns, isLoading: packingLoading } = usePackingRuns();
+  const { data: fgTransactions, isLoading: ledgerLoading } = useFgLedgerTransactions();
   const { data: demand, isLoading: demandLoading } = useAuthoritativeDemand();
   const { data: products, isLoading: productsLoading } = useProductsWithRoastGroup();
-  
+
   const shortList = useMemo(() => {
-    if (!packingRuns || !demand || !products) return [];
-    
-    // Calculate FG created (total packed) by product - no allocation subtraction
+    if (!fgTransactions || !demand || !products) return [];
+
+    // FG produced (total packed) by product, from the ledger — PACK_PRODUCE_FG is
+    // signed (reverses are negative), so summing yields net produced. Picks/ships
+    // (SHIP_CONSUME_FG) do not reduce shortage; this measures whether we have
+    // produced enough total to cover demand.
     const fgCreatedByProduct: Record<string, number> = {};
-    for (const pr of packingRuns) {
-      fgCreatedByProduct[pr.product_id] = (fgCreatedByProduct[pr.product_id] ?? 0) + pr.units_packed;
+    for (const tx of fgTransactions) {
+      if (!tx.product_id || tx.transaction_type !== 'PACK_PRODUCE_FG') continue;
+      fgCreatedByProduct[tx.product_id] =
+        (fgCreatedByProduct[tx.product_id] ?? 0) + Number(tx.quantity_units ?? 0);
     }
     
     const items: Array<{
@@ -717,11 +734,11 @@ export function useAuthoritativeShortList() {
     }
     
     return items.sort((a, b) => b.shortage - a.shortage);
-  }, [packingRuns, demand, products]);
-  
+  }, [fgTransactions, demand, products]);
+
   return {
     data: shortList,
-    isLoading: packingLoading || demandLoading || productsLoading,
+    isLoading: ledgerLoading || demandLoading || productsLoading,
   };
 }
 

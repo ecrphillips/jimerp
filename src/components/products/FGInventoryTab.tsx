@@ -1,67 +1,37 @@
 import React, { useState, useMemo, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Plus, Minus, Search, PackagePlus } from 'lucide-react';
+import { Plus, Minus, Search } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
-import { format } from 'date-fns';
+import { useAuthoritativeFg } from '@/hooks/useAuthoritativeInventory';
 
-interface FGInventoryRow {
-  id: string;
+interface FGRow {
   product_id: string;
   units_on_hand: number;
-  updated_at: string;
-  product: {
-    id: string;
-    product_name: string;
-    sku: string | null;
-    packaging_variant: PackagingVariant | null;
-    is_active: boolean;
-    client: { name: string } | null;
-  };
-}
-
-interface ActiveProduct {
-  id: string;
   product_name: string;
   sku: string | null;
   packaging_variant: PackagingVariant | null;
-  client: { name: string } | null;
+  client_name: string | null;
 }
 
 export function FGInventoryTab() {
   const queryClient = useQueryClient();
+  const { authUser } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
-  const lastEditTime = useRef<number>(0);
   const sortFreezeTimeout = useRef<NodeJS.Timeout | null>(null);
   const [isSortFrozen, setIsSortFrozen] = useState(false);
 
-  // Fetch FG inventory with product info
-  const { data: inventory, isLoading } = useQuery({
-    queryKey: ['fg-inventory-all'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('fg_inventory')
-        .select(`
-          id,
-          product_id,
-          units_on_hand,
-          updated_at,
-          product:products(id, product_name, sku, packaging_variant, is_active, client:clients(name))
-        `)
-        .order('updated_at', { ascending: false });
+  // FG on-hand from the inventory_transactions ledger (single source of truth).
+  const { data: authoritativeFg, isLoading: fgLoading } = useAuthoritativeFg();
 
-      if (error) throw error;
-      return (data ?? []) as FGInventoryRow[];
-    },
-  });
-
-  // Fetch all active products (for backfill)
-  const { data: activeProducts } = useQuery({
+  // Active products supply the display metadata (client, packaging, sku).
+  const { data: activeProducts, isLoading: productsLoading } = useQuery({
     queryKey: ['active-products-for-fg'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -69,73 +39,75 @@ export function FGInventoryTab() {
         .select('id, product_name, sku, packaging_variant, client:clients(name)')
         .eq('is_active', true)
         .order('product_name');
-
       if (error) throw error;
-      return (data ?? []) as ActiveProduct[];
+      return data ?? [];
     },
   });
 
-  // Products without inventory rows
-  const productsWithoutInventory = useMemo(() => {
-    if (!activeProducts || !inventory) return [];
-    const inventoryProductIds = new Set(inventory.map((i) => i.product_id));
-    return activeProducts.filter((p) => !inventoryProductIds.has(p.id));
-  }, [activeProducts, inventory]);
+  const isLoading = fgLoading || productsLoading;
 
-  // Filter and sort inventory
+  const rows = useMemo<FGRow[]>(() => {
+    const fg = authoritativeFg ?? {};
+    return (activeProducts ?? []).map((p) => ({
+      product_id: p.id,
+      units_on_hand: fg[p.id]?.fg_available_units ?? 0,
+      product_name: p.product_name,
+      sku: p.sku,
+      packaging_variant: (p.packaging_variant as PackagingVariant | null) ?? null,
+      client_name: (p.client as { name: string } | null)?.name ?? null,
+    }));
+  }, [activeProducts, authoritativeFg]);
+
   const filteredInventory = useMemo(() => {
-    if (!inventory) return [];
-    
-    let filtered = inventory.filter((row) => row.product.is_active);
-    
+    let filtered = rows;
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter((row) =>
-        row.product.product_name.toLowerCase().includes(query) ||
-        row.product.sku?.toLowerCase().includes(query) ||
-        row.product.client?.name.toLowerCase().includes(query)
+        row.product_name.toLowerCase().includes(query) ||
+        row.sku?.toLowerCase().includes(query) ||
+        row.client_name?.toLowerCase().includes(query)
       );
     }
-
-    // Sort by client, then product name (unless sort is frozen)
     if (!isSortFrozen) {
-      filtered.sort((a, b) => {
-        const clientA = a.product.client?.name ?? '';
-        const clientB = b.product.client?.name ?? '';
+      filtered = [...filtered].sort((a, b) => {
+        const clientA = a.client_name ?? '';
+        const clientB = b.client_name ?? '';
         if (clientA !== clientB) return clientA.localeCompare(clientB);
-        return a.product.product_name.localeCompare(b.product.product_name);
+        return a.product_name.localeCompare(b.product_name);
       });
     }
-
     return filtered;
-  }, [inventory, searchQuery, isSortFrozen]);
+  }, [rows, searchQuery, isSortFrozen]);
 
-  // Freeze sort on edit
   const freezeSort = useCallback(() => {
     setIsSortFrozen(true);
-    lastEditTime.current = Date.now();
-    
-    if (sortFreezeTimeout.current) {
-      clearTimeout(sortFreezeTimeout.current);
-    }
+    if (sortFreezeTimeout.current) clearTimeout(sortFreezeTimeout.current);
     sortFreezeTimeout.current = setTimeout(() => {
       setIsSortFrozen(false);
       setEditingRowId(null);
     }, 1200);
   }, []);
 
-  // Update mutation
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, units }: { id: string; units: number }) => {
+  // A change writes ONE balancing ADJUSTMENT row to inventory_transactions
+  // (quantity_units = counted − current ledger balance). Stamped with the user;
+  // created_at provides the timestamp. No writes to the retired fg_inventory.
+  const adjustMutation = useMutation({
+    mutationFn: async ({ productId, unitsDelta, newUnits }: { productId: string; unitsDelta: number; newUnits: number }) => {
+      if (!unitsDelta) return;
       const { error } = await supabase
-        .from('fg_inventory')
-        .update({ units_on_hand: units, updated_at: new Date().toISOString() })
-        .eq('id', id);
-
+        .from('inventory_transactions')
+        .insert({
+          transaction_type: 'ADJUSTMENT',
+          product_id: productId,
+          quantity_units: unitsDelta,
+          notes: `FG floor count: counted ${newUnits} units (delta ${unitsDelta >= 0 ? '+' : ''}${unitsDelta})`,
+          created_by: authUser?.id,
+          is_system_generated: false,
+        });
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fg-inventory-all'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-fg-ledger'] });
     },
     onError: (err) => {
       console.error(err);
@@ -143,46 +115,19 @@ export function FGInventoryTab() {
     },
   });
 
-  // Backfill mutation
-  const backfillMutation = useMutation({
-    mutationFn: async () => {
-      if (productsWithoutInventory.length === 0) return 0;
-
-      const rows = productsWithoutInventory.map((p) => ({
-        product_id: p.id,
-        units_on_hand: 0,
-      }));
-
-      const { error } = await supabase.from('fg_inventory').insert(rows);
-      if (error) throw error;
-
-      return productsWithoutInventory.length;
-    },
-    onSuccess: (count) => {
-      if (count > 0) {
-        toast.success(`Added ${count} inventory row${count > 1 ? 's' : ''}`);
-        queryClient.invalidateQueries({ queryKey: ['fg-inventory-all'] });
-      }
-    },
-    onError: (err) => {
-      console.error(err);
-      toast.error('Failed to add inventory rows');
-    },
-  });
-
-  const handleQuantityChange = (row: FGInventoryRow, delta: number) => {
+  const handleQuantityChange = (row: FGRow, delta: number) => {
     const newUnits = Math.max(0, row.units_on_hand + delta);
-    setEditingRowId(row.id);
+    setEditingRowId(row.product_id);
     freezeSort();
-    updateMutation.mutate({ id: row.id, units: newUnits });
+    adjustMutation.mutate({ productId: row.product_id, unitsDelta: newUnits - row.units_on_hand, newUnits });
   };
 
-  const handleInputChange = (row: FGInventoryRow, value: string) => {
+  const handleInputChange = (row: FGRow, value: string) => {
     const numValue = value.replace(/[^0-9]/g, '');
-    const units = numValue === '' ? 0 : parseInt(numValue, 10);
-    setEditingRowId(row.id);
+    const newUnits = numValue === '' ? 0 : parseInt(numValue, 10);
+    setEditingRowId(row.product_id);
     freezeSort();
-    updateMutation.mutate({ id: row.id, units: Math.max(0, units) });
+    adjustMutation.mutate({ productId: row.product_id, unitsDelta: Math.max(0, newUnits) - row.units_on_hand, newUnits: Math.max(0, newUnits) });
   };
 
   return (
@@ -197,20 +142,6 @@ export function FGInventoryTab() {
             className="pl-9"
           />
         </div>
-        {productsWithoutInventory.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => backfillMutation.mutate()}
-            disabled={backfillMutation.isPending}
-            className="gap-2"
-          >
-            <PackagePlus className="h-4 w-4" />
-            {backfillMutation.isPending
-              ? 'Adding…'
-              : `Add ${productsWithoutInventory.length} missing`}
-          </Button>
-        )}
       </div>
 
       <Card>
@@ -222,7 +153,7 @@ export function FGInventoryTab() {
             <p className="text-muted-foreground">Loading…</p>
           ) : filteredInventory.length === 0 ? (
             <p className="text-muted-foreground">
-              {searchQuery ? 'No matching products.' : 'No inventory records yet.'}
+              {searchQuery ? 'No matching products.' : 'No active products.'}
             </p>
           ) : (
             <table className="w-full text-sm">
@@ -233,21 +164,20 @@ export function FGInventoryTab() {
                   <th className="pb-2">SKU</th>
                   <th className="pb-2">Packaging</th>
                   <th className="pb-2 text-right">On Hand</th>
-                  <th className="pb-2 text-right">Updated</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredInventory.map((row) => (
                   <tr
-                    key={row.id}
-                    className={`border-b last:border-0 ${editingRowId === row.id ? 'bg-muted/50' : ''}`}
+                    key={row.product_id}
+                    className={`border-b last:border-0 ${editingRowId === row.product_id ? 'bg-muted/50' : ''}`}
                   >
-                    <td className="py-2 font-medium">{row.product.product_name}</td>
-                    <td className="py-2">{row.product.client?.name ?? '—'}</td>
-                    <td className="py-2">{row.product.sku || '—'}</td>
+                    <td className="py-2 font-medium">{row.product_name}</td>
+                    <td className="py-2">{row.client_name ?? '—'}</td>
+                    <td className="py-2">{row.sku || '—'}</td>
                     <td className="py-2">
-                      {row.product.packaging_variant ? (
-                        <PackagingBadge variant={row.product.packaging_variant} />
+                      {row.packaging_variant ? (
+                        <PackagingBadge variant={row.packaging_variant} />
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
@@ -270,7 +200,7 @@ export function FGInventoryTab() {
                           value={row.units_on_hand}
                           onChange={(e) => handleInputChange(row, e.target.value)}
                           onFocus={() => {
-                            setEditingRowId(row.id);
+                            setEditingRowId(row.product_id);
                             freezeSort();
                           }}
                         />
@@ -283,9 +213,6 @@ export function FGInventoryTab() {
                           <Plus className="h-3 w-3" />
                         </Button>
                       </div>
-                    </td>
-                    <td className="py-2 text-right text-muted-foreground text-xs">
-                      {format(new Date(row.updated_at), 'MMM d, h:mm a')}
                     </td>
                   </tr>
                 ))}
