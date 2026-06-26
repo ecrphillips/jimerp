@@ -662,7 +662,13 @@ export default function OrderDetail() {
       confirmMutation.mutate();
       return;
     }
-    if (target === 'READY' && !isDerivedPackComplete) {
+    // Soft-warn on forward advance to READY when not packed. On a revert
+    // (e.g. SHIPPED → READY), skip the warning and route through the
+    // status-change confirmation which describes the actual transition.
+    const targetIdxAdv = PRODUCTION_LADDER.indexOf(target);
+    const currentIdxAdv = PRODUCTION_LADDER.indexOf(order.status);
+    const isForward = targetIdxAdv > currentIdxAdv;
+    if (target === 'READY' && isForward && !isDerivedPackComplete) {
       setIncompleteSteps(['Packed (per run sheet)']);
       setIncompleteIntent('READY');
       setShowIncompleteModal(true);
