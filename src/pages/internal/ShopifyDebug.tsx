@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -41,13 +42,17 @@ async function countQuery(
 
 export default function ShopifyDebug() {
   const queryClient = useQueryClient();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editClientId, setEditClientId] = useState('');
+  const [editClientSecret, setEditClientSecret] = useState('');
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   const sourcesQ = useQuery({
     queryKey: ['shopify-debug', 'sources'],
     queryFn: async () => {
       const { data, error } = await sb
         .from('shopify_sources')
-        .select('id, store_name, store_slug, is_active, created_at')
+        .select('id, store_name, store_slug, is_active, created_at, oauth_client_id, oauth_client_secret')
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data as Array<{
@@ -56,6 +61,8 @@ export default function ShopifyDebug() {
         store_slug: string | null;
         is_active: boolean | null;
         created_at: string | null;
+        oauth_client_id: string | null;
+        oauth_client_secret: string | null;
       }>;
     },
   });
