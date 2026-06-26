@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Plus, Minus, Search } from 'lucide-react';
+import { format } from 'date-fns';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { useAuthoritativeFg } from '@/hooks/useAuthoritativeInventory';
 
@@ -26,6 +27,8 @@ export function FGInventoryTab() {
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const sortFreezeTimeout = useRef<NodeJS.Timeout | null>(null);
   const [isSortFrozen, setIsSortFrozen] = useState(false);
+  // Per-product "last counted by X at <time>" from the ledger row just written.
+  const [lastCounted, setLastCounted] = useState<Record<string, { at: string; by: string }>>({});
 
   // FG on-hand from the inventory_transactions ledger (single source of truth).
   const { data: authoritativeFg, isLoading: fgLoading } = useAuthoritativeFg();
@@ -93,8 +96,8 @@ export function FGInventoryTab() {
   // created_at provides the timestamp. No writes to the retired fg_inventory.
   const adjustMutation = useMutation({
     mutationFn: async ({ productId, unitsDelta, newUnits }: { productId: string; unitsDelta: number; newUnits: number }) => {
-      if (!unitsDelta) return;
-      const { error } = await supabase
+      if (!unitsDelta) return null;
+      const { data, error } = await supabase
         .from('inventory_transactions')
         .insert({
           transaction_type: 'ADJUSTMENT',
@@ -103,11 +106,21 @@ export function FGInventoryTab() {
           notes: `FG floor count: counted ${newUnits} units (delta ${unitsDelta >= 0 ? '+' : ''}${unitsDelta})`,
           created_by: authUser?.id,
           is_system_generated: false,
-        });
+        })
+        .select('created_at, created_by')
+        .single();
       if (error) throw error;
+      return { productId, newUnits, createdAt: data.created_at };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['authoritative-fg-ledger'] });
+      if (!result) return;
+      const by = authUser?.profile?.name ?? authUser?.email ?? 'Unknown';
+      setLastCounted((prev) => ({
+        ...prev,
+        [result.productId]: { at: result.createdAt, by },
+      }));
+      toast.success(`Counted ${result.newUnits} units.`);
     },
     onError: (err) => {
       console.error(err);
@@ -172,7 +185,15 @@ export function FGInventoryTab() {
                     key={row.product_id}
                     className={`border-b last:border-0 ${editingRowId === row.product_id ? 'bg-muted/50' : ''}`}
                   >
-                    <td className="py-2 font-medium">{row.product_name}</td>
+                    <td className="py-2 font-medium">
+                      {row.product_name}
+                      {lastCounted[row.product_id] && (
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          Last counted by {lastCounted[row.product_id].by} at{' '}
+                          {format(new Date(lastCounted[row.product_id].at), 'MMM d, h:mm a')}
+                        </span>
+                      )}
+                    </td>
                     <td className="py-2">{row.client_name ?? '—'}</td>
                     <td className="py-2">{row.sku || '—'}</td>
                     <td className="py-2">

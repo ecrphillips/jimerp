@@ -22,6 +22,28 @@ import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { WipAdjustmentModal } from '@/components/inventory/WipAdjustmentModal';
 import { WipFloorCountModal, type WipFloorRow } from '@/components/inventory/WipFloorCountModal';
 import { computeAuthoritativeWip, useAuthoritativeFg } from '@/hooks/useAuthoritativeInventory';
+import { useOrderCreator } from '@/hooks/useOrderCreator';
+
+interface LastCount {
+  created_at: string;
+  created_by: string | null;
+}
+
+/**
+ * "Last counted by X at <time>" footnote for a WIP/FG row. Reads the most recent
+ * manual ADJUSTMENT (floor count / recount) written to inventory_transactions and
+ * resolves the user id to a name. Display only — no ledger writes.
+ */
+function LastCountedLine({ entry }: { entry?: LastCount }) {
+  const { data: profile } = useOrderCreator(entry?.created_by);
+  if (!entry) return null;
+  const who = profile?.name?.trim() || profile?.email || 'Unknown';
+  return (
+    <span className="block text-xs font-normal text-muted-foreground">
+      Last counted by {who} at {format(new Date(entry.created_at), 'MMM d, h:mm a')}
+    </span>
+  );
+}
 
 type WipAdjustmentReason = 'LOSS' | 'COUNT_ADJUSTMENT' | 'CONTAMINATION' | 'OTHER';
 
@@ -118,6 +140,32 @@ export default function Inventory() {
     },
   });
 
+  // Most recent manual ADJUSTMENT per roast_group and per product — powers the
+  // "last counted by X at <time>" footnote on WIP and FG rows. Read-only.
+  const { data: lastCounts } = useQuery({
+    queryKey: ['inventory-last-counts'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('inventory_transactions')
+        .select('roast_group, product_id, created_at, created_by')
+        .eq('transaction_type', 'ADJUSTMENT')
+        .eq('is_system_generated', false)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      const byGroup: Record<string, LastCount> = {};
+      const byProduct: Record<string, LastCount> = {};
+      for (const r of data ?? []) {
+        if (r.roast_group && !byGroup[r.roast_group]) {
+          byGroup[r.roast_group] = { created_at: r.created_at, created_by: r.created_by };
+        }
+        if (r.product_id && !byProduct[r.product_id]) {
+          byProduct[r.product_id] = { created_at: r.created_at, created_by: r.created_by };
+        }
+      }
+      return { byGroup, byProduct };
+    },
+  });
+
   // Fetch all roast groups
   const { data: roastGroups } = useQuery({
     queryKey: ['all-roast-groups'],
@@ -191,6 +239,7 @@ export default function Inventory() {
       toast.success('WIP adjustment recorded');
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions-wip'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-last-counts'] });
       setShowWipAdjust(false);
       setAdjustKgDelta('');
       setAdjustNotes('');
@@ -267,9 +316,12 @@ export default function Inventory() {
           is_system_generated: false,
         });
       if (error) throw error;
+      return newUnits;
     },
-    onSuccess: () => {
+    onSuccess: (newUnits) => {
       queryClient.invalidateQueries({ queryKey: ['authoritative-fg-ledger'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-last-counts'] });
+      if (newUnits != null) toast.success(`Counted ${newUnits} units.`);
     },
     onError: (err) => {
       console.error(err);
@@ -460,7 +512,10 @@ export default function Inventory() {
                   <tbody>
                     {wipDisplayRows.map((row) => (
                       <tr key={row.roast_group} className="border-b">
-                        <td className="py-3 font-medium">{row.roast_group}</td>
+                        <td className="py-3 font-medium">
+                          {row.roast_group}
+                          <LastCountedLine entry={lastCounts?.byGroup[row.roast_group]} />
+                        </td>
                         <td className="py-3 text-right">{row.roasted_kg.toFixed(1)} kg</td>
                         <td className="py-3 text-right text-muted-foreground">
                           −{row.consumed_kg.toFixed(1)} kg
@@ -559,6 +614,7 @@ export default function Inventory() {
                       <FgInventoryRow
                         key={row.id}
                         row={row}
+                        lastCount={lastCounts?.byProduct[row.product_id]}
                         onAdjust={(delta) => handleFgAdjust(row.product_id, row.units_on_hand, delta)}
                         onSet={(value) => handleFgSet(row.product_id, row.units_on_hand, value)}
                       />
@@ -742,12 +798,14 @@ export default function Inventory() {
 }
 
 // Sub-component for FG inventory row with inline controls
-function FgInventoryRow({ 
-  row, 
-  onAdjust, 
-  onSet 
-}: { 
-  row: FgInventoryRow; 
+function FgInventoryRow({
+  row,
+  lastCount,
+  onAdjust,
+  onSet
+}: {
+  row: FgInventoryRow;
+  lastCount?: LastCount;
   onAdjust: (delta: number) => void;
   onSet: (value: string) => void;
 }) {
@@ -766,7 +824,10 @@ function FgInventoryRow({
 
   return (
     <tr className="border-b">
-      <td className="py-3 font-medium">{row.product.product_name}</td>
+      <td className="py-3 font-medium">
+        {row.product.product_name}
+        <LastCountedLine entry={lastCount} />
+      </td>
       <td className="py-3">{row.product.client?.name ?? '—'}</td>
       <td className="py-3">
         <div className="flex items-center gap-2">

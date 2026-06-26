@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOrderCreator } from '@/hooks/useOrderCreator';
 import { format } from 'date-fns';
 import { Scale } from 'lucide-react';
 import { WipAdjustmentModal } from '@/components/inventory/WipAdjustmentModal';
@@ -56,10 +57,12 @@ export function RoastGroupWipSection({ roastGroupKey, displayName }: Props) {
     },
   });
 
-  if (!isAdminOrOps) return null;
-
   const balance = data?.balance ?? 0;
   const lastAdj = data?.lastAdj;
+  const { data: lastAdjProfile } = useOrderCreator(lastAdj?.created_by);
+  const lastAdjBy = lastAdjProfile?.name?.trim() || lastAdjProfile?.email || null;
+
+  if (!isAdminOrOps) return null;
 
   return (
     <Card>
@@ -100,7 +103,7 @@ export function RoastGroupWipSection({ roastGroupKey, displayName }: Props) {
 
         {lastAdj && (
           <p className="text-xs text-muted-foreground">
-            Last adjusted{' '}
+            Last counted{lastAdjBy ? ` by ${lastAdjBy}` : ''} at{' '}
             {format(new Date(lastAdj.created_at), 'MMM d, yyyy h:mm a')}
             {lastAdj.notes ? ` (${lastAdj.notes})` : ''}
           </p>

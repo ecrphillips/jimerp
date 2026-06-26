@@ -54,4 +54,6 @@ export const WIP_ADJUSTMENT_QUERY_KEYS: string[][] = [
   ['roast-group-inventory-levels'],
   // Authoritative hook used by the production page
   ['authoritative-wip-ledger'],
+  // "Last counted by X" footnote on the Inventory page WIP/FG rows
+  ['inventory-last-counts'],
 ];
