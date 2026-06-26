@@ -47,7 +47,7 @@ export default function ShopifyDebug() {
     queryFn: async () => {
       const { data, error } = await sb
         .from('shopify_sources')
-        .select('id, store_name, store_slug, is_active, created_at')
+        .select('id, store_name, store_slug, is_active, created_at, oauth_client_id, oauth_client_secret')
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data as Array<{
@@ -56,6 +56,8 @@ export default function ShopifyDebug() {
         store_slug: string | null;
         is_active: boolean | null;
         created_at: string | null;
+        oauth_client_id: string | null;
+        oauth_client_secret: string | null;
       }>;
     },
   });
