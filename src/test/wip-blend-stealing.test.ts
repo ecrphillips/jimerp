@@ -52,7 +52,7 @@ describe('blend WIP stealing', () => {
         consumed_by_blend_at: null,
       },
     ];
-    const wip = computeAuthoritativeWip(ledger, [], batches);
+    const wip = computeAuthoritativeWip(ledger, batches);
     expect(wip[COMPONENT].reserved_for_blend_kg).toBe(10);
     expect(wip[COMPONENT].wip_available_kg).toBe(0);
   });
@@ -72,7 +72,7 @@ describe('blend WIP stealing', () => {
         consumed_by_blend_at: '2026-06-17T12:00:00Z',
       },
     ];
-    const wip = computeAuthoritativeWip(ledger, [], batches);
+    const wip = computeAuthoritativeWip(ledger, batches);
     expect(wip[COMPONENT].reserved_for_blend_kg).toBe(0);
     // 4 kg leftover from the partial blend is now available to the component
     expect(wip[COMPONENT].wip_available_kg).toBe(4);

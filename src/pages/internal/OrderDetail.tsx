@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { parseDateOnly } from '@/lib/dateOnly';
@@ -498,6 +499,115 @@ export default function OrderDetail() {
     },
   });
 
+  // Cancelling an order that still has picked (FG-consumed) units must decide
+  // the fate of that coffee in the ledger — never silently. We prompt:
+  //   (a) return to stock  → reverse each SHIP_CONSUME_FG (+units) so FG rises
+  //   (b) write off as lost → reverse the pick (+units) AND record an ADJUSTMENT
+  //                           (−units) so the coffee leaves FG, marked as a loss
+  // Then zero the picks and cancel the order. Every row is stamped with the
+  // logged-in user; created_at supplies the timestamp.
+  const [cancelPicks, setCancelPicks] = useState<
+    { pickId: string; productId: string; productName: string; units: number }[] | null
+  >(null);
+
+  const cancelWithPicksMutation = useMutation({
+    mutationFn: async (mode: 'return' | 'writeoff') => {
+      const picks = cancelPicks ?? [];
+      const rows: Database['public']['Tables']['inventory_transactions']['Insert'][] = [];
+      for (const p of picks) {
+        // Reverse the pick consumption — the coffee re-enters FG.
+        rows.push({
+          transaction_type: 'SHIP_CONSUME_FG',
+          product_id: p.productId,
+          order_id: id!,
+          quantity_units: p.units,
+          notes: mode === 'return'
+            ? `Returned ${p.units} units to stock (order ${order?.order_number} cancelled)`
+            : `Reversed ${p.units} picked units (order ${order?.order_number} cancelled)`,
+          is_system_generated: false,
+          created_by: authUser?.id,
+        });
+        // Write-off: immediately remove it again as a recorded loss.
+        if (mode === 'writeoff') {
+          rows.push({
+            transaction_type: 'ADJUSTMENT',
+            product_id: p.productId,
+            order_id: id!,
+            quantity_units: -p.units,
+            notes: `Written off as lost: ${p.units} units (order ${order?.order_number} cancelled)`,
+            is_system_generated: false,
+            created_by: authUser?.id,
+          });
+        }
+      }
+      if (rows.length > 0) {
+        const { error: ledgerErr } = await supabase.from('inventory_transactions').insert(rows);
+        if (ledgerErr) throw ledgerErr;
+      }
+
+      // Zero the picks so the allocation record matches the reversed ledger.
+      const pickIds = picks.map((p) => p.pickId);
+      if (pickIds.length > 0) {
+        const { error: pickErr } = await supabase
+          .from('ship_picks')
+          .update({ units_picked: 0, updated_by: authUser?.id })
+          .in('id', pickIds);
+        if (pickErr) throw pickErr;
+      }
+
+      const { error } = await supabase.rpc('update_order_status' as any, {
+        p_order_id: id!,
+        p_target_status: 'CANCELLED',
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Order cancelled');
+      setCancelPicks(null);
+      queryClient.invalidateQueries({ queryKey: ['order', id] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-fg-ledger'] });
+      queryClient.invalidateQueries({ queryKey: ['ship-picks', id] });
+      supabase.functions.invoke('notify-order-event', {
+        body: { order_id: id, event_type: 'ORDER_CANCELLED', details: 'Status changed by ops' },
+      }).catch((e) => console.warn('[notify-order-event] CANCELLED failed:', e));
+    },
+    onError: (err: any) => {
+      console.error(err);
+      toast.error(err?.message || 'Failed to cancel order');
+    },
+  });
+
+  // Decide whether cancelling needs the FG-fate prompt. If the order has no
+  // outstanding picked units, cancel straight through the normal path.
+  const initiateCancel = useCallback(async () => {
+    const { data: picks, error } = await supabase
+      .from('ship_picks')
+      .select('id, order_line_item_id, units_picked')
+      .eq('order_id', id!)
+      .gt('units_picked', 0);
+    if (error) {
+      toast.error('Failed to check picked units');
+      return;
+    }
+    const outstanding = (picks ?? [])
+      .map((p) => {
+        const li = (lineItems ?? []).find((l) => l.id === p.order_line_item_id);
+        return {
+          pickId: p.id,
+          productId: li?.product_id ?? '',
+          productName: li?.product?.product_name ?? 'Unknown',
+          units: p.units_picked,
+        };
+      })
+      .filter((p) => p.productId && p.units > 0);
+    if (outstanding.length === 0) {
+      handleStatusChange('CANCELLED');
+      return;
+    }
+    setCancelPicks(outstanding);
+  }, [id, lineItems, handleStatusChange]);
+
   if (isLoading) {
     return (
       <div className="page-container">
@@ -534,6 +644,10 @@ export default function OrderDetail() {
   const handleAdvanceTo = (target: OrderStatus) => {
     if (target === 'SHIPPED') {
       handleMarkAsShipped();
+      return;
+    }
+    if (target === 'CANCELLED') {
+      initiateCancel();
       return;
     }
     if (target === 'CONFIRMED' && order.status === 'SUBMITTED') {
@@ -1043,6 +1157,41 @@ export default function OrderDetail() {
           orderNumber={order.order_number}
         />
       )}
+
+      {/* Cancel-with-picks: decide the fate of already-picked FG */}
+      <Dialog open={cancelPicks !== null} onOpenChange={(o) => { if (!o) setCancelPicks(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancel order — picked coffee</DialogTitle>
+            <DialogDescription>
+              This order has finished goods already picked off the shelf. Choose what happens to them — either way it's recorded in the inventory ledger with your name and the time.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
+            {(cancelPicks ?? []).map((p) => (
+              <div key={p.pickId} className="flex justify-between">
+                <span>{p.productName}</span>
+                <span className="font-mono">{p.units} units</span>
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              disabled={cancelWithPicksMutation.isPending}
+              onClick={() => cancelWithPicksMutation.mutate('writeoff')}
+            >
+              Write off as lost
+            </Button>
+            <Button
+              disabled={cancelWithPicksMutation.isPending}
+              onClick={() => cancelWithPicksMutation.mutate('return')}
+            >
+              {cancelWithPicksMutation.isPending ? 'Working…' : 'Return bags to stock'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

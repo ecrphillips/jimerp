@@ -18,9 +18,11 @@ export interface SaveWipAdjustmentArgs {
 
 /**
  * Single source of truth for writing WIP adjustments.
- * Both the per-row WipAdjustmentModal and the bulk WipFloorCountModal
- * use this helper. Writes ONLY to wip_adjustments — that is what the
- * Inventory Levels WIP math reads as the manual-adjustment source.
+ * Both the per-row WipAdjustmentModal and the bulk WipFloorCountModal use this
+ * helper. Writes ONE balancing ADJUSTMENT row to inventory_transactions — the
+ * single ledger every WIP balance now reads. The human reason is folded into
+ * notes (inventory_transactions has no reason column); the row is stamped with
+ * the logged-in user and relies on created_at (now()) for the timestamp.
  */
 export async function saveWipAdjustment(args: SaveWipAdjustmentArgs): Promise<void> {
   const { roastGroup, kgDelta, reason, notes, createdBy } = args;
@@ -30,25 +32,26 @@ export async function saveWipAdjustment(args: SaveWipAdjustmentArgs): Promise<vo
     throw new Error('kg delta must be a non-zero number.');
   }
 
-  const { error } = await supabase.from('wip_adjustments').insert({
+  const trimmed = notes?.trim();
+  const note = trimmed ? `[${reason}] ${trimmed}` : `[${reason}]`;
+
+  const { error } = await supabase.from('inventory_transactions').insert({
+    transaction_type: 'ADJUSTMENT',
     roast_group: roastGroup,
-    kg_delta: +kgDelta.toFixed(4),
-    reason,
-    notes: notes?.trim() ? notes.trim() : null,
+    quantity_kg: +kgDelta.toFixed(4),
+    notes: note,
     created_by: createdBy ?? null,
+    is_system_generated: false,
   });
 
   if (error) throw error;
 }
 
 export const WIP_ADJUSTMENT_QUERY_KEYS: string[][] = [
-  ['wip-adjustments'],
   ['inventory-transactions-wip'],
-  ['inventory-ledger-wip'],
   ['roast-group-wip'],
   ['roast-group-detail'],
   ['roast-group-inventory-levels'],
-  // Authoritative hooks used by the production page
-  ['authoritative-wip-manual-adjustments'],
+  // Authoritative hook used by the production page
   ['authoritative-wip-ledger'],
 ];

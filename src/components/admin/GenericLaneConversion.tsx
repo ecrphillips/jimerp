@@ -551,17 +551,27 @@ function ReassignFgDialog({
       const genIds = (genProducts ?? []).map((p) => p.id);
       if (genIds.length === 0) return [];
 
+      // FG on-hand per generic product, from the inventory_transactions ledger.
       const { data, error } = await supabase
-        .from('fg_inventory')
-        .select('product_id, units_on_hand')
+        .from('inventory_transactions')
+        .select('product_id, quantity_units, transaction_type')
         .in('product_id', genIds)
-        .gt('units_on_hand', 0);
+        .in('transaction_type', ['PACK_PRODUCE_FG', 'SHIP_CONSUME_FG', 'ADJUSTMENT']);
       if (error) throw error;
 
-      return (data ?? []).map((row) => ({
-        ...row,
-        product_name: genProducts?.find((p) => p.id === row.product_id)?.product_name ?? 'Unknown',
-      }));
+      const byProduct: Record<string, number> = {};
+      for (const r of data ?? []) {
+        if (!r.product_id) continue;
+        byProduct[r.product_id] = (byProduct[r.product_id] ?? 0) + Number(r.quantity_units ?? 0);
+      }
+
+      return genIds
+        .map((id) => ({
+          product_id: id,
+          units_on_hand: Math.max(0, byProduct[id] ?? 0),
+          product_name: genProducts?.find((p) => p.id === id)?.product_name ?? 'Unknown',
+        }))
+        .filter((row) => row.units_on_hand > 0);
     },
   });
 
@@ -573,54 +583,19 @@ function ReassignFgDialog({
     if (!sourceProductId || !targetProductId || numAmount <= 0) return;
     setSubmitting(true);
     try {
-      // Decrement source
-      const { data: srcRow, error: e1 } = await supabase
-        .from('fg_inventory')
-        .select('units_on_hand')
-        .eq('product_id', sourceProductId)
-        .single();
-      if (e1) throw e1;
-      const newSourceUnits = (srcRow?.units_on_hand ?? 0) - numAmount;
-      const { error: e2 } = await supabase
-        .from('fg_inventory')
-        .update({ units_on_hand: newSourceUnits } as any)
-        .eq('product_id', sourceProductId);
-      if (e2) throw e2;
-
-      // Upsert target
-      const { data: tgtRow } = await supabase
-        .from('fg_inventory')
-        .select('units_on_hand')
-        .eq('product_id', targetProductId)
-        .maybeSingle();
-      const oldTargetUnits = tgtRow?.units_on_hand ?? 0;
-      const newTargetUnits = oldTargetUnits + numAmount;
-      if (tgtRow) {
-        const { error: e3 } = await supabase
-          .from('fg_inventory')
-          .update({ units_on_hand: newTargetUnits } as any)
-          .eq('product_id', targetProductId);
-        if (e3) throw e3;
-      } else {
-        const { error: e3 } = await supabase
-          .from('fg_inventory')
-          .insert({ product_id: targetProductId, units_on_hand: numAmount });
-        if (e3) throw e3;
-      }
-
-      // Get target product name
       const targetName = nonGenericProducts.find((p) => p.id === targetProductId)?.product_name ?? 'target';
       const sourceName = selectedSource?.product_name ?? 'Generic';
 
-      // Log entries
-      const { error: e4 } = await supabase.from('fg_inventory_log').insert([
-        { product_id: sourceProductId, units_delta: -numAmount, units_after: newSourceUnits, notes: `Reassigned to ${targetName}`, created_by: authUserId },
-        { product_id: targetProductId, units_delta: numAmount, units_after: newTargetUnits, notes: `Reassigned from ${sourceName}`, created_by: authUserId },
+      // Balanced FG reassignment written to the inventory_transactions ledger:
+      // −units off the source product, +units onto the target product.
+      const { error } = await supabase.from('inventory_transactions').insert([
+        { product_id: sourceProductId, transaction_type: 'ADJUSTMENT' as const, quantity_units: -numAmount, notes: `Reassigned to ${targetName}`, created_by: authUserId, is_system_generated: false },
+        { product_id: targetProductId, transaction_type: 'ADJUSTMENT' as const, quantity_units: numAmount, notes: `Reassigned from ${sourceName}`, created_by: authUserId, is_system_generated: false },
       ]);
-      if (e4) throw e4;
+      if (error) throw error;
 
       toast.success(`${numAmount} units moved to ${targetName}`);
-      queryClient.invalidateQueries({ queryKey: ['fg-inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-fg-ledger'] });
       queryClient.invalidateQueries({ queryKey: ['generic-fg-inventory'] });
       resetAndClose();
     } catch (err: any) {

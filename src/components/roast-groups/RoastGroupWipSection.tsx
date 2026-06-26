@@ -16,9 +16,11 @@ interface Props {
 /**
  * WIP summary + Adjust button, shown on the roast-group detail page (ADMIN/OPS only).
  *
- * WIP balance is computed the same way as Inventory Levels:
- *   sum(inventory_transactions.quantity_kg for {ROAST_OUTPUT, PACK_CONSUME_WIP, ADJUSTMENT, LOSS})
- *   + sum(wip_adjustments.kg_delta)
+ * WIP balance is computed the same way as Inventory Levels, entirely from the
+ * inventory_transactions ledger:
+ *   sum(quantity_kg for {ROAST_OUTPUT, PACK_CONSUME_WIP, ADJUSTMENT, LOSS})
+ * Manual floor-count / recount adjustments are ADJUSTMENT rows here now (the
+ * separate wip_adjustments table is retired).
  */
 export function RoastGroupWipSection({ roastGroupKey, displayName }: Props) {
   const { authUser } = useAuth();
@@ -28,23 +30,16 @@ export function RoastGroupWipSection({ roastGroupKey, displayName }: Props) {
   const { data, isLoading } = useQuery({
     queryKey: ['roast-group-wip', roastGroupKey],
     queryFn: async () => {
-      const [txRes, adjRes] = await Promise.all([
-        supabase
-          .from('inventory_transactions')
-          .select('quantity_kg, transaction_type')
-          .eq('roast_group', roastGroupKey)
-          .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'ADJUSTMENT', 'LOSS']),
-        supabase
-          .from('wip_adjustments')
-          .select('kg_delta, reason, notes, created_at, created_by')
-          .eq('roast_group', roastGroupKey)
-          .order('created_at', { ascending: false }),
-      ]);
-      if (txRes.error) throw txRes.error;
-      if (adjRes.error) throw adjRes.error;
+      const { data, error } = await supabase
+        .from('inventory_transactions')
+        .select('quantity_kg, transaction_type, notes, created_at, created_by')
+        .eq('roast_group', roastGroupKey)
+        .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'ADJUSTMENT', 'LOSS'])
+        .order('created_at', { ascending: false });
+      if (error) throw error;
 
       let txSum = 0;
-      for (const r of txRes.data ?? []) {
+      for (const r of data ?? []) {
         const kg = Number(r.quantity_kg) || 0;
         if (r.transaction_type === 'LOSS') {
           // LOSS rows reduce WIP — ledger writes are typically negative,
@@ -54,11 +49,10 @@ export function RoastGroupWipSection({ roastGroupKey, displayName }: Props) {
           txSum += kg;
         }
       }
-      let adjSum = 0;
-      for (const a of adjRes.data ?? []) adjSum += Number(a.kg_delta) || 0;
 
-      const lastAdj = (adjRes.data ?? [])[0] ?? null;
-      return { balance: txSum + adjSum, lastAdj };
+      // Most recent manual adjustment (floor count / recount) for the footnote.
+      const lastAdj = (data ?? []).find((r) => r.transaction_type === 'ADJUSTMENT') ?? null;
+      return { balance: txSum, lastAdj };
     },
   });
 
@@ -108,7 +102,7 @@ export function RoastGroupWipSection({ roastGroupKey, displayName }: Props) {
           <p className="text-xs text-muted-foreground">
             Last adjusted{' '}
             {format(new Date(lastAdj.created_at), 'MMM d, yyyy h:mm a')}
-            {lastAdj.reason ? ` (${lastAdj.reason})` : ''}
+            {lastAdj.notes ? ` (${lastAdj.notes})` : ''}
           </p>
         )}
       </CardContent>
