@@ -703,10 +703,13 @@ export default function OrderDetail() {
     (t) => t !== primaryNext?.target && t !== 'DRAFT',
   );
 
-  // Cancel is the safe everyday action (runs the stop-and-ask inventory prompt),
-  // so it gets the prominent always-visible button. Delete is destructive and is
-  // demoted into the "More actions" menu. The menu therefore excludes CANCELLED.
-  const canCancel = (ALLOWED_ORDER_TRANSITIONS[order.status] ?? []).includes('CANCELLED');
+  // Cancel is a side-exit from the pipeline, not a forward status step — it must
+  // be available at ANY active stage, so its visibility is derived from status
+  // directly rather than the forward-transition ladder. Only already-shipped or
+  // already-cancelled orders cannot be cancelled. It gets the prominent
+  // always-visible button; Delete is destructive and demoted into "More actions".
+  // The menu therefore excludes CANCELLED.
+  const canCancel = order.status !== 'SHIPPED' && order.status !== 'CANCELLED';
   const menuTransitions = secondaryTransitions.filter((t) => t !== 'CANCELLED');
 
   return (
