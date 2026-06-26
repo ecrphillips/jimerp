@@ -42,6 +42,10 @@ async function countQuery(
 
 export default function ShopifyDebug() {
   const queryClient = useQueryClient();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editClientId, setEditClientId] = useState('');
+  const [editClientSecret, setEditClientSecret] = useState('');
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   const sourcesQ = useQuery({
     queryKey: ['shopify-debug', 'sources'],
