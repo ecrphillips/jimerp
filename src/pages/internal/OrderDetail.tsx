@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { parseDateOnly } from '@/lib/dateOnly';
-import { ArrowLeft, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock, FileText, Clock, Trash2, Printer } from 'lucide-react';
+import { ArrowLeft, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, PenSquare, CalendarClock, FileText, Clock, Trash2, Printer, Ban } from 'lucide-react';
 import { printPackingSlips } from '@/components/orders/printPackingSlips';
 import { LocationBadge } from '@/components/orders/LocationSelect';
 import { OrderShipmentsCard } from '@/components/orders/OrderShipmentsCard';
@@ -27,6 +27,7 @@ import { OrderDateAuditHistory } from '@/components/internal/OrderDateAuditHisto
 import { WorkDeadlinePicker } from '@/components/orders/WorkDeadlinePicker';
 import { OrderDeleteModal } from '@/components/internal/OrderDeleteModal';
 import { ALLOWED_ORDER_TRANSITIONS } from '@/lib/orderTransitions';
+import { useAuth } from '@/contexts/AuthContext';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -68,6 +69,7 @@ interface RoastedBatch {
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const { authUser } = useAuth();
 
   const { data: order, isLoading, error } = useQuery({
     queryKey: ['order', id],
@@ -581,32 +583,38 @@ export default function OrderDetail() {
   // Decide whether cancelling needs the FG-fate prompt. If the order has no
   // outstanding picked units, cancel straight through the normal path.
   const initiateCancel = useCallback(async () => {
+    // The authoritative "does this order have outstanding picks?" signal is the
+    // ship_picks rows themselves — NOT a client-side join. Product enrichment is
+    // pulled in the same query so a missing/stale `lineItems` cache can never
+    // suppress the prompt or drop a pick from the ledger reversal.
     const { data: picks, error } = await supabase
       .from('ship_picks')
-      .select('id, order_line_item_id, units_picked')
+      .select('id, order_line_item_id, units_picked, order_line_item:order_line_items(product_id, product:products(product_name))')
       .eq('order_id', id!)
       .gt('units_picked', 0);
     if (error) {
       toast.error('Failed to check picked units');
       return;
     }
-    const outstanding = (picks ?? [])
-      .map((p) => {
-        const li = (lineItems ?? []).find((l) => l.id === p.order_line_item_id);
-        return {
-          pickId: p.id,
-          productId: li?.product_id ?? '',
-          productName: li?.product?.product_name ?? 'Unknown',
-          units: p.units_picked,
-        };
-      })
-      .filter((p) => p.productId && p.units > 0);
-    if (outstanding.length === 0) {
+    // No picked units → nothing to decide, cancel straight through.
+    if (!picks || picks.length === 0) {
       handleStatusChange('CANCELLED');
       return;
     }
+    // Outstanding picks exist → ALWAYS prompt; the mutation acts only on choice.
+    type PickRow = {
+      id: string;
+      units_picked: number;
+      order_line_item: { product_id: string; product: { product_name: string } | null } | null;
+    };
+    const outstanding = (picks as unknown as PickRow[]).map((p) => ({
+      pickId: p.id,
+      productId: p.order_line_item?.product_id ?? '',
+      productName: p.order_line_item?.product?.product_name ?? 'Unknown',
+      units: p.units_picked,
+    }));
     setCancelPicks(outstanding);
-  }, [id, lineItems, handleStatusChange]);
+  }, [id, handleStatusChange]);
 
   if (isLoading) {
     return (
@@ -695,6 +703,12 @@ export default function OrderDetail() {
     (t) => t !== primaryNext?.target && t !== 'DRAFT',
   );
 
+  // Cancel is the safe everyday action (runs the stop-and-ask inventory prompt),
+  // so it gets the prominent always-visible button. Delete is destructive and is
+  // demoted into the "More actions" menu. The menu therefore excludes CANCELLED.
+  const canCancel = (ALLOWED_ORDER_TRANSITIONS[order.status] ?? []).includes('CANCELLED');
+  const menuTransitions = secondaryTransitions.filter((t) => t !== 'CANCELLED');
+
   return (
     <div className="page-container">
       <div className="page-header flex items-center justify-between">
@@ -727,16 +741,18 @@ export default function OrderDetail() {
           <LocationBadge locationId={(order as any).location_id} />
         </div>
         <div className="flex items-center gap-2">
-          {/* Delete Order button - destructive action */}
-          <Button 
-            variant="outline" 
-            onClick={() => setShowDeleteModal(true)} 
-            className="gap-2 text-destructive border-destructive/50 hover:bg-destructive/10 hover:border-destructive"
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </Button>
-          
+          {/* Cancel Order button — safe everyday action (stop-and-ask inventory prompt) */}
+          {canCancel && (
+            <Button
+              variant="outline"
+              onClick={() => handleAdvanceTo('CANCELLED')}
+              className="gap-2 text-destructive border-destructive/50 hover:bg-destructive/10 hover:border-destructive"
+            >
+              <Ban className="h-4 w-4" />
+              Cancel Order
+            </Button>
+          )}
+
           {/* Print Packing Slips - one slip per shipment */}
           <Button
             variant="outline"
@@ -771,24 +787,34 @@ export default function OrderDetail() {
             </Button>
           )}
 
-          {/* Secondary transitions (reverts, cancel, alternate advances) */}
-          {secondaryTransitions.length > 0 && (
-            <Select
-              value=""
-              onValueChange={(value) => handleAdvanceTo(value as OrderStatus)}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder={primaryNext ? 'More actions' : 'Change Status'} />
-              </SelectTrigger>
-              <SelectContent>
-                {secondaryTransitions.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {transitionLabel(t)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          {/* More actions — reverts, alternate advances, and the destructive Delete */}
+          <Select
+            value=""
+            onValueChange={(value) => {
+              if (value === '__DELETE__') {
+                setShowDeleteModal(true);
+                return;
+              }
+              handleAdvanceTo(value as OrderStatus);
+            }}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder={primaryNext ? 'More actions' : 'Change Status'} />
+            </SelectTrigger>
+            <SelectContent>
+              {menuTransitions.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {transitionLabel(t)}
+                </SelectItem>
+              ))}
+              <SelectItem value="__DELETE__" className="text-destructive focus:text-destructive">
+                <span className="flex items-center gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Delete Order
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
