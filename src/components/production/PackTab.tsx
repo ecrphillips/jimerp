@@ -29,7 +29,7 @@ import { type PackagingVariant } from '@/components/PackagingBadge';
 import { SortablePackRow } from './SortablePackRow';
 import type { DateFilterConfig } from './types';
 // Use AUTHORITATIVE inventory hooks - computed from source-of-truth tables
-import { useAuthoritativeWip, useAuthoritativePlannedWip } from '@/hooks/useAuthoritativeInventory';
+import { useAuthoritativeWip, useAuthoritativePlannedWip, useAuthoritativeFg } from '@/hooks/useAuthoritativeInventory';
 import { AuthoritativeSummaryPanel } from './AuthoritativeTotals';
 import { filterOrderByWorkStart } from '@/lib/productionScheduling';
 import {
@@ -219,6 +219,8 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   // WIP = sum(roasted_batches.actual_output_kg) - sum(packing_runs.kg_consumed)
   const { data: authWip } = useAuthoritativeWip();
   const { data: plannedWip } = useAuthoritativePlannedWip();
+  // FG ledger is the authoritative "units packed" count — see packingByProductUnits.
+  const { data: authFg } = useAuthoritativeFg();
   
   // Use authoritative WIP for roasted inventory display
   const roastedInventory = useMemo(() => {
@@ -242,14 +244,18 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     },
   });
 
-  // Map packing by product for unblocks calculation
+  // "Units packed" per product comes from the authoritative FG ledger (net
+  // sum of PACK_PRODUCE_FG), NOT the legacy per-day packing_runs rows. This is
+  // the same date-agnostic baseline update_packing_units reverses against, so
+  // completeness, the editable units field, and the reversal RPC all agree —
+  // editing units down reverses the run instead of diverging from the ledger.
   const packingByProductUnits = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const pr of packingRuns ?? []) {
-      map[pr.product_id] = (map[pr.product_id] ?? 0) + pr.units_packed;
+    for (const [pid, f] of Object.entries(authFg ?? {})) {
+      map[pid] = f.fg_created_units;
     }
     return map;
-  }, [packingRuns]);
+  }, [authFg]);
 
   // Fetch ship_picks for OPEN orders, aggregated by product.
   // A pick is physical evidence that a bag was packed — the downstream station
@@ -669,6 +675,8 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
     queryClient.invalidateQueries({ queryKey: ['inventory-ledger-fg'] });
     queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
+    // FG ledger now drives the packed count / status — refresh it after each edit.
+    queryClient.invalidateQueries({ queryKey: ['authoritative-fg-ledger'] });
   }, [today, queryClient]);
 
   // Mutation to update pack_display_order for a whole reordered list at once.
@@ -868,7 +876,9 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                   <tbody>
                     {displayProducts.map((product, index) => {
                       const packing = packingByProduct[product.product_id];
-                      const packed = packing?.units_packed ?? 0;
+                      // Authoritative net produced (ledger) — matches the RPC baseline
+                      // so the units field reverses correctly; packing_runs is legacy.
+                      const packed = packingByProductUnits[product.product_id] ?? 0;
                       const picked = pickedByProductUnits?.[product.product_id] ?? 0;
                       const isExpanded = expandedProductId === product.product_id;
                       const prevRoastGroup = index > 0 ? displayProducts[index - 1].roast_group : undefined;
