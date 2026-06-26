@@ -662,7 +662,13 @@ export default function OrderDetail() {
       confirmMutation.mutate();
       return;
     }
-    if (target === 'READY' && !isDerivedPackComplete) {
+    // Soft-warn on forward advance to READY when not packed. On a revert
+    // (e.g. SHIPPED → READY), skip the warning and route through the
+    // status-change confirmation which describes the actual transition.
+    const targetIdxAdv = PRODUCTION_LADDER.indexOf(target);
+    const currentIdxAdv = PRODUCTION_LADDER.indexOf(order.status);
+    const isForward = targetIdxAdv > currentIdxAdv;
+    if (target === 'READY' && isForward && !isDerivedPackComplete) {
       setIncompleteSteps(['Packed (per run sheet)']);
       setIncompleteIntent('READY');
       setShowIncompleteModal(true);
@@ -1127,6 +1133,13 @@ export default function OrderDetail() {
         open={showIncompleteModal}
         onOpenChange={setShowIncompleteModal}
         incompleteSteps={incompleteSteps}
+        title={incompleteIntent === 'READY' ? 'Mark Ready Without Packing?' : 'Incomplete Fulfillment Steps'}
+        promptText={
+          incompleteIntent === 'READY'
+            ? 'Mark this order as Ready anyway?'
+            : 'Mark as shipped anyway?'
+        }
+        confirmLabel={incompleteIntent === 'READY' ? 'Mark Ready' : 'Mark as Shipped'}
         onConfirm={() => {
           setShowIncompleteModal(false);
           if (incompleteIntent === 'READY') {
