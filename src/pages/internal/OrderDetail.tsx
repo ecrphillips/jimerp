@@ -1133,6 +1133,13 @@ export default function OrderDetail() {
         open={showIncompleteModal}
         onOpenChange={setShowIncompleteModal}
         incompleteSteps={incompleteSteps}
+        title={incompleteIntent === 'READY' ? 'Mark Ready Without Packing?' : 'Incomplete Fulfillment Steps'}
+        promptText={
+          incompleteIntent === 'READY'
+            ? 'Mark this order as Ready anyway?'
+            : 'Mark as shipped anyway?'
+        }
+        confirmLabel={incompleteIntent === 'READY' ? 'Mark Ready' : 'Mark as Shipped'}
         onConfirm={() => {
           setShowIncompleteModal(false);
           if (incompleteIntent === 'READY') {
