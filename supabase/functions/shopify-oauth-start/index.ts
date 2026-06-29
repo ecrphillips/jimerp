@@ -17,6 +17,27 @@ import {
   normalizeShop,
   SHOPIFY_SCOPE,
 } from "../_shared/shopify.ts";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// Breadcrumb logging — platform/function logs are dead, so each major step writes
+// a row to shopify_oauth_debug. Best-effort: a logging failure must never break
+// the OAuth flow, so swallow any error here.
+async function debug(
+  supabase: SupabaseClient,
+  shop: string | null,
+  step: string,
+  detail?: string,
+): Promise<void> {
+  try {
+    await supabase.from("shopify_oauth_debug").insert({
+      shop: shop ?? null,
+      step,
+      detail: detail ?? null,
+    });
+  } catch (_e) {
+    // ignore — debug logging must not affect the install outcome
+  }
+}
 
 function errorPage(message: string): Response {
   const siteUrl = Deno.env.get("SITE_URL") || "https://homeislandcoffeepartners.lovable.app";
@@ -37,9 +58,21 @@ function errorPage(message: string): Response {
 serve(async (req) => {
   try {
     const url = new URL(req.url);
+    const supabase = getServiceClient();
+
+    // First breadcrumb — proves Shopify's install GET actually reached this
+    // function (vs. landing on the app login page). Logs the raw shop and which
+    // params are present before any validation can short-circuit.
+    const rawShop = url.searchParams.get("shop");
+    await debug(
+      supabase,
+      rawShop,
+      "start_entered",
+      `hmac=${url.searchParams.has("hmac")} code=${url.searchParams.has("code")}`,
+    );
 
     // Validate shop format (rejects evil.myshopify.com.x, foo.com, etc.).
-    const shop = normalizeShop(url.searchParams.get("shop"));
+    const shop = normalizeShop(rawShop);
     if (!shop) {
       return errorPage("Missing or invalid shop parameter (must be *.myshopify.com).");
     }
@@ -59,8 +92,6 @@ serve(async (req) => {
         return errorPage("Request signature (HMAC) verification failed.");
       }
     }
-
-    const supabase = getServiceClient();
 
     // Store a single-use, time-limited state on the merchant's source row. The
     // row must already exist (created by an admin) — we never write tokens for
