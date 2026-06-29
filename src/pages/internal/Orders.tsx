@@ -23,6 +23,7 @@ import { SetDeadlineModal } from '@/components/orders/SetDeadlineModal';
 import { OrderProgressBar, DeadlineStatus } from '@/components/orders/OrderProgressBar';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { NoSmokeShopifyPull } from '@/components/orders/NoSmokeShopifyPull';
+import { ShopifyQuarantineTile } from '@/components/orders/ShopifyQuarantineResolver';
 import { FunkImportLink } from '@/components/orders/FunkImportLink';
 
 type SortDirection = 'asc' | 'desc';
@@ -280,6 +281,7 @@ export default function Orders() {
         </Button>
       </div>
       <NoSmokeShopifyPull onPulled={() => refetch()} />
+      <ShopifyQuarantineTile />
       <FunkImportLink />
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
