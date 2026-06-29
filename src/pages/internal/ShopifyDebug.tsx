@@ -125,6 +125,54 @@ export default function ShopifyDebug() {
   const [pulling, setPulling] = React.useState(false);
   const [createdAtMin, setCreatedAtMin] = React.useState('');
   const [createdAtMax, setCreatedAtMax] = React.useState('');
+  const [rederiving, setRederiving] = React.useState(false);
+  const [rederiveResult, setRederiveResult] = React.useState<{
+    results?: Array<{
+      store_slug: string;
+      total_open: number;
+      resolved: number;
+      still_failing: number;
+      failures: Array<{ order: string | null; title: string | null; variant_title: string | null; reason: string }>;
+    }>;
+  } | null>(null);
+
+  const handleRederive = async () => {
+    setRederiving(true);
+    try {
+      const { data: src, error: srcErr } = await sb
+        .from('shopify_sources')
+        .select('id')
+        .eq('store_slug', 'no-smoke-coffee')
+        .maybeSingle();
+      if (srcErr) throw srcErr;
+      if (!src?.id) throw new Error('No Smoke source not found');
+      const { data, error } = await supabase.functions.invoke(
+        'shopify-rederive-quarantine',
+        { body: { source_id: src.id } },
+      );
+      if (error) throw error;
+      setRederiveResult(data ?? null);
+      const results = (data?.results ?? []) as Array<{
+        store_slug: string;
+        total_open: number;
+        resolved: number;
+        still_failing: number;
+      }>;
+      if (results.length === 0) {
+        toast.info(data?.message ?? 'No active sources');
+      }
+      for (const r of results) {
+        const msg = `${r.store_slug}: ${r.resolved}/${r.total_open} resolved, ${r.still_failing} still failing`;
+        if (r.still_failing > 0) toast.warning(msg);
+        else toast.success(msg);
+      }
+      invalidate('pull_log');
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setRederiving(false);
+    }
+  };
 
   const handleRunPullNow = async (body: Record<string, unknown> = {}) => {
     setPulling(true);
@@ -337,6 +385,42 @@ export default function ShopifyDebug() {
               {pulling ? 'Pulling…' : 'Run targeted pull'}
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* 1c. Re-derive open quarantined lines */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Re-derive open quarantined lines</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Re-runs the current derivation logic against No Smoke lines already sitting in
+            <code className="mx-1">shopify_quarantined_lines</code> (status open). Each line that
+            now matches is resolved into its bundle order and its variant mapping is written, so
+            it resolves instantly next time. No fresh Shopify order needed.
+          </p>
+          <Button onClick={handleRederive} disabled={rederiving}>
+            {rederiving ? 'Re-deriving…' : 'Re-derive open quarantined lines'}
+          </Button>
+          {rederiveResult?.results?.map((r) => (
+            <div key={r.store_slug} className="space-y-1 text-sm">
+              <p className="font-medium">
+                {r.store_slug}: {r.resolved}/{r.total_open} resolved · {r.still_failing} still
+                failing
+              </p>
+              {r.failures.length > 0 && (
+                <ul className="list-disc pl-5 text-xs text-muted-foreground">
+                  {r.failures.map((f, i) => (
+                    <li key={i}>
+                      {f.order ?? '—'} · {f.title ?? '—'} · {f.variant_title ?? '—'} →{' '}
+                      <span className="font-mono">{f.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
         </CardContent>
       </Card>
 

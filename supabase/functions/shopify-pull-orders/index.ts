@@ -22,10 +22,16 @@
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeadersFor } from '../_shared/cors.ts';
 import { decryptSecret, looksEncrypted } from '../_shared/crypto.ts';
+import {
+  buildProductIndex,
+  deriveProduct,
+  normProductName,
+  parseGrams,
+} from '../_shared/shopifyDerive.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '3.3-title-derivation';
+const FUNCTION_VERSION = '3.4-shared-derive';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -191,43 +197,8 @@ async function fetchUnfulfilledOrders(
   return orders;
 }
 
-// Parse grams from a variant title like "250 G / Whole Bean" or "1 KG / Cone Drip".
-function parseGrams(variantTitle: string | null): number | null {
-  if (!variantTitle) return null;
-  const m = variantTitle.match(/([\d.]+)\s*(KG|G|LB)/i);
-  if (!m) return null;
-  const value = parseFloat(m[1]);
-  if (!Number.isFinite(value)) return null;
-  const unit = m[2].toUpperCase();
-  if (unit === 'KG') return Math.round(value * 1000);
-  if (unit === 'LB') return Math.round(value * 454);
-  return Math.round(value);
-}
-
-// The product-family portion of a SKU: the 5-letter middle segment (HEAVY, AMIWR,
-// PEOPL, RINGS …). JIM SKUs look like NSC-BLD-HEAVY-01000; the origin segment
-// (BLD/ETH/XXX, 3 letters) is inconsistent between Shopify and JIM, so it's ignored.
-function skuFamily(sku: string | null): string | null {
-  if (!sku) return null;
-  const segs = sku.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
-  for (const s of segs) if (/^[A-Z]{5}$/.test(s)) return s;
-  return null;
-}
-
-// Normalise a product name to its family for matching: case-insensitive, with bag
-// sizes ("1kg", "250 g", "2 KG") and packaging descriptors ("Bulk", "Retail", …)
-// stripped, then non-alphanumerics removed. So the Shopify title "People Pleaser"
-// and the JIM name "People Pleaser 1kg Bulk" both collapse to "peoplepleaser",
-// while unsuffixed names ("Sacred Garden") are unaffected. Shopify line SKUs are
-// usually null, so this title→name match is the primary derivation key.
-function normProductName(s: string | null): string {
-  if (!s) return '';
-  return s
-    .toLowerCase()
-    .replace(/\b\d+(?:\.\d+)?\s*(?:kgs?|g|gr|grams?|lbs?|oz)\b/g, ' ') // bag sizes
-    .replace(/\b(?:bulk|retail|wholesale|sample|samples|bag|bags|case|cases|box|boxes|pouch|tin)\b/g, ' ') // packaging
-    .replace(/[^a-z0-9]+/g, '');
-}
+// parseGrams / skuFamily / normProductName / deriveProduct live in
+// ../_shared/shopifyDerive.ts so the pull and the re-derive action share one matcher.
 
 // Map a Shopify grind option to the JIM grind_option enum.
 function parseGrind(variantTitle: string | null): 'WHOLE_BEAN' | 'ESPRESSO' | 'FILTER' | null {
@@ -357,25 +328,7 @@ async function pullSource(
       .select('id, sku, product_name, bag_size_g')
       .eq('account_id', source.linked_account_id);
     if (prodErr) throw new Error(`product lookup failed: ${prodErr.message}`);
-    const byNameGrams = new Map<string, string[]>();
-    const byFamilyGrams = new Map<string, string[]>();
-    for (const p of acctProducts ?? []) {
-      if (p.bag_size_g == null) continue;
-      const n = normProductName(p.product_name);
-      if (n) {
-        const key = `${n}|${p.bag_size_g}`;
-        const arr = byNameGrams.get(key) ?? [];
-        arr.push(p.id);
-        byNameGrams.set(key, arr);
-      }
-      const fam = skuFamily(p.sku);
-      if (fam) {
-        const key = `${fam}|${p.bag_size_g}`;
-        const arr = byFamilyGrams.get(key) ?? [];
-        arr.push(p.id);
-        byFamilyGrams.set(key, arr);
-      }
-    }
+    const productIndex = buildProductIndex(acctProducts ?? []);
 
     type LineFate =
       | { kind: 'product'; productId: string; derived: boolean }
@@ -389,24 +342,10 @@ async function pullSource(
         const mapped = byVariant.get(li.variantId);
         if (mapped) return { kind: 'product', productId: mapped, derived: false };
       }
-      // Derive by bag size + product family.
-      const grams = parseGrams(li.variantTitle);
-      if (grams == null) return { kind: 'quarantine', reason: 'no_bag_size' };
-
-      // Primary: normalised Shopify title vs normalised JIM product_name.
-      const nkey = normProductName(li.title);
-      if (nkey) {
-        const ids = byNameGrams.get(`${nkey}|${grams}`);
-        if (ids && ids.length === 1) return { kind: 'product', productId: ids[0], derived: true };
-        if (ids && ids.length > 1) return { kind: 'quarantine', reason: 'ambiguous_name' };
-      }
-      // Secondary: SKU family, only if the Shopify line actually carries a SKU.
-      const fam = skuFamily(li.sku);
-      if (fam) {
-        const ids = byFamilyGrams.get(`${fam}|${grams}`);
-        if (ids && ids.length === 1) return { kind: 'product', productId: ids[0], derived: true };
-      }
-      return { kind: 'quarantine', reason: nkey ? 'no_name_match' : 'no_name' };
+      // Derive via the shared matcher (title + bag size, SKU family secondary).
+      const dr = deriveProduct(li, productIndex);
+      if (dr.ok) return { kind: 'product', productId: dr.productId, derived: true };
+      return { kind: 'quarantine', reason: dr.reason };
     };
 
     // Partition every producible line: resolved → bundle aggregate; unresolved →
