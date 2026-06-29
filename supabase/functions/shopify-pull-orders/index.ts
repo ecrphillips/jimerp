@@ -31,7 +31,7 @@ import {
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '3.4-shared-derive';
+const FUNCTION_VERSION = '3.5-skuwriteback-off';
 
 interface ShopifyLineItem {
   sku: string | null;
