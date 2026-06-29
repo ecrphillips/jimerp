@@ -25,7 +25,7 @@ import { decryptSecret, looksEncrypted } from '../_shared/crypto.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '3.0-line-quarantine';
+const FUNCTION_VERSION = '3.1-quarantine-logging';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -267,7 +267,7 @@ async function pullSource(
 
   const finalize = async (patch: Partial<PullResult>, details?: unknown): Promise<PullResult> => {
     const out = { ...base, ...patch };
-    await admin
+    const { error: updErr } = await admin
       .from('shopify_pull_log')
       .update({
         result: out.result,
@@ -280,6 +280,7 @@ async function pullSource(
         ...(details !== undefined ? { details } : {}),
       })
       .eq('id', pullLogId);
+    if (updErr) console.error(`pull_log finalize update failed: ${updErr.message}`);
     return out;
   };
 
@@ -492,56 +493,85 @@ async function pullSource(
     // Insert quarantine rows for unresolved lines, skipping any already-open row for
     // the same (order, variant). bundle_order_id is the shared bundle iff this order
     // contributed resolved lines, else null.
+    //
+    // This is deliberately NON-fatal: a quarantine failure must not throw away the
+    // bundle order that was just created, and the failure must be visible. Any error
+    // is captured into pull_log.details (and error_message) rather than swallowed.
+    let linesAttempted = 0;
     let linesQuarantined = 0;
+    let quarantineError: string | null = null;
     if (quarantineByOrder.size > 0) {
-      const orderIds = [...quarantineByOrder.keys()];
-      const { data: openRows, error: openErr } = await admin
-        .from('shopify_quarantined_lines')
-        .select('shopify_order_id, shopify_variant_id')
-        .eq('source_id', source.id)
-        .eq('status', 'open')
-        .in('shopify_order_id', orderIds);
-      if (openErr) throw new Error(`quarantine lookup failed: ${openErr.message}`);
-      const openKey = new Set(
-        (openRows ?? []).map((r) => `${r.shopify_order_id}|${r.shopify_variant_id ?? ''}`),
-      );
+      try {
+        const orderIds = [...quarantineByOrder.keys()];
+        const { data: openRows, error: openErr } = await admin
+          .from('shopify_quarantined_lines')
+          .select('shopify_order_id, shopify_variant_id')
+          .eq('source_id', source.id)
+          .eq('status', 'open')
+          .in('shopify_order_id', orderIds);
+        if (openErr) throw new Error(`lookup failed: ${openErr.message}`);
+        const openKey = new Set(
+          (openRows ?? []).map((r) => `${r.shopify_order_id}|${r.shopify_variant_id ?? ''}`),
+        );
 
-      const qRows: Record<string, unknown>[] = [];
-      for (const o of newOrders) {
-        const lines = quarantineByOrder.get(o.id);
-        if (!lines) continue;
-        const bId = orderHasResolved.get(o.id) ? bundleOrderId : null;
-        for (const li of lines) {
-          const key = `${o.id}|${li.variantId ?? ''}`;
-          if (openKey.has(key)) continue;
-          openKey.add(key);
-          qRows.push({
-            source_id: source.id,
-            pull_log_id: pullLogId,
-            bundle_order_id: bId,
-            shopify_order_id: o.id,
-            shopify_order_number: o.name,
-            customer_name: o.customerName,
-            shopify_product_id: li.productId,
-            shopify_variant_id: li.variantId,
-            shopify_product_title: li.title,
-            shopify_variant_title: li.variantTitle,
-            shopify_sku: li.sku,
-            quantity: li.unfulfilledQuantity,
-            reason: 'no_match',
-            status: 'open',
-          });
+        const qRows: Record<string, unknown>[] = [];
+        for (const o of newOrders) {
+          const lines = quarantineByOrder.get(o.id);
+          if (!lines) continue;
+          const bId = orderHasResolved.get(o.id) ? bundleOrderId : null;
+          for (const li of lines) {
+            const key = `${o.id}|${li.variantId ?? ''}`;
+            if (openKey.has(key)) continue;
+            openKey.add(key);
+            qRows.push({
+              source_id: source.id,
+              pull_log_id: pullLogId,
+              bundle_order_id: bId,
+              shopify_order_id: o.id,
+              shopify_order_number: o.name,
+              customer_name: o.customerName,
+              shopify_product_id: li.productId,
+              shopify_variant_id: li.variantId,
+              shopify_product_title: li.title,
+              shopify_variant_title: li.variantTitle,
+              shopify_sku: li.sku,
+              quantity: li.unfulfilledQuantity,
+              reason: 'no_match',
+              status: 'open',
+            });
+          }
         }
+        linesAttempted = qRows.length;
+        // Insert one row at a time so a single bad row (e.g. a transient unique-index
+        // race) can't drop the whole batch, and so the failing row is identifiable.
+        for (const row of qRows) {
+          const { error: qErr } = await admin.from('shopify_quarantined_lines').insert(row);
+          if (qErr) {
+            // 23505 = unique_violation: an open row already exists, treat as written.
+            if (qErr.code === '23505') {
+              linesQuarantined++;
+              continue;
+            }
+            throw new Error(
+              `insert failed for ${row.shopify_order_number}/${row.shopify_variant_id}: ${qErr.message}`,
+            );
+          }
+          linesQuarantined++;
+        }
+      } catch (e) {
+        quarantineError = e instanceof Error ? e.message : String(e);
+        console.error(`[${source.store_slug}] quarantine write failed: ${quarantineError}`);
       }
-      if (qRows.length > 0) {
-        const { error: qErr } = await admin.from('shopify_quarantined_lines').insert(qRows);
-        if (qErr) throw new Error(`quarantine insert failed: ${qErr.message}`);
-      }
-      linesQuarantined = qRows.length;
     }
 
     // orders_quarantined = orders still carrying ≥1 open quarantined line this run.
     const ordersQuarantined = quarantineByOrder.size;
+
+    const summaryError = quarantineError
+      ? `Quarantine write FAILED: ${quarantineError}`
+      : ordersQuarantined > 0
+        ? `${linesQuarantined} quarantined line(s) across ${ordersQuarantined} order(s)`
+        : undefined;
 
     return await finalize(
       {
@@ -549,17 +579,16 @@ async function pullSource(
         orders_included: includedOrders.length,
         orders_quarantined: ordersQuarantined,
         lines_quarantined: linesQuarantined,
-        result: ordersQuarantined > 0 ? 'partial' : 'success',
+        result: quarantineError ? 'error' : ordersQuarantined > 0 ? 'partial' : 'success',
         order_id: bundleOrderId ?? undefined,
         order_number: bundleOrderNumber,
-        error:
-          ordersQuarantined > 0
-            ? `${linesQuarantined} new quarantined line(s) across ${ordersQuarantined} order(s)`
-            : undefined,
+        error: summaryError,
       },
       {
-        quarantined_lines: linesQuarantined,
         quarantined_orders: ordersQuarantined,
+        quarantined_lines_attempted: linesAttempted,
+        quarantined_lines_written: linesQuarantined,
+        quarantine_error: quarantineError,
       },
     );
   } catch (e) {
