@@ -5189,6 +5189,110 @@ export type Database = {
           },
         ]
       }
+      shopify_quarantined_lines: {
+        Row: {
+          bundle_order_id: string | null
+          created_at: string
+          customer_name: string | null
+          first_seen_at: string
+          id: string
+          notes: string | null
+          pull_log_id: string | null
+          quantity: number
+          reason: string
+          resolved_at: string | null
+          resolved_by: string | null
+          resolved_jim_product_id: string | null
+          shopify_order_id: string | null
+          shopify_order_number: string | null
+          shopify_product_id: string | null
+          shopify_product_title: string | null
+          shopify_sku: string | null
+          shopify_variant_id: string | null
+          shopify_variant_title: string | null
+          source_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          bundle_order_id?: string | null
+          created_at?: string
+          customer_name?: string | null
+          first_seen_at?: string
+          id?: string
+          notes?: string | null
+          pull_log_id?: string | null
+          quantity?: number
+          reason?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          resolved_jim_product_id?: string | null
+          shopify_order_id?: string | null
+          shopify_order_number?: string | null
+          shopify_product_id?: string | null
+          shopify_product_title?: string | null
+          shopify_sku?: string | null
+          shopify_variant_id?: string | null
+          shopify_variant_title?: string | null
+          source_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          bundle_order_id?: string | null
+          created_at?: string
+          customer_name?: string | null
+          first_seen_at?: string
+          id?: string
+          notes?: string | null
+          pull_log_id?: string | null
+          quantity?: number
+          reason?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          resolved_jim_product_id?: string | null
+          shopify_order_id?: string | null
+          shopify_order_number?: string | null
+          shopify_product_id?: string | null
+          shopify_product_title?: string | null
+          shopify_sku?: string | null
+          shopify_variant_id?: string | null
+          shopify_variant_title?: string | null
+          source_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_quarantined_lines_bundle_order_id_fkey"
+            columns: ["bundle_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopify_quarantined_lines_pull_log_id_fkey"
+            columns: ["pull_log_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_pull_log"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopify_quarantined_lines_resolved_jim_product_id_fkey"
+            columns: ["resolved_jim_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopify_quarantined_lines_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shopify_sources: {
         Row: {
           api_access_token: string | null
@@ -5792,10 +5896,18 @@ export type Database = {
           read_ct: number
         }[]
       }
+      resolve_shopify_quarantined_line: {
+        Args: { p_jim_product_id: string; p_line_id: string }
+        Returns: undefined
+      }
       reverse_quote_to_sent: { Args: { p_quote_id: string }; Returns: Json }
       revert_batch_to_planned: {
         Args: { p_batch_id: string }
         Returns: boolean
+      }
+      set_shopify_quarantined_line_do_not_produce: {
+        Args: { p_line_id: string }
+        Returns: undefined
       }
       submit_prospect_interest: {
         Args: {
