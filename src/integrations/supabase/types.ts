@@ -4146,6 +4146,7 @@ export type Database = {
           account_id: string | null
           adjustment_note: string | null
           adjustment_per_unit: number | null
+          allied_type: Database["public"]["Enums"]["allied_type_option"] | null
           bag_size_g: number
           client_id: string | null
           created_at: string
@@ -4180,6 +4181,7 @@ export type Database = {
           account_id?: string | null
           adjustment_note?: string | null
           adjustment_per_unit?: number | null
+          allied_type?: Database["public"]["Enums"]["allied_type_option"] | null
           bag_size_g: number
           client_id?: string | null
           created_at?: string
@@ -4214,6 +4216,7 @@ export type Database = {
           account_id?: string | null
           adjustment_note?: string | null
           adjustment_per_unit?: number | null
+          allied_type?: Database["public"]["Enums"]["allied_type_option"] | null
           bag_size_g?: number
           client_id?: string | null
           created_at?: string
@@ -5995,6 +5998,7 @@ export type Database = {
     }
     Enums: {
       account_status: "PROSPECT" | "ACTIVE" | "PAUSED" | "CHURNED"
+      allied_type_option: "MERCH" | "EQUIPMENT" | "INSTANT" | "OTHER"
       app_role: "ADMIN" | "OPS" | "CLIENT"
       board_source: "MATCHSTICK" | "FUNK" | "NOSMOKE"
       contract_status: "ACTIVE" | "DEPLETED" | "CANCELLED"
@@ -6243,6 +6247,7 @@ export const Constants = {
   public: {
     Enums: {
       account_status: ["PROSPECT", "ACTIVE", "PAUSED", "CHURNED"],
+      allied_type_option: ["MERCH", "EQUIPMENT", "INSTANT", "OTHER"],
       app_role: ["ADMIN", "OPS", "CLIENT"],
       board_source: ["MATCHSTICK", "FUNK", "NOSMOKE"],
       contract_status: ["ACTIVE", "DEPLETED", "CANCELLED"],

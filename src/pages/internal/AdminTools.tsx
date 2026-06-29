@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertTriangle, Trash2, Sparkles, RotateCcw, Bomb, Wand2, LineChart, ShoppingBag } from 'lucide-react';
+import { AlertTriangle, Trash2, Sparkles, RotateCcw, Bomb, Wand2, LineChart, ShoppingBag, Package } from 'lucide-react';
 import { GenericLaneConversion } from '@/components/admin/GenericLaneConversion';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -18,6 +18,7 @@ import { BuildInfoPanel } from '@/components/admin/BuildInfoPanel';
 import { PackagingTypesManager } from '@/components/admin/PackagingTypesManager';
 import { buildSku, getOriginCode, generateFgNameCode, formatGramsSuffix } from '@/lib/skuGenerator';
 import { PerennialSkuAudit } from '@/components/admin/PerennialSkuAudit';
+import { CreateAlliedProductModal } from '@/components/admin/CreateAlliedProductModal';
 
 // Check if we're in development mode
 const isDev = import.meta.env.DEV;
@@ -60,6 +61,9 @@ export default function AdminTools() {
   // Orphaned account_users cleanup state
   const [orphanEmail, setOrphanEmail] = useState('');
   const [isRemovingOrphan, setIsRemovingOrphan] = useState(false);
+
+  // Create Allied Product state
+  const [showAlliedModal, setShowAlliedModal] = useState(false);
 
   const handleRemoveOrphanedAccountUsers = async () => {
     const email = orphanEmail.trim().toLowerCase();
@@ -389,6 +393,27 @@ export default function AdminTools() {
         </CardContent>
       </Card>
 
+      {/* Create Allied Product */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Package className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Create Allied Product (merch / equipment / instant)</CardTitle>
+          </div>
+          <CardDescription>
+            Add a non-produced item that arrives via Shopify/CSV order pulls and needs to ship but is
+            never roasted or packed as coffee. No roast group and no packaging variants are created,
+            so it generates zero roast/production demand. Distinct from coffee product creation.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={() => setShowAlliedModal(true)} className="gap-2">
+            <Package className="h-4 w-4" />
+            Create Allied Product
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* Packaging Types Manager */}
       <PackagingTypesManager />
 
@@ -711,6 +736,9 @@ export default function AdminTools() {
       )}
 
       <PerennialSkuAudit />
+
+      {/* Create Allied Product Modal */}
+      <CreateAlliedProductModal open={showAlliedModal} onOpenChange={setShowAlliedModal} />
 
       {/* Reset Confirmation Modal */}
       <Dialog open={showResetModal} onOpenChange={setShowResetModal}>
