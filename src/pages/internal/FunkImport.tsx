@@ -26,6 +26,13 @@ import {
   type ProductLite, type MappingLite, type ReviewGroup, type Classification,
   type BatchClass, type BatchMonth, type CsvOrder,
 } from '@/lib/funkCsvImport';
+// Shared grind-signal parser — same module the Shopify pull edge function uses, so
+// the grind rule can never drift between the two sources.
+import {
+  buildGrindSummaryLine,
+  mergeGrindSummary,
+  parseGrindSignal,
+} from '../../../supabase/functions/_shared/grind';
 
 // funk_* tables + products.is_placeholder are not yet in the generated Supabase
 // types (additive migrations, types not regenerated) — mirror the Shopify-pull
@@ -282,15 +289,44 @@ export default function FunkImport() {
         const r = effRes(g);
         groupProductId.set(g.key, r.status === 'product' ? r.productId : await ensurePlaceholder(g.rawName));
       }
-      const shipQty = new Map<string, number>();
+      // Aggregate ship-now demand by product AND grind so grind variants stay on
+      // their own line — the packer must see the whole-bean vs grind split per product.
+      const shipAgg = new Map<
+        string,
+        { product_id: string; needs_grind: boolean; grind_label: string | null; qty: number; rawName: string }
+      >();
       for (const g of shipNowGroups) {
         const pid = groupProductId.get(g.key)!;
-        shipQty.set(pid, (shipQty.get(pid) ?? 0) + g.totalQuantity);
+        const { needsGrind, grindLabel } = parseGrindSignal(g.rawName);
+        const k = `${pid}|${grindLabel ?? ''}`;
+        const e =
+          shipAgg.get(k) ??
+          { product_id: pid, needs_grind: needsGrind, grind_label: grindLabel, qty: 0, rawName: g.rawName };
+        e.qty += g.totalQuantity;
+        shipAgg.set(k, e);
       }
+
+      // Ops-notes grind summary (idempotent: mergeGrindSummary refreshes the GRIND: line).
+      const prodNameById = new Map(parsed.products.map((p) => [p.id, p]));
+      const sizeLabel = (g: number | null | undefined) =>
+        g && g >= 1000 && g % 1000 === 0 ? `${g / 1000}KG` : g ? `${g}G` : '';
+      const grindLine = buildGrindSummaryLine(
+        [...shipAgg.values()]
+          .filter((e) => e.needs_grind && e.grind_label)
+          .map((e) => {
+            const p = prodNameById.get(e.product_id);
+            const name = p ? `${p.product_name}${p.bag_size_g ? ` ${sizeLabel(p.bag_size_g)}` : ''}` : e.rawName.split('/')[0].trim();
+            return { productName: name, grindLabel: e.grind_label, qty: e.qty };
+          }),
+      );
+      const shipOpsNotes = mergeGrindSummary(
+        `FUNK CSV import — ${parsed.fileName} (${parsed.newCount} orders)`,
+        grindLine,
+      );
 
       let bundleOrderId: string | null = null;
       let bundleOrderNumber = '';
-      if (shipQty.size > 0) {
+      if (shipAgg.size > 0) {
         const refBase = funkReferenceBase();
         const { data: sameDay, error: refErr } = await sb
           .from('orders').select('client_po').eq('account_id', funk.id).like('client_po', `${refBase}%`);
@@ -306,7 +342,7 @@ export default function FunkImport() {
           delivery_method: 'COURIER',
           client_po: reference,
           source_channel: 'manual',
-          internal_ops_notes: `FUNK CSV import — ${parsed.fileName} (${parsed.newCount} orders)`,
+          internal_ops_notes: shipOpsNotes,
           created_by_user_id: authUser?.id,
           created_by_admin: true,
         }).select('id, order_number').single();
@@ -320,8 +356,9 @@ export default function FunkImport() {
           .select('id').single();
         if (shipErr) throw shipErr;
 
-        const lines = Array.from(shipQty.entries()).map(([product_id, quantity_units]) => ({
-          order_id: order.id, product_id, quantity_units, grind: null,
+        const lines = [...shipAgg.values()].map((e) => ({
+          order_id: order.id, product_id: e.product_id, quantity_units: e.qty, grind: null,
+          needs_grind: e.needs_grind, grind_label: e.grind_label,
           unit_price_locked: 0, shipment_id: shipment?.id ?? null,
         }));
         const { error: liErr } = await sb.from('order_line_items').insert(lines);

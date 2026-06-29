@@ -3486,8 +3486,10 @@ export type Database = {
         Row: {
           created_at: string
           grind: Database["public"]["Enums"]["grind_option"] | null
+          grind_label: string | null
           id: string
           line_notes: string | null
+          needs_grind: boolean
           order_id: string
           product_id: string
           quantity_units: number
@@ -3501,8 +3503,10 @@ export type Database = {
         Insert: {
           created_at?: string
           grind?: Database["public"]["Enums"]["grind_option"] | null
+          grind_label?: string | null
           id?: string
           line_notes?: string | null
+          needs_grind?: boolean
           order_id: string
           product_id: string
           quantity_units: number
@@ -3516,8 +3520,10 @@ export type Database = {
         Update: {
           created_at?: string
           grind?: Database["public"]["Enums"]["grind_option"] | null
+          grind_label?: string | null
           id?: string
           line_notes?: string | null
+          needs_grind?: boolean
           order_id?: string
           product_id?: string
           quantity_units?: number

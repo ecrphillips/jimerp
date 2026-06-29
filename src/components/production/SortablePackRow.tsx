@@ -31,6 +31,11 @@ interface SortablePackRowProps {
    *  is flagged complete and won't pressure the packer to over-pack a SKU the
    *  shipper has already grabbed. The numeric input still edits raw packs. */
   pickedUnits?: number;
+  /** Grind alarm: of demandedUnits, how many are whole bean vs need grinding,
+   *  and the per-grind-label breakdown. Drives the unmissable GRIND badge. */
+  wholeBeanUnits?: number;
+  grindUnits?: number;
+  grindByLabel?: Record<string, number>;
   hasTimeSensitive: boolean;
   wipStatus: WipStatus;
   unblocksOrders: number;
@@ -59,6 +64,9 @@ export function SortablePackRow({
   demandedUnits,
   packedUnits,
   pickedUnits = 0,
+  wholeBeanUnits = 0,
+  grindUnits = 0,
+  grindByLabel = {},
   hasTimeSensitive,
   wipStatus,
   unblocksOrders,
@@ -205,6 +213,28 @@ export function SortablePackRow({
               </Badge>
             )}
           </div>
+          {/* Grind alarm — unmissable when any units need grinding. Failsafe so the
+              packer can never ship whole bean by mistake. No badge when all whole bean. */}
+          {grindUnits > 0 && (
+            <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+              <Badge className="text-xs font-bold uppercase tracking-wide bg-orange-500 text-white border-orange-600 hover:bg-orange-500">
+                <AlertTriangle className="h-3.5 w-3.5 mr-1" />
+                {grindUnits} GRIND
+              </Badge>
+              <span className="text-xs font-medium text-muted-foreground">
+                {wholeBeanUnits} whole bean
+              </span>
+              {Object.entries(grindByLabel).map(([label, qty]) => (
+                <Badge
+                  key={label}
+                  variant="outline"
+                  className="text-xs font-semibold border-orange-400 text-orange-700 bg-orange-50 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800"
+                >
+                  {qty} × {label}
+                </Badge>
+              ))}
+            </div>
+          )}
           <div className="text-xs text-muted-foreground">
             {bagSizeG}g • {sku || 'No SKU'}
           </div>

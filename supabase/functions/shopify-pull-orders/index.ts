@@ -28,10 +28,15 @@ import {
   normProductName,
   parseGrams,
 } from '../_shared/shopifyDerive.ts';
+import {
+  buildGrindSummaryLine,
+  mergeGrindSummary,
+  parseGrindSignal,
+} from '../_shared/grind.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '3.5-skuwriteback-off';
+const FUNCTION_VERSION = '3.6-grind';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -353,7 +358,10 @@ async function pullSource(
     // lines resolves; its quarantined lines then reference the shared bundle order.
     // Derived (non-override) matches also queue a variant mapping so the variant
     // resolves instantly on the next pull.
-    const bundleLines = new Map<string, { productId: string; grind: string | null; qty: number }>();
+    const bundleLines = new Map<
+      string,
+      { productId: string; grind: string | null; needsGrind: boolean; grindLabel: string | null; qty: number }
+    >();
     const includedOrders: ShopifyOrder[] = [];
     const orderHasResolved = new Map<string, boolean>();
     const quarantineByOrder = new Map<string, ShopifyLineItem[]>();
@@ -389,8 +397,16 @@ async function pullSource(
             }
           }
           const grind = parseGrind(li.variantTitle);
-          const key = `${fate.productId}|${grind ?? ''}`;
-          const entry = bundleLines.get(key) ?? { productId: fate.productId, grind, qty: 0 };
+          // Grind alarm: the lineitem "name" is title + variant joined by " / ";
+          // the shared helper takes the text after the FINAL "/" (handles a variant
+          // title that itself contains a size segment, e.g. "250 G / Whole Bean").
+          const liName = [li.title, li.variantTitle].filter(Boolean).join(' / ');
+          const { needsGrind, grindLabel } = parseGrindSignal(liName);
+          // Key by grind_label so distinct grinds split into their own lines while
+          // whole-bean lines (label null) aggregate together.
+          const key = `${fate.productId}|${grindLabel ?? ''}`;
+          const entry =
+            bundleLines.get(key) ?? { productId: fate.productId, grind, needsGrind, grindLabel, qty: 0 };
           entry.qty += li.unfulfilledQuantity;
           bundleLines.set(key, entry);
         } else {
@@ -465,6 +481,34 @@ async function pullSource(
           ? `\n\n${quarantinedLineCount} line(s) quarantined (unmatched variant) — resolve in the Shopify quarantine screen.`
           : '');
 
+      // Grind alarm: build an ops-notes summary line of every line that needs grinding.
+      const grindEntries = [...bundleLines.values()].filter((e) => e.needsGrind && e.grindLabel);
+      let grindSummaryLine: string | null = null;
+      if (grindEntries.length > 0) {
+        const gIds = [...new Set(grindEntries.map((e) => e.productId))];
+        const { data: gProducts } = await admin
+          .from('products')
+          .select('id, product_name, bag_size_g')
+          .in('id', gIds);
+        const sizeLabel = (g: number) => (g >= 1000 && g % 1000 === 0 ? `${g / 1000}KG` : `${g}G`);
+        const nameById = new Map(
+          (gProducts ?? []).map((p) => [
+            p.id as string,
+            `${p.product_name}${p.bag_size_g ? ` ${sizeLabel(p.bag_size_g)}` : ''}`,
+          ]),
+        );
+        grindSummaryLine = buildGrindSummaryLine(
+          grindEntries.map((e) => ({
+            productName: nameById.get(e.productId) ?? 'Unknown',
+            grindLabel: e.grindLabel,
+            qty: e.qty,
+          })),
+        );
+      }
+      // Fresh bundle order each pull, so this is idempotent by construction; mergeGrindSummary
+      // keeps it safe if this order is ever rebuilt/updated in place later.
+      const opsNotes = mergeGrindSummary(null, grindSummaryLine) || null;
+
       const { data: order, error: orderErr } = await admin
         .from('orders')
         .insert({
@@ -476,6 +520,7 @@ async function pullSource(
           shopify_source_id: source.id,
           shopify_pull_log_id: pullLogId,
           client_notes: notes.slice(0, 2000),
+          internal_ops_notes: opsNotes,
           created_by_admin: true,
         })
         .select('id, order_number')
@@ -497,6 +542,8 @@ async function pullSource(
         quantity_units: entry.qty,
         unit_price_locked: priceByProduct.get(entry.productId) ?? 0,
         grind: entry.grind,
+        needs_grind: entry.needsGrind,
+        grind_label: entry.grindLabel,
         shipment_id: shipment?.id ?? null,
       }));
       const { error: liErr } = await admin.from('order_line_items').insert(lineItems);

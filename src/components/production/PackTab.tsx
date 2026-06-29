@@ -105,6 +105,11 @@ interface ProductDemand {
   shortage: number;
   unblocksOrders: number;
   pack_display_order: number | null;
+  // Grind alarm: split of demanded units into whole-bean vs needs-grinding, and a
+  // breakdown of grind units by their exact grind label.
+  wholeBeanUnits: number;
+  grindUnits: number;
+  grindByLabel: Record<string, number>;
 }
 
 export function PackTab({ dateFilterConfig, today }: PackTabProps) {
@@ -178,6 +183,8 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
           id,
           product_id,
           quantity_units,
+          needs_grind,
+          grind_label,
           order_id,
           order:orders!inner(id, status, work_deadline_at, manually_deprioritized),
           product:products(id, product_name, sku, bag_size_g, packaging_variant, roast_group)
@@ -315,7 +322,21 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
           plannedKg: 0,
           plannedCount: 0,
           wipStatus: 'none' as const, // NEW: WIP status for color coding
+          wholeBeanUnits: 0,
+          grindUnits: 0,
+          grindByLabel: {},
         };
+      }
+      // Grind split: a line either needs grinding (count toward grind + its label)
+      // or it's whole bean. Defaults are failsafe — only an explicit needs_grind
+      // flag pushes units into the grind bucket.
+      if (li.needs_grind) {
+        productMap[li.product_id].grindUnits += li.quantity_units;
+        const label = li.grind_label || 'Grind';
+        productMap[li.product_id].grindByLabel[label] =
+          (productMap[li.product_id].grindByLabel[label] ?? 0) + li.quantity_units;
+      } else {
+        productMap[li.product_id].wholeBeanUnits += li.quantity_units;
       }
       productMap[li.product_id].demanded_units += li.quantity_units;
       productMap[li.product_id].demanded_kg += (li.quantity_units * li.product.bag_size_g) / 1000;
@@ -930,6 +951,9 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                           demandedUnits={product.demanded_units}
                           packedUnits={packed}
                           pickedUnits={picked}
+                          wholeBeanUnits={product.wholeBeanUnits}
+                          grindUnits={product.grindUnits}
+                          grindByLabel={product.grindByLabel}
                           hasTimeSensitive={product.hasTimeSensitive}
                           wipStatus={product.wipStatus}
                           unblocksOrders={product.unblocksOrders}
