@@ -25,7 +25,7 @@ import { decryptSecret, looksEncrypted } from '../_shared/crypto.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '3.2-quarantine-logging-datewindow';
+const FUNCTION_VERSION = '3.3-title-derivation';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -214,6 +214,21 @@ function skuFamily(sku: string | null): string | null {
   return null;
 }
 
+// Normalise a product name to its family for matching: case-insensitive, with bag
+// sizes ("1kg", "250 g", "2 KG") and packaging descriptors ("Bulk", "Retail", …)
+// stripped, then non-alphanumerics removed. So the Shopify title "People Pleaser"
+// and the JIM name "People Pleaser 1kg Bulk" both collapse to "peoplepleaser",
+// while unsuffixed names ("Sacred Garden") are unaffected. Shopify line SKUs are
+// usually null, so this title→name match is the primary derivation key.
+function normProductName(s: string | null): string {
+  if (!s) return '';
+  return s
+    .toLowerCase()
+    .replace(/\b\d+(?:\.\d+)?\s*(?:kgs?|g|gr|grams?|lbs?|oz)\b/g, ' ') // bag sizes
+    .replace(/\b(?:bulk|retail|wholesale|sample|samples|bag|bags|case|cases|box|boxes|pouch|tin)\b/g, ' ') // packaging
+    .replace(/[^a-z0-9]+/g, '');
+}
+
 // Map a Shopify grind option to the JIM grind_option enum.
 function parseGrind(variantTitle: string | null): 'WHOLE_BEAN' | 'ESPRESSO' | 'FILTER' | null {
   if (!variantTitle) return null;
@@ -333,51 +348,80 @@ async function pullSource(
       if (m.jim_product_id) byVariant.set(m.shopify_variant_id, m.jim_product_id);
     }
 
-    // Account products, indexed by (SKU family | bag size) for derivation.
+    // Account products, indexed for derivation. Keyed on account_id (NOT client_id —
+    // these products carry a null client_id, so a client_id filter would find none).
+    // Two indexes: normalised product name + bag size (primary, title-based), and SKU
+    // family + bag size (secondary, only usable when the Shopify line carries a SKU).
     const { data: acctProducts, error: prodErr } = await admin
       .from('products')
-      .select('id, sku, bag_size_g')
+      .select('id, sku, product_name, bag_size_g')
       .eq('account_id', source.linked_account_id);
     if (prodErr) throw new Error(`product lookup failed: ${prodErr.message}`);
+    const byNameGrams = new Map<string, string[]>();
     const byFamilyGrams = new Map<string, string[]>();
     for (const p of acctProducts ?? []) {
+      if (p.bag_size_g == null) continue;
+      const n = normProductName(p.product_name);
+      if (n) {
+        const key = `${n}|${p.bag_size_g}`;
+        const arr = byNameGrams.get(key) ?? [];
+        arr.push(p.id);
+        byNameGrams.set(key, arr);
+      }
       const fam = skuFamily(p.sku);
-      if (!fam || p.bag_size_g == null) continue;
-      const key = `${fam}|${p.bag_size_g}`;
-      const arr = byFamilyGrams.get(key) ?? [];
-      arr.push(p.id);
-      byFamilyGrams.set(key, arr);
+      if (fam) {
+        const key = `${fam}|${p.bag_size_g}`;
+        const arr = byFamilyGrams.get(key) ?? [];
+        arr.push(p.id);
+        byFamilyGrams.set(key, arr);
+      }
     }
 
     type LineFate =
-      | { kind: 'product'; productId: string }
+      | { kind: 'product'; productId: string; derived: boolean }
       | { kind: 'skip' }
-      | { kind: 'quarantine' };
+      | { kind: 'quarantine'; reason: string };
 
     const classify = (li: ShopifyLineItem): LineFate => {
       // Overrides win, keyed on the variant id.
       if (li.variantId) {
         if (doNotProduce.has(li.variantId)) return { kind: 'skip' };
         const mapped = byVariant.get(li.variantId);
-        if (mapped) return { kind: 'product', productId: mapped };
+        if (mapped) return { kind: 'product', productId: mapped, derived: false };
       }
-      // Derive by bag size + SKU family (unique match only).
+      // Derive by bag size + product family.
       const grams = parseGrams(li.variantTitle);
-      const fam = skuFamily(li.sku);
-      if (grams != null && fam) {
-        const ids = byFamilyGrams.get(`${fam}|${grams}`);
-        if (ids && ids.length === 1) return { kind: 'product', productId: ids[0] };
+      if (grams == null) return { kind: 'quarantine', reason: 'no_bag_size' };
+
+      // Primary: normalised Shopify title vs normalised JIM product_name.
+      const nkey = normProductName(li.title);
+      if (nkey) {
+        const ids = byNameGrams.get(`${nkey}|${grams}`);
+        if (ids && ids.length === 1) return { kind: 'product', productId: ids[0], derived: true };
+        if (ids && ids.length > 1) return { kind: 'quarantine', reason: 'ambiguous_name' };
       }
-      return { kind: 'quarantine' };
+      // Secondary: SKU family, only if the Shopify line actually carries a SKU.
+      const fam = skuFamily(li.sku);
+      if (fam) {
+        const ids = byFamilyGrams.get(`${fam}|${grams}`);
+        if (ids && ids.length === 1) return { kind: 'product', productId: ids[0], derived: true };
+      }
+      return { kind: 'quarantine', reason: nkey ? 'no_name_match' : 'no_name' };
     };
 
     // Partition every producible line: resolved → bundle aggregate; unresolved →
     // quarantine; do-not-produce → dropped. An order is "included" once any of its
     // lines resolves; its quarantined lines then reference the shared bundle order.
+    // Derived (non-override) matches also queue a variant mapping so the variant
+    // resolves instantly on the next pull.
     const bundleLines = new Map<string, { productId: string; grind: string | null; qty: number }>();
     const includedOrders: ShopifyOrder[] = [];
     const orderHasResolved = new Map<string, boolean>();
     const quarantineByOrder = new Map<string, ShopifyLineItem[]>();
+    const derivedMappings: Record<string, unknown>[] = [];
+    const derivedSeen = new Set<string>();
+    const derivationFailures: Record<string, unknown>[] = [];
+    let derivedCount = 0;
 
     for (const o of newOrders) {
       let resolvedAny = false;
@@ -388,6 +432,23 @@ async function pullSource(
         if (fate.kind === 'skip') continue;
         if (fate.kind === 'product') {
           resolvedAny = true;
+          if (fate.derived) {
+            derivedCount++;
+            // Queue a variant mapping (once per variant) for instant future resolves.
+            if (li.variantId && li.productId && !derivedSeen.has(li.variantId)) {
+              derivedSeen.add(li.variantId);
+              derivedMappings.push({
+                source_id: source.id,
+                shopify_product_id: li.productId,
+                shopify_variant_id: li.variantId,
+                jim_product_id: fate.productId,
+                shopify_product_title: li.title,
+                shopify_sku: li.sku,
+                mapped_at: new Date().toISOString(),
+                notes: 'auto-derived by title + bag size',
+              });
+            }
+          }
           const grind = parseGrind(li.variantTitle);
           const key = `${fate.productId}|${grind ?? ''}`;
           const entry = bundleLines.get(key) ?? { productId: fate.productId, grind, qty: 0 };
@@ -395,11 +456,34 @@ async function pullSource(
           bundleLines.set(key, entry);
         } else {
           qLines.push(li);
+          if (derivationFailures.length < 50) {
+            derivationFailures.push({
+              order: o.name,
+              title: li.title,
+              variant_title: li.variantTitle,
+              grams: parseGrams(li.variantTitle),
+              normalized: normProductName(li.title),
+              reason: fate.reason,
+            });
+          }
         }
       }
       orderHasResolved.set(o.id, resolvedAny);
       if (resolvedAny) includedOrders.push(o);
       if (qLines.length > 0) quarantineByOrder.set(o.id, qLines);
+    }
+
+    // Persist derived variant mappings (non-fatal: a mapping failure must not block
+    // the bundle or quarantine writes, and must be visible in details).
+    let mappingError: string | null = null;
+    if (derivedMappings.length > 0) {
+      const { error: mapInsErr } = await admin
+        .from('shopify_product_mappings')
+        .insert(derivedMappings);
+      if (mapInsErr) {
+        mappingError = mapInsErr.message;
+        console.error(`[${source.store_slug}] derived mapping insert failed: ${mappingError}`);
+      }
     }
 
     // Create the bundle order from all resolved lines (if any).
@@ -602,6 +686,10 @@ async function pullSource(
         quarantined_lines_attempted: linesAttempted,
         quarantined_lines_written: linesQuarantined,
         quarantine_error: quarantineError,
+        derived_matched: derivedCount,
+        derived_mappings_written: mappingError ? 0 : derivedMappings.length,
+        mapping_error: mappingError,
+        derivation_failures: derivationFailures,
       },
     );
   } catch (e) {
