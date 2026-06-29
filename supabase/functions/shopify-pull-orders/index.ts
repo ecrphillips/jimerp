@@ -7,14 +7,16 @@
 // Per active shopify_source:
 //  1. Fetch open, unfulfilled orders from the Shopify Admin GraphQL API.
 //  2. Skip orders already linked in shopify_bundle_source_orders (dedupe across runs).
-//  3. Map line items to internal products via shopify_product_mappings, falling back
-//     to SKU match, then to auto-matching by normalized product name + bag size parsed
-//     from the variant title. Auto-matches persist a mapping row and write the JIM SKU
-//     back onto the Shopify variant (requires write_products scope). Orders containing
-//     any unmapped item are quarantined (counted, retried next run once a mapping exists).
-//  4. Create ONE order (source_channel 'shopify_auto', status SUBMITTED) with line
-//     items aggregated by product, plus a primary shipment, and link each included
-//     Shopify order in shopify_bundle_source_orders.
+//  3. Resolve EACH line item to a JIM product:
+//       a. shopify_product_mappings override keyed on shopify_variant_id wins —
+//          jim_product_id maps it, do_not_produce silently drops it.
+//       b. otherwise derive: parse bag size (grams) from the variant title, parse
+//          the 5-letter SKU family from the line SKU, and match the one JIM product
+//          for this source's client with equal bag_size_g and the same family
+//          segment in its SKU. Origin segments (BLD/ETH/XXX) are ignored.
+//  4. LINE-LEVEL quarantine: lines that resolve flow into ONE bundle order (status
+//     SUBMITTED, aggregated by product + grind). Lines that don't resolve are parked
+//     in shopify_quarantined_lines — the rest of their order still bundles normally.
 //  5. Record the attempt in shopify_pull_log.
 
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -23,7 +25,7 @@ import { decryptSecret, looksEncrypted } from '../_shared/crypto.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '2.6-customer-in-notes';
+const FUNCTION_VERSION = '3.0-line-quarantine';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -177,11 +179,6 @@ async function fetchUnfulfilledOrders(
   return orders;
 }
 
-// "Am I Wrong" → "AMIWRONG" — tolerant of punctuation/case/spacing drift.
-function normalizeName(s: string): string {
-  return s.toUpperCase().replace(/[^A-Z0-9]/g, '');
-}
-
 // Parse grams from a variant title like "250 G / Whole Bean" or "1 KG / Cone Drip".
 function parseGrams(variantTitle: string | null): number | null {
   if (!variantTitle) return null;
@@ -193,6 +190,16 @@ function parseGrams(variantTitle: string | null): number | null {
   if (unit === 'KG') return Math.round(value * 1000);
   if (unit === 'LB') return Math.round(value * 454);
   return Math.round(value);
+}
+
+// The product-family portion of a SKU: the 5-letter middle segment (HEAVY, AMIWR,
+// PEOPL, RINGS …). JIM SKUs look like NSC-BLD-HEAVY-01000; the origin segment
+// (BLD/ETH/XXX, 3 letters) is inconsistent between Shopify and JIM, so it's ignored.
+function skuFamily(sku: string | null): string | null {
+  if (!sku) return null;
+  const segs = sku.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+  for (const s of segs) if (/^[A-Z]{5}$/.test(s)) return s;
+  return null;
 }
 
 // Map a Shopify grind option to the JIM grind_option enum.
@@ -207,55 +214,6 @@ function parseGrind(variantTitle: string | null): 'WHOLE_BEAN' | 'ESPRESSO' | 'F
   return null;
 }
 
-// Write JIM SKUs back onto Shopify variants so the variant carries the join key.
-// Best-effort: requires write_products scope; failures are reported, not fatal.
-async function pushSkusToShopify(
-  storeUrl: string,
-  accessToken: string,
-  updates: { shopifyProductId: string; shopifyVariantId: string; sku: string }[],
-): Promise<string | null> {
-  const endpoint = `https://${shopHost(storeUrl)}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
-
-  const byProduct = new Map<string, { id: string; inventoryItem: { sku: string } }[]>();
-  for (const u of updates) {
-    const list = byProduct.get(u.shopifyProductId) ?? [];
-    list.push({
-      id: `gid://shopify/ProductVariant/${u.shopifyVariantId}`,
-      inventoryItem: { sku: u.sku },
-    });
-    byProduct.set(u.shopifyProductId, list);
-  }
-
-  const errors: string[] = [];
-  for (const [productId, variants] of byProduct) {
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': accessToken,
-      },
-      body: JSON.stringify({
-        query: `
-          mutation SyncSkus($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-            productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-              userErrors { field message }
-            }
-          }`,
-        variables: { productId: `gid://shopify/Product/${productId}`, variants },
-      }),
-    });
-    if (!res.ok) {
-      errors.push(`product ${productId}: HTTP ${res.status}`);
-      continue;
-    }
-    const payload = await res.json();
-    const userErrors = payload.data?.productVariantsBulkUpdate?.userErrors ?? [];
-    if (payload.errors?.length) errors.push(`product ${productId}: ${JSON.stringify(payload.errors).slice(0, 200)}`);
-    if (userErrors.length) errors.push(`product ${productId}: ${JSON.stringify(userErrors).slice(0, 200)}`);
-  }
-  return errors.length > 0 ? errors.join('; ') : null;
-}
-
 interface PullResult {
   source_id: string;
   store_slug: string;
@@ -263,6 +221,7 @@ interface PullResult {
   orders_retrieved: number;
   orders_included: number;
   orders_quarantined: number;
+  lines_quarantined?: number;
   order_id?: string;
   order_number?: string;
   error?: string;
@@ -291,7 +250,7 @@ async function pullSource(
     orders_quarantined: 0,
   };
 
-  // Pull-log row first so the created order can reference it.
+  // Pull-log row first so the created order and quarantine rows can reference it.
   const { data: logRow, error: logErr } = await admin
     .from('shopify_pull_log')
     .insert({
@@ -341,253 +300,268 @@ async function pullSource(
       return await finalize({ orders_retrieved: shopifyOrders.length });
     }
 
-    // Mapping table: variant-level beats product-level. do_not_produce variants
-    // are intentionally excluded from JIM orders (not quarantined).
+    // Variant-keyed overrides: jim_product_id maps a line; do_not_produce drops it.
+    // Product-level (variant-null) and SKU matching are intentionally NOT used —
+    // derivation handles those deterministically.
     const { data: mappings, error: mapErr } = await admin
       .from('shopify_product_mappings')
-      .select('shopify_product_id, shopify_variant_id, jim_product_id, do_not_produce')
+      .select('shopify_variant_id, jim_product_id, do_not_produce')
       .eq('source_id', source.id);
     if (mapErr) throw new Error(`mapping lookup failed: ${mapErr.message}`);
     const byVariant = new Map<string, string>();
-    const byProduct = new Map<string, string>();
     const doNotProduce = new Set<string>();
     for (const m of mappings ?? []) {
-      if (m.do_not_produce && m.shopify_variant_id) {
+      if (!m.shopify_variant_id) continue;
+      if (m.do_not_produce) {
         doNotProduce.add(m.shopify_variant_id);
         continue;
       }
-      if (!m.jim_product_id) continue;
-      if (m.shopify_variant_id) byVariant.set(m.shopify_variant_id, m.jim_product_id);
-      else byProduct.set(m.shopify_product_id, m.jim_product_id);
+      if (m.jim_product_id) byVariant.set(m.shopify_variant_id, m.jim_product_id);
     }
 
-    // Account products: used for SKU fallback and name+size auto-matching.
+    // Account products, indexed by (SKU family | bag size) for derivation.
     const { data: acctProducts, error: prodErr } = await admin
       .from('products')
-      .select('id, sku, product_name, bag_size_g')
+      .select('id, sku, bag_size_g')
       .eq('account_id', source.linked_account_id);
     if (prodErr) throw new Error(`product lookup failed: ${prodErr.message}`);
-    const bySku = new Map<string, string>();
+    const byFamilyGrams = new Map<string, string[]>();
     for (const p of acctProducts ?? []) {
-      if (p.sku) bySku.set(p.sku.trim().toUpperCase(), p.id);
+      const fam = skuFamily(p.sku);
+      if (!fam || p.bag_size_g == null) continue;
+      const key = `${fam}|${p.bag_size_g}`;
+      const arr = byFamilyGrams.get(key) ?? [];
+      arr.push(p.id);
+      byFamilyGrams.set(key, arr);
     }
 
-    const resolve = (li: ShopifyLineItem): string | null =>
-      (li.variantId && byVariant.get(li.variantId)) ||
-      (li.productId && byProduct.get(li.productId)) ||
-      (li.sku && bySku.get(li.sku.trim().toUpperCase())) ||
-      null;
+    type LineFate =
+      | { kind: 'product'; productId: string }
+      | { kind: 'skip' }
+      | { kind: 'quarantine' };
 
-    // Auto-map unresolved variants by normalized product name + bag size, so new
-    // Shopify products never need manual transposition. A unique match persists a
-    // mapping row and queues the JIM SKU for write-back to the Shopify variant.
-    const newMappings: {
-      source_id: string;
-      shopify_product_id: string;
-      shopify_variant_id: string;
-      jim_product_id: string;
-      mapped_at: string;
-      notes: string;
-      shopify_product_title: string;
-      shopify_sku: string | null;
-    }[] = [];
-    const skuPushes: { shopifyProductId: string; shopifyVariantId: string; sku: string }[] = [];
-    const attempted = new Set<string>();
+    const classify = (li: ShopifyLineItem): LineFate => {
+      // Overrides win, keyed on the variant id.
+      if (li.variantId) {
+        if (doNotProduce.has(li.variantId)) return { kind: 'skip' };
+        const mapped = byVariant.get(li.variantId);
+        if (mapped) return { kind: 'product', productId: mapped };
+      }
+      // Derive by bag size + SKU family (unique match only).
+      const grams = parseGrams(li.variantTitle);
+      const fam = skuFamily(li.sku);
+      if (grams != null && fam) {
+        const ids = byFamilyGrams.get(`${fam}|${grams}`);
+        if (ids && ids.length === 1) return { kind: 'product', productId: ids[0] };
+      }
+      return { kind: 'quarantine' };
+    };
+
+    // Partition every producible line: resolved → bundle aggregate; unresolved →
+    // quarantine; do-not-produce → dropped. An order is "included" once any of its
+    // lines resolves; its quarantined lines then reference the shared bundle order.
+    const bundleLines = new Map<string, { productId: string; grind: string | null; qty: number }>();
+    const includedOrders: ShopifyOrder[] = [];
+    const orderHasResolved = new Map<string, boolean>();
+    const quarantineByOrder = new Map<string, ShopifyLineItem[]>();
+
     for (const o of newOrders) {
+      let resolvedAny = false;
+      const qLines: ShopifyLineItem[] = [];
       for (const li of o.lineItems) {
-        if (li.unfulfilledQuantity <= 0 || resolve(li)) continue;
-        if (!li.variantId || !li.productId || attempted.has(li.variantId)) continue;
-        if (doNotProduce.has(li.variantId)) continue;
-        attempted.add(li.variantId);
-        const wantName = normalizeName(li.title);
-        const wantGrams = parseGrams(li.variantTitle);
-        if (!wantName || wantGrams == null) continue;
-        const candidates = (acctProducts ?? []).filter(
-          (p) => normalizeName(p.product_name ?? '') === wantName && p.bag_size_g === wantGrams,
-        );
-        if (candidates.length !== 1) continue;
-        const match = candidates[0];
-        byVariant.set(li.variantId, match.id);
-        newMappings.push({
+        if (li.unfulfilledQuantity <= 0) continue;
+        const fate = classify(li);
+        if (fate.kind === 'skip') continue;
+        if (fate.kind === 'product') {
+          resolvedAny = true;
+          const grind = parseGrind(li.variantTitle);
+          const key = `${fate.productId}|${grind ?? ''}`;
+          const entry = bundleLines.get(key) ?? { productId: fate.productId, grind, qty: 0 };
+          entry.qty += li.unfulfilledQuantity;
+          bundleLines.set(key, entry);
+        } else {
+          qLines.push(li);
+        }
+      }
+      orderHasResolved.set(o.id, resolvedAny);
+      if (resolvedAny) includedOrders.push(o);
+      if (qLines.length > 0) quarantineByOrder.set(o.id, qLines);
+    }
+
+    // Create the bundle order from all resolved lines (if any).
+    let bundleOrderId: string | null = null;
+    let bundleOrderNumber: string | undefined;
+    if (bundleLines.size > 0) {
+      const productIds = [...new Set([...bundleLines.values()].map((e) => e.productId))];
+      const { data: prices, error: priceErr } = await admin
+        .from('price_list')
+        .select('product_id, unit_price, effective_date')
+        .in('product_id', productIds)
+        .lte('effective_date', new Date().toISOString().slice(0, 10))
+        .order('effective_date', { ascending: false });
+      if (priceErr) throw new Error(`price lookup failed: ${priceErr.message}`);
+      const priceByProduct = new Map<string, number>();
+      for (const p of prices ?? []) {
+        if (!priceByProduct.has(p.product_id)) priceByProduct.set(p.product_id, Number(p.unit_price));
+      }
+
+      const summarizeItems = (o: ShopifyOrder): string =>
+        o.lineItems
+          .filter((li) => (li.unfulfilledQuantity ?? li.quantity) > 0)
+          .map((li) => {
+            const qty = li.unfulfilledQuantity ?? li.quantity;
+            const label = [li.title, li.variantTitle].filter(Boolean).join(' / ');
+            return `${qty}× ${label}`;
+          })
+          .join(', ');
+      const orderLines = includedOrders
+        .map((o) => {
+          const who = o.customerName ? ` - ${o.customerName}` : '';
+          const items = summarizeItems(o);
+          return `${o.name}${who}${items ? `: ${items}` : ''}`;
+        })
+        .join('\n');
+      const quarantinedLineCount = [...quarantineByOrder.values()].reduce((n, l) => n + l.length, 0);
+      const notes =
+        `Shopify daily pull (${source.store_name})\n${includedOrders.length} unfulfilled order(s)\n${orderLines}` +
+        (quarantinedLineCount > 0
+          ? `\n\n${quarantinedLineCount} line(s) quarantined (unmatched variant) — resolve in the Shopify quarantine screen.`
+          : '');
+
+      const { data: order, error: orderErr } = await admin
+        .from('orders')
+        .insert({
+          order_number: '',
+          account_id: source.linked_account_id,
+          status: 'SUBMITTED',
+          delivery_method: 'PICKUP',
+          source_channel: 'shopify_auto',
+          shopify_source_id: source.id,
+          shopify_pull_log_id: pullLogId,
+          client_notes: notes.slice(0, 2000),
+          created_by_admin: true,
+        })
+        .select('id, order_number')
+        .single();
+      if (orderErr || !order) throw new Error(`order insert failed: ${orderErr?.message}`);
+      bundleOrderId = order.id;
+      bundleOrderNumber = order.order_number;
+
+      const { data: shipment, error: shipErr } = await admin
+        .from('order_shipments')
+        .insert({ order_id: order.id, shipment_number: 1, delivery_method: 'PICKUP' })
+        .select('id')
+        .single();
+      if (shipErr) throw new Error(`shipment insert failed: ${shipErr.message}`);
+
+      const lineItems = [...bundleLines.values()].map((entry) => ({
+        order_id: order.id,
+        product_id: entry.productId,
+        quantity_units: entry.qty,
+        unit_price_locked: priceByProduct.get(entry.productId) ?? 0,
+        grind: entry.grind,
+        shipment_id: shipment?.id ?? null,
+      }));
+      const { error: liErr } = await admin.from('order_line_items').insert(lineItems);
+      if (liErr) throw new Error(`line item insert failed: ${liErr.message}`);
+
+      const { error: bundleErr } = await admin.from('shopify_bundle_source_orders').insert(
+        includedOrders.map((o) => ({
           source_id: source.id,
-          shopify_product_id: li.productId,
-          shopify_variant_id: li.variantId,
-          jim_product_id: match.id,
-          mapped_at: new Date().toISOString(),
-          notes: 'auto-mapped by product name + bag size',
-          shopify_product_title: li.title,
-          shopify_sku: li.sku,
-        });
-        if (match.sku) {
-          skuPushes.push({
-            shopifyProductId: li.productId,
-            shopifyVariantId: li.variantId,
-            sku: match.sku,
+          shopify_order_id: o.id,
+          shopify_order_number: o.name,
+          shopify_created_at: o.createdAt,
+          customer_name: o.customerName,
+          bundle_order_id: order.id,
+          pull_log_id: pullLogId,
+          line_items: o.lineItems
+            .filter((li) => li.unfulfilledQuantity > 0)
+            .map((li) => ({
+              sku: li.sku,
+              title: li.title,
+              variant_title: li.variantTitle,
+              quantity: li.unfulfilledQuantity,
+              shopify_product_id: li.productId,
+              shopify_variant_id: li.variantId,
+            })),
+        })),
+      );
+      if (bundleErr) throw new Error(`bundle link insert failed: ${bundleErr.message}`);
+    }
+
+    // Insert quarantine rows for unresolved lines, skipping any already-open row for
+    // the same (order, variant). bundle_order_id is the shared bundle iff this order
+    // contributed resolved lines, else null.
+    let linesQuarantined = 0;
+    if (quarantineByOrder.size > 0) {
+      const orderIds = [...quarantineByOrder.keys()];
+      const { data: openRows, error: openErr } = await admin
+        .from('shopify_quarantined_lines')
+        .select('shopify_order_id, shopify_variant_id')
+        .eq('source_id', source.id)
+        .eq('status', 'open')
+        .in('shopify_order_id', orderIds);
+      if (openErr) throw new Error(`quarantine lookup failed: ${openErr.message}`);
+      const openKey = new Set(
+        (openRows ?? []).map((r) => `${r.shopify_order_id}|${r.shopify_variant_id ?? ''}`),
+      );
+
+      const qRows: Record<string, unknown>[] = [];
+      for (const o of newOrders) {
+        const lines = quarantineByOrder.get(o.id);
+        if (!lines) continue;
+        const bId = orderHasResolved.get(o.id) ? bundleOrderId : null;
+        for (const li of lines) {
+          const key = `${o.id}|${li.variantId ?? ''}`;
+          if (openKey.has(key)) continue;
+          openKey.add(key);
+          qRows.push({
+            source_id: source.id,
+            pull_log_id: pullLogId,
+            bundle_order_id: bId,
+            shopify_order_id: o.id,
+            shopify_order_number: o.name,
+            customer_name: o.customerName,
+            shopify_product_id: li.productId,
+            shopify_variant_id: li.variantId,
+            shopify_product_title: li.title,
+            shopify_variant_title: li.variantTitle,
+            shopify_sku: li.sku,
+            quantity: li.unfulfilledQuantity,
+            reason: 'no_match',
+            status: 'open',
           });
         }
       }
-    }
-
-    let skuPushError: string | null = null;
-    if (newMappings.length > 0) {
-      const { error: insErr } = await admin
-        .from('shopify_product_mappings')
-        .insert(newMappings);
-      if (insErr) throw new Error(`mapping insert failed: ${insErr.message}`);
-      if (skuPushes.length > 0) {
-        skuPushError = await pushSkusToShopify(source.store_url, accessToken, skuPushes);
+      if (qRows.length > 0) {
+        const { error: qErr } = await admin.from('shopify_quarantined_lines').insert(qRows);
+        if (qErr) throw new Error(`quarantine insert failed: ${qErr.message}`);
       }
+      linesQuarantined = qRows.length;
     }
 
-    // Partition orders: fully mappable vs quarantined.
-    const included: ShopifyOrder[] = [];
-    const quarantined: { order: ShopifyOrder; unmapped: string[] }[] = [];
-    const producible = (li: ShopifyLineItem) =>
-      li.unfulfilledQuantity > 0 && !(li.variantId && doNotProduce.has(li.variantId));
-    for (const o of newOrders) {
-      const items = o.lineItems.filter(producible);
-      const unmapped = items.filter((li) => !resolve(li)).map((li) => li.sku || li.title);
-      if (items.length === 0) continue; // nothing left to fulfill
-      if (unmapped.length > 0) quarantined.push({ order: o, unmapped });
-      else included.push(o);
-    }
+    // orders_quarantined = orders still carrying ≥1 open quarantined line this run.
+    const ordersQuarantined = quarantineByOrder.size;
 
-    if (included.length === 0) {
-      return await finalize({
+    return await finalize(
+      {
         orders_retrieved: shopifyOrders.length,
-        orders_quarantined: quarantined.length,
-        result: quarantined.length > 0 ? 'partial' : 'success',
-        error: quarantined.length > 0
-          ? `Quarantined ${quarantined.length} order(s) with unmapped items: ${quarantined.map((q) => `${q.order.name} [${q.unmapped.join(', ')}]`).join('; ').slice(0, 500)}`
-          : undefined,
-      });
-    }
-
-    // Aggregate quantities by internal product + grind across all included orders.
-    const qtyByLine = new Map<string, { productId: string; grind: string | null; qty: number }>();
-    for (const o of included) {
-      for (const li of o.lineItems) {
-        if (!producible(li)) continue;
-        const productId = resolve(li)!;
-        const grind = parseGrind(li.variantTitle);
-        const key = `${productId}|${grind ?? ''}`;
-        const entry = qtyByLine.get(key) ?? { productId, grind, qty: 0 };
-        entry.qty += li.unfulfilledQuantity;
-        qtyByLine.set(key, entry);
-      }
-    }
-
-    // Latest effective price per product; 0 if none.
-    const productIds = [...new Set([...qtyByLine.values()].map((e) => e.productId))];
-    const { data: prices, error: priceErr } = await admin
-      .from('price_list')
-      .select('product_id, unit_price, effective_date')
-      .in('product_id', productIds)
-      .lte('effective_date', new Date().toISOString().slice(0, 10))
-      .order('effective_date', { ascending: false });
-    if (priceErr) throw new Error(`price lookup failed: ${priceErr.message}`);
-    const priceByProduct = new Map<string, number>();
-    for (const p of prices ?? []) {
-      if (!priceByProduct.has(p.product_id)) priceByProduct.set(p.product_id, Number(p.unit_price));
-    }
-
-    // Create the batched order.
-    const summarizeItems = (o: ShopifyOrder): string => {
-      const parts = o.lineItems
-        .filter((li) => (li.unfulfilledQuantity ?? li.quantity) > 0)
-        .map((li) => {
-          const qty = li.unfulfilledQuantity ?? li.quantity;
-          const label = [li.title, li.variantTitle].filter(Boolean).join(' / ');
-          return `${qty}× ${label}`;
-        });
-      return parts.join(', ');
-    };
-    const orderLines = included
-      .map((o) => {
-        const who = o.customerName ? ` - ${o.customerName}` : '';
-        const items = summarizeItems(o);
-        return `${o.name}${who}${items ? `: ${items}` : ''}`;
-      })
-      .join('\n');
-    const notes =
-      `Shopify daily pull (${source.store_name})\n${included.length} unfulfilled order(s)\n${orderLines}` +
-      (newMappings.length > 0
-        ? `\n\nAuto-mapped ${newMappings.length} new Shopify variant(s) by name + size`
-        : '') +
-      (skuPushError
-        ? `\n\nSKU write-back to Shopify failed (check write_products scope): ${skuPushError}`
-        : '') +
-      (quarantined.length > 0
-        ? `\n\nQuarantined (unmapped items, will retry next pull):\n${quarantined.map((q) => `${q.order.name} [${q.unmapped.join(', ')}]`).join('\n')}`
-        : '');
-
-    const { data: order, error: orderErr } = await admin
-      .from('orders')
-      .insert({
-        order_number: '',
-        account_id: source.linked_account_id,
-        status: 'SUBMITTED',
-        delivery_method: 'PICKUP',
-        source_channel: 'shopify_auto',
-        shopify_source_id: source.id,
-        shopify_pull_log_id: pullLogId,
-        client_notes: notes.slice(0, 2000),
-        created_by_admin: true,
-      })
-      .select('id, order_number')
-      .single();
-    if (orderErr || !order) throw new Error(`order insert failed: ${orderErr?.message}`);
-
-    const { data: shipment, error: shipErr } = await admin
-      .from('order_shipments')
-      .insert({ order_id: order.id, shipment_number: 1, delivery_method: 'PICKUP' })
-      .select('id')
-      .single();
-    if (shipErr) throw new Error(`shipment insert failed: ${shipErr.message}`);
-
-    const lineItems = [...qtyByLine.values()].map((entry) => ({
-      order_id: order.id,
-      product_id: entry.productId,
-      quantity_units: entry.qty,
-      unit_price_locked: priceByProduct.get(entry.productId) ?? 0,
-      grind: entry.grind,
-      shipment_id: shipment?.id ?? null,
-    }));
-    const { error: liErr } = await admin.from('order_line_items').insert(lineItems);
-    if (liErr) throw new Error(`line item insert failed: ${liErr.message}`);
-
-    const { error: bundleErr } = await admin.from('shopify_bundle_source_orders').insert(
-      included.map((o) => ({
-        source_id: source.id,
-        shopify_order_id: o.id,
-        shopify_order_number: o.name,
-        shopify_created_at: o.createdAt,
-        customer_name: o.customerName,
-        bundle_order_id: order.id,
-        pull_log_id: pullLogId,
-        line_items: o.lineItems.filter(producible).map((li) => ({
-          sku: li.sku,
-          title: li.title,
-          variant_title: li.variantTitle,
-          quantity: li.unfulfilledQuantity,
-          shopify_product_id: li.productId,
-          shopify_variant_id: li.variantId,
-        })),
-      })),
+        orders_included: includedOrders.length,
+        orders_quarantined: ordersQuarantined,
+        lines_quarantined: linesQuarantined,
+        result: ordersQuarantined > 0 ? 'partial' : 'success',
+        order_id: bundleOrderId ?? undefined,
+        order_number: bundleOrderNumber,
+        error:
+          ordersQuarantined > 0
+            ? `${linesQuarantined} new quarantined line(s) across ${ordersQuarantined} order(s)`
+            : undefined,
+      },
+      {
+        quarantined_lines: linesQuarantined,
+        quarantined_orders: ordersQuarantined,
+      },
     );
-    if (bundleErr) throw new Error(`bundle link insert failed: ${bundleErr.message}`);
-
-    return await finalize({
-      orders_retrieved: shopifyOrders.length,
-      orders_included: included.length,
-      orders_quarantined: quarantined.length,
-      result: quarantined.length > 0 ? 'partial' : 'success',
-      order_id: order.id,
-      order_number: order.order_number,
-      error: quarantined.length > 0
-        ? `Quarantined ${quarantined.length} order(s) with unmapped items`
-        : undefined,
-    });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return await finalize({ result: 'error', error: message.slice(0, 1000) });
