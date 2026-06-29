@@ -25,7 +25,7 @@ import { decryptSecret, looksEncrypted } from '../_shared/crypto.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '3.1-quarantine-logging';
+const FUNCTION_VERSION = '3.2-quarantine-logging-datewindow';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -101,19 +101,31 @@ function legacyId(gid: string | null | undefined): string | null {
   return m ? m[1] : String(gid);
 }
 
+// Build the Shopify order search string. The base filter is always open +
+// unfulfilled; a manual run may narrow it to a created-at window so old orders
+// (e.g. early-June) are guaranteed to fall inside the 1000-order page cap.
+function buildOrderSearch(opts?: { createdAtMin?: string; createdAtMax?: string }): string {
+  const parts = ['status:open', 'fulfillment_status:unfulfilled'];
+  if (opts?.createdAtMin) parts.push(`created_at:>=${opts.createdAtMin}`);
+  if (opts?.createdAtMax) parts.push(`created_at:<=${opts.createdAtMax}`);
+  return parts.join(' AND ');
+}
+
 async function fetchUnfulfilledOrders(
   storeUrl: string,
   accessToken: string,
+  opts?: { createdAtMin?: string; createdAtMax?: string },
 ): Promise<ShopifyOrder[]> {
   const endpoint = `https://${shopHost(storeUrl)}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const search = buildOrderSearch(opts);
 
   const orders: ShopifyOrder[] = [];
   let cursor: string | null = null;
 
   for (let page = 0; page < 10; page++) {
     const query = `
-      query PullUnfulfilled($cursor: String) {
-        orders(first: 100, after: $cursor, query: "status:open AND fulfillment_status:unfulfilled") {
+      query PullUnfulfilled($cursor: String, $search: String!) {
+        orders(first: 100, after: $cursor, query: $search) {
           pageInfo { hasNextPage endCursor }
           nodes {
             id
@@ -140,7 +152,7 @@ async function fetchUnfulfilledOrders(
         'Content-Type': 'application/json',
         'X-Shopify-Access-Token': accessToken,
       },
-      body: JSON.stringify({ query, variables: { cursor } }),
+      body: JSON.stringify({ query, variables: { cursor, search } }),
     });
 
     if (!res.ok) {
@@ -240,6 +252,7 @@ async function pullSource(
     oauth_client_secret: string | null;
   },
   triggerType: 'manual' | 'scheduled',
+  opts?: { createdAtMin?: string; createdAtMax?: string },
 ): Promise<PullResult> {
   const base: PullResult = {
     source_id: source.id,
@@ -286,7 +299,7 @@ async function pullSource(
 
   try {
     const accessToken = await resolveAccessToken(source);
-    const shopifyOrders = await fetchUnfulfilledOrders(source.store_url, accessToken);
+    const shopifyOrders = await fetchUnfulfilledOrders(source.store_url, accessToken, opts);
 
     // Dedupe against orders already bundled in prior runs.
     const { data: existing, error: existErr } = await admin
@@ -630,13 +643,25 @@ Deno.serve(async (req) => {
     }
   }
 
-  let body: { source_id?: string; trigger?: string } = {};
+  let body: {
+    source_id?: string;
+    trigger?: string;
+    created_at_min?: string;
+    created_at_max?: string;
+  } = {};
   try {
     body = await req.json();
   } catch {
     // empty body is fine
   }
   if (body.trigger === 'scheduled' && token === serviceRoleKey) triggerType = 'scheduled';
+
+  // Created-at window is a MANUAL-only override (for one-off back-fill / testing).
+  // The scheduled cron always runs the unbounded open+unfulfilled query.
+  const pullOpts =
+    triggerType === 'manual' && (body.created_at_min || body.created_at_max)
+      ? { createdAtMin: body.created_at_min, createdAtMax: body.created_at_max }
+      : undefined;
 
   let query = admin
     .from('shopify_sources')
@@ -670,7 +695,9 @@ Deno.serve(async (req) => {
       });
       continue;
     }
-    results.push(await pullSource(admin, source as Parameters<typeof pullSource>[1], triggerType));
+    results.push(
+      await pullSource(admin, source as Parameters<typeof pullSource>[1], triggerType, pullOpts),
+    );
   }
 
   const anyError = results.some((r) => r.result === 'error');
