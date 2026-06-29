@@ -123,13 +123,15 @@ export default function ShopifyDebug() {
     queryClient.invalidateQueries({ queryKey: ['shopify-debug', key] });
 
   const [pulling, setPulling] = React.useState(false);
+  const [createdAtMin, setCreatedAtMin] = React.useState('');
+  const [createdAtMax, setCreatedAtMax] = React.useState('');
 
-  const handleRunPullNow = async () => {
+  const handleRunPullNow = async (body: Record<string, unknown> = {}) => {
     setPulling(true);
     try {
       const { data, error } = await supabase.functions.invoke(
         'shopify-pull-orders',
-        { body: {} },
+        { body },
       );
       if (error) throw error;
       const results = (data?.results ?? []) as Array<{
@@ -247,7 +249,7 @@ export default function ShopifyDebug() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex gap-2">
-            <Button onClick={handleRunPullNow} disabled={pulling}>
+            <Button onClick={() => handleRunPullNow()} disabled={pulling}>
               {pulling ? 'Pulling…' : 'Run pull now'}
             </Button>
             <Button onClick={handleInsertTestSource}>Insert test source</Button>
@@ -289,6 +291,52 @@ export default function ShopifyDebug() {
               ))}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+
+      {/* 1b. Targeted manual pull (created-at window) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Targeted manual pull</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            One-off pull that narrows the Shopify search to a created-at window, so older
+            open/unfulfilled orders are guaranteed to fall inside the 1000-order page cap.
+            Leave dates blank for the normal unbounded pull. Manual runs only — the daily
+            cron is unaffected.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="text-sm">
+              <span className="block text-xs text-muted-foreground">created_at min</span>
+              <input
+                type="date"
+                value={createdAtMin}
+                onChange={(e) => setCreatedAtMin(e.target.value)}
+                className="mt-1 rounded-md border border-input bg-background px-2 py-1 text-sm"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="block text-xs text-muted-foreground">created_at max</span>
+              <input
+                type="date"
+                value={createdAtMax}
+                onChange={(e) => setCreatedAtMax(e.target.value)}
+                className="mt-1 rounded-md border border-input bg-background px-2 py-1 text-sm"
+              />
+            </label>
+            <Button
+              disabled={pulling || (!createdAtMin && !createdAtMax)}
+              onClick={() =>
+                handleRunPullNow({
+                  ...(createdAtMin ? { created_at_min: createdAtMin } : {}),
+                  ...(createdAtMax ? { created_at_max: createdAtMax } : {}),
+                })
+              }
+            >
+              {pulling ? 'Pulling…' : 'Run targeted pull'}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
