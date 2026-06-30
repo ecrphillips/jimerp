@@ -53,13 +53,19 @@ interface NewSingleOriginProductModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialLifecycle?: LifecycleType | null;
+  /**
+   * 'single' (default) → single-origin product, requires an origin.
+   * 'generic' → heuristic placeholder product: no origin, never a blend, "GEN" in the SKU.
+   */
+  category?: 'single' | 'generic';
 }
 
 type RoastGroupMode = 'existing' | 'new';
 type LifecycleType = 'perennial' | 'seasonal';
 
-export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecycle }: NewSingleOriginProductModalProps) {
+export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecycle, category = 'single' }: NewSingleOriginProductModalProps) {
   const queryClient = useQueryClient();
+  const isGeneric = category === 'generic';
   
   // Step 1: Client
   const [clientId, setClientId] = useState('');
@@ -99,6 +105,13 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
       setLifecycleOverridden(false);
     }
   }, [open, initialLifecycle]);
+
+  // Generic products always create a fresh (origin-less, non-blend) roast group.
+  useEffect(() => {
+    if (open && isGeneric) {
+      setRoastGroupMode('new');
+    }
+  }, [open, isGeneric]);
 
   // Queries
   const { data: clients } = useQuery({
@@ -173,10 +186,11 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
   
   // Get the origin prefix for new roast group mode
   const originPrefix = useMemo(() => {
+    if (isGeneric) return '';
     if (roastGroupMode !== 'new') return '';
     if (!origin) return '';
     return origin === '__custom__' ? customOrigin.trim() : origin;
-  }, [roastGroupMode, origin, customOrigin]);
+  }, [isGeneric, roastGroupMode, origin, customOrigin]);
   
   // Full finished good display name (combines origin prefix + user input)
   const fullFinishedGoodName = useMemo(() => {
@@ -248,7 +262,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
     if (!selectedClient?.account_code) return false;
     if (roastGroupMode === 'existing' && !selectedRoastGroup) return false;
     if (selectedRgMissingOrigin) return false;
-    if (roastGroupMode === 'new') {
+    if (roastGroupMode === 'new' && !isGeneric) {
       if (!origin) return false;
       if (origin === '__custom__' && !customOrigin.trim()) return false;
     }
@@ -256,7 +270,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
     if (validVariants.length === 0) return false;
     if (!lifecycle) return false;
     return true;
-  }, [clientId, selectedClient, roastGroupMode, selectedRoastGroup, selectedRgMissingOrigin, origin, customOrigin, finishedGoodName, validVariants, lifecycle]);
+  }, [clientId, selectedClient, roastGroupMode, selectedRoastGroup, selectedRgMissingOrigin, origin, customOrigin, finishedGoodName, validVariants, lifecycle, isGeneric]);
   
   // Reset form
   const resetForm = () => {
@@ -286,11 +300,14 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
       
       // Create or reuse roast group if needed
       if (roastGroupMode === 'new') {
-        const originValue = origin === '__custom__' ? customOrigin.trim() : origin;
-        
+        const originValue = isGeneric
+          ? null
+          : (origin === '__custom__' ? customOrigin.trim() : origin);
+
         const result = await createOrReuseRoastGroup({
           displayName,
           isBlend: false,
+          isGeneric,
           origin: originValue,
           cropsterProfileRef: cropsterProfileRef.trim() || null,
         });
@@ -312,7 +329,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
       let skuOrigin: string;
       let skuIsBlend = false;
       if (roastGroupMode === 'new') {
-        skuOrigin = origin === '__custom__' ? customOrigin.trim() : origin;
+        skuOrigin = isGeneric ? '' : (origin === '__custom__' ? customOrigin.trim() : origin);
       } else {
         const selectedRg = singleOriginRoastGroups.find(g => g.roast_group === selectedRoastGroup);
         skuOrigin = selectedRg?.origin ?? '';
@@ -334,7 +351,8 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
           finishedGoodName.trim(),
           validVariants,
           existingSkus ?? new Set(),
-          lifecycle === 'perennial'
+          lifecycle === 'perennial',
+          isGeneric
         );
 
       } catch (err: any) {
@@ -476,7 +494,9 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
       <DialogContent className={wizardStep === 2 ? 'max-w-6xl max-h-[90vh] overflow-y-auto' : 'max-w-2xl max-h-[90vh] overflow-y-auto'}>
         <DialogHeader>
           <DialogTitle>
-            {wizardStep === 1 ? 'New Product — Details' : 'New Product — Pricing'}
+            {isGeneric
+              ? (wizardStep === 1 ? 'New Generic Product — Details' : 'New Generic Product — Pricing')
+              : (wizardStep === 1 ? 'New Product — Details' : 'New Product — Pricing')}
           </DialogTitle>
         </DialogHeader>
 
@@ -505,20 +525,24 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
           {/* Step 2: Roast Group */}
           <div className="space-y-3">
             <Label>2. Roast Group</Label>
-            <RadioGroup
-              value={roastGroupMode}
-              onValueChange={(v) => setRoastGroupMode(v as RoastGroupMode)}
-              className="flex gap-4"
-            >
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="existing" id="rg-existing" />
-                <Label htmlFor="rg-existing" className="font-normal cursor-pointer">Select existing</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="new" id="rg-new" />
-                <Label htmlFor="rg-new" className="font-normal cursor-pointer">Create new roast group</Label>
-              </div>
-            </RadioGroup>
+            {isGeneric ? (
+              <p className="text-xs text-muted-foreground">Generic products create their own placeholder roast group — no origin, not a blend. SKUs use "GEN".</p>
+            ) : (
+              <RadioGroup
+                value={roastGroupMode}
+                onValueChange={(v) => setRoastGroupMode(v as RoastGroupMode)}
+                className="flex gap-4"
+              >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="existing" id="rg-existing" />
+                  <Label htmlFor="rg-existing" className="font-normal cursor-pointer">Select existing</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="new" id="rg-new" />
+                  <Label htmlFor="rg-new" className="font-normal cursor-pointer">Create new roast group</Label>
+                </div>
+              </RadioGroup>
+            )}
 
             {roastGroupMode === 'existing' && (
               <>
@@ -554,6 +578,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
 
             {roastGroupMode === 'new' && (
               <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
+                {!isGeneric && (
                 <div>
                   <Label htmlFor="origin" className="text-xs text-muted-foreground">Origin</Label>
                   <Select value={origin || 'NONE'} onValueChange={(v) => setOrigin(v === 'NONE' ? '' : v)}>
@@ -568,6 +593,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
                     <Input className="mt-2" placeholder="Enter origin name" value={customOrigin} onChange={(e) => setCustomOrigin(e.target.value)} />
                   )}
                 </div>
+                )}
                 <div>
                   <Label htmlFor="cropsterRef" className="text-xs text-muted-foreground">Cropster Profile Ref (optional)</Label>
                   <Input id="cropsterRef" placeholder="e.g. R-1234 or profile name" value={cropsterProfileRef} onChange={(e) => setCropsterProfileRef(e.target.value)} />
@@ -588,7 +614,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
                 <Input id="fgName" className="rounded-l-none" placeholder="e.g. Hermanos, Santa Rosa, Yirgacheffe Natural" value={finishedGoodName} onChange={(e) => setFinishedGoodName(e.target.value)} />
               </div>
             ) : (
-              <Input id="fgName" placeholder={roastGroupMode === 'existing' ? "e.g. Guatemala Huehuetenango, Ethiopia Yirgacheffe Natural" : "Select an origin above first"} value={finishedGoodName} onChange={(e) => setFinishedGoodName(e.target.value)} disabled={roastGroupMode === 'new' && !originPrefix} />
+              <Input id="fgName" placeholder={isGeneric ? "e.g. FUNK Subscription, Mystery Roast" : (roastGroupMode === 'existing' ? "e.g. Guatemala Huehuetenango, Ethiopia Yirgacheffe Natural" : "Select an origin above first")} value={finishedGoodName} onChange={(e) => setFinishedGoodName(e.target.value)} disabled={!isGeneric && roastGroupMode === 'new' && !originPrefix} />
             )}
             <p className="text-xs text-muted-foreground mt-1">
               {fullFinishedGoodName ? <>Full name: <span className="font-medium">{fullFinishedGoodName}</span></> : 'This name appears on orders, pack lists, and shipping.'}
@@ -602,6 +628,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
             clientCode={selectedClient?.account_code ?? ''}
             origin={originForSku}
             isBlend={isBlendSelected}
+            isGeneric={isGeneric}
             isPerennial={lifecycle === 'perennial'}
             fgNameSuffix={finishedGoodName.trim()}
             variants={validVariants}

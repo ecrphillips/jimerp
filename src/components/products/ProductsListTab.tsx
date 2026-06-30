@@ -150,6 +150,7 @@ export function ProductsListTab() {
   // Product type choice + separate modals
   const [typeChoiceOpen, setTypeChoiceOpen] = useState(false);
   const [singleOriginModalOpen, setSingleOriginModalOpen] = useState(false);
+  const [singleOriginCategory, setSingleOriginCategory] = useState<'single' | 'generic'>('single');
   const [blendModalOpen, setBlendModalOpen] = useState(false);
   const [pendingLifecycle, setPendingLifecycle] = useState<'perennial' | 'seasonal' | null>(null);
 
@@ -686,8 +687,9 @@ export function ProductsListTab() {
   const openDeleteDialog = useCallback((p: Product) => { deletePreflightMutation.mutate(p.id); }, [deletePreflightMutation]);
 
   const openNew = () => { setTypeChoiceOpen(true); };
-  const handleChooseSingleOrigin = (lifecycle: 'perennial' | 'seasonal') => { setTypeChoiceOpen(false); setPendingLifecycle(lifecycle); setSingleOriginModalOpen(true); };
+  const handleChooseSingleOrigin = (lifecycle: 'perennial' | 'seasonal') => { setTypeChoiceOpen(false); setPendingLifecycle(lifecycle); setSingleOriginCategory('single'); setSingleOriginModalOpen(true); };
   const handleChooseBlend = (lifecycle: 'perennial' | 'seasonal') => { setTypeChoiceOpen(false); setPendingLifecycle(lifecycle); setBlendModalOpen(true); };
+  const handleChooseGeneric = (lifecycle: 'perennial' | 'seasonal') => { setTypeChoiceOpen(false); setPendingLifecycle(lifecycle); setSingleOriginCategory('generic'); setSingleOriginModalOpen(true); };
 
   const openEdit = async (p: Product) => {
     setEditingProduct(p); setProductName(p.product_name); setSku(p.sku ?? '');
@@ -1179,8 +1181,8 @@ export function ProductsListTab() {
         </DialogContent>
       </Dialog>
 
-      <ProductTypeChoiceModal open={typeChoiceOpen} onOpenChange={setTypeChoiceOpen} onChooseSingleOrigin={handleChooseSingleOrigin} onChooseBlend={handleChooseBlend} />
-      <NewSingleOriginProductModal open={singleOriginModalOpen} onOpenChange={setSingleOriginModalOpen} initialLifecycle={pendingLifecycle} />
+      <ProductTypeChoiceModal open={typeChoiceOpen} onOpenChange={setTypeChoiceOpen} onChooseSingleOrigin={handleChooseSingleOrigin} onChooseBlend={handleChooseBlend} onChooseGeneric={handleChooseGeneric} />
+      <NewSingleOriginProductModal open={singleOriginModalOpen} onOpenChange={setSingleOriginModalOpen} initialLifecycle={pendingLifecycle} category={singleOriginCategory} />
       <NewBlendProductModal open={blendModalOpen} onOpenChange={setBlendModalOpen} />
 
       <SafeDeleteModal

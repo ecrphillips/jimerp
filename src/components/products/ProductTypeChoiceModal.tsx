@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Leaf, Blend, RefreshCw, Snowflake, ArrowLeft, Check } from 'lucide-react';
+import { Leaf, Blend, Package, RefreshCw, Snowflake, ArrowLeft, Check } from 'lucide-react';
 
 type LifecycleChoice = 'perennial' | 'seasonal';
 
@@ -11,13 +11,15 @@ interface ProductTypeChoiceModalProps {
   onOpenChange: (open: boolean) => void;
   onChooseSingleOrigin: (lifecycle: LifecycleChoice) => void;
   onChooseBlend: (lifecycle: LifecycleChoice) => void;
+  onChooseGeneric: (lifecycle: LifecycleChoice) => void;
 }
 
-export function ProductTypeChoiceModal({ 
-  open, 
-  onOpenChange, 
-  onChooseSingleOrigin, 
-  onChooseBlend 
+export function ProductTypeChoiceModal({
+  open,
+  onOpenChange,
+  onChooseSingleOrigin,
+  onChooseBlend,
+  onChooseGeneric
 }: ProductTypeChoiceModalProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const [lifecycleChoice, setLifecycleChoice] = useState<LifecycleChoice | null>(null);
@@ -51,7 +53,7 @@ export function ProductTypeChoiceModal({
           )}
           {step === 2 && (
             <DialogDescription>
-              Is this a post-roast blend?
+              What kind of product is this?
             </DialogDescription>
           )}
         </DialogHeader>
@@ -127,9 +129,27 @@ export function ProductTypeChoiceModal({
                   <Blend className="h-5 w-5 text-accent-foreground" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-base">Yes — post-roast blend</h3>
+                  <h3 className="font-semibold text-base">Post-roast blend</h3>
                   <p className="text-sm text-muted-foreground mt-1">
                     This product combines multiple separately-roasted coffees.
+                  </p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  handleOpenChange(false);
+                  onChooseGeneric(lifecycleChoice);
+                }}
+                className="flex items-start gap-4 p-4 border rounded-lg text-left transition-colors hover:bg-accent/50 hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                <div className="flex-shrink-0 h-10 w-10 rounded-full bg-accent flex items-center justify-center">
+                  <Package className="h-5 w-5 text-accent-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-base">Generic / placeholder</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    A heuristic product with no fixed origin (e.g. a monthly subscription coffee). Not a single origin or blend.
                   </p>
                 </div>
               </button>

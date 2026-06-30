@@ -372,14 +372,16 @@ export default function RoastGroups() {
                 <p className="font-semibold text-sm">{displayName}</p>
 
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  <Badge variant="outline" className={cn(
-                    'text-[10px]',
-                    rg.is_blend
-                      ? 'border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300'
-                      : 'border-green-300 text-green-700 dark:border-green-700 dark:text-green-300'
-                  )}>
-                    {rg.is_blend ? 'Blend' : 'Single Origin'}
-                  </Badge>
+                  {!rg.is_generic && (
+                    <Badge variant="outline" className={cn(
+                      'text-[10px]',
+                      rg.is_blend
+                        ? 'border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300'
+                        : 'border-green-300 text-green-700 dark:border-green-700 dark:text-green-300'
+                    )}>
+                      {rg.is_blend ? 'Blend' : 'Single Origin'}
+                    </Badge>
+                  )}
                   <Badge variant="outline" className={cn(
                     'text-[10px]',
                     rg.is_seasonal
