@@ -22,9 +22,8 @@ import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
 import { SetDeadlineModal } from '@/components/orders/SetDeadlineModal';
 import { OrderProgressBar, DeadlineStatus } from '@/components/orders/OrderProgressBar';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
-import { NoSmokeShopifyPull } from '@/components/orders/NoSmokeShopifyPull';
+import { ShopifyFetchTile } from '@/components/orders/ShopifyFetchTile';
 import { ShopifyQuarantineTile } from '@/components/orders/ShopifyQuarantineResolver';
-import { FunkImportLink } from '@/components/orders/FunkImportLink';
 
 type SortDirection = 'asc' | 'desc';
 
@@ -280,9 +279,8 @@ export default function Orders() {
           Create Order
         </Button>
       </div>
-      <NoSmokeShopifyPull onPulled={() => refetch()} />
+      <ShopifyFetchTile onPulled={() => refetch()} />
       <ShopifyQuarantineTile />
-      <FunkImportLink />
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="flex items-center gap-3">
