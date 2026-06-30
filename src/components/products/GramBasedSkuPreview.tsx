@@ -20,6 +20,11 @@ interface GramBasedSkuPreviewProps {
    */
   isBlend?: boolean;
   /**
+   * Whether this is a generic placeholder product (neither single origin nor blend).
+   * If true, origin segment is forced to "GEN" (takes priority over blend/perennial).
+   */
+  isGeneric?: boolean;
+  /**
    * Whether this is a perennial product. If true, origin segment is forced to "BLD".
    */
   isPerennial?: boolean;
@@ -33,6 +38,7 @@ interface GramBasedSkuPreviewProps {
 
 /**
  * Resolve the origin segment for a SKU according to the canonical rule:
+ * - Generic → "GEN" always (highest priority)
  * - Perennial → "BLD" always
  * - Blend → "BLD"
  * - Single origin → ISO3 code; throws if not determinable
@@ -40,8 +46,10 @@ interface GramBasedSkuPreviewProps {
 export function resolveOriginSegment(
   isPerennial: boolean,
   isBlend: boolean,
-  origin: string | undefined | null
+  origin: string | undefined | null,
+  isGeneric: boolean = false
 ): string {
+  if (isGeneric) return 'GEN';
   if (isPerennial) return 'BLD';
   if (isBlend) return 'BLD';
   if (!origin || !origin.trim()) {
@@ -95,6 +103,7 @@ export function GramBasedSkuPreview({
   clientCode,
   origin,
   isBlend = false,
+  isGeneric = false,
   isPerennial = false,
   fgNameSuffix,
   variants,
@@ -107,7 +116,7 @@ export function GramBasedSkuPreview({
 
     let originCode: string;
     try {
-      originCode = resolveOriginSegment(isPerennial, isBlend, origin);
+      originCode = resolveOriginSegment(isPerennial, isBlend, origin, isGeneric);
     } catch (err: any) {
       return { resolvedSkus: [] as SkuPreviewItem[], originError: err?.message ?? 'Origin not determinable' };
     }
@@ -148,7 +157,7 @@ export function GramBasedSkuPreview({
     }
 
     return { resolvedSkus: results, originError: null as string | null };
-  }, [clientCode, origin, isBlend, isPerennial, fgNameSuffix, variants, existingSkus]);
+  }, [clientCode, origin, isBlend, isGeneric, isPerennial, fgNameSuffix, variants, existingSkus]);
 
   const hasAdjustments = resolvedSkus.some((s) => s.wasAdjusted);
 
@@ -225,7 +234,9 @@ export function GramBasedSkuPreview({
       <p className="text-xs text-muted-foreground pt-2 border-t">
         SKU format: <code className="bg-muted px-1 rounded">{'{CLIENT}'}-{'{ORIGIN/BLD}'}-{'{NAME}'}-{'{GRAMS}'}</code>
         <br />
-        {isBlend ? (
+        {isGeneric ? (
+          <span>GEN = Generic • Name = first 5 letters • Grams zero-padded to 5 digits</span>
+        ) : isBlend ? (
           <span>BLD = Blend • Name = first 5 letters • Grams zero-padded to 5 digits</span>
         ) : (
           <span>Origin = ISO 3166-1 alpha-3 • Name = first 5 letters • Grams zero-padded to 5 digits</span>
@@ -248,7 +259,8 @@ export function getResolvedSkus(
   fgNameSuffix: string,
   variants: PackagingVariantEntry[],
   existingSkus: Set<string>,
-  isPerennial: boolean = false
+  isPerennial: boolean = false,
+  isGeneric: boolean = false
 ): Array<{
   packagingTypeId: string;
   packagingTypeName: string;
@@ -259,7 +271,7 @@ export function getResolvedSkus(
   if (!clientCode || !fgNameSuffix || variants.length === 0) return [];
 
   // Determine origin code (throws if non-perennial single-origin can't resolve)
-  const originCode = resolveOriginSegment(isPerennial, isBlend, origin);
+  const originCode = resolveOriginSegment(isPerennial, isBlend, origin, isGeneric);
   
   // Generate 5-char FG name code
   const { code: fgNameCode } = generateFgNameCode(fgNameSuffix);

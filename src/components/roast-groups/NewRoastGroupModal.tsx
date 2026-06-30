@@ -26,8 +26,10 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
   const queryClient = useQueryClient();
 
   const [displayName, setDisplayName] = useState('');
-  const [isBlend, setIsBlend] = useState(false);
+  const [groupType, setGroupType] = useState<'single' | 'blend' | 'generic'>('single');
   const [blendType, setBlendType] = useState<string | null>(null);
+  const isBlend = groupType === 'blend';
+  const isGeneric = groupType === 'generic';
   const [origin, setOrigin] = useState('');
   const [originCustom, setOriginCustom] = useState('');
   const [isSeasonal, setIsSeasonal] = useState(false);
@@ -58,7 +60,7 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
 
   const reset = () => {
     setDisplayName('');
-    setIsBlend(false);
+    setGroupType('single');
     setBlendType(null);
     setOrigin('');
     setOriginCustom('');
@@ -75,7 +77,7 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
   const handleSave = async () => {
     const trimmed = displayName.trim();
     if (!trimmed) { toast.error('Display name is required'); return; }
-    if (!isBlend && !effectiveOrigin) {
+    if (groupType === 'single' && !effectiveOrigin) {
       toast.error('Origin is required for single-origin roast groups');
       return;
     }
@@ -85,7 +87,8 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
       const result = await createOrReuseRoastGroup({
         displayName: trimmed,
         isBlend,
-        origin: isBlend ? null : effectiveOrigin || null,
+        isGeneric,
+        origin: groupType === 'single' ? effectiveOrigin || null : null,
         cropsterProfileRef: cropsterRef || null,
         notes: notes || null,
       });
@@ -141,8 +144,8 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
           <div>
             <Label>Type</Label>
             <RadioGroup
-              value={isBlend ? 'blend' : 'single'}
-              onValueChange={v => { setIsBlend(v === 'blend'); if (v !== 'blend') setBlendType(null); }}
+              value={groupType}
+              onValueChange={v => { setGroupType(v as 'single' | 'blend' | 'generic'); if (v !== 'blend') setBlendType(null); }}
               className="flex gap-4 mt-1"
             >
               <div className="flex items-center gap-2">
@@ -153,7 +156,14 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
                 <RadioGroupItem value="blend" id="rg-blend" />
                 <Label htmlFor="rg-blend" className="font-normal cursor-pointer">Blend</Label>
               </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="generic" id="rg-generic" />
+                <Label htmlFor="rg-generic" className="font-normal cursor-pointer">Generic</Label>
+              </div>
             </RadioGroup>
+            {isGeneric && (
+              <p className="text-xs text-muted-foreground mt-1">Placeholder product with no fixed origin (e.g. monthly subscription coffees). Not a blend; uses "GEN" in the SKU.</p>
+            )}
           </div>
 
           {/* Blend Type (blends only) */}
@@ -184,7 +194,7 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
           )}
 
           {/* Origin (single origin only) */}
-          {!isBlend && (
+          {groupType === 'single' && (
             <div>
               <Label>Origin Country *</Label>
               <OriginSelect
@@ -256,7 +266,7 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving || !displayName.trim() || (!isBlend && !effectiveOrigin)}>
+            <Button onClick={handleSave} disabled={saving || !displayName.trim() || (groupType === 'single' && !effectiveOrigin)}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Create
             </Button>

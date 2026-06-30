@@ -4817,6 +4817,7 @@ export type Database = {
           expected_yield_loss_pct: number
           is_active: boolean
           is_blend: boolean
+          is_generic: boolean
           is_seasonal: boolean
           notes: string | null
           origin: string | null
@@ -4836,6 +4837,7 @@ export type Database = {
           expected_yield_loss_pct?: number
           is_active?: boolean
           is_blend?: boolean
+          is_generic?: boolean
           is_seasonal?: boolean
           notes?: string | null
           origin?: string | null
@@ -4855,6 +4857,7 @@ export type Database = {
           expected_yield_loss_pct?: number
           is_active?: boolean
           is_blend?: boolean
+          is_generic?: boolean
           is_seasonal?: boolean
           notes?: string | null
           origin?: string | null

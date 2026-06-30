@@ -11,6 +11,8 @@ import { generateShortCode } from './skuUtils';
 export interface RoastGroupCreateParams {
   displayName: string;
   isBlend: boolean;
+  /** Marks the roast group as a heuristic placeholder (Generic category). */
+  isGeneric?: boolean;
   origin?: string | null;
   blendName?: string | null;
   cropsterProfileRef?: string | null;
@@ -121,6 +123,7 @@ export async function createOrReuseRoastGroup(
       roast_group_code: baseCode,
       display_name: displayName,
       is_blend: params.isBlend,
+      is_generic: params.isGeneric ?? false,
       origin: params.origin ?? null,
       blend_name: params.blendName ?? null,
       standard_batch_kg: 20,
@@ -165,6 +168,7 @@ export async function createOrReuseRoastGroup(
         roast_group_code: code,
         display_name: displayName,
         is_blend: params.isBlend,
+        is_generic: params.isGeneric ?? false,
         origin: params.origin ?? null,
         blend_name: params.blendName ?? null,
         standard_batch_kg: 20,
