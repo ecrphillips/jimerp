@@ -5082,6 +5082,7 @@ export type Database = {
           shopify_sku: string | null
           shopify_variant_id: string | null
           source_id: string
+          units_per_shopify_unit: number
           updated_at: string
         }
         Insert: {
@@ -5099,6 +5100,7 @@ export type Database = {
           shopify_sku?: string | null
           shopify_variant_id?: string | null
           source_id: string
+          units_per_shopify_unit?: number
           updated_at?: string
         }
         Update: {
@@ -5116,6 +5118,7 @@ export type Database = {
           shopify_sku?: string | null
           shopify_variant_id?: string | null
           source_id?: string
+          units_per_shopify_unit?: number
           updated_at?: string
         }
         Relationships: [
@@ -5909,7 +5912,11 @@ export type Database = {
         }[]
       }
       resolve_shopify_quarantined_line: {
-        Args: { p_jim_product_id: string; p_line_id: string }
+        Args: {
+          p_jim_product_id: string
+          p_line_id: string
+          p_units_per_shopify_unit?: number
+        }
         Returns: undefined
       }
       reverse_quote_to_sent: { Args: { p_quote_id: string }; Returns: Json }

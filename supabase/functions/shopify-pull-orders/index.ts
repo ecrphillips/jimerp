@@ -9,7 +9,9 @@
 //  2. Skip orders already linked in shopify_bundle_source_orders (dedupe across runs).
 //  3. Resolve EACH line item to a JIM product:
 //       a. shopify_product_mappings override keyed on shopify_variant_id wins —
-//          jim_product_id maps it, do_not_produce silently drops it.
+//          jim_product_id maps it, do_not_produce silently drops it. The mapped
+//          quantity is shopify quantity × units_per_shopify_unit (a "4 x 250g"
+//          box variant mapped with multiplier 4 creates 4 units per box).
 //       b. otherwise derive: parse bag size (grams) from the variant title, parse
 //          the 5-letter SKU family from the line SKU, and match the one JIM product
 //          for this source's client with equal bag_size_g and the same family
@@ -36,7 +38,7 @@ import {
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '3.6-grind';
+const FUNCTION_VERSION = '3.7-units-multiplier';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -310,10 +312,12 @@ async function pullSource(
     // derivation handles those deterministically.
     const { data: mappings, error: mapErr } = await admin
       .from('shopify_product_mappings')
-      .select('shopify_variant_id, jim_product_id, do_not_produce')
+      .select('shopify_variant_id, jim_product_id, do_not_produce, units_per_shopify_unit')
       .eq('source_id', source.id);
     if (mapErr) throw new Error(`mapping lookup failed: ${mapErr.message}`);
-    const byVariant = new Map<string, string>();
+    // units_per_shopify_unit: one Shopify unit = N JIM units (e.g. a "4 x 250g"
+    // box variant mapped to a 250g product carries 4). Null/0/negative → 1.
+    const byVariant = new Map<string, { productId: string; unitsPerShopifyUnit: number }>();
     const doNotProduce = new Set<string>();
     for (const m of mappings ?? []) {
       if (!m.shopify_variant_id) continue;
@@ -321,7 +325,14 @@ async function pullSource(
         doNotProduce.add(m.shopify_variant_id);
         continue;
       }
-      if (m.jim_product_id) byVariant.set(m.shopify_variant_id, m.jim_product_id);
+      if (m.jim_product_id) {
+        const raw = Number(m.units_per_shopify_unit);
+        const unitsPerShopifyUnit = Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
+        byVariant.set(m.shopify_variant_id, {
+          productId: m.jim_product_id,
+          unitsPerShopifyUnit,
+        });
+      }
     }
 
     // Account products, indexed for derivation. Keyed on account_id (NOT client_id —
@@ -336,20 +347,30 @@ async function pullSource(
     const productIndex = buildProductIndex(acctProducts ?? []);
 
     type LineFate =
-      | { kind: 'product'; productId: string; derived: boolean }
+      | { kind: 'product'; productId: string; derived: boolean; unitsPerShopifyUnit: number }
       | { kind: 'skip' }
       | { kind: 'quarantine'; reason: string };
 
     const classify = (li: ShopifyLineItem): LineFate => {
-      // Overrides win, keyed on the variant id.
+      // Overrides win, keyed on the variant id; they carry the unit multiplier.
       if (li.variantId) {
         if (doNotProduce.has(li.variantId)) return { kind: 'skip' };
         const mapped = byVariant.get(li.variantId);
-        if (mapped) return { kind: 'product', productId: mapped, derived: false };
+        if (mapped) {
+          return {
+            kind: 'product',
+            productId: mapped.productId,
+            derived: false,
+            unitsPerShopifyUnit: mapped.unitsPerShopifyUnit,
+          };
+        }
       }
       // Derive via the shared matcher (title + bag size, SKU family secondary).
+      // Derived matches are always 1:1 — only explicit mappings can multiply.
       const dr = deriveProduct(li, productIndex);
-      if (dr.ok) return { kind: 'product', productId: dr.productId, derived: true };
+      if (dr.ok) {
+        return { kind: 'product', productId: dr.productId, derived: true, unitsPerShopifyUnit: 1 };
+      }
       return { kind: 'quarantine', reason: dr.reason };
     };
 
@@ -389,6 +410,8 @@ async function pullSource(
                 shopify_product_id: li.productId,
                 shopify_variant_id: li.variantId,
                 jim_product_id: fate.productId,
+                // Derivation is always 1:1; only a human can set a multiplier.
+                units_per_shopify_unit: 1,
                 shopify_product_title: li.title,
                 shopify_sku: li.sku,
                 mapped_at: new Date().toISOString(),
@@ -407,7 +430,8 @@ async function pullSource(
           const key = `${fate.productId}|${grindLabel ?? ''}`;
           const entry =
             bundleLines.get(key) ?? { productId: fate.productId, grind, needsGrind, grindLabel, qty: 0 };
-          entry.qty += li.unfulfilledQuantity;
+          // Mapping overrides can expand one Shopify unit into N JIM units.
+          entry.qty += li.unfulfilledQuantity * fate.unitsPerShopifyUnit;
           bundleLines.set(key, entry);
         } else {
           qLines.push(li);

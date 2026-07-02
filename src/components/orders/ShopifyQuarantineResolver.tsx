@@ -31,6 +31,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -225,8 +226,15 @@ function ResolverBody({ onCountChange }: { onCountChange?: (n: number) => void }
   });
 
   const [selected, setSelected] = React.useState<Record<string, string>>({});
+  // Units of the mapped JIM product inside ONE unit of the Shopify item (≥1).
+  const [unitsPer, setUnitsPer] = React.useState<Record<string, number>>({});
   const [busyId, setBusyId] = React.useState<string | null>(null);
   const [confirmLine, setConfirmLine] = React.useState<QuarantineLine | null>(null);
+
+  const unitsFor = (lineId: string): number => {
+    const n = Math.trunc(unitsPer[lineId] ?? 1);
+    return Number.isFinite(n) && n >= 1 ? n : 1;
+  };
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: QK });
@@ -247,12 +255,19 @@ function ResolverBody({ onCountChange }: { onCountChange?: (n: number) => void }
     }
     setBusyId(l.id);
     try {
+      const units = unitsFor(l.id);
       const { error } = await sb.rpc('resolve_shopify_quarantined_line', {
         p_line_id: l.id,
         p_jim_product_id: productId,
+        p_units_per_shopify_unit: units,
       });
       if (error) throw error;
-      toast.success(`Resolved ${l.shopify_order_number ?? 'line'} into its bundle`);
+      const qty = l.quantity ?? 0;
+      toast.success(
+        units > 1
+          ? `Resolved ${l.shopify_order_number ?? 'line'} — ${qty} × ${units} = ${qty * units} units into its bundle`
+          : `Resolved ${l.shopify_order_number ?? 'line'} into its bundle`,
+      );
       refresh();
     } catch (e) {
       toast.error(errMsg(e));
@@ -375,6 +390,28 @@ function ResolverBody({ onCountChange }: { onCountChange?: (n: number) => void }
                             }
                             disabled={busyId === l.id}
                           />
+                          <label
+                            htmlFor={`units-per-${l.id}`}
+                            className="text-xs text-muted-foreground"
+                          >
+                            Units per box
+                          </label>
+                          <Input
+                            id={`units-per-${l.id}`}
+                            type="number"
+                            min={1}
+                            step={1}
+                            className="h-9 w-20"
+                            value={unitsPer[l.id] ?? 1}
+                            disabled={busyId === l.id}
+                            onChange={(e) => {
+                              const n = Math.trunc(Number(e.target.value));
+                              setUnitsPer((s) => ({
+                                ...s,
+                                [l.id]: Number.isFinite(n) && n >= 1 ? n : 1,
+                              }));
+                            }}
+                          />
                           <Button
                             size="sm"
                             disabled={busyId === l.id || !selected[l.id]}
@@ -393,6 +430,16 @@ function ResolverBody({ onCountChange }: { onCountChange?: (n: number) => void }
                             Do not produce
                           </Button>
                         </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          How many units of the selected JIM product are inside ONE unit of this
+                          Shopify item. Leave at 1 for normal products.
+                          {unitsFor(l.id) > 1 && (
+                            <span className="ml-1 font-medium text-foreground">
+                              {l.quantity ?? 0} box{(l.quantity ?? 0) === 1 ? '' : 'es'} ×{' '}
+                              {unitsFor(l.id)} = {(l.quantity ?? 0) * unitsFor(l.id)} units
+                            </span>
+                          )}
+                        </p>
                       </div>
                     );
                   })}
@@ -410,7 +457,16 @@ function ResolverBody({ onCountChange }: { onCountChange?: (n: number) => void }
             <AlertDialogDescription>
               The bundle order for {confirmLine?.shopify_order_number ?? 'this line'} is past
               confirmation. Adding this line will change an order that may already be on the
-              production floor. Continue anyway?
+              production floor.
+              {confirmLine && unitsFor(confirmLine.id) > 1 && (
+                <>
+                  {' '}
+                  This adds {confirmLine.quantity ?? 0} box
+                  {(confirmLine.quantity ?? 0) === 1 ? '' : 'es'} × {unitsFor(confirmLine.id)} ={' '}
+                  {(confirmLine.quantity ?? 0) * unitsFor(confirmLine.id)} units.
+                </>
+              )}{' '}
+              Continue anyway?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
