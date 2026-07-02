@@ -50,6 +50,7 @@ interface ShippableShipment {
   roasted: boolean;
   packed: boolean;
   invoiced: boolean;
+  status: string;
   lineItems: LineItem[];
   allLineItemsPacked: boolean;
   orderAllPicked: boolean;
@@ -103,6 +104,12 @@ export function SortableShipCard({
     transform: CSS.Transform.toString(transform),
     transition,
   };
+
+  // Once an order is SHIPPED the goods are gone — the pick was the FG consumption
+  // and shipping doesn't re-consume. Freeze picks so an unpick can't write a
+  // compensating return that would re-add already-shipped stock. Defense-in-depth
+  // behind the list filter, in case a just-shipped order lingers mid-refetch.
+  const isShipped = order.status === 'SHIPPED';
 
   // Fetch ship picks for this order (shared across the order's shipments)
   const { data: shipPicks } = useQuery({
@@ -159,7 +166,7 @@ export function SortableShipCard({
       // Negative delta = return FG (positive units)
       // Bought-in items (requires_production = false) never touch the ledger:
       // there is no FG to consume — the pick record alone tracks the shelf pull.
-      if (delta !== 0 && requiresProduction) {
+      if (delta !== 0 && requiresProduction && !isShipped) {
         const { error: ledgerError } = await supabase
           .from('inventory_transactions')
           .insert({
@@ -185,6 +192,10 @@ export function SortableShipCard({
       queryClient.invalidateQueries({ queryKey: ['ship-picks-gating'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-ship-picks'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-ledger-fg'] });
+      // The Ship tab renders FG Avail from useAuthoritativeFg (['authoritative-fg-ledger']).
+      // Without this, a pick/unpick writes the SHIP_CONSUME_FG row to the DB but the
+      // on-screen FG count never refreshes — making an unpick look like it returned no stock.
+      queryClient.invalidateQueries({ queryKey: ['authoritative-fg-ledger'] });
     },
     onError: (err) => {
       console.error(err);
@@ -551,7 +562,7 @@ export function SortableShipCard({
                       maxValue={Math.max(available + picked, li.quantity_units)} // Can pick up to what's available + already picked
                       fillValue={li.quantity_units} // "Pick all" fills Required, not FG available
                       onCommit={(newValue) => handlePickChange(li, newValue, available + picked)}
-                      disabled={upsertPickMutation.isPending}
+                      disabled={upsertPickMutation.isPending || isShipped}
                     />
                   </div>
 

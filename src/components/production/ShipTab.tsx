@@ -83,6 +83,7 @@ interface ShippableShipment {
   roasted: boolean;
   packed: boolean;
   invoiced: boolean;
+  status: string;            // parent order status — used to freeze picks once SHIPPED
   lineItems: LineItem[];     // only lines where shipment_id === this.shipment_id
   allLineItemsPacked: boolean;
   orderAllPicked: boolean;   // populated after picks are loaded (in card)
@@ -458,6 +459,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           roasted: order.roasted,
           packed: order.packed,
           invoiced: order.invoiced,
+          status: order.status,
           lineItems,
           allLineItemsPacked,
           orderAllPicked: fullyPickedOrderIds.has(order.id),
@@ -584,7 +586,10 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     },
     onSuccess: (orderId) => {
       toast.success('Order marked as shipped');
-      queryClient.invalidateQueries({ queryKey: ['shippable-orders'] });
+      // Must match the actual list query key (['shippable-orders-all']). The old
+      // ['shippable-orders'] was a no-op, so a just-shipped order lingered on the
+      // Ship tab with live pick inputs — unpicking it would wrongly return shipped stock.
+      queryClient.invalidateQueries({ queryKey: ['shippable-orders-all'] });
       queryClient.invalidateQueries({ queryKey: ['shipped-awaiting-invoice'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       supabase.functions.invoke('notify-order-event', {
