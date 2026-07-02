@@ -89,7 +89,7 @@ export default function Orders() {
           created_at,
             client:clients(name),
             account:accounts(account_name),
-            order_line_items(id, product_id, quantity_units, product:products(bag_size_g))
+            order_line_items(id, product_id, quantity_units, product:products(bag_size_g, requires_production))
         `,
           { count: 'exact' }
         )
@@ -248,6 +248,8 @@ export default function Orders() {
     if (lineItems.length === 0) return false;
     
     return lineItems.every((li) => {
+      // Bought-in lines (requires_production = false) count as auto-packed.
+      if (li.product?.requires_production === false) return true;
       const packed = packingByProduct[li.product_id] ?? 0;
       return packed >= li.quantity_units;
     });
@@ -260,6 +262,8 @@ export default function Orders() {
   const getRoastedKg = (order: typeof visibleOrders[0]) => {
     const lineItems = order.order_line_items ?? [];
     const grams = lineItems.reduce((sum, li: any) => {
+      // Bought-in lines don't get roasted — keep them out of the roasted-kg total.
+      if (li.product?.requires_production === false) return sum;
       const bag = li.product?.bag_size_g ?? 0;
       return sum + (li.quantity_units ?? 0) * bag;
     }, 0);

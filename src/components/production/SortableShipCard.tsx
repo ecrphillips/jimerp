@@ -27,6 +27,9 @@ interface LineItem {
   product_id: string;
   roast_group: string | null;
   shipment_id: string | null;
+  // False for bought-in items: picking still records ship_picks (evidence the
+  // shelf item was pulled) but never writes to the inventory ledger.
+  requires_production: boolean;
 }
 
 interface ShippableShipment {
@@ -123,19 +126,21 @@ export function SortableShipCard({
 
   // Upsert ship pick mutation - now writes ledger transactions
   const upsertPickMutation = useMutation({
-    mutationFn: async ({ 
-      lineItemId, 
-      unitsPicked, 
-      previousPicked, 
-      productId 
-    }: { 
-      lineItemId: string; 
-      unitsPicked: number; 
+    mutationFn: async ({
+      lineItemId,
+      unitsPicked,
+      previousPicked,
+      productId,
+      requiresProduction,
+    }: {
+      lineItemId: string;
+      unitsPicked: number;
       previousPicked: number;
       productId: string;
+      requiresProduction: boolean;
     }) => {
       const delta = unitsPicked - previousPicked;
-      
+
       // Update ship_picks record
       const { error: pickError } = await supabase
         .from('ship_picks')
@@ -148,11 +153,13 @@ export function SortableShipCard({
           onConflict: 'order_line_item_id',
         });
       if (pickError) throw pickError;
-      
+
       // Write SHIP_CONSUME_FG transaction for the delta
       // Positive delta = consume FG (negative units)
       // Negative delta = return FG (positive units)
-      if (delta !== 0) {
+      // Bought-in items (requires_production = false) never touch the ledger:
+      // there is no FG to consume — the pick record alone tracks the shelf pull.
+      if (delta !== 0 && requiresProduction) {
         const { error: ledgerError } = await supabase
           .from('inventory_transactions')
           .insert({
@@ -185,11 +192,17 @@ export function SortableShipCard({
     },
   });
 
-  const handlePickChange = useCallback((lineItemId: string, newValue: number, available: number, productId: string) => {
-    const previousPicked = picksByLineItem[lineItemId] ?? 0;
+  const handlePickChange = useCallback((li: LineItem, newValue: number, available: number) => {
+    const previousPicked = picksByLineItem[li.id] ?? 0;
     // Clamp to 0-available
     const clamped = Math.max(0, Math.min(newValue, available));
-    upsertPickMutation.mutate({ lineItemId, unitsPicked: clamped, previousPicked, productId });
+    upsertPickMutation.mutate({
+      lineItemId: li.id,
+      unitsPicked: clamped,
+      previousPicked,
+      productId: li.product_id,
+      requiresProduction: li.requires_production !== false,
+    });
   }, [upsertPickMutation, picksByLineItem]);
 
   const [isPickingAll, setIsPickingAll] = useState(false);
@@ -198,8 +211,12 @@ export function SortableShipCard({
     setIsPickingAll(true);
     try {
       for (const li of order.lineItems) {
+        const requiresProduction = li.requires_production !== false;
         const previousPicked = picksByLineItem[li.id] ?? 0;
-        const available = fgInventory[li.product_id] ?? 0;
+        // Bought-in items aren't FG-gated: always pickable up to the required qty.
+        const available = requiresProduction
+          ? (fgInventory[li.product_id] ?? 0)
+          : li.quantity_units;
         const target = Math.min(li.quantity_units, available + previousPicked);
         if (target === previousPicked) continue;
         await upsertPickMutation.mutateAsync({
@@ -207,6 +224,7 @@ export function SortableShipCard({
           unitsPicked: target,
           previousPicked,
           productId: li.product_id,
+          requiresProduction,
         });
       }
       onMarkShipped(order);
@@ -397,6 +415,7 @@ export function SortableShipCard({
           </Button>
           {order.isFirstShipmentInOrder && !allItemsFullyPicked && (() => {
             const shortLines = order.lineItems.filter((li) => {
+              if (li.requires_production === false) return false; // shelf item, never FG-short
               const picked = picksByLineItem[li.id] ?? 0;
               const available = fgInventory[li.product_id] ?? 0;
               return (available + picked) < li.quantity_units;
@@ -484,47 +503,58 @@ export function SortableShipCard({
             </div>
             
             {order.lineItems.map((li) => {
-              // Use ledger-based FG inventory
-              const available = fgInventory[li.product_id] ?? 0;
+              const requiresProduction = li.requires_production !== false;
+              // Use ledger-based FG inventory. Bought-in items aren't FG-tracked:
+              // treat the full required qty as available so picking is never blocked.
+              const available = requiresProduction
+                ? (fgInventory[li.product_id] ?? 0)
+                : li.quantity_units;
               const picked = picksByLineItem[li.id] ?? 0;
               const remaining = Math.max(0, li.quantity_units - picked);
               const isComplete = picked >= li.quantity_units;
               const hasAvailable = available > 0;
-              
+
               return (
-                <div 
-                  key={li.id} 
+                <div
+                  key={li.id}
                   className={`flex items-center gap-2 text-sm p-2 rounded ${
-                    isComplete 
-                      ? 'bg-green-100 border border-green-300' 
-                      : hasAvailable 
-                        ? 'bg-green-50 border border-green-200' 
+                    isComplete
+                      ? 'bg-green-100 border border-green-300'
+                      : hasAvailable
+                        ? 'bg-green-50 border border-green-200'
                         : 'bg-muted/30 border border-muted'
                   }`}
                 >
                   <div className="flex-1 flex items-center gap-2">
                     <span className="font-medium">{li.product_name}</span>
                     <PackagingBadge variant={li.packaging_variant} />
-                    <span className="text-muted-foreground text-xs">{li.bag_size_g}g</span>
+                    {requiresProduction ? (
+                      <span className="text-muted-foreground text-xs">{li.bag_size_g}g</span>
+                    ) : (
+                      <Badge className="text-xs font-bold uppercase tracking-wide bg-amber-500 text-white border-amber-600 hover:bg-amber-500">
+                        <AlertTriangle className="h-3.5 w-3.5 mr-1" />
+                        No production — pull from stock
+                      </Badge>
+                    )}
                   </div>
-                  
+
                   <span className="w-16 text-center font-medium">{li.quantity_units}</span>
-                  
-                  <span className={`w-16 text-center ${available > 0 ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>
-                    {available}
+
+                  <span className={`w-16 text-center ${requiresProduction ? (available > 0 ? 'text-green-600 font-medium' : 'text-muted-foreground') : 'text-muted-foreground'}`}>
+                    {requiresProduction ? available : '—'}
                   </span>
-                  
+
                   {/* Picked input with local state - commits on blur/Enter */}
                   <div className="w-28">
                     <ShipPickInput
                       value={picked}
                       maxValue={Math.max(available + picked, li.quantity_units)} // Can pick up to what's available + already picked
                       fillValue={li.quantity_units} // "Pick all" fills Required, not FG available
-                      onCommit={(newValue) => handlePickChange(li.id, newValue, available + picked, li.product_id)}
+                      onCommit={(newValue) => handlePickChange(li, newValue, available + picked)}
                       disabled={upsertPickMutation.isPending}
                     />
                   </div>
-                  
+
                   <span className={`w-16 text-center ${remaining > 0 ? 'text-amber-600 font-medium' : 'text-green-600'}`}>
                     {remaining > 0 ? remaining : '✓'}
                   </span>

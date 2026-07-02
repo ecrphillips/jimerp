@@ -78,6 +78,8 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
   const [pNewVariant, setPNewVariant] = useState('');
   const [pNewPrice, setPNewPrice] = useState('');
   const [pRoastGroupMode, setPRoastGroupMode] = useState<'existing' | 'new' | 'skip'>('existing');
+  // "Produced in-house" — off for bought-in items (instant coffee, merch, gear).
+  const [pRequiresProduction, setPRequiresProduction] = useState(true);
   const [pExistingRG, setPExistingRG] = useState('');
   const [pNewRGName, setPNewRGName] = useState('');
   const [pNewRGBlend, setPNewRGBlend] = useState(false);
@@ -112,6 +114,7 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
     setPClientId(''); setPClientName(''); setPProductName('');
     setPVariants([]); setPNewVariant(''); setPNewPrice('');
     setPRoastGroupMode('existing'); setPExistingRG('');
+    setPRequiresProduction(true);
     setPNewRGName(''); setPNewRGBlend(false); setPNewRGOrigin('');
     setPLotId(''); setPSaving(false); setPResult(null); setPClientSearch('');
     setGContractId(''); setGContract(null); setGBags('');
@@ -182,7 +185,10 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
       let roastGroupKey: string | null = null;
       let rgCreated = false;
 
-      if (pRoastGroupMode === 'existing' && pExistingRG) {
+      if (!pRequiresProduction) {
+        // Bought-in item: no roast group, no production demand.
+        roastGroupKey = null;
+      } else if (pRoastGroupMode === 'existing' && pExistingRG) {
         roastGroupKey = pExistingRG;
       } else if (pRoastGroupMode === 'new' && pNewRGName.trim()) {
         const result = await createOrReuseRoastGroup({
@@ -247,6 +253,7 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
           grind_options: ['WHOLE_BEAN'] as any,
           is_active: true,
           is_perennial: true,
+          requires_production: pRequiresProduction,
           ...(sku ? { sku } : {}),
         } as any).select('id, product_name').single();
         if (error) throw error;
@@ -495,6 +502,21 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
             <DialogHeader><DialogTitle>New Product</DialogTitle></DialogHeader>
             <StepIndicator step={3} total={4} />
             <p className="text-sm text-muted-foreground mb-3">Assign a roast group</p>
+            <label className="flex items-center gap-2 mb-3 text-sm">
+              <input
+                type="checkbox"
+                checked={pRequiresProduction}
+                onChange={(e) => setPRequiresProduction(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <span className="font-medium">Produced in-house</span>
+            </label>
+            {!pRequiresProduction && (
+              <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">
+                Bought-in item. No roasting or packing required — appears on the pack list for attention only. No roast group needed.
+              </p>
+            )}
+            {pRequiresProduction && (
             <div className="space-y-3">
               <button
                 onClick={() => setPRoastGroupMode('existing')}
@@ -530,10 +552,13 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
                 </div>
               )}
             </div>
-            <button onClick={() => { setPRoastGroupMode('skip'); setStep(4); }} className="text-xs text-muted-foreground hover:text-foreground mt-3 underline">I'll do this later</button>
+            )}
+            {pRequiresProduction && (
+              <button onClick={() => { setPRoastGroupMode('skip'); setStep(4); }} className="text-xs text-muted-foreground hover:text-foreground mt-3 underline">I'll do this later</button>
+            )}
             <div className="flex justify-between mt-4">
               <Button variant="ghost" size="sm" onClick={() => setStep(2)}><ArrowLeft className="h-4 w-4 mr-1" /> Back</Button>
-              <Button size="sm" onClick={() => setStep(4)} disabled={pRoastGroupMode === 'existing' && !pExistingRG || pRoastGroupMode === 'new' && !pNewRGName.trim()}>Advance to Green Lot</Button>
+              <Button size="sm" onClick={() => setStep(4)} disabled={pRequiresProduction && (pRoastGroupMode === 'existing' && !pExistingRG || pRoastGroupMode === 'new' && !pNewRGName.trim())}>Advance to Green Lot</Button>
             </div>
           </>
         );

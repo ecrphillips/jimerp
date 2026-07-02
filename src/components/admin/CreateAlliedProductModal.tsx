@@ -102,9 +102,9 @@ export function CreateAlliedProductModal({ open, onOpenChange }: CreateAlliedPro
     if (!selectedSource || !alliedType || !name.trim()) return;
     setIsSaving(true);
     try {
-      // Allied products are non-produced: roast_group is intentionally omitted (NULL),
-      // which is what guarantees zero roast/production demand. No packaging variants and
-      // no price-list rows are created.
+      // Allied products are non-produced: roast_group is intentionally omitted (NULL)
+      // and requires_production is false, which guarantees zero roast/pack demand.
+      // No packaging variants and no price-list rows are created.
       const payload = {
         account_id: selectedSource.accountId,
         product_name: name.trim(),
@@ -112,6 +112,7 @@ export function CreateAlliedProductModal({ open, onOpenChange }: CreateAlliedPro
         format: 'OTHER' as const,
         bag_size_g: 0, // placeholder; allied items are not weighed coffee
         is_active: true,
+        requires_production: false,
       };
 
       const { error } = await supabase.from('products').insert(payload as never);

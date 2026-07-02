@@ -90,7 +90,7 @@ type OpenOrder = {
   workDeadlineRaw: string | null;    // raw ts for display/sort
   createdAt: string;
   kg: number;
-  lines: Array<{ product_id: string; quantity_units: number; bag_size_g: number; roast_group: string | null }>;
+  lines: Array<{ product_id: string; quantity_units: number; bag_size_g: number; roast_group: string | null; requires_production: boolean }>;
 };
 
 type AccountLocationRow = {
@@ -160,7 +160,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
              accounts!orders_account_id_fkey(account_name),
              account_locations!orders_account_location_id_fkey(location_name),
              clients(name),
-             order_line_items(product_id, quantity_units, products(bag_size_g, roast_group))`
+             order_line_items(product_id, quantity_units, products(bag_size_g, roast_group, requires_production))`
           )
           // Keep SHIPPED so today's already-finished priority orders still show as "covered".
           // Cancelled is dropped — they are not real demand.
@@ -188,10 +188,12 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
           quantity_units: li.quantity_units ?? 0,
           bag_size_g: li.products?.bag_size_g ?? 0,
           roast_group: li.products?.roast_group ?? null,
+          requires_production: li.products?.requires_production !== false,
         }));
+        // Roast weight excludes bought-in lines — they never hit the roaster.
         const kg = lines.reduce(
-          (s: number, li: { quantity_units: number; bag_size_g: number }) =>
-            s + (li.quantity_units * li.bag_size_g) / 1000,
+          (s: number, li: { quantity_units: number; bag_size_g: number; requires_production: boolean }) =>
+            li.requires_production ? s + (li.quantity_units * li.bag_size_g) / 1000 : s,
           0
         );
         const wd = o.work_deadline_at ?? o.work_deadline ?? null;
@@ -398,7 +400,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
     for (const o of todayOrders) {
       if (o.status === 'SHIPPED') continue; // shipped is fulfilled, no longer demand
       for (const li of o.lines) {
-        if (!li.roast_group) continue;
+        if (!li.roast_group || !li.requires_production) continue;
         const kg = (li.quantity_units * li.bag_size_g) / 1000;
         demandByGroup[li.roast_group] = (demandByGroup[li.roast_group] ?? 0) + kg;
       }

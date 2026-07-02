@@ -50,11 +50,12 @@ interface Product {
   account_id: string | null;
   packaging_variant: PackagingVariant | null;
   roast_group: string | null;
+  requires_production: boolean;
   packaging_material_override: number | null;
   packaging_labour_override: number | null;
   client: { name: string } | null;
   account: { account_name: string } | null;
-  
+
 }
 
 const FORMATS: ProductFormat[] = ['WHOLE_BEAN', 'ESPRESSO', 'FILTER', 'OTHER'];
@@ -203,6 +204,8 @@ export function ProductsListTab() {
   const [priceInput, setPriceInput] = useState<string>('');
   const [isPerennial, setIsPerennial] = useState(false);
   const [roastGroup, setRoastGroup] = useState<string>('');
+  // "Produced in-house" — off for bought-in items (instant coffee, merch, gear).
+  const [requiresProduction, setRequiresProduction] = useState(true);
   const [packagingMaterialOverride, setPackagingMaterialOverride] = useState<string>('');
   const [packagingLabourOverride, setPackagingLabourOverride] = useState<string>('');
 
@@ -224,7 +227,7 @@ export function ProductsListTab() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, is_placeholder, client_id, account_id, packaging_variant, roast_group, packaging_material_override, packaging_labour_override, client:clients(name), account:accounts(account_name)')
+        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, is_placeholder, client_id, account_id, packaging_variant, roast_group, requires_production, packaging_material_override, packaging_labour_override, client:clients(name), account:accounts(account_name)')
         .order('product_name');
 
       if (error) throw error;
@@ -483,6 +486,7 @@ export function ProductsListTab() {
       is_perennial: boolean;
       packaging_variant: PackagingVariant | null;
       roast_group: string | null;
+      requires_production: boolean;
     }) => {
       let productId: string;
       if (editingProduct) {
@@ -532,6 +536,7 @@ export function ProductsListTab() {
       grind_options: grindOptions, client_id: editingProduct?.client_id ?? null,
       account_id: clientId || null, is_active: isActive, is_perennial: isPerennial,
       packaging_variant: packagingVariant, roast_group: roastGroup || null,
+      requires_production: requiresProduction,
       packaging_material_override: matValue,
       packaging_labour_override: labValue,
     };
@@ -545,7 +550,7 @@ export function ProductsListTab() {
       }
     }
     executeSaveMutation.mutate(payload);
-  }, [editingProduct, productName, sku, formatState, bagSize, grindOptions, clientId, isActive, isPerennial, packagingVariant, roastGroup, packagingMaterialOverride, packagingLabourOverride, executeSaveMutation]);
+  }, [editingProduct, productName, sku, formatState, bagSize, grindOptions, clientId, isActive, isPerennial, packagingVariant, roastGroup, requiresProduction, packagingMaterialOverride, packagingLabourOverride, executeSaveMutation]);
 
   const handleConfirmReroute = useCallback(() => {
     if (pendingRerouteData) executeSaveMutation.mutate(pendingRerouteData.fullPayload);
@@ -665,6 +670,7 @@ export function ProductsListTab() {
         account_id: variantSource.account_id, product_name: variantNewName, roast_group: variantSource.roast_group,
         packaging_variant: variantPackaging, bag_size_g: bagSizeG, format: variantSource.format as any,
         grind_options: variantSource.grind_options as any, is_perennial: variantSource.is_perennial, is_active: true,
+        requires_production: variantSource.requires_production !== false,
         sku: derivedSku,
       }).select('id').single();
       if (error) throw error;
@@ -697,6 +703,7 @@ export function ProductsListTab() {
     setClientId(p.account_id ?? p.client_id ?? ''); setIsActive(p.is_active);
     setIsPerennial(p.is_perennial); setPackagingVariant(p.packaging_variant);
     setPriceInput(''); setRoastGroup(p.roast_group ?? '');
+    setRequiresProduction(p.requires_production !== false);
     setPackagingMaterialOverride(
       p.packaging_material_override === null || p.packaging_material_override === undefined
         ? ''
@@ -1045,8 +1052,23 @@ export function ProductsListTab() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="requiresProduction"
+                  checked={requiresProduction}
+                  onCheckedChange={(c) => setRequiresProduction(!!c)}
+                />
+                <Label htmlFor="requiresProduction">Produced in-house</Label>
+              </div>
+              {!requiresProduction && (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  Bought-in item. No roasting or packing required — appears on the pack list for attention only.
+                </p>
+              )}
+            </div>
             <div>
-              <Label htmlFor="roastGroup">Roast Group</Label>
+              <Label htmlFor="roastGroup">Roast Group{!requiresProduction && ' (optional)'}</Label>
               <Select value={roastGroup || 'NONE'} onValueChange={(v) => setRoastGroup(v === 'NONE' ? '' : v)}>
                 <SelectTrigger id="roastGroup"><SelectValue placeholder="Select roast group" /></SelectTrigger>
                 <SelectContent>
@@ -1054,7 +1076,11 @@ export function ProductsListTab() {
                   {roastGroups?.map((g) => (<SelectItem key={g.roast_group} value={g.roast_group}>{g.roast_group}</SelectItem>))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">Products sharing the same roast group are roasted together.</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {requiresProduction
+                  ? 'Products sharing the same roast group are roasted together.'
+                  : 'Not needed for bought-in items — leave as None.'}
+              </p>
             </div>
             <div>
               <Label>Grind Options</Label>

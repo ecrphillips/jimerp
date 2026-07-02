@@ -289,7 +289,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
           product_id,
           quantity_units,
           order:orders!inner(id, status, work_deadline_at, manually_deprioritized),
-          product:products(id, product_name, roast_group, bag_size_g)
+          product:products(id, product_name, roast_group, bag_size_g, requires_production)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
       
@@ -389,6 +389,9 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
 
     // 1. Build demand from order line items (unpicked only)
     for (const li of orderLineItems ?? []) {
+      // Bought-in products never generate roast work, even if a roast_group
+      // happens to be set on them.
+      if (li.product?.requires_production === false) continue;
       const roastGroup = li.product?.roast_group;
       if (!roastGroup) continue;
 

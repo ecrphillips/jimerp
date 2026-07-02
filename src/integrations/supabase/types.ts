@@ -4178,6 +4178,7 @@ export type Database = {
           pricing_overrides_updated_by: string | null
           process_per_kg_green_override: number | null
           product_name: string
+          requires_production: boolean
           roast_group: string | null
           sku: string | null
           updated_at: string
@@ -4213,6 +4214,7 @@ export type Database = {
           pricing_overrides_updated_by?: string | null
           process_per_kg_green_override?: number | null
           product_name: string
+          requires_production?: boolean
           roast_group?: string | null
           sku?: string | null
           updated_at?: string
@@ -4248,6 +4250,7 @@ export type Database = {
           pricing_overrides_updated_by?: string | null
           process_per_kg_green_override?: number | null
           product_name?: string
+          requires_production?: boolean
           roast_group?: string | null
           sku?: string | null
           updated_at?: string

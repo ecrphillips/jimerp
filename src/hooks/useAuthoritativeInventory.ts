@@ -149,7 +149,7 @@ function useProductsWithRoastGroup() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, bag_size_g, roast_group')
+        .select('id, product_name, sku, bag_size_g, roast_group, requires_production')
         .eq('is_active', true);
       if (error) throw error;
       return data ?? [];
@@ -610,10 +610,11 @@ export function useAuthoritativeRoastDemand() {
   const roastDemand = useMemo((): Record<string, RoastDemand> => {
     if (!demand || !products) return {};
     
-    // Map product_id to roast_group
+    // Map product_id to roast_group. Bought-in products (requires_production =
+    // false) never generate roast demand, even if a roast_group is somehow set.
     const productRoastGroup: Record<string, string> = {};
     for (const p of products) {
-      if (p.roast_group) {
+      if (p.roast_group && p.requires_production !== false) {
         productRoastGroup[p.id] = p.roast_group;
       }
     }
@@ -712,9 +713,16 @@ export function useAuthoritativeShortList() {
       shortage: number;
     }> = [];
     
+    // Bought-in products are never packed into FG, so they'd read as perpetually
+    // "short" — exclude them from the short list entirely.
+    const nonProducedIds = new Set(
+      products.filter((p) => p.requires_production === false).map((p) => p.id),
+    );
+
     for (const [pid, d] of Object.entries(demand)) {
+      if (nonProducedIds.has(pid)) continue;
       const fgCreated = fgCreatedByProduct[pid] ?? 0;
-      
+
       // Shortage = total demanded - total FG created (picks don't affect shortage)
       const shortage = d.demanded_units - fgCreated;
       

@@ -57,6 +57,9 @@ interface LineItem {
   product_id: string;
   roast_group: string | null;
   shipment_id: string | null;
+  // False for bought-in items: no FG gating, no ledger writes on pick —
+  // the shipper just pulls the item off the shelf.
+  requires_production: boolean;
 }
 
 // One card per shipment. `orderAllPicked` is true iff every line item across
@@ -136,7 +139,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           product_id,
           quantity_units,
           order:orders!inner(status, work_deadline_at, manually_deprioritized),
-          product:products(id, product_name, bag_size_g, packaging_variant)
+          product:products(id, product_name, bag_size_g, packaging_variant, requires_production)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
       
@@ -211,7 +214,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
             product_id,
             quantity_units,
             shipment_id,
-            product:products(product_name, bag_size_g, packaging_variant, roast_group)
+            product:products(product_name, bag_size_g, packaging_variant, roast_group, requires_production)
           )
         `)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY'])
@@ -324,6 +327,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         bag_size_g: number;
         packaging_variant: PackagingVariant | null;
         roast_group: string | null;
+        requires_production: boolean;
       } | null;
     };
     type RawShipment = {
@@ -380,8 +384,10 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         }
       }
 
-      // Order-level contention (any shared SKU short)
+      // Order-level contention (any shared SKU short). Bought-in items are never
+      // FG-tracked, so they can't be "short" — skip them.
       const hasContention = allLines.some((li) => {
+        if (li.product?.requires_production === false) return false;
         const totalDemanded = demandByProduct[li.product_id] ?? 0;
         const totalFg = fgInventoryMap[li.product_id] ?? 0;
         return totalFg < totalDemanded;
@@ -404,6 +410,7 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           product_id: li.product_id,
           roast_group: li.product?.roast_group ?? null,
           shipment_id: li.shipment_id,
+          requires_production: li.product?.requires_production !== false,
         }));
 
         const skuCount = lineItems.length;
@@ -412,6 +419,9 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
         let missingSkuCount = 0;
         let missingUnitsTotal = 0;
         for (const li of lineItems) {
+          // Bought-in items never get packed into FG — they count as
+          // automatically satisfied so they can't hold a shipment back.
+          if (!li.requires_production) continue;
           const fgAvailable = fgInventoryMap[li.product_id] ?? 0;
           if (fgAvailable < li.quantity_units) {
             missingSkuCount++;

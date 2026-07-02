@@ -194,7 +194,7 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
       // Products info
       const { data: products } = await supabase
         .from('products')
-        .select('id, bag_size_g, roast_group, grams_per_unit')
+        .select('id, bag_size_g, roast_group, grams_per_unit, requires_production')
         .eq('is_active', true);
 
       const productInfo = new Map(
@@ -202,6 +202,7 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
           bag_size_g: p.bag_size_g,
           roast_group: p.roast_group,
           grams_per_unit: p.grams_per_unit || p.bag_size_g,
+          requires_production: p.requires_production !== false,
         }])
       );
 
@@ -220,6 +221,11 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
         todayOrderIdSet.add(order.id);
 
         for (const item of order.order_line_items || []) {
+          // Bought-in items need no packing or roasting — keep them out of the
+          // FG/WIP pressure metrics.
+          const info = productInfo.get(item.product_id);
+          if (info && !info.requires_production) continue;
+
           const picked = picksByLineItem.get(item.id) || 0;
           const remaining = Math.max(0, item.quantity_units - picked);
 
@@ -227,7 +233,6 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
             orderHasRemaining = true;
             fgNeededTodayUnits += remaining;
 
-            const info = productInfo.get(item.product_id);
             if (info) {
               wipNeededTodayKg += (remaining * info.grams_per_unit) / 1000;
             }

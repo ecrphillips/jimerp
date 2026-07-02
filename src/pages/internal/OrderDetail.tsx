@@ -126,7 +126,7 @@ export default function OrderDetail() {
           unit_price_locked,
           line_notes,
           shipment_id,
-          product:products(id, product_name, roast_group, bag_size_g, grams_per_unit, packaging_variant, packaging_type:packaging_types(name))
+          product:products(id, product_name, roast_group, bag_size_g, grams_per_unit, packaging_variant, requires_production, packaging_type:packaging_types(name))
         `)
         .eq('order_id', id!)
         .order('created_at', { ascending: true });
@@ -177,11 +177,14 @@ export default function OrderDetail() {
     return map;
   }, [packingRuns]);
 
-  // Compute per-line item packed status
+  // Compute per-line item packed status. Bought-in lines (requires_production =
+  // false) are never packed — they count as automatically satisfied so they
+  // can't block order progress.
   const lineItemsWithPackedStatus = useMemo(() => {
     return (lineItems ?? []).map((li) => {
       const packedUnits = packingByProduct[li.product_id] ?? 0;
-      const isPackedComplete = packedUnits >= li.quantity_units;
+      const isPackedComplete =
+        li.product?.requires_production === false || packedUnits >= li.quantity_units;
       return {
         ...li,
         packedUnits,
@@ -229,7 +232,8 @@ export default function OrderDetail() {
   const orderRoastGroups = useMemo(() => {
     const groups = new Set<string>();
     for (const li of lineItems ?? []) {
-      if (li.product?.roast_group) {
+      // Bought-in lines never contribute roast groups to the order.
+      if (li.product?.roast_group && li.product?.requires_production !== false) {
         groups.add(li.product.roast_group);
       }
     }
@@ -1086,9 +1090,18 @@ export default function OrderDetail() {
                         </div>
                       </td>
                       <td className="py-2">{li.quantity_units}</td>
-                      <td className="py-2">{li.packedUnits}</td>
                       <td className="py-2">
-                        {li.isPackedComplete ? (
+                        {li.product?.requires_production === false ? '—' : li.packedUnits}
+                      </td>
+                      <td className="py-2">
+                        {li.product?.requires_production === false ? (
+                          <Badge
+                            variant="outline"
+                            className="text-xs bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800"
+                          >
+                            No production — pull from stock
+                          </Badge>
+                        ) : li.isPackedComplete ? (
                           <Badge className="bg-green-600 text-xs">
                             <Check className="h-3 w-3 mr-1" />
                             Ready

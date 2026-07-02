@@ -40,6 +40,9 @@ import {
 } from '@/lib/packGroupSort';
 
 const UNASSIGNED = '__unassigned__';
+// Bought-in products (requires_production = false) get their own section at the
+// bottom of the pack list: attention-only rows, no pack controls, no WIP math.
+const NO_PRODUCTION = '__no_production__';
 
 const SORT_OPTIONS: { value: PackSortMode; label: string }[] = [
   { value: 'wip', label: 'WIP priority' },
@@ -110,6 +113,9 @@ interface ProductDemand {
   wholeBeanUnits: number;
   grindUnits: number;
   grindByLabel: Record<string, number>;
+  // False for bought-in items (instant coffee, merch): shown for attention only,
+  // never packed, never touch WIP/FG ledgers.
+  requiresProduction: boolean;
 }
 
 export function PackTab({ dateFilterConfig, today }: PackTabProps) {
@@ -160,7 +166,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, bag_size_g, packaging_variant, roast_group, pack_display_order')
+        .select('id, product_name, sku, bag_size_g, packaging_variant, roast_group, pack_display_order, requires_production')
         .eq('is_active', true)
         .order('pack_display_order', { ascending: true, nullsFirst: false })
         .order('product_name', { ascending: true });
@@ -187,7 +193,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
           grind_label,
           order_id,
           order:orders!inner(id, status, work_deadline_at, manually_deprioritized),
-          product:products(id, product_name, sku, bag_size_g, packaging_variant, roast_group)
+          product:products(id, product_name, sku, bag_size_g, packaging_variant, roast_group, requires_production)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
       
@@ -325,6 +331,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
           wholeBeanUnits: 0,
           grindUnits: 0,
           grindByLabel: {},
+          requiresProduction: li.product.requires_production !== false,
         };
       }
       // Grind split: a line either needs grinding (count toward grind + its label)
@@ -363,6 +370,15 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     // packer hasn't clicked through yet. This prevents the Pack tab from
     // pressuring the user into over-packing a SKU the shipper has already grabbed.
     for (const product of Object.values(productMap)) {
+      // Bought-in items: attention-only. No shortage, no WIP math, no unblock
+      // pressure — they count as automatically satisfied for pack purposes.
+      if (!product.requiresProduction) {
+        if (product.shipDates.length > 0) {
+          product.earliestShipDate = product.shipDates.sort()[0];
+        }
+        continue;
+      }
+
       const packed = packingByProductUnits[product.product_id] ?? 0;
       const picked = pickedByProductUnits?.[product.product_id] ?? 0;
       const effectivePacked = Math.max(packed, picked);
@@ -485,8 +501,11 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
 
   // ===== Roast-group ordering (WIP-priority default, sort control, manual drag) =====
 
+  // Bought-in items group under their own NO_PRODUCTION section regardless of
+  // any roast_group value, so they never pollute a real group or Unassigned.
   const groupKeyOf = useCallback(
-    (rg: string | null) => rg ?? UNASSIGNED,
+    (p: Pick<ProductDemand, 'roast_group' | 'requiresProduction'>) =>
+      p.requiresProduction ? (p.roast_group ?? UNASSIGNED) : NO_PRODUCTION,
     [],
   );
 
@@ -498,7 +517,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     );
     const byGroup = new Map<string, ProductDemand[]>();
     for (const p of sortedProducts) {
-      const key = groupKeyOf(p.roast_group);
+      const key = groupKeyOf(p);
       const arr = byGroup.get(key) ?? [];
       arr.push(p);
       byGroup.set(key, arr);
@@ -506,7 +525,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
 
     const metas: PackGroupMeta[] = [];
     for (const [key, prods] of byGroup) {
-      const cfg = key === UNASSIGNED ? undefined : configByKey.get(key);
+      const cfg = key === UNASSIGNED || key === NO_PRODUCTION ? undefined : configByKey.get(key);
       const tier = rollUpGroupTier(
         prods.map((p) => ({ wipStatus: p.wipStatus, remainingUnits: p.shortage })),
       );
@@ -516,7 +535,10 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
         .sort();
       metas.push({
         roastGroup: key,
-        displayName: cfg?.display_name?.trim() || (key === UNASSIGNED ? 'Unassigned' : key.replace(/_/g, ' ')),
+        displayName:
+          key === NO_PRODUCTION
+            ? 'No production required'
+            : cfg?.display_name?.trim() || (key === UNASSIGNED ? 'Unassigned' : key.replace(/_/g, ' ')),
         tier,
         roastTabIndex: cfg?.display_order ?? 999999,
         earliestShipDate: shipDates[0] ?? null,
@@ -558,7 +580,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   const displayProducts = useMemo(() => {
     const byGroup = new Map<string, ProductDemand[]>();
     for (const p of sortedProducts) {
-      const key = groupKeyOf(p.roast_group);
+      const key = groupKeyOf(p);
       const arr = byGroup.get(key) ?? [];
       arr.push(p);
       byGroup.set(key, arr);
@@ -575,6 +597,13 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   const completeProductIds = useMemo(() => {
     const ids = new Set<string>();
     for (const p of displayProducts) {
+      // Bought-in items never block a group from counting as done — but they are
+      // NOT added to the de-emphasized snapshot (see below) so their amber
+      // attention treatment stays visible.
+      if (!p.requiresProduction) {
+        ids.add(p.product_id);
+        continue;
+      }
       const packed = packingByProductUnits[p.product_id] ?? 0;
       const picked = pickedByProductUnits?.[p.product_id] ?? 0;
       const effective = Math.max(packed, picked);
@@ -585,10 +614,22 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     return ids;
   }, [displayProducts, packingByProductUnits, pickedByProductUnits]);
 
+  // Complete PRODUCED rows only — the de-emphasized (faded) treatment must not
+  // swallow bought-in rows, whose amber "pull from stock" cue has to stay loud.
+  const deemphasizableIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const p of displayProducts) {
+      if (p.requiresProduction && completeProductIds.has(p.product_id)) {
+        ids.add(p.product_id);
+      }
+    }
+    return ids;
+  }, [displayProducts, completeProductIds]);
+
   // First time we get a populated list, snapshot what was already complete.
   useEffect(() => {
     if (deemphasizedIds === null && displayProducts.length > 0) {
-      setDeemphasizedIds(new Set(completeProductIds));
+      setDeemphasizedIds(new Set(deemphasizableIds));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayProducts.length]);
@@ -597,7 +638,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   // re-sort so incomplete work surfaces to the top, and collapse any drawer that
   // just got de-emphasized.
   const handleRefreshComplete = useCallback(() => {
-    setDeemphasizedIds(new Set(completeProductIds));
+    setDeemphasizedIds(new Set(deemphasizableIds));
     hasUserReorderedRef.current = false;
     setLocalProducts(computedSortedProducts);
     if (expandedProductId && completeProductIds.has(expandedProductId)) {
@@ -609,7 +650,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       const current = prev ?? orderPackGroups(groupMetas, sortMode, manualGroupOrder);
       const productsByGroup = new Map<string, ProductDemand[]>();
       for (const p of displayProducts) {
-        const key = groupKeyOf(p.roast_group);
+        const key = groupKeyOf(p);
         const arr = productsByGroup.get(key) ?? [];
         arr.push(p);
         productsByGroup.set(key, arr);
@@ -627,6 +668,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     });
   }, [
     completeProductIds,
+    deemphasizableIds,
     computedSortedProducts,
     expandedProductId,
     displayProducts,
@@ -902,16 +944,22 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                       const packed = packingByProductUnits[product.product_id] ?? 0;
                       const picked = pickedByProductUnits?.[product.product_id] ?? 0;
                       const isExpanded = expandedProductId === product.product_id;
-                      const prevRoastGroup = index > 0 ? displayProducts[index - 1].roast_group : undefined;
-                      const showHeader = product.roast_group !== prevRoastGroup;
-                      const headerLabel = product.roast_group
-                        ? product.roast_group.replace(/_/g, ' ')
-                        : 'Unassigned';
-                      const headerWipKg = product.roast_group
-                        ? (roastedInventory[product.roast_group] ?? 0)
+                      const groupKey = groupKeyOf(product);
+                      const prevGroupKey = index > 0 ? groupKeyOf(displayProducts[index - 1]) : undefined;
+                      const showHeader = groupKey !== prevGroupKey;
+                      const isNoProductionGroup = groupKey === NO_PRODUCTION;
+                      const headerLabel = isNoProductionGroup
+                        ? 'No production required'
+                        : product.roast_group
+                          ? product.roast_group.replace(/_/g, ' ')
+                          : 'Unassigned';
+                      // WIP stats are meaningless for the bought-in section.
+                      const showHeaderWip = !isNoProductionGroup && !!product.roast_group;
+                      const headerWipKg = showHeaderWip
+                        ? (roastedInventory[product.roast_group!] ?? 0)
                         : 0;
-                      const headerPlanned = product.roast_group
-                        ? plannedWip?.[product.roast_group]
+                      const headerPlanned = showHeaderWip
+                        ? plannedWip?.[product.roast_group!]
                         : undefined;
                       
                       return (
@@ -926,7 +974,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                                   <span className="text-sm font-bold text-foreground uppercase tracking-wide">
                                     {headerLabel}
                                   </span>
-                                  {product.roast_group && (
+                                  {showHeaderWip && (
                                     <span className="text-xs font-medium text-muted-foreground">
                                       {headerWipKg.toFixed(1)} kg WIP available
                                       {headerPlanned && headerPlanned.count > 0 && (
@@ -962,6 +1010,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                           plannedKg={product.plannedKg}
                           plannedCount={product.plannedCount}
                           packingRun={packing}
+                          requiresProduction={product.requiresProduction}
                           isExpanded={isExpanded && !(deemphasizedIds?.has(product.product_id) ?? false)}
                           deemphasized={deemphasizedIds?.has(product.product_id) ?? false}
                           onToggleExpand={() => setExpandedProductId(isExpanded ? null : product.product_id)}

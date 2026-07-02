@@ -44,6 +44,10 @@ interface SortablePackRowProps {
   plannedKg: number;
   plannedCount: number;
   packingRun: PackingRun | undefined;
+  /** False for bought-in items: attention-only row — no pack controls, no WIP
+   *  math, never writes to any ledger. Rendered with an amber badge so the
+   *  packer remembers to pull the item off the shelf. */
+  requiresProduction?: boolean;
   isExpanded: boolean;
   /** When true, the row was already complete at session/snapshot time and is
    *  visually de-emphasized so the packer's eye lands on outstanding work.
@@ -75,6 +79,7 @@ export function SortablePackRow({
   plannedKg,
   plannedCount,
   packingRun,
+  requiresProduction = true,
   isExpanded,
   deemphasized = false,
   onToggleExpand,
@@ -144,7 +149,7 @@ export function SortablePackRow({
         ref={setNodeRef}
         style={style}
         className={getRowClasses()}
-        onClick={onToggleExpand}
+        onClick={requiresProduction ? onToggleExpand : undefined}
       >
         {/* Drag handle */}
         <td
@@ -156,7 +161,7 @@ export function SortablePackRow({
           <GripVertical className="h-4 w-4 text-muted-foreground" />
         </td>
         <td className="py-3 w-8">
-          {isExpanded ? (
+          {!requiresProduction ? null : isExpanded ? (
             <ChevronDown className="h-4 w-4 text-muted-foreground" />
           ) : (
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -166,13 +171,20 @@ export function SortablePackRow({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium">{productName}</span>
             <PackagingBadge variant={packagingVariant} />
+            {/* Bought-in item: attention-only cue, styled like the grind alarm */}
+            {!requiresProduction && (
+              <Badge className="text-xs font-bold uppercase tracking-wide bg-amber-500 text-white border-amber-600 hover:bg-amber-500">
+                <AlertTriangle className="h-3.5 w-3.5 mr-1" />
+                No production — pull from stock
+              </Badge>
+            )}
             {hasTimeSensitive && (
               <Badge variant="destructive" className="text-xs">
                 <Clock className="h-3 w-3 mr-1" />
                 Urgent
               </Badge>
             )}
-            {unblocksOrders > 0 && (demandedUnits - effectivePacked) > 0 && (
+            {requiresProduction && unblocksOrders > 0 && (demandedUnits - effectivePacked) > 0 && (
               <Badge variant="outline" className="text-xs">
                 <ShoppingCart className="h-3 w-3 mr-1" />
                 Unblocks: {unblocksOrders} order{unblocksOrders !== 1 ? 's' : ''}
@@ -188,7 +200,7 @@ export function SortablePackRow({
               </Badge>
             )}
             {/* WIP status badges */}
-            {wipStatus === 'full' && (
+            {requiresProduction && wipStatus === 'full' && (
               <Badge
                 variant="outline"
                 className="text-xs bg-success/15 text-success border-success/30"
@@ -197,7 +209,7 @@ export function SortablePackRow({
                 WIP ready
               </Badge>
             )}
-            {wipStatus === 'partial' && (
+            {requiresProduction && wipStatus === 'partial' && (
               <Badge
                 variant="outline"
                 className="text-xs bg-warning/15 text-warning border-warning/30"
@@ -206,7 +218,7 @@ export function SortablePackRow({
                 WIP partial
               </Badge>
             )}
-            {wipStatus !== 'full' && plannedCount > 0 && (
+            {requiresProduction && wipStatus !== 'full' && plannedCount > 0 && (
               <Badge variant="outline" className="text-xs">
                 <Layers className="h-3 w-3 mr-1" />
                 {plannedCount} planned (~{plannedKg.toFixed(1)} kg)
@@ -236,7 +248,9 @@ export function SortablePackRow({
             </div>
           )}
           <div className="text-xs text-muted-foreground">
-            {bagSizeG}g • {sku || 'No SKU'}
+            {requiresProduction
+              ? `${bagSizeG}g • ${sku || 'No SKU'}`
+              : [sku, 'Bought-in item'].filter(Boolean).join(' • ')}
           </div>
         </td>
         <td className="py-3">
@@ -251,16 +265,29 @@ export function SortablePackRow({
           <span className="text-muted-foreground text-xs ml-1">units</span>
         </td>
         <td className="py-3" onClick={(e) => e.stopPropagation()}>
-          <InlinePackingControl
-            value={packedUnits}
-            onCommit={onUpdatePackedUnits}
-            onEditingChange={onEditingChange}
-            isComplete={isComplete}
-            fillValue={demandedUnits}
-          />
+          {requiresProduction ? (
+            <InlinePackingControl
+              value={packedUnits}
+              onCommit={onUpdatePackedUnits}
+              onEditingChange={onEditingChange}
+              isComplete={isComplete}
+              fillValue={demandedUnits}
+            />
+          ) : (
+            // Bought-in item: nothing to pack, nothing to write to any ledger.
+            <span className="text-muted-foreground text-sm">—</span>
+          )}
         </td>
         <td className="py-3 text-right">
-          {isComplete ? (
+          {!requiresProduction ? (
+            <Badge
+              variant="outline"
+              className="text-xs bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800"
+            >
+              <AlertTriangle className="h-3 w-3 mr-1" />
+              Pull from stock
+            </Badge>
+          ) : isComplete ? (
             <Badge variant="default" className="bg-primary text-primary-foreground">
               <Check className="h-3 w-3 mr-1" />
               Complete
@@ -277,7 +304,7 @@ export function SortablePackRow({
           )}
         </td>
       </tr>
-      {isExpanded && (
+      {isExpanded && requiresProduction && (
         <PackRowDrawer
           productId={productId}
           productName={productName}
