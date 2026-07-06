@@ -586,13 +586,17 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
 
       if (allBatches.length > 0) {
         const ids = allBatches.map((b) => b.id);
-        const wipRes = await supabase
-          .from('wip_ledger')
-          .select('related_batch_id')
-          .in('related_batch_id', ids);
-        if (wipRes.error) throw wipRes.error;
+        // A batch "has a ledger entry" when an inventory_transactions row carries
+        // its id in source_batch_id (written by mark_batch_roasted for every
+        // ROAST_OUTPUT). The retired wip_ledger table never carried batch refs,
+        // so checking it flagged every batch as an orphan.
+        const ledgerRes = await supabase
+          .from('inventory_transactions')
+          .select('source_batch_id')
+          .in('source_batch_id', ids);
+        if (ledgerRes.error) throw ledgerRes.error;
         const referenced = new Set(
-          (wipRes.data ?? []).map((r) => r.related_batch_id).filter((v): v is string => !!v)
+          (ledgerRes.data ?? []).map((r) => r.source_batch_id).filter((v): v is string => !!v)
         );
         for (const b of allBatches) {
           if (referenced.has(b.id)) continue;
