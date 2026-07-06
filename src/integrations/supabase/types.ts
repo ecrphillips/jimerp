@@ -3203,6 +3203,7 @@ export type Database = {
           quantity_kg: number | null
           quantity_units: number | null
           roast_group: string | null
+          source_batch_id: string | null
           transaction_type: Database["public"]["Enums"]["inventory_transaction_type"]
         }
         Insert: {
@@ -3217,6 +3218,7 @@ export type Database = {
           quantity_kg?: number | null
           quantity_units?: number | null
           roast_group?: string | null
+          source_batch_id?: string | null
           transaction_type: Database["public"]["Enums"]["inventory_transaction_type"]
         }
         Update: {
@@ -3231,6 +3233,7 @@ export type Database = {
           quantity_kg?: number | null
           quantity_units?: number | null
           roast_group?: string | null
+          source_batch_id?: string | null
           transaction_type?: Database["public"]["Enums"]["inventory_transaction_type"]
         }
         Relationships: [
@@ -3260,6 +3263,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_source_batch_id_fkey"
+            columns: ["source_batch_id"]
+            isOneToOne: false
+            referencedRelation: "roasted_batches"
             referencedColumns: ["id"]
           },
         ]
