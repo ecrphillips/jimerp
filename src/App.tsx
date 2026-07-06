@@ -89,6 +89,7 @@ const App = () => (
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/auth/set-password" element={<SetPassword />} />
             <Route path="/explore/:token" element={<ExplorePage />} />
+            <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
             <Route path="/" element={<Navigate to="/auth" replace />} />
 
             {/* Internal (Admin/Ops) */}
