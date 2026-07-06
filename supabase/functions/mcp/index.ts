@@ -135,6 +135,51 @@ var list_products_default = defineTool3({
   }
 });
 
+// src/lib/mcp/tools/run-read-query.ts
+import { createClient as createClient4 } from "npm:@supabase/supabase-js@2.91.0";
+import { defineTool as defineTool4 } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { z as z3 } from "npm:zod@^3.25.76";
+var FORBIDDEN = /\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|comment|vacuum|analyze|copy|call|merge|reindex|refresh|cluster|listen|notify|lock|do|set|reset|security)\b/i;
+function serviceClient() {
+  return createClient4(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+}
+var run_read_query_default = defineTool4({
+  name: "run_read_query",
+  title: "Run read-only SQL query",
+  description: "Execute a single read-only SQL SELECT (or WITH ... SELECT) query against the project's database and return the resulting rows. Runs with elevated permission and bypasses row-level security \u2014 intended for a trusted internal agent only. Any statement that writes or changes structure is rejected.",
+  inputSchema: {
+    query: z3.string().min(1).describe("A single SQL SELECT statement. No semicolons except optional trailing. No writes or DDL.")
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false, destructiveHint: false },
+  handler: async ({ query }, _ctx) => {
+    const trimmed = query.trim().replace(/;+\s*$/, "");
+    if (trimmed.includes(";")) {
+      return { content: [{ type: "text", text: "Error: multiple statements are not allowed." }], isError: true };
+    }
+    const lowered = trimmed.toLowerCase();
+    if (!lowered.startsWith("select") && !lowered.startsWith("with")) {
+      return { content: [{ type: "text", text: "Error: only SELECT (or WITH ... SELECT) queries are allowed." }], isError: true };
+    }
+    if (FORBIDDEN.test(lowered)) {
+      return { content: [{ type: "text", text: "Error: query contains a forbidden keyword." }], isError: true };
+    }
+    const supabase = serviceClient();
+    const { data, error } = await supabase.rpc("mcp_run_read_sql", { query_text: trimmed });
+    if (error) {
+      return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };
+    }
+    const rows = Array.isArray(data) ? data : [];
+    return {
+      content: [{ type: "text", text: JSON.stringify(rows, null, 2) }],
+      structuredContent: { rows, row_count: rows.length }
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "cgdzjkryygwlyygeznrb";
 var mcp_default = defineMcp({
@@ -146,7 +191,7 @@ var mcp_default = defineMcp({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
   }),
-  tools: [get_account_info_default, list_my_orders_default, list_products_default]
+  tools: [get_account_info_default, list_my_orders_default, list_products_default, run_read_query_default]
 });
 
 // lovable-mcp-supabase-entry.ts

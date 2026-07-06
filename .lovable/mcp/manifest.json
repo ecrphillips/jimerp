@@ -103,6 +103,33 @@
           "$schema": "http://json-schema.org/draft-07/schema#"
         },
         "outputSchema": null
+      },
+      {
+        "name": "run_read_query",
+        "title": "Run read-only SQL query",
+        "description": "Execute a single read-only SQL SELECT (or WITH ... SELECT) query against the project's database and return the resulting rows. Runs with elevated permission and bypasses row-level security — intended for a trusted internal agent only. Any statement that writes or changes structure is rejected.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "destructiveHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "description": "A single SQL SELECT statement. No semicolons except optional trailing. No writes or DDL."
+            }
+          },
+          "required": [
+            "query"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
       }
     ]
   }
