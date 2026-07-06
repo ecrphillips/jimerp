@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "sdk_version": "0.20.0",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://cgdzjkryygwlyygeznrb.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "home-island-mcp",
+      "version": "0.1.0",
+      "title": "Home Island Coffee Partners"
+    },
+    "tools": [
+      {
+        "name": "get_account_info",
+        "title": "Get account info",
+        "description": "Return the signed-in user's Home Island account details (name, programs, co-roast tier, certification, join date, billing contact). Uses the caller's identity — no input needed.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_my_orders",
+        "title": "List my orders",
+        "description": "List recent orders visible to the signed-in user, filtered by RLS. Returns order number, status, work deadline, ship date, and totals. Ordered newest first.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25,
+              "description": "Max orders to return (1-100)."
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "DRAFT",
+                "SUBMITTED",
+                "CONFIRMED",
+                "IN_PRODUCTION",
+                "READY",
+                "SHIPPED",
+                "CANCELLED"
+              ],
+              "description": "Filter by order status."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_products",
+        "title": "List products",
+        "description": "List products visible to the signed-in user (RLS-scoped to their account). Returns SKU, name, format, bag size, and active status.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "description": "Max products to return (1-200)."
+            },
+            "active_only": {
+              "type": "boolean",
+              "default": true,
+              "description": "Only return active products."
+            },
+            "search": {
+              "type": "string",
+              "description": "Optional substring match on product name or SKU."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
