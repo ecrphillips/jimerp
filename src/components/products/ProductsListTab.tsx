@@ -183,6 +183,9 @@ export function ProductsListTab() {
       is_perennial: boolean;
       packaging_variant: PackagingVariant | null;
       roast_group: string | null;
+      requires_production: boolean;
+      packaging_material_override: number | null;
+      packaging_labour_override: number | null;
     };
   } | null>(null);
 
