@@ -5826,6 +5826,7 @@ export type Database = {
       }
       mark_quote_accepted: { Args: { p_quote_id: string }; Returns: Json }
       mark_quote_sent: { Args: { p_quote_id: string }; Returns: undefined }
+      mcp_run_read_sql: { Args: { query_text: string }; Returns: Json }
       move_to_dlq: {
         Args: {
           dlq_name: string
