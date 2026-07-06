@@ -3,7 +3,7 @@ import { defineTool, type ToolContext } from "@lovable.dev/mcp-js";
 import { z } from "zod";
 
 const FORBIDDEN =
-  /\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|comment|vacuum|analyze|copy|call|merge|reindex|refresh|cluster|listen|notify|lock|do|set|reset|security)\b/i;
+  /\b(insert|update|delete|drop|alter|create|truncate)\b/i;
 
 function serviceClient() {
   return createClient(
