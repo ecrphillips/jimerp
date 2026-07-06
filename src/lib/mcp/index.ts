@@ -2,6 +2,8 @@ import { auth, defineMcp } from "@lovable.dev/mcp-js";
 import getAccountInfoTool from "./tools/get-account-info";
 import listMyOrdersTool from "./tools/list-my-orders";
 import listProductsTool from "./tools/list-products";
+import runReadQueryTool from "./tools/run-read-query";
+
 
 const projectRef = import.meta.env.VITE_SUPABASE_PROJECT_ID ?? "project-ref-unset";
 
