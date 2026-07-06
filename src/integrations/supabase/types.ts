@@ -5736,6 +5736,7 @@ export type Database = {
       dev_reset_test_day: { Args: never; Returns: Json }
       dev_test_reset: { Args: never; Returns: Json }
       dev_test_seed_minimal: { Args: never; Returns: undefined }
+      email_queue_dispatch: { Args: never; Returns: undefined }
       enqueue_email: {
         Args: { payload: Json; queue_name: string }
         Returns: number
@@ -5930,6 +5931,13 @@ export type Database = {
       set_shopify_quarantined_line_do_not_produce: {
         Args: { p_line_id: string }
         Returns: undefined
+      }
+      shopify_grind_signal: {
+        Args: { p_name: string }
+        Returns: {
+          grind_label: string
+          needs_grind: boolean
+        }[]
       }
       submit_prospect_interest: {
         Args: {
