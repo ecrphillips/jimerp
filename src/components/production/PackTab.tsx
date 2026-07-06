@@ -715,6 +715,12 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     // PACK_PRODUCE_FG ledger rows in one transaction, with the real delta
     // recomputed against the DB row under lock.
     //
+    // The consumed WIP weight and the roast group are derived server-side from
+    // the products row (grams_per_unit, roast_group) — so FG-in-bags and
+    // WIP-in-kg always reconcile by the stored bag weight. The p_bag_size_g /
+    // p_roast_group args below are IGNORED by the RPC and kept only for
+    // signature compatibility; do NOT reintroduce a client-supplied weight.
+    //
     // No upstream-material gating: a user packing a bag the system thinks doesn't
     // exist is treated as an upstream data-entry lag, not a physical shortage. The
     // "0 available" / amber WIP color cues are nudge enough; never block completion.
