@@ -71,6 +71,7 @@ import MyNumbers from "@/pages/member/MyNumbers";
 import ClientMyNumbers from "@/pages/client/MyNumbers";
 import NotFound from "@/pages/NotFound";
 import ExplorePage from "@/pages/public/ExplorePage";
+import OAuthConsent from "@/pages/OAuthConsent";
 
 const queryClient = new QueryClient();
 
