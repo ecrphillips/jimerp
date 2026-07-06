@@ -139,7 +139,7 @@ var list_products_default = defineTool3({
 import { createClient as createClient4 } from "npm:@supabase/supabase-js@2.91.0";
 import { defineTool as defineTool4 } from "npm:@lovable.dev/mcp-js@0.20.0";
 import { z as z3 } from "npm:zod@^3.25.76";
-var FORBIDDEN = /\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|comment|vacuum|analyze|copy|call|merge|reindex|refresh|cluster|listen|notify|lock|do|set|reset|security)\b/i;
+var FORBIDDEN = /\b(insert|update|delete|drop|alter|create|truncate)\b/i;
 function serviceClient() {
   return createClient4(
     process.env.SUPABASE_URL,
