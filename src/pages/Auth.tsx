@@ -116,6 +116,12 @@ export default function Auth() {
   useEffect(() => {
     if (inviteState === 'ready' || inviteState === 'checking') return;
     if (user && authUser) {
+      // Honor ?next= for same-origin relative paths (used by OAuth consent flow)
+      const nextParam = searchParams.get('next');
+      if (nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//')) {
+        navigate(nextParam, { replace: true });
+        return;
+      }
       const from = (location.state as { from?: Location })?.from?.pathname;
       if (from) {
         navigate(from, { replace: true });
@@ -127,7 +133,7 @@ export default function Auth() {
         navigate('/production', { replace: true });
       }
     }
-  }, [user, authUser, navigate, location, inviteState]);
+  }, [user, authUser, navigate, location, inviteState, searchParams]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
