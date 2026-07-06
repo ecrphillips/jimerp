@@ -27,7 +27,6 @@ import {
   Package,
   Layers,
   Leaf,
-  Sparkles,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -45,7 +44,7 @@ import { evaluateMultiRoastGroupImpacts, type MultiRgImpact } from '@/hooks/useG
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { type RoastGroupComponent, getComponentBreakdown, type ComponentDisplay } from '@/hooks/useRoastGroupComponents';
-import { useBlendReadiness, getBlendReadinessDisplay } from '@/hooks/useBlendReadiness';
+import { useBlendReadiness } from '@/hooks/useBlendReadiness';
 
 type RoasterMachine = 'SAMIAC' | 'LORING';
 type DefaultRoaster = 'SAMIAC' | 'LORING' | 'EITHER';
@@ -286,9 +285,15 @@ export function RoastGroupDrawer({
     wipKg
   );
   
-  // Get display props for blend readiness status
-  const blendStatusDisplay = getBlendReadinessDisplay(blendReadiness, coverageDelta);
-  
+  // Blend coverage. A blend is never roasted directly (`roastedTotal` is always
+  // 0 for it), so the standard `coverageDelta` reads perpetually short. Instead
+  // measure coverage from on-hand blended WIP + finished goods — the same
+  // wip/fg figures the inventory screens show — against gross demand:
+  //   coverage = net WIP + FG (kg) - demand
+  // >= 0 means the blend is fully covered (net demand is 0); < 0 is the shortfall.
+  const blendCoverageDelta = wipKg + fgKg - demandKg;
+  const isBlendComplete = isBlend && blendCoverageDelta >= 0;
+
   // For blends: "expected" column should show staged-for-blend kg instead of planned batches
   // This reflects component inventory ready for blending, not direct roast batches
   const displayExpectedOutput = isBlend && blendReadiness
@@ -695,9 +700,9 @@ export function RoastGroupDrawer({
         ref={setNodeRef}
         style={style}
         className={`border-b cursor-pointer transition-colors 
-          ${isFullyRoasted || isCompleted ? 'opacity-60' : ''}
-          ${hasTimeSensitive && !isFullyRoasted && !isCompleted ? 'bg-destructive/5' : ''} 
-          ${isCompleted && !isExpanded ? 'bg-muted/30' : ''}
+          ${isFullyRoasted || isCompleted || isBlendComplete ? 'opacity-60' : ''}
+          ${hasTimeSensitive && !isFullyRoasted && !isCompleted && !isBlendComplete ? 'bg-destructive/5' : ''}
+          ${(isCompleted || isBlendComplete) && !isExpanded ? 'bg-muted/30' : ''}
           ${isExpanded ? 'bg-muted/50 border-l-2 border-l-primary' : 'hover:bg-muted/50'}
           ${isDragging ? 'opacity-50' : ''}`}
         onClick={() => setIsExpanded(!isExpanded)}
@@ -772,21 +777,17 @@ export function RoastGroupDrawer({
           <span className="text-muted-foreground text-xs ml-1">kg</span>
         </td>
         <td className="py-3 text-right">
-          {/* Use blend-specific status display if available */}
-          {blendStatusDisplay ? (
-            <div className="flex flex-col items-end gap-0.5">
-              <Badge variant="secondary" className={blendStatusDisplay.className}>
-                {blendStatusDisplay.variant === 'ready' && (
-                  <Sparkles className="h-3 w-3 mr-1" />
-                )}
-                {blendStatusDisplay.label}
+          {/* Blends: coverage is WIP + FG vs demand, not roasted weight (always 0) */}
+          {isBlend ? (
+            blendCoverageDelta >= 0 ? (
+              <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+                Covered +{blendCoverageDelta.toFixed(1)} kg
               </Badge>
-              {blendStatusDisplay.sublabel && (
-                <span className="text-[10px] text-muted-foreground">
-                  {blendStatusDisplay.sublabel}
-                </span>
-              )}
-            </div>
+            ) : (
+              <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300">
+                Short {Math.abs(blendCoverageDelta).toFixed(1)} kg
+              </Badge>
+            )
           ) : isCompleted ? (
             <Badge variant="secondary" className="bg-muted text-muted-foreground border-border">
               <Check className="h-3 w-3 mr-1" />
