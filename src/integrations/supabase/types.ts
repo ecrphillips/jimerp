@@ -6079,6 +6079,7 @@ export type Database = {
         | "ADJUSTMENT"
         | "LOSS"
         | "GREEN_FLOOR_COUNT_ADJUSTMENT"
+        | "BLEND"
       lot_status:
         | "EN_ROUTE"
         | "RECEIVED"
@@ -6326,6 +6327,7 @@ export const Constants = {
         "ADJUSTMENT",
         "LOSS",
         "GREEN_FLOOR_COUNT_ADJUSTMENT",
+        "BLEND",
       ],
       lot_status: [
         "EN_ROUTE",

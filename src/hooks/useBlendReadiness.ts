@@ -132,7 +132,7 @@ export function useBlendReadiness(
     const roastShortfallKg = Math.max(0, netDemandKg - wipKg - blendPossibleKg);
     
     // Determine state
-    // "blended" = WIP exists and covers demand (from blend ADJUSTMENT)
+    // "blended" = WIP exists and covers demand (from blend BLEND rows)
     // "ready_to_blend" = components roasted, enough to blend, but blend not yet executed
     // "partially_ready" = some components available but not enough for full demand
     // "needs_roasting" = components not roasted enough

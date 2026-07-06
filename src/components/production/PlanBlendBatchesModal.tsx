@@ -138,11 +138,13 @@ export function PlanBlendBatchesModal({
       
       if (packError) throw packError;
       
-      // Get adjustments and losses
+      // Get blend movement, adjustments and losses. BLEND rows carry the negative
+      // component decrement written when a blend was executed, so they must be
+      // included or a component's WIP would ignore coffee already blended away.
       const { data: adjustments, error: adjError } = await supabase
         .from('inventory_transactions')
         .select('roast_group, quantity_kg')
-        .in('transaction_type', ['ADJUSTMENT', 'LOSS'])
+        .in('transaction_type', ['BLEND', 'ADJUSTMENT', 'LOSS'])
         .in('roast_group', componentGroups);
       
       if (adjError) throw adjError;

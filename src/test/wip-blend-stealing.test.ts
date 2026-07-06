@@ -20,23 +20,41 @@ describe('blend WIP stealing', () => {
   it('executing a blend moves kg out of component WIP and into blend WIP (no double count)', () => {
     const ledger: WipLedgerTx[] = [
       { roast_group: COMPONENT, quantity_kg: 10, transaction_type: 'ROAST_OUTPUT' },
-      { roast_group: BLEND, quantity_kg: 10, transaction_type: 'ADJUSTMENT' },
-      { roast_group: COMPONENT, quantity_kg: -10, transaction_type: 'ADJUSTMENT' },
+      { roast_group: BLEND, quantity_kg: 10, transaction_type: 'BLEND' },
+      { roast_group: COMPONENT, quantity_kg: -10, transaction_type: 'BLEND' },
     ];
     const wip = computeAuthoritativeWip(ledger);
     expect(wip[COMPONENT].wip_available_kg).toBe(0);
     expect(wip[BLEND].wip_available_kg).toBe(10);
+    // Blend movement lands in blended_kg, never adjustments_kg.
+    expect(wip[COMPONENT].blended_kg).toBe(-10);
+    expect(wip[BLEND].blended_kg).toBe(10);
+    expect(wip[COMPONENT].adjustments_kg).toBe(0);
+    expect(wip[BLEND].adjustments_kg).toBe(0);
   });
 
   it('partial blend leaves the unblended remainder available to the component', () => {
     const ledger: WipLedgerTx[] = [
       { roast_group: COMPONENT, quantity_kg: 10, transaction_type: 'ROAST_OUTPUT' },
-      { roast_group: BLEND, quantity_kg: 6, transaction_type: 'ADJUSTMENT' },
-      { roast_group: COMPONENT, quantity_kg: -6, transaction_type: 'ADJUSTMENT' },
+      { roast_group: BLEND, quantity_kg: 6, transaction_type: 'BLEND' },
+      { roast_group: COMPONENT, quantity_kg: -6, transaction_type: 'BLEND' },
     ];
     const wip = computeAuthoritativeWip(ledger);
     expect(wip[COMPONENT].wip_available_kg).toBe(4);
     expect(wip[BLEND].wip_available_kg).toBe(6);
+  });
+
+  it('keeps genuine adjustments separate from blend movement', () => {
+    const ledger: WipLedgerTx[] = [
+      { roast_group: COMPONENT, quantity_kg: 10, transaction_type: 'ROAST_OUTPUT' },
+      { roast_group: COMPONENT, quantity_kg: -6, transaction_type: 'BLEND' },
+      { roast_group: COMPONENT, quantity_kg: 2, transaction_type: 'ADJUSTMENT' },
+    ];
+    const wip = computeAuthoritativeWip(ledger);
+    expect(wip[COMPONENT].blended_kg).toBe(-6);
+    expect(wip[COMPONENT].adjustments_kg).toBe(2);
+    // Net WIP includes both: 10 - 6 + 2 = 6
+    expect(wip[COMPONENT].wip_net_kg).toBe(6);
   });
 
   it('a ROASTED, blend-earmarked, not-yet-consumed batch is reserved out of component WIP', () => {
@@ -60,8 +78,8 @@ describe('blend WIP stealing', () => {
   it('reservation releases once the batch is consumed by the blend', () => {
     const ledger: WipLedgerTx[] = [
       { roast_group: COMPONENT, quantity_kg: 10, transaction_type: 'ROAST_OUTPUT' },
-      { roast_group: BLEND, quantity_kg: 6, transaction_type: 'ADJUSTMENT' },
-      { roast_group: COMPONENT, quantity_kg: -6, transaction_type: 'ADJUSTMENT' },
+      { roast_group: BLEND, quantity_kg: 6, transaction_type: 'BLEND' },
+      { roast_group: COMPONENT, quantity_kg: -6, transaction_type: 'BLEND' },
     ];
     const batches: BlendReservationBatch[] = [
       {

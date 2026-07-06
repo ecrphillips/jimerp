@@ -1,13 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
-export type InventoryTransactionType = 
+export type InventoryTransactionType =
   | 'ROAST_OUTPUT'
   | 'PACK_CONSUME_WIP'
   | 'PACK_PRODUCE_FG'
   | 'SHIP_CONSUME_FG'
   | 'ADJUSTMENT'
-  | 'LOSS';
+  | 'LOSS'
+  | 'BLEND';
 
 export interface InventoryTransaction {
   id: string;

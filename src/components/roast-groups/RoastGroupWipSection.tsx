@@ -19,7 +19,7 @@ interface Props {
  *
  * WIP balance is computed the same way as Inventory Levels, entirely from the
  * inventory_transactions ledger:
- *   sum(quantity_kg for {ROAST_OUTPUT, PACK_CONSUME_WIP, ADJUSTMENT, LOSS})
+ *   sum(quantity_kg for {ROAST_OUTPUT, PACK_CONSUME_WIP, BLEND, ADJUSTMENT, LOSS})
  * Manual floor-count / recount adjustments are ADJUSTMENT rows here now (the
  * separate wip_adjustments table is retired).
  */
@@ -35,7 +35,7 @@ export function RoastGroupWipSection({ roastGroupKey, displayName }: Props) {
         .from('inventory_transactions')
         .select('quantity_kg, transaction_type, notes, created_at, created_by')
         .eq('roast_group', roastGroupKey)
-        .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'ADJUSTMENT', 'LOSS'])
+        .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'BLEND', 'ADJUSTMENT', 'LOSS'])
         .order('created_at', { ascending: false });
       if (error) throw error;
 

@@ -19,11 +19,12 @@ const transactionTypeLabels: Record<InventoryTransactionType, string> = {
   SHIP_CONSUME_FG: 'Ship Consume FG',
   ADJUSTMENT: 'Adjustment',
   LOSS: 'Loss',
+  BLEND: 'Blend',
 };
 
 // Determine if transaction affects WIP (kg) or FG (units)
 function getInventoryType(type: InventoryTransactionType): 'WIP' | 'FG' {
-  if (type === 'ROAST_OUTPUT' || type === 'PACK_CONSUME_WIP') {
+  if (type === 'ROAST_OUTPUT' || type === 'PACK_CONSUME_WIP' || type === 'BLEND') {
     return 'WIP';
   }
   return 'FG';

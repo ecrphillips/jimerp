@@ -4,7 +4,7 @@
  * These hooks compute inventory from the inventory_transactions ledger — the
  * single source of truth that triggers/RPCs maintain and that manual floor
  * counts append balancing ADJUSTMENT rows to:
- * - WIP per roast_group = sum(quantity_kg) over ROAST_OUTPUT + PACK_CONSUME_WIP + ADJUSTMENT + LOSS
+ * - WIP per roast_group = sum(quantity_kg) over ROAST_OUTPUT + PACK_CONSUME_WIP + BLEND + ADJUSTMENT + LOSS
  * - FG per product      = sum(quantity_units) over PACK_PRODUCE_FG + SHIP_CONSUME_FG + ADJUSTMENT
  * - Demand = CONFIRMED/open orders (order_line_items + ship_picks for picked progress)
  *
@@ -24,7 +24,8 @@ export interface AuthoritativeWip {
   roast_group: string;
   roasted_completed_kg: number;  // sum(actual_output_kg) for ROASTED batches
   packed_consumed_kg: number;    // sum(kg_consumed) from packing_runs
-  adjustments_kg: number;        // sum(ADJUSTMENT/LOSS transactions) - includes blend outputs
+  blended_kg: number;            // sum(BLEND transactions) — negative for a component that gave weight, positive for the blend that received it
+  adjustments_kg: number;        // sum(ADJUSTMENT/LOSS transactions) — genuine adjustments only, blend activity lives in blended_kg
   reserved_for_blend_kg: number; // kg of ROASTED batches earmarked for a blend, not yet consumed
   wip_net_kg: number;            // unclamped net (can be negative — used by Inventory page & floor count)
   wip_available_kg: number;      // max(0, wip_net_kg - reserved_for_blend_kg) — used by production UX
@@ -99,7 +100,7 @@ function useRoastedBatches() {
 
 /**
  * Fetch WIP-related transactions from inventory_transactions ledger
- * This includes ROAST_OUTPUT (positive), PACK_CONSUME_WIP (negative), ADJUSTMENT, and LOSS
+ * This includes ROAST_OUTPUT (positive), PACK_CONSUME_WIP (negative), BLEND, ADJUSTMENT, and LOSS
  * The ledger is the single source of truth for all WIP movements
  */
 function useWipLedgerTransactions() {
@@ -110,7 +111,7 @@ function useWipLedgerTransactions() {
         .from('inventory_transactions')
         .select('id, roast_group, quantity_kg, transaction_type, notes')
         .not('roast_group', 'is', null)
-        .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'ADJUSTMENT', 'LOSS']);
+        .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'BLEND', 'ADJUSTMENT', 'LOSS']);
       if (error) throw error;
       return data ?? [];
     },
@@ -272,13 +273,15 @@ export interface BlendReservationBatch {
  * - ROAST_OUTPUT: positive kg added (roasted batches, INCLUDING blend component batches,
  *   which write a ROAST_OUTPUT to their own component roast group when roasted)
  * - PACK_CONSUME_WIP: negative kg removed (packing consumed)
- * - ADJUSTMENT: +/- kg (blend output +, blend component decrement -, reverts, and the
- *   manual floor-count / recount / opening-balance adjustments — these were formerly in
- *   the separate wip_adjustments table, now backfilled into inventory_transactions)
+ * - BLEND: +/- kg blend movement (blend output +, blend component decrement -), tracked
+ *   separately from ADJUSTMENT so the WIP screen can show blend activity in its own column
+ * - ADJUSTMENT: +/- kg (reverts, and the manual floor-count / recount / opening-balance
+ *   adjustments — these were formerly in the separate wip_adjustments table, now
+ *   backfilled into inventory_transactions)
  * - LOSS: negative kg (recorded losses)
  *
- * Blend bookkeeping must stay balanced: executing a blend writes a positive ADJUSTMENT
- * to the blend group AND a matching negative ADJUSTMENT to each component group, so the
+ * Blend bookkeeping must stay balanced: executing a blend writes a positive BLEND row
+ * to the blend group AND a matching negative BLEND row to each component group, so the
  * kg blended away is removed from component WIP (otherwise it is double-counted and a
  * sibling product in the component group can consume coffee already in the blend).
  *
@@ -298,6 +301,7 @@ export function computeAuthoritativeWip(
   // Aggregate transactions by roast group and type
   const roastedByGroup: Record<string, number> = {};
   const consumedByGroup: Record<string, number> = {};
+  const blendedByGroup: Record<string, number> = {};
   const adjustmentsByGroup: Record<string, number> = {};
   const reservedByGroup: Record<string, number> = {};
 
@@ -315,6 +319,9 @@ export function computeAuthoritativeWip(
         } else {
           consumedByGroup[tx.roast_group] = (consumedByGroup[tx.roast_group] ?? 0) - kg;
         }
+        break;
+      case 'BLEND':
+        blendedByGroup[tx.roast_group] = (blendedByGroup[tx.roast_group] ?? 0) + kg;
         break;
       case 'ADJUSTMENT':
         adjustmentsByGroup[tx.roast_group] = (adjustmentsByGroup[tx.roast_group] ?? 0) + kg;
@@ -338,6 +345,7 @@ export function computeAuthoritativeWip(
   const allGroups = new Set([
     ...Object.keys(roastedByGroup),
     ...Object.keys(consumedByGroup),
+    ...Object.keys(blendedByGroup),
     ...Object.keys(adjustmentsByGroup),
     ...Object.keys(reservedByGroup),
   ]);
@@ -346,16 +354,18 @@ export function computeAuthoritativeWip(
   for (const rg of allGroups) {
     const roasted = roastedByGroup[rg] ?? 0;
     const consumed = consumedByGroup[rg] ?? 0;
+    const blended = blendedByGroup[rg] ?? 0;
     const adjusted = adjustmentsByGroup[rg] ?? 0;
     const reserved = reservedByGroup[rg] ?? 0;
 
-    const wipNet = roasted - consumed + adjusted;
+    const wipNet = roasted - consumed + blended + adjusted;
     const wipAvailable = wipNet - reserved;
 
     result[rg] = {
       roast_group: rg,
       roasted_completed_kg: roasted,
       packed_consumed_kg: consumed,
+      blended_kg: blended,
       adjustments_kg: adjusted,
       reserved_for_blend_kg: reserved,
       wip_net_kg: wipNet,

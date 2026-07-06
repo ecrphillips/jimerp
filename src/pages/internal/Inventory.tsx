@@ -50,6 +50,7 @@ type WipAdjustmentReason = 'LOSS' | 'COUNT_ADJUSTMENT' | 'CONTAMINATION' | 'OTHE
 interface WipByRoastGroup {
   roast_group: string;
   roasted_kg: number;
+  blended_kg: number;
   consumed_kg: number;
   adjusted_kg: number;
   net_wip_kg: number;
@@ -134,7 +135,7 @@ export default function Inventory() {
         .from('inventory_transactions')
         .select('roast_group, quantity_kg, notes, transaction_type')
         .not('roast_group', 'is', null)
-        .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'ADJUSTMENT', 'LOSS']);
+        .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'BLEND', 'ADJUSTMENT', 'LOSS']);
       if (error) throw error;
       return data ?? [];
     },
@@ -187,9 +188,10 @@ export default function Inventory() {
   // and the production-tab dropdowns all agree.
   //
   // Formula (per group):
-  //   wip_net_kg = sum(ROAST_OUTPUT) - sum(|PACK_CONSUME_WIP|) + sum(ADJUSTMENT + LOSS)
-  // Manual adjustments (floor counts, recounts, opening balances) are ADJUSTMENT rows
-  // in inventory_transactions now — the separate wip_adjustments table is retired.
+  //   wip_net_kg = sum(ROAST_OUTPUT) - sum(|PACK_CONSUME_WIP|) + sum(BLEND) + sum(ADJUSTMENT + LOSS)
+  // Blend movement (BLEND rows) is tracked in its own column; manual adjustments
+  // (floor counts, recounts, opening balances) are ADJUSTMENT rows in
+  // inventory_transactions now — the separate wip_adjustments table is retired.
   const wipByRoastGroup = useMemo((): WipByRoastGroup[] => {
     const computed = computeAuthoritativeWip(
       (inventoryTransactions ?? []).map((tx) => ({
@@ -204,11 +206,12 @@ export default function Inventory() {
       .map((w) => ({
         roast_group: w.roast_group,
         roasted_kg: w.roasted_completed_kg,
+        blended_kg: w.blended_kg,
         consumed_kg: w.packed_consumed_kg,
         adjusted_kg: w.adjustments_kg,
         net_wip_kg: w.wip_net_kg,
       }))
-      .filter((row) => row.roasted_kg !== 0 || row.consumed_kg !== 0 || row.adjusted_kg !== 0)
+      .filter((row) => row.roasted_kg !== 0 || row.blended_kg !== 0 || row.consumed_kg !== 0 || row.adjusted_kg !== 0)
       .sort((a, b) => a.roast_group.localeCompare(b.roast_group));
   }, [inventoryTransactions]);
 
@@ -444,7 +447,7 @@ export default function Inventory() {
                 <div>
                   <CardTitle className="text-lg">Work-in-Progress by Roast Group</CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Net WIP = Roasted/Blended Output − Packing Consumed + Adjustments
+                    Net WIP = Roasted + Blended − Packing Consumed + Adjustments
                   </p>
                   <p className="text-xs text-muted-foreground">
                     For post-roast blends, WIP is created when components are blended, not when components are roasted.
@@ -502,7 +505,8 @@ export default function Inventory() {
                   <thead>
                     <tr className="border-b text-left">
                       <th className="pb-2">Roast Group</th>
-                      <th className="pb-2 text-right">Roasted/Blended</th>
+                      <th className="pb-2 text-right">Roasted</th>
+                      <th className="pb-2 text-right">Blended</th>
                       <th className="pb-2 text-right">Consumed</th>
                       <th className="pb-2 text-right">Adjustments</th>
                       <th className="pb-2 text-right">Net WIP</th>
@@ -517,6 +521,13 @@ export default function Inventory() {
                           <LastCountedLine entry={lastCounts?.byGroup[row.roast_group]} />
                         </td>
                         <td className="py-3 text-right">{row.roasted_kg.toFixed(1)} kg</td>
+                        <td className="py-3 text-right">
+                          {row.blended_kg !== 0 && (
+                            <span className={row.blended_kg > 0 ? 'text-green-600' : 'text-destructive'}>
+                              {row.blended_kg > 0 ? '+' : ''}{row.blended_kg.toFixed(1)} kg
+                            </span>
+                          )}
+                        </td>
                         <td className="py-3 text-right text-muted-foreground">
                           −{row.consumed_kg.toFixed(1)} kg
                         </td>
