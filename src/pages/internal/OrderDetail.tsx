@@ -523,7 +523,7 @@ export default function OrderDetail() {
       // status = CANCELLED in one transaction. This replaces the former three
       // separate writes that could credit FG while leaving the order live if the
       // status change failed (and a retry then cancelled "clean").
-      const { error } = await supabase.rpc('cancel_order_with_picks' as any, {
+      const { error } = await supabase.rpc('cancel_order_with_picks', {
         p_order_id: id!,
         p_mode: mode,
       });

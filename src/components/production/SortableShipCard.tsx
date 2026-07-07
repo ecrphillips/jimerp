@@ -148,7 +148,7 @@ export function SortableShipCard({
       productId: string;
       requiresProduction: boolean;
     }) => {
-      const { error } = await supabase.rpc('set_ship_pick' as any, {
+      const { error } = await supabase.rpc('set_ship_pick', {
         p_order_id: order.order_id,
         p_order_line_item_id: lineItemId,
         p_units_picked: unitsPicked,
