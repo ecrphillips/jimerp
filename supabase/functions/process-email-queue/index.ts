@@ -259,6 +259,54 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Honor the unsubscribe / suppression list before sending. This is the
+      // single choke point for it: confirm-order-email, notify-order-event, and
+      // any other path all enqueue to transactional_emails, so checking here
+      // covers every one of them (fixing the paths that enqueued without a
+      // suppression check). Auth emails (password resets, magic links) must
+      // ALWAYS deliver, so they are deliberately never suppressed.
+      if (queue === 'transactional_emails' && payload.to) {
+        const { data: suppressed, error: suppressionError } = await supabase
+          .from('suppressed_emails')
+          .select('id')
+          .eq('email', String(payload.to).toLowerCase())
+          .maybeSingle()
+
+        if (suppressionError) {
+          // Fail closed: if we can't verify suppression, don't send. Leave the
+          // message in the queue — its visibility timeout expires and it's retried
+          // next cycle; a persistently broken check ages out via the TTL/DLQ path.
+          console.error('Suppression check failed — deferring send', {
+            queue,
+            msg_id: msg.msg_id,
+            error: suppressionError,
+          })
+          continue
+        }
+
+        if (suppressed) {
+          await supabase.from('email_send_log').insert({
+            message_id: payload.message_id,
+            template_name: payload.label || queue,
+            recipient_email: payload.to,
+            status: 'suppressed',
+          })
+          const { error: supDelError } = await supabase.rpc('delete_email', {
+            queue_name: queue,
+            message_id: msg.msg_id,
+          })
+          if (supDelError) {
+            console.error('Failed to delete suppressed message from queue', {
+              queue,
+              msg_id: msg.msg_id,
+              error: supDelError,
+            })
+          }
+          console.log('Email suppressed', { queue, recipient: payload.to, label: payload.label })
+          continue
+        }
+      }
+
       try {
         await sendLovableEmail(
           {

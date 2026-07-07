@@ -17,12 +17,12 @@ import { ChevronLeft, ChevronRight, CalendarIcon, Lock, Info, AlertTriangle } fr
 import { cn } from '@/lib/utils';
 import {
   format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval,
-  startOfToday, differenceInHours, parseISO, addDays, getDay,
+  startOfToday, differenceInHours, addDays, getDay,
   isBefore, startOfDay, isAfter,
 } from 'date-fns';
 import { parseDateOnly } from '@/lib/dateOnly';
 import { DEFAULT_TZ, isoDateInTz, todayInTz } from '@/lib/timezone';
-import { formatInTimeZone } from 'date-fns-tz';
+import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 import { formatCurrency } from '@/lib/currency';
 import {
   checkOverlap, timeToMinutes, formatTime12, TIER_RATES,
@@ -806,7 +806,10 @@ export default function MemberSchedule() {
             <DialogTitle>Booking Details</DialogTitle>
           </DialogHeader>
           {selectedBooking && (() => {
-            const bkDate = parseISO(selectedBooking.booking_date + 'T' + selectedBooking.start_time);
+            // Interpret the stored date + wall-clock start as Vancouver local time
+            // (matching the server RPC), so the countdown is correct regardless of
+            // the viewer's own timezone.
+            const bkDate = fromZonedTime(`${selectedBooking.booking_date}T${selectedBooking.start_time}`, DEFAULT_TZ);
             const hrsUntil = differenceInHours(bkDate, new Date());
             const canCancel = hrsUntil > 48;
             const cancellationFee = hrsUntil <= 24

@@ -40,20 +40,24 @@ Frontend rewired to call the RPCs: [`src/components/production/SortableShipCard.
 
 Ordered by the owner's priority. Each is independent.
 
-### N1 — UTC-vs-Vancouver timezone math (High)
+### N1 — UTC-vs-Vancouver timezone math (High) — ✅ DONE (deploy pending)
+Fixed in migration `20260707130000_1beff1af-...sql` (redefines `create_member_booking` + `cancel_member_booking` to use a Vancouver calendar "today" and a Vancouver wall-clock booking start) and in [`src/pages/member/MemberSchedule.tsx`](src/pages/member/MemberSchedule.tsx) (cancellation countdown now interprets the booking as Vancouver-local via `fromZonedTime`). Deploy the migration via Lovable to activate. Note: the member dialog's `canCancel` still hardcodes 48h — the custom-cancellation-window fix (audit M7) is deliberately left for a later pass.
+
+<details><summary>Original entry</summary>
+
+
 **Why it matters:** the booking RPCs build timestamps from stored Vancouver wall-clock times but evaluate them in the server's UTC timezone, so the 48-hour cancellation cutoff fires ~7–8 hours early and, because "today" is computed in UTC, every evening after ~4–5 PM Pacific the system thinks it's tomorrow (same-day bookings rejected as "in the past", next-morning cancellations blocked).
 **Approach:** new migration re-creating `create_member_booking` and `cancel_member_booking` (latest defs in `20260603174431`) to evaluate date/time as `(booking_date + start_time) AT TIME ZONE 'America/Vancouver'` and to use a Vancouver-local "today" instead of `CURRENT_DATE`. Align the member-portal display in [`src/pages/member/MemberSchedule.tsx`](src/pages/member/MemberSchedule.tsx) to the same timezone (it currently uses the browser's). The correct helpers already exist in [`src/lib/timezone.ts`](src/lib/timezone.ts) — the RPCs and this screen are the outliers.
 **Effort:** simple fix (localized SQL + one screen). **Risk:** medium (SQL, needs staging test across an evening boundary).
+</details>
 
 ### N2 — Multi-account / multi-role users get locked out (High)
 **Why it matters:** the auth resolution, post-login landing, and set-password flow assume exactly one `user_roles` / `account_users` row and query with single-row expectations. The first time a user belongs to a second account (or holds two roles) those queries error and the user is shown "account pending" or dropped into the wrong portal with permissions defaulted off.
 **Approach:** in [`src/contexts/AuthContext.tsx`](src/contexts/AuthContext.tsx), [`src/pages/AuthCallback.tsx`](src/pages/AuthCallback.tsx), and [`src/pages/SetPassword.tsx`](src/pages/SetPassword.tsx), replace the single-row assumptions with a deterministic choice (order + `.limit(1)`, or return all rows and pick by a documented precedence) and, where a user legitimately has several accounts, surface an account picker. Decide the precedence rule (e.g. ADMIN > OPS > CLIENT for role; most-recently-active account) before coding.
 **Effort:** structural (touches core auth). **Risk:** medium-high — auth regressions are high-blast-radius; test every portal's login.
 
-### N3 — Order confirmation/status emails ignore the unsubscribe list (High)
-**Why it matters:** order-confirmation and order-status emails are queued straight to recipients without consulting `suppressed_emails`, so an unsubscribed client keeps getting order email — breaking the unsubscribe promise.
-**Approach:** add the same suppression filter the general notification path uses (`_shared/notifications.ts`) before enqueue in [`supabase/functions/confirm-order-email/index.ts`](supabase/functions/confirm-order-email/index.ts) and [`supabase/functions/notify-order-event/index.ts`](supabase/functions/notify-order-event/index.ts) — or, more robustly, check suppression once at send time in `process-email-queue` so no enqueue path can bypass it. The queue-time check is preferred (single choke point).
-**Effort:** simple fix. **Risk:** low.
+### N3 — Order confirmation/status emails ignore the unsubscribe list (High) — ✅ DONE (deploy pending)
+Fixed at the single choke point: [`supabase/functions/process-email-queue/index.ts`](supabase/functions/process-email-queue/index.ts) now checks `suppressed_emails` before sending any `transactional_emails` message (fail-closed on a check error; suppressed messages are logged and dropped from the queue). Auth emails (password resets, magic links) are deliberately never suppressed. This covers confirm-order-email, notify-order-event, and every other path that enqueues transactional mail. Redeploy the edge function via Lovable to activate.
 
 ### N4 — Cancellation / no-show fees recorded but never billed (Medium)
 **Why it matters:** the admin UI stamps `cancellation_fee_amt` on charged-cancellation and no-show bookings but the billing page never reads it, so those fees are silently uncollected. No-show is inconsistent the other way (hours count *and* a fee is stamped).
