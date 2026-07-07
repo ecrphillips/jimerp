@@ -5690,6 +5690,10 @@ export type Database = {
         Args: { p_booking_id: string }
         Returns: undefined
       }
+      cancel_order_with_picks: {
+        Args: { p_mode: string; p_order_id: string }
+        Returns: undefined
+      }
       create_member_booking: {
         Args: {
           p_account_id: string
@@ -5938,6 +5942,14 @@ export type Database = {
       revert_batch_to_planned: {
         Args: { p_batch_id: string }
         Returns: boolean
+      }
+      set_ship_pick: {
+        Args: {
+          p_order_id: string
+          p_order_line_item_id: string
+          p_units_picked: number
+        }
+        Returns: number
       }
       set_shopify_quarantined_line_do_not_produce: {
         Args: { p_line_id: string }
