@@ -5770,6 +5770,10 @@ export type Database = {
         Args: { p_mode: string; p_order_id: string }
         Returns: undefined
       }
+      cancel_shipped_order: {
+        Args: { p_order_id: string }
+        Returns: undefined
+      }
       client_cancel_own_order: {
         Args: { p_order_id: string }
         Returns: boolean
