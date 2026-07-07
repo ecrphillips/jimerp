@@ -1906,6 +1906,13 @@ export type Database = {
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "funk_drop_batches_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_all"
+            referencedColumns: ["id"]
+          },
         ]
       }
       funk_drop_slots: {
@@ -2018,6 +2025,13 @@ export type Database = {
             columns: ["bundle_order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "funk_import_sessions_bundle_order_id_fkey"
+            columns: ["bundle_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_all"
             referencedColumns: ["id"]
           },
         ]
@@ -3259,6 +3273,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "inventory_transactions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_all"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "inventory_transactions_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
@@ -3490,6 +3511,13 @@ export type Database = {
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "order_date_audit_log_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_all"
+            referencedColumns: ["id"]
+          },
         ]
       }
       order_line_items: {
@@ -3553,6 +3581,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "order_line_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_all"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "order_line_items_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
@@ -3608,6 +3643,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_notifications_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_all"
             referencedColumns: ["id"]
           },
         ]
@@ -3692,6 +3734,13 @@ export type Database = {
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "order_shipments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_all"
+            referencedColumns: ["id"]
+          },
         ]
       }
       order_status_audit_log: {
@@ -3728,6 +3777,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_status_audit_log_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_all"
             referencedColumns: ["id"]
           },
         ]
@@ -4146,6 +4202,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_plan_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_all"
             referencedColumns: ["id"]
           },
           {
@@ -4980,6 +5043,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "ship_picks_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_all"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "ship_picks_order_line_item_id_fkey"
             columns: ["order_line_item_id"]
             isOneToOne: true
@@ -5037,6 +5107,13 @@ export type Database = {
             columns: ["bundle_order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopify_bundle_source_orders_bundle_order_id_fkey"
+            columns: ["bundle_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_all"
             referencedColumns: ["id"]
           },
           {
@@ -5209,6 +5286,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "shopify_pull_log_generated_order_id_fkey"
+            columns: ["generated_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_all"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "shopify_pull_log_source_id_fkey"
             columns: ["source_id"]
             isOneToOne: false
@@ -5296,6 +5380,13 @@ export type Database = {
             columns: ["bundle_order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopify_quarantined_lines_bundle_order_id_fkey"
+            columns: ["bundle_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_all"
             referencedColumns: ["id"]
           },
           {
@@ -5665,6 +5756,72 @@ export type Database = {
           updated_at: string | null
           work_deadline: string | null
           work_deadline_at: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          account_location_id?: string | null
+          client_id?: string | null
+          client_notes?: string | null
+          client_po?: string | null
+          created_at?: string | null
+          created_by_admin?: boolean | null
+          created_by_user_id?: string | null
+          delivery_method?:
+            | Database["public"]["Enums"]["delivery_method"]
+            | null
+          id?: string | null
+          internal_ops_notes?: string | null
+          invoiced?: boolean | null
+          location_id?: string | null
+          manually_deprioritized?: boolean | null
+          notify_email_error?: string | null
+          notify_email_sent_at?: string | null
+          order_number?: string | null
+          packed?: boolean | null
+          requested_ship_date?: string | null
+          roasted?: boolean | null
+          ship_display_order?: number | null
+          shipped_or_ready?: boolean | null
+          shopify_pull_log_id?: string | null
+          shopify_source_id?: string | null
+          source_channel?: string | null
+          status?: Database["public"]["Enums"]["order_status"] | null
+          updated_at?: string | null
+          work_deadline?: string | null
+          work_deadline_at?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          account_location_id?: string | null
+          client_id?: string | null
+          client_notes?: string | null
+          client_po?: string | null
+          created_at?: string | null
+          created_by_admin?: boolean | null
+          created_by_user_id?: string | null
+          delivery_method?:
+            | Database["public"]["Enums"]["delivery_method"]
+            | null
+          id?: string | null
+          internal_ops_notes?: string | null
+          invoiced?: boolean | null
+          location_id?: string | null
+          manually_deprioritized?: boolean | null
+          notify_email_error?: string | null
+          notify_email_sent_at?: string | null
+          order_number?: string | null
+          packed?: boolean | null
+          requested_ship_date?: string | null
+          roasted?: boolean | null
+          ship_display_order?: number | null
+          shipped_or_ready?: boolean | null
+          shopify_pull_log_id?: string | null
+          shopify_source_id?: string | null
+          source_channel?: string | null
+          status?: Database["public"]["Enums"]["order_status"] | null
+          updated_at?: string | null
+          work_deadline?: string | null
+          work_deadline_at?: string | null
         }
         Relationships: [
           {
