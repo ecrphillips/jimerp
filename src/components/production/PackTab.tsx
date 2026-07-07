@@ -21,6 +21,7 @@ import { horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Package, Layers, GripVertical, RotateCcw } from 'lucide-react';
@@ -247,14 +248,14 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   // Fetch packing runs (still needed for units_packed tracking until ledger migration)
   const { data: packingRuns } = useQuery({
     queryKey: ['packing-runs', dateFilterConfig],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('packing_runs')
-        .select('*');
-      
-      if (error) throw error;
-      return (data ?? []) as PackingRun[];
-    },
+    queryFn: async () =>
+      (await fetchAllRows((from, to) =>
+        supabase
+          .from('packing_runs')
+          .select('*')
+          .order('id', { ascending: true })
+          .range(from, to),
+      )) as PackingRun[],
   });
 
   // "Units packed" per product comes from the authoritative FG ledger (net
@@ -278,15 +279,18 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   const { data: pickedByProductUnits } = useQuery<Record<string, number>>({
     queryKey: ['pack-tab-picks-by-product'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('ship_picks')
-        .select(`
+      const data = await fetchAllRows((from, to) =>
+        supabase
+          .from('ship_picks')
+          .select(`
           units_picked,
           order:orders!inner(status),
           order_line_item:order_line_items!inner(product_id)
         `)
-        .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
-      if (error) throw error;
+          .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY'])
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
       const map: Record<string, number> = {};
       for (const row of (data ?? []) as any[]) {
         const pid = row.order_line_item?.product_id;

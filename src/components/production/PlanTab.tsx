@@ -17,6 +17,7 @@ import {
   PlusCircle,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -563,13 +564,16 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
       const stuckCutoffIso = subDays(vNow, 1).toISOString();
       const orphans: Anomaly[] = [];
 
-      const batchesRes = await supabase
-        .from('roasted_batches')
-        .select('id, roast_group, status, created_at, target_date')
-        .eq('status', 'PLANNED')
-        .lt('created_at', stuckCutoffIso);
-      if (batchesRes.error) throw batchesRes.error;
-      for (const b of batchesRes.data ?? []) {
+      const batchesData = await fetchAllRows((from, to) =>
+        supabase
+          .from('roasted_batches')
+          .select('id, roast_group, status, created_at, target_date')
+          .eq('status', 'PLANNED')
+          .lt('created_at', stuckCutoffIso)
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+      for (const b of batchesData) {
         const rel = formatDistanceToNow(new Date(b.created_at), { addSuffix: true });
         orphans.push({
           key: `D-${b.id}`,
@@ -578,11 +582,13 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
         });
       }
 
-      const allBatchesRes = await supabase
-        .from('roasted_batches')
-        .select('id, roast_group, target_date, status');
-      if (allBatchesRes.error) throw allBatchesRes.error;
-      const allBatches = allBatchesRes.data ?? [];
+      const allBatches = await fetchAllRows((from, to) =>
+        supabase
+          .from('roasted_batches')
+          .select('id, roast_group, target_date, status')
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
 
       if (allBatches.length > 0) {
         const ids = allBatches.map((b) => b.id);
@@ -590,13 +596,16 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
         // its id in source_batch_id (written by mark_batch_roasted for every
         // ROAST_OUTPUT). The retired wip_ledger table never carried batch refs,
         // so checking it flagged every batch as an orphan.
-        const ledgerRes = await supabase
-          .from('inventory_transactions')
-          .select('source_batch_id')
-          .in('source_batch_id', ids);
-        if (ledgerRes.error) throw ledgerRes.error;
+        const ledgerData = await fetchAllRows((from, to) =>
+          supabase
+            .from('inventory_transactions')
+            .select('id, source_batch_id')
+            .in('source_batch_id', ids)
+            .order('id', { ascending: true })
+            .range(from, to),
+        );
         const referenced = new Set(
-          (ledgerRes.data ?? []).map((r) => r.source_batch_id).filter((v): v is string => !!v)
+          ledgerData.map((r) => r.source_batch_id).filter((v): v is string => !!v)
         );
         for (const b of allBatches) {
           if (referenced.has(b.id)) continue;
@@ -609,13 +618,16 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
         }
       }
 
-      const picksRes = await supabase
-        .from('ship_picks')
-        .select(
-          'order_line_item_id, units_picked, order_line_items!inner(id, quantity_units, products(product_name), orders!inner(id, order_number, status, clients(name)))'
-        )
-        .not('order_line_items.orders.status', 'in', '(SHIPPED,CANCELLED)');
-      if (picksRes.error) throw picksRes.error;
+      const picksData = await fetchAllRows((from, to) =>
+        supabase
+          .from('ship_picks')
+          .select(
+            'id, order_line_item_id, units_picked, order_line_items!inner(id, quantity_units, products(product_name), orders!inner(id, order_number, status, clients(name)))'
+          )
+          .not('order_line_items.orders.status', 'in', '(SHIPPED,CANCELLED)')
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
 
       type LineAgg = {
         totalPicked: number;
@@ -626,7 +638,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
         clientName: string;
       };
       const byLine = new Map<string, LineAgg>();
-      for (const row of picksRes.data ?? []) {
+      for (const row of picksData) {
         const li = row.order_line_items as
           | {
               id: string;

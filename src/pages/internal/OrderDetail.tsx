@@ -518,52 +518,14 @@ export default function OrderDetail() {
 
   const cancelWithPicksMutation = useMutation({
     mutationFn: async (mode: 'return' | 'writeoff') => {
-      const picks = cancelPicks ?? [];
-      const rows: Database['public']['Tables']['inventory_transactions']['Insert'][] = [];
-      for (const p of picks) {
-        // Reverse the pick consumption — the coffee re-enters FG.
-        rows.push({
-          transaction_type: 'SHIP_CONSUME_FG',
-          product_id: p.productId,
-          order_id: id!,
-          quantity_units: p.units,
-          notes: mode === 'return'
-            ? `Returned ${p.units} units to stock (order ${order?.order_number} cancelled)`
-            : `Reversed ${p.units} picked units (order ${order?.order_number} cancelled)`,
-          is_system_generated: false,
-          created_by: authUser?.id,
-        });
-        // Write-off: immediately remove it again as a recorded loss.
-        if (mode === 'writeoff') {
-          rows.push({
-            transaction_type: 'ADJUSTMENT',
-            product_id: p.productId,
-            order_id: id!,
-            quantity_units: -p.units,
-            notes: `Written off as lost: ${p.units} units (order ${order?.order_number} cancelled)`,
-            is_system_generated: false,
-            created_by: authUser?.id,
-          });
-        }
-      }
-      if (rows.length > 0) {
-        const { error: ledgerErr } = await supabase.from('inventory_transactions').insert(rows);
-        if (ledgerErr) throw ledgerErr;
-      }
-
-      // Zero the picks so the allocation record matches the reversed ledger.
-      const pickIds = picks.map((p) => p.pickId);
-      if (pickIds.length > 0) {
-        const { error: pickErr } = await supabase
-          .from('ship_picks')
-          .update({ units_picked: 0, updated_by: authUser?.id })
-          .in('id', pickIds);
-        if (pickErr) throw pickErr;
-      }
-
-      const { error } = await supabase.rpc('update_order_status' as any, {
+      // Delegates to the cancel_order_with_picks RPC, which reads the outstanding
+      // picks server-side and reverses the FG ledger, zeroes the picks, and sets
+      // status = CANCELLED in one transaction. This replaces the former three
+      // separate writes that could credit FG while leaving the order live if the
+      // status change failed (and a retry then cancelled "clean").
+      const { error } = await supabase.rpc('cancel_order_with_picks' as any, {
         p_order_id: id!,
-        p_target_status: 'CANCELLED',
+        p_mode: mode,
       });
       if (error) throw error;
     },

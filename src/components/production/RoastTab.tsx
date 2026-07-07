@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Flame, Plus, Check, Zap, Clock, Settings, Sparkles, Package, Layers } from 'lucide-react';
@@ -258,13 +259,14 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   // Picked items should NOT contribute to upstream demand (roast/pack)
   const { data: shipPicks } = useQuery({
     queryKey: ['roast-tab-ship-picks'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('ship_picks')
-        .select('order_line_item_id, units_picked');
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () =>
+      fetchAllRows((from, to) =>
+        supabase
+          .from('ship_picks')
+          .select('order_line_item_id, units_picked')
+          .order('id', { ascending: true })
+          .range(from, to),
+      ),
   });
 
   // Map order_line_item_id to units_picked
@@ -338,15 +340,15 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   // Fetch existing batches
   const { data: batches } = useQuery({
     queryKey: ['roasted-batches', dateFilterConfig],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('roasted_batches')
-        .select('*')
-        .order('created_at', { ascending: true });
-      
-      if (error) throw error;
-      return (data ?? []) as RoastBatch[];
-    },
+    queryFn: async () =>
+      (await fetchAllRows((from, to) =>
+        supabase
+          .from('roasted_batches')
+          .select('*')
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to),
+      )) as RoastBatch[],
   });
 
   // ========== AUTHORITATIVE INVENTORY (from source-of-truth tables) ==========

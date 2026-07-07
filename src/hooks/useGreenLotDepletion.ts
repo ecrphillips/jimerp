@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 
 export interface DepletionLink {
   link_id: string;
@@ -118,15 +119,16 @@ export function useGreenLotDepletion(
   const { data: plannedBatches = [], isLoading: loadingBatches } = useQuery({
     queryKey: ['depletion-planned-batches', roastGroupKey],
     enabled,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('roasted_batches')
-        .select('id, planned_output_kg, status')
-        .eq('roast_group', roastGroupKey!)
-        .eq('status', 'PLANNED');
-      if (error) throw error;
-      return (data ?? []) as Array<{ id: string; planned_output_kg: number | null; status: string }>;
-    },
+    queryFn: async () =>
+      (await fetchAllRows((from, to) =>
+        supabase
+          .from('roasted_batches')
+          .select('id, planned_output_kg, status')
+          .eq('roast_group', roastGroupKey!)
+          .eq('status', 'PLANNED')
+          .order('id', { ascending: true })
+          .range(from, to),
+      )) as Array<{ id: string; planned_output_kg: number | null; status: string }>,
   });
 
   const expectedYieldLossPct = Number(rgConfig?.expected_yield_loss_pct ?? 16);
@@ -246,7 +248,7 @@ export async function evaluateMultiRoastGroupImpacts(
   const rgKeys = Array.from(new Set(inputs.map(i => i.roastGroup)));
   if (rgKeys.length === 0) return { impacts: [], pctByLinkId: {} };
 
-  const [{ data: rgConfigs, error: rgErr }, { data: linksData, error: linkErr }, { data: batches, error: bErr }] =
+  const [{ data: rgConfigs, error: rgErr }, { data: linksData, error: linkErr }, batches] =
     await Promise.all([
       supabase
         .from('roast_groups')
@@ -260,15 +262,18 @@ export async function evaluateMultiRoastGroupImpacts(
           successor:green_lots!green_lot_roast_group_links_successor_lot_id_fkey ( id, lot_number, status, kg_on_hand )
         `)
         .in('roast_group', rgKeys),
-      supabase
-        .from('roasted_batches')
-        .select('roast_group, planned_output_kg, status')
-        .in('roast_group', rgKeys)
-        .eq('status', 'PLANNED'),
+      fetchAllRows((from, to) =>
+        supabase
+          .from('roasted_batches')
+          .select('roast_group, planned_output_kg, status')
+          .in('roast_group', rgKeys)
+          .eq('status', 'PLANNED')
+          .order('id', { ascending: true })
+          .range(from, to),
+      ),
     ]);
   if (rgErr) throw rgErr;
   if (linkErr) throw linkErr;
-  if (bErr) throw bErr;
 
   const yieldByRg = new Map<string, number>();
   (rgConfigs ?? []).forEach((r: any) => {

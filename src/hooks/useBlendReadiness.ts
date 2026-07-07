@@ -15,6 +15,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 import { RoastGroupComponent } from './useRoastGroupComponents';
 
 export type BlendReadinessState = 'needs_roasting' | 'partially_ready' | 'ready_to_blend' | 'blended';
@@ -51,17 +52,17 @@ export interface BlendReadiness {
 function useRoastedComponentBatches() {
   return useQuery({
     queryKey: ['roasted-component-batches-for-blending'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('roasted_batches')
-        .select('id, roast_group, actual_output_kg, planned_for_blend_roast_group')
-        .eq('status', 'ROASTED')
-        .not('planned_for_blend_roast_group', 'is', null)
-        .is('consumed_by_blend_at', null);
-      
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () =>
+      fetchAllRows((from, to) =>
+        supabase
+          .from('roasted_batches')
+          .select('id, roast_group, actual_output_kg, planned_for_blend_roast_group')
+          .eq('status', 'ROASTED')
+          .not('planned_for_blend_roast_group', 'is', null)
+          .is('consumed_by_blend_at', null)
+          .order('id', { ascending: true })
+          .range(from, to),
+      ),
   });
 }
 

@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 import { toast } from 'sonner';
 import { Loader2, AlertTriangle, CheckCircle2, Layers, ArrowRight, Beaker } from 'lucide-react';
 
@@ -118,16 +119,18 @@ export function BlendExecuteModal({
       
       // Get all ROASTED batches for component groups that are NOT consumed
       // consumed_by_blend_at IS NULL means the batch is still available
-      const { data, error } = await supabase
-        .from('roasted_batches')
-        .select('id, roast_group, actual_output_kg, status, planned_for_blend_roast_group, consumed_by_blend_at, notes, target_date, created_at')
-        .in('roast_group', componentGroups)
-        .eq('status', 'ROASTED')
-        .is('consumed_by_blend_at', null)  // Only unconsumed batches
-        .order('created_at', { ascending: true });
-      
-      if (error) throw error;
-      return (data ?? []) as RoastedBatch[];
+      const data = await fetchAllRows((from, to) =>
+        supabase
+          .from('roasted_batches')
+          .select('id, roast_group, actual_output_kg, status, planned_for_blend_roast_group, consumed_by_blend_at, notes, target_date, created_at')
+          .in('roast_group', componentGroups)
+          .eq('status', 'ROASTED')
+          .is('consumed_by_blend_at', null)  // Only unconsumed batches
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+      return data as RoastedBatch[];
     },
     enabled: open && !!blendComponents && blendComponents.length > 0,
   });
@@ -141,14 +144,16 @@ export function BlendExecuteModal({
       const componentGroups = blendComponents.map(c => c.component_roast_group);
       
       // Get pack consumptions per roast group
-      const { data, error } = await supabase
-        .from('inventory_transactions')
-        .select('roast_group, quantity_kg')
-        .eq('transaction_type', 'PACK_CONSUME_WIP')
-        .in('roast_group', componentGroups);
-      
-      if (error) throw error;
-      
+      const data = await fetchAllRows((from, to) =>
+        supabase
+          .from('inventory_transactions')
+          .select('id, roast_group, quantity_kg')
+          .eq('transaction_type', 'PACK_CONSUME_WIP')
+          .in('roast_group', componentGroups)
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+
       const consumedByGroup: Record<string, number> = {};
       for (const t of data ?? []) {
         if (t.roast_group) {

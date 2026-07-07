@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 import { startOfDay, startOfWeek, addDays, format, getHours, getMinutes, getDay } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 
@@ -95,11 +96,15 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
       const dateFilter = getDateFilter();
 
       // ===== Channel 1 & 2: Roaster batches today =====
-      const { data: plannedBatches } = await supabase
-        .from('roasted_batches')
-        .select('roast_group, planned_output_kg, assigned_roaster')
-        .eq('status', 'PLANNED')
-        .eq('target_date', todayStr);
+      const plannedBatches = await fetchAllRows((from, to) =>
+        supabase
+          .from('roasted_batches')
+          .select('roast_group, planned_output_kg, assigned_roaster')
+          .eq('status', 'PLANNED')
+          .eq('target_date', todayStr)
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
 
       let samiacBatchKgToday = 0;
       let loringBatchKgToday = 0;
@@ -183,9 +188,13 @@ export function useDashboardMetrics(horizon: TimeHorizon) {
 
       // Ship picks for today's orders
       const todayOrderIds = (todayOrders || []).map(o => o.id);
-      const { data: shipPicks } = await supabase
-        .from('ship_picks')
-        .select('order_line_item_id, units_picked');
+      const shipPicks = await fetchAllRows((from, to) =>
+        supabase
+          .from('ship_picks')
+          .select('order_line_item_id, units_picked')
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
 
       const picksByLineItem = new Map(
         (shipPicks || []).map(p => [p.order_line_item_id, p.units_picked])

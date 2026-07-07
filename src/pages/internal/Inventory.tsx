@@ -22,6 +22,7 @@ import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { WipAdjustmentModal } from '@/components/inventory/WipAdjustmentModal';
 import { WipFloorCountModal, type WipFloorRow } from '@/components/inventory/WipFloorCountModal';
 import { computeAuthoritativeWip, useAuthoritativeFg } from '@/hooks/useAuthoritativeInventory';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 import { useOrderCreator } from '@/hooks/useOrderCreator';
 
 interface LastCount {
@@ -130,15 +131,16 @@ export default function Inventory() {
   // Fetch ALL inventory transactions for WIP calculation (ledger-based source of truth)
   const { data: inventoryTransactions } = useQuery({
     queryKey: ['inventory-transactions-wip'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('inventory_transactions')
-        .select('roast_group, quantity_kg, notes, transaction_type')
-        .not('roast_group', 'is', null)
-        .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'BLEND', 'ADJUSTMENT', 'LOSS']);
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () =>
+      fetchAllRows((from, to) =>
+        supabase
+          .from('inventory_transactions')
+          .select('id, roast_group, quantity_kg, notes, transaction_type')
+          .not('roast_group', 'is', null)
+          .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'BLEND', 'ADJUSTMENT', 'LOSS'])
+          .order('id', { ascending: true })
+          .range(from, to),
+      ),
   });
 
   // Most recent manual ADJUSTMENT per roast_group and per product — powers the
@@ -146,13 +148,16 @@ export default function Inventory() {
   const { data: lastCounts } = useQuery({
     queryKey: ['inventory-last-counts'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('inventory_transactions')
-        .select('roast_group, product_id, created_at, created_by')
-        .eq('transaction_type', 'ADJUSTMENT')
-        .eq('is_system_generated', false)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+      const data = await fetchAllRows((from, to) =>
+        supabase
+          .from('inventory_transactions')
+          .select('id, roast_group, product_id, created_at, created_by')
+          .eq('transaction_type', 'ADJUSTMENT')
+          .eq('is_system_generated', false)
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(from, to),
+      );
       const byGroup: Record<string, LastCount> = {};
       const byProduct: Record<string, LastCount> = {};
       for (const r of data ?? []) {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,13 +32,16 @@ export function RoastGroupWipSection({ roastGroupKey, displayName }: Props) {
   const { data, isLoading } = useQuery({
     queryKey: ['roast-group-wip', roastGroupKey],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('inventory_transactions')
-        .select('quantity_kg, transaction_type, notes, created_at, created_by')
-        .eq('roast_group', roastGroupKey)
-        .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'BLEND', 'ADJUSTMENT', 'LOSS'])
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+      const data = await fetchAllRows((from, to) =>
+        supabase
+          .from('inventory_transactions')
+          .select('id, quantity_kg, transaction_type, notes, created_at, created_by')
+          .eq('roast_group', roastGroupKey)
+          .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'BLEND', 'ADJUSTMENT', 'LOSS'])
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(from, to),
+      );
 
       let txSum = 0;
       for (const r of data ?? []) {

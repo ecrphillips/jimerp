@@ -14,6 +14,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 import { useMemo } from 'react';
 
 // ============================================================================
@@ -88,13 +89,14 @@ export interface ComponentInventory {
 function useRoastedBatches() {
   return useQuery({
     queryKey: ['authoritative-roasted-batches'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('roasted_batches')
-        .select('id, roast_group, status, actual_output_kg, planned_output_kg, planned_for_blend_roast_group, consumed_by_blend_at, target_date');
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () =>
+      fetchAllRows((from, to) =>
+        supabase
+          .from('roasted_batches')
+          .select('id, roast_group, status, actual_output_kg, planned_output_kg, planned_for_blend_roast_group, consumed_by_blend_at, target_date')
+          .order('id', { ascending: true })
+          .range(from, to),
+      ),
   });
 }
 
@@ -106,15 +108,16 @@ function useRoastedBatches() {
 function useWipLedgerTransactions() {
   return useQuery({
     queryKey: ['authoritative-wip-ledger'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('inventory_transactions')
-        .select('id, roast_group, quantity_kg, transaction_type, notes')
-        .not('roast_group', 'is', null)
-        .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'BLEND', 'ADJUSTMENT', 'LOSS']);
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () =>
+      fetchAllRows((from, to) =>
+        supabase
+          .from('inventory_transactions')
+          .select('id, roast_group, quantity_kg, transaction_type, notes')
+          .not('roast_group', 'is', null)
+          .in('transaction_type', ['ROAST_OUTPUT', 'PACK_CONSUME_WIP', 'BLEND', 'ADJUSTMENT', 'LOSS'])
+          .order('id', { ascending: true })
+          .range(from, to),
+      ),
   });
 }
 
@@ -129,15 +132,16 @@ function useWipLedgerTransactions() {
 function useFgLedgerTransactions() {
   return useQuery({
     queryKey: ['authoritative-fg-ledger'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('inventory_transactions')
-        .select('product_id, quantity_units, transaction_type')
-        .not('product_id', 'is', null)
-        .in('transaction_type', ['PACK_PRODUCE_FG', 'SHIP_CONSUME_FG', 'ADJUSTMENT']);
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () =>
+      fetchAllRows((from, to) =>
+        supabase
+          .from('inventory_transactions')
+          .select('id, product_id, quantity_units, transaction_type')
+          .not('product_id', 'is', null)
+          .in('transaction_type', ['PACK_PRODUCE_FG', 'SHIP_CONSUME_FG', 'ADJUSTMENT'])
+          .order('id', { ascending: true })
+          .range(from, to),
+      ),
   });
 }
 
@@ -182,21 +186,22 @@ function useRoastGroupsInfo() {
 function useShipPicks() {
   return useQuery({
     queryKey: ['authoritative-ship-picks'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('ship_picks')
-        .select(`
-          id, 
-          order_line_item_id, 
-          units_picked, 
-          order_id,
-          order:orders!inner(id, status)
-        `)
-        // Only count picks for orders that are still open (not shipped/cancelled)
-        .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () =>
+      fetchAllRows((from, to) =>
+        supabase
+          .from('ship_picks')
+          .select(`
+            id,
+            order_line_item_id,
+            units_picked,
+            order_id,
+            order:orders!inner(id, status)
+          `)
+          // Only count picks for orders that are still open (not shipped/cancelled)
+          .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY'])
+          .order('id', { ascending: true })
+          .range(from, to),
+      ),
   });
 }
 
@@ -206,21 +211,22 @@ function useShipPicks() {
 function useConfirmedOrderLines() {
   return useQuery({
     queryKey: ['authoritative-confirmed-demand'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('order_line_items')
-        .select(`
-          id,
-          product_id,
-          quantity_units,
-          order_id,
-          order:orders!inner(id, status)
-        `)
-        // CONFIRMED orders only - this is the authoritative source of demand
-        .eq('order.status', 'CONFIRMED');
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () =>
+      fetchAllRows((from, to) =>
+        supabase
+          .from('order_line_items')
+          .select(`
+            id,
+            product_id,
+            quantity_units,
+            order_id,
+            order:orders!inner(id, status)
+          `)
+          // CONFIRMED orders only - this is the authoritative source of demand
+          .eq('order.status', 'CONFIRMED')
+          .order('id', { ascending: true })
+          .range(from, to),
+      ),
   });
 }
 
@@ -230,20 +236,21 @@ function useConfirmedOrderLines() {
 function useOpenOrderLines() {
   return useQuery({
     queryKey: ['authoritative-open-demand'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('order_line_items')
-        .select(`
-          id,
-          product_id,
-          quantity_units,
-          order_id,
-          order:orders!inner(id, status, work_deadline)
-        `)
-        .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () =>
+      fetchAllRows((from, to) =>
+        supabase
+          .from('order_line_items')
+          .select(`
+            id,
+            product_id,
+            quantity_units,
+            order_id,
+            order:orders!inner(id, status, work_deadline)
+          `)
+          .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY'])
+          .order('id', { ascending: true })
+          .range(from, to),
+      ),
   });
 }
 

@@ -131,14 +131,16 @@ export function SortableShipCard({
     picksByLineItem[pick.order_line_item_id] = pick.units_picked;
   }
 
-  // Upsert ship pick mutation - now writes ledger transactions
+  // Upsert ship pick mutation.
+  // Delegates to the set_ship_pick RPC: it reads the previous picked count under
+  // lock and writes the ship_picks row + the SHIP_CONSUME_FG delta atomically, so
+  // two pickers (or a double-click before refetch) can't both compute the delta
+  // from a stale baseline and double-consume FG. The server also resolves
+  // requires_production and order status, so those params here are advisory only.
   const upsertPickMutation = useMutation({
     mutationFn: async ({
       lineItemId,
       unitsPicked,
-      previousPicked,
-      productId,
-      requiresProduction,
     }: {
       lineItemId: string;
       unitsPicked: number;
@@ -146,46 +148,12 @@ export function SortableShipCard({
       productId: string;
       requiresProduction: boolean;
     }) => {
-      const delta = unitsPicked - previousPicked;
-
-      // Update ship_picks record
-      const { error: pickError } = await supabase
-        .from('ship_picks')
-        .upsert({
-          order_id: order.order_id,
-          order_line_item_id: lineItemId,
-          units_picked: unitsPicked,
-          updated_by: user?.id,
-        }, {
-          onConflict: 'order_line_item_id',
-        });
-      if (pickError) throw pickError;
-
-      // Write SHIP_CONSUME_FG transaction for the delta
-      // Positive delta = consume FG (negative units)
-      // Negative delta = return FG (positive units)
-      // Bought-in items (requires_production = false) never touch the ledger:
-      // there is no FG to consume — the pick record alone tracks the shelf pull.
-      if (delta !== 0 && requiresProduction && !isShipped) {
-        const { error: ledgerError } = await supabase
-          .from('inventory_transactions')
-          .insert({
-            transaction_type: 'SHIP_CONSUME_FG',
-            product_id: productId,
-            order_id: order.order_id,
-            quantity_units: -delta, // negative for consumption, positive for return
-            notes: delta > 0 
-              ? `Picked ${delta} units for order ${order.order_number}` 
-              : `Returned ${Math.abs(delta)} units from order ${order.order_number}`,
-            is_system_generated: true,
-            created_by: user?.id,
-          });
-        
-        if (ledgerError) {
-          console.error('[SortableShipCard] Ledger write failed:', ledgerError);
-          throw ledgerError;
-        }
-      }
+      const { error } = await supabase.rpc('set_ship_pick' as any, {
+        p_order_id: order.order_id,
+        p_order_line_item_id: lineItemId,
+        p_units_picked: unitsPicked,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ship-picks', order.order_id] });

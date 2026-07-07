@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Loader2, AlertTriangle, Plus, Minus, ExternalLink, CheckCircle2 } from 'lucide-react';
@@ -121,33 +122,39 @@ export function PlanBlendBatchesModal({
       const componentGroups = blendComponents.map(c => c.component_roast_group);
       
       // Get roast outputs
-      const { data: roastOutputs, error: roastError } = await supabase
-        .from('inventory_transactions')
-        .select('roast_group, quantity_kg')
-        .eq('transaction_type', 'ROAST_OUTPUT')
-        .in('roast_group', componentGroups);
-      
-      if (roastError) throw roastError;
-      
+      const roastOutputs = await fetchAllRows((from, to) =>
+        supabase
+          .from('inventory_transactions')
+          .select('id, roast_group, quantity_kg')
+          .eq('transaction_type', 'ROAST_OUTPUT')
+          .in('roast_group', componentGroups)
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+
       // Get pack consumptions
-      const { data: packConsumptions, error: packError } = await supabase
-        .from('inventory_transactions')
-        .select('roast_group, quantity_kg')
-        .eq('transaction_type', 'PACK_CONSUME_WIP')
-        .in('roast_group', componentGroups);
-      
-      if (packError) throw packError;
-      
+      const packConsumptions = await fetchAllRows((from, to) =>
+        supabase
+          .from('inventory_transactions')
+          .select('id, roast_group, quantity_kg')
+          .eq('transaction_type', 'PACK_CONSUME_WIP')
+          .in('roast_group', componentGroups)
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+
       // Get blend movement, adjustments and losses. BLEND rows carry the negative
       // component decrement written when a blend was executed, so they must be
       // included or a component's WIP would ignore coffee already blended away.
-      const { data: adjustments, error: adjError } = await supabase
-        .from('inventory_transactions')
-        .select('roast_group, quantity_kg')
-        .in('transaction_type', ['BLEND', 'ADJUSTMENT', 'LOSS'])
-        .in('roast_group', componentGroups);
-      
-      if (adjError) throw adjError;
+      const adjustments = await fetchAllRows((from, to) =>
+        supabase
+          .from('inventory_transactions')
+          .select('id, roast_group, quantity_kg')
+          .in('transaction_type', ['BLEND', 'ADJUSTMENT', 'LOSS'])
+          .in('roast_group', componentGroups)
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
       
       // Calculate WIP per group
       const wipByGroup: Record<string, number> = {};
@@ -187,14 +194,15 @@ export function PlanBlendBatchesModal({
       // Only fetch PLANNED/ROASTED batches that are either:
       // 1. Explicitly linked to this blend via planned_for_blend_roast_group
       // 2. OR not linked to any blend (general component batches)
-      const { data, error } = await supabase
-        .from('roasted_batches')
-        .select('id, roast_group, status, planned_output_kg, actual_output_kg, planned_for_blend_roast_group, notes')
-        .in('roast_group', componentGroups)
-        .in('status', ['PLANNED', 'ROASTED']);
-      
-      if (error) throw error;
-      return data ?? [];
+      return fetchAllRows((from, to) =>
+        supabase
+          .from('roasted_batches')
+          .select('id, roast_group, status, planned_output_kg, actual_output_kg, planned_for_blend_roast_group, notes')
+          .in('roast_group', componentGroups)
+          .in('status', ['PLANNED', 'ROASTED'])
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
     },
     enabled: open && !!blendComponents && blendComponents.length > 0,
   });

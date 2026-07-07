@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 import { format, subDays, startOfDay } from 'date-fns';
 import { parseDateOnly } from '@/lib/dateOnly';
 import { 
@@ -116,13 +117,14 @@ export default function Orders() {
   // Fetch packing runs for pack completion calculation
   const { data: packingRuns } = useQuery({
     queryKey: ['packing-runs-all'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('packing_runs')
-        .select('product_id, target_date, units_packed');
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () =>
+      fetchAllRows((from, to) =>
+        supabase
+          .from('packing_runs')
+          .select('product_id, target_date, units_packed')
+          .order('id', { ascending: true })
+          .range(from, to),
+      ),
   });
 
   // Map packing runs by product_id for quick lookup

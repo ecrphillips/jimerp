@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Truck, AlertTriangle, Package, RefreshCw } from 'lucide-react';
@@ -293,13 +294,14 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
   // when building shipment cards.
   const { data: shipPicksForGating } = useQuery({
     queryKey: ['ship-picks-gating'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('ship_picks')
-        .select('order_line_item_id, units_picked');
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () =>
+      fetchAllRows((from, to) =>
+        supabase
+          .from('ship_picks')
+          .select('order_line_item_id, units_picked')
+          .order('id', { ascending: true })
+          .range(from, to),
+      ),
   });
 
   const fullyPickedOrderIds = useMemo(() => {

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 
 export type InventoryTransactionType =
   | 'ROAST_OUTPUT'
@@ -40,14 +41,16 @@ export function useWipInventory() {
   return useQuery({
     queryKey: ['inventory-ledger-wip'],
     queryFn: async (): Promise<WipInventory> => {
-      const { data, error } = await supabase
-        .from('inventory_transactions')
-        .select('roast_group, quantity_kg')
-        .not('roast_group', 'is', null)
-        .not('quantity_kg', 'is', null);
-      
-      if (error) throw error;
-      
+      const data = await fetchAllRows((from, to) =>
+        supabase
+          .from('inventory_transactions')
+          .select('id, roast_group, quantity_kg')
+          .not('roast_group', 'is', null)
+          .not('quantity_kg', 'is', null)
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+
       const wip: WipInventory = {};
       for (const row of data ?? []) {
         if (row.roast_group && row.quantity_kg !== null) {
@@ -67,14 +70,16 @@ export function useFgInventory() {
   return useQuery({
     queryKey: ['inventory-ledger-fg'],
     queryFn: async (): Promise<FgInventory> => {
-      const { data, error } = await supabase
-        .from('inventory_transactions')
-        .select('product_id, quantity_units')
-        .not('product_id', 'is', null)
-        .not('quantity_units', 'is', null);
-      
-      if (error) throw error;
-      
+      const data = await fetchAllRows((from, to) =>
+        supabase
+          .from('inventory_transactions')
+          .select('id, product_id, quantity_units')
+          .not('product_id', 'is', null)
+          .not('quantity_units', 'is', null)
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+
       const fg: FgInventory = {};
       for (const row of data ?? []) {
         if (row.product_id && row.quantity_units !== null) {
