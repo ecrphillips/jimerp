@@ -6,6 +6,52 @@ Follow-up to [AUDIT_REPORT.md](AUDIT_REPORT.md). This plan records what has alre
 
 ---
 
+## Status board (resume here)
+
+_Last updated 2026-07-07._
+
+### ✅ Done — code merged to `main`
+| Item | What | Deploy status |
+|------|------|---------------|
+| Fix 1 | Bounded ledger reads (`fetchAllRows`) — kills the 1000-row truncation/corruption | Live (frontend only, no deploy needed) |
+| Fix 2 | Atomic `set_ship_pick` + `cancel_order_with_picks` RPCs | **Migration deployed + types regen'd.** Smoke-test still pending |
+| N1 | Vancouver timezone in booking RPCs + member cancel countdown | ⚠️ **Migration `20260707130000` NOT yet deployed via Lovable** |
+| N3 | Email queue honors unsubscribe (suppression choke point) | ⚠️ **`process-email-queue` edge function NOT yet redeployed via Lovable** |
+
+### ⏳ Outstanding deploy actions (do these to finish what's already coded)
+1. Deploy migration `20260707130000_1beff1af-...sql` (N1 booking timezone) via Lovable.
+2. Redeploy the `process-email-queue` edge function (N3 unsubscribe) via Lovable.
+3. Smoke-test Fix 2 on real data: pick/unpick a line (two tabs at once), cancel-return, cancel-writeoff, a bought-in line.
+
+### 🔜 To do — not started (detail in "Fix next" below)
+| ID | Item | Severity | Size | Notes |
+|----|------|----------|------|-------|
+| N2 | Multi-account / multi-role users locked out | High | Structural | **Do alone** — auth, high blast radius |
+| N4 | Cancellation / no-show fees never billed | Medium | Simple | Do with N5 (billing-period math) |
+| N5 | Two sources of truth for member hours | Medium | Structural | Reconcile H16 orphaned ledger rows first |
+| N6 | Safer account delete (no cascade wipe) | Medium (was Critical) | Structural | Interim: make button deactivate-only |
+| M7 | Custom cancellation windows ignored in UI | Medium | Simple | Member dialog still hardcodes 48h (noted in N1) |
+
+### 🔍 Investigate before coding
+| ID | Item | Notes |
+|----|------|-------|
+| I1 | Green-coffee yield-loss model (C4/H7/H8/M17) | Needs a modelling decision; do before wiring upstream green modules |
+| Q1 | Server-side order constraints ($0 / disallowed products) | Needs allowed-product rules expressed in SQL |
+| Q2 | Duplicate billing periods | Fold into the N4/N5 billing work — one canonical period RPC |
+| Q3 | Shopify duplicate orders + schema drift (H17/H18) | Schema catch-up first; needed before the new-project migration |
+
+### 🅿️ Parked (owner decision)
+MCP `run_read_query` (C1), QBO token encryption (M1), in-app billing beyond the above, and the remaining Medium/Low items in AUDIT_REPORT.md.
+
+### Follow-ups to work already done
+- Fix 1 perf: move summation server-side (aggregate RPCs) — removes the "re-download whole ledger on every write" cost.
+- Fix 2: an atomic `create_order` RPC (order + shipments + line items) for the H4 non-atomic order-create path, plus recurring-booking and invite-flow atomicity.
+
+### Suggested next session
+Deploy the two pending items above, smoke-test Fix 2, then start **N2** on its own branch (it's the risky one — isolate it). After that, the **N4 + N5 + Q2** billing cluster together.
+
+---
+
 ## Done in this pass
 
 ### Fix 1 — Client-side aggregation of unbounded tables (was Critical C2 + the scaling reads)
