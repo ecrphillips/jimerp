@@ -130,6 +130,15 @@ Frontend tier rates have a single source of truth: `CO_ROAST_TIER_DEFAULTS` in `
 
 When changing rates, update in lockstep: (1) `CO_ROAST_TIER_DEFAULTS`, (2) the `coroast_tier_rates` table seed in `supabase/migrations/20260514094701_*.sql`, and (3) the `_get_or_create_billing_period` CASE in `supabase/migrations/20260501195324_*.sql`. The `ACCESS` tier is legacy (`isLegacy: true`) — kept for historical billing, filtered out of admin UI; do not surface in new UI.
 
+## Orders: Cancelled Hidden by Default
+
+As of `supabase/migrations/20260707130000_*.sql`, a **RESTRICTIVE** RLS SELECT policy on `public.orders` hides `CANCELLED` orders from every read made with a user JWT — internal portal, client portal, and RLS-scoped external readers (MCP tools). Do **not** add per-screen `.neq('status','CANCELLED')` filters; the DB does it.
+
+- **Opt-in**: `public.orders_all` (staff-only SECURITY DEFINER view, read-only) includes cancelled orders. Used by `src/pages/internal/OrderDetail.tsx` so a just-cancelled order still renders. View columns are typed nullable — coerce NOT NULL base columns after fetch.
+- **Unaffected**: `service_role` (edge functions) and SECURITY DEFINER functions still see cancelled orders — cancellation emails and server-side order logic depend on this.
+- **Consequences**: direct PostgREST UPDATE/DELETE against an already-cancelled order match zero rows (silently). Cancelled orders are read-only in the UI; anything that must touch them goes through SECURITY DEFINER RPCs. Client self-cancel uses the `client_cancel_own_order` RPC (a direct update's RETURNING comes back empty under the policy and reads as failure).
+- **Cancelling from OrderDetail**: non-shipped orders use `cancel_order_with_picks` in `'return'` mode (picked FG returns to stock). Shipped orders are wired to a `cancel_shipped_order` RPC that does **not exist yet** — a follow-up migration must add it (mark CANCELLED + audit row, no inventory writes) and allow `SHIPPED → CANCELLED` in the DB `is_allowed_order_transition`; the frontend cancel flow already bypasses the transition ladder.
+
 ## Migration Discipline
 
 - Filenames: `YYYYMMDDHHMMSS_<uuid>.sql` in `supabase/migrations/`

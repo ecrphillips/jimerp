@@ -130,36 +130,33 @@ export default function OrderHistory() {
 
   const cancelMutation = useMutation({
     mutationFn: async (orderId: string) => {
-      const { data, error } = await supabase
-        .from('orders')
-        .update({ status: 'CANCELLED' })
-        .eq('id', orderId)
-        .eq('status', 'SUBMITTED')
-        .select();
+      // SECURITY DEFINER RPC: validates account membership + SUBMITTED status
+      // server-side. A direct table update can't be used here — cancelled rows
+      // are hidden from default order reads, so its RETURNING representation
+      // comes back empty and reads as a false failure.
+      const { data: cancelled, error } = await supabase.rpc('client_cancel_own_order', {
+        p_order_id: orderId,
+      });
 
       if (error) {
         console.error('Cancel error:', error.code, error.message, error.details);
         throw new Error("Couldn't cancel this order. Please refresh and try again, or contact us if it persists.");
       }
 
-      if (!data || data.length === 0) {
-        console.error('Cancel returned 0 rows - permission or status mismatch');
-        throw new Error('No rows updated — order may already be processed or you lack permission');
+      if (!cancelled) {
+        throw new Error('Order could not be cancelled — it may already be processed');
       }
 
-      return data;
+      return orderId;
     },
-    onSuccess: (data) => {
+    onSuccess: (orderId) => {
       toast.success('Order cancelled');
       // Prefix-match invalidates ['client-orders', accountId, locationIds]
       queryClient.invalidateQueries({ queryKey: ['client-orders'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['client-orders-line-items'], exact: false });
-      const orderId = (data?.[0] as { id?: string } | undefined)?.id;
-      if (orderId) {
-        supabase.functions.invoke('notify-order-event', {
-          body: { order_id: orderId, event_type: 'ORDER_CANCELLED', details: 'Cancelled by client' },
-        }).catch((e) => console.warn('[notify-order-event] cancel failed:', e));
-      }
+      supabase.functions.invoke('notify-order-event', {
+        body: { order_id: orderId, event_type: 'ORDER_CANCELLED', details: 'Cancelled by client' },
+      }).catch((e) => console.warn('[notify-order-event] cancel failed:', e));
       setSelectedOrderId(null);
     },
     onError: (err) => {

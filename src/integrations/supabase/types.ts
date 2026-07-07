@@ -5634,7 +5634,83 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      orders_all: {
+        Row: {
+          account_id: string | null
+          account_location_id: string | null
+          client_id: string | null
+          client_notes: string | null
+          client_po: string | null
+          created_at: string | null
+          created_by_admin: boolean | null
+          created_by_user_id: string | null
+          delivery_method: Database["public"]["Enums"]["delivery_method"] | null
+          id: string | null
+          internal_ops_notes: string | null
+          invoiced: boolean | null
+          location_id: string | null
+          manually_deprioritized: boolean | null
+          notify_email_error: string | null
+          notify_email_sent_at: string | null
+          order_number: string | null
+          packed: boolean | null
+          requested_ship_date: string | null
+          roasted: boolean | null
+          ship_display_order: number | null
+          shipped_or_ready: boolean | null
+          shopify_pull_log_id: string | null
+          shopify_source_id: string | null
+          source_channel: string | null
+          status: Database["public"]["Enums"]["order_status"] | null
+          updated_at: string | null
+          work_deadline: string | null
+          work_deadline_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_account_location_id_fkey"
+            columns: ["account_location_id"]
+            isOneToOne: false
+            referencedRelation: "account_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "account_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_shopify_pull_log_id_fkey"
+            columns: ["shopify_pull_log_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_pull_log"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_shopify_source_id_fkey"
+            columns: ["shopify_source_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       _assert_account_owner: {
@@ -5693,6 +5769,10 @@ export type Database = {
       cancel_order_with_picks: {
         Args: { p_mode: string; p_order_id: string }
         Returns: undefined
+      }
+      client_cancel_own_order: {
+        Args: { p_order_id: string }
+        Returns: boolean
       }
       create_member_booking: {
         Args: {

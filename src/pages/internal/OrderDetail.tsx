@@ -74,8 +74,11 @@ export default function OrderDetail() {
   const { data: order, isLoading, error } = useQuery({
     queryKey: ['order', id],
     queryFn: async () => {
+      // Deliberate opt-in: orders_all (staff-only view) includes CANCELLED
+      // orders, which the base `orders` reads hide by default. The detail page
+      // must keep rendering an order after it is cancelled.
       const { data, error } = await supabase
-        .from('orders')
+        .from('orders_all')
         .select(`
           id,
           order_number,
@@ -103,7 +106,18 @@ export default function OrderDetail() {
         .maybeSingle();
 
       if (error) throw error;
-      return data;
+      if (!data) return null;
+      // View columns are typed nullable (Postgres can't propagate NOT NULL
+      // through views); assert the base table's NOT NULL columns back.
+      return {
+        ...data,
+        id: data.id!,
+        order_number: data.order_number!,
+        status: data.status!,
+        delivery_method: data.delivery_method!,
+        created_by_admin: data.created_by_admin ?? false,
+        invoiced: data.invoiced ?? false,
+      };
     },
     enabled: !!id,
   });
@@ -505,33 +519,33 @@ export default function OrderDetail() {
     },
   });
 
-  // Cancelling an order that still has picked (FG-consumed) units must decide
-  // the fate of that coffee in the ledger — never silently. We prompt:
-  //   (a) return to stock  → reverse each SHIP_CONSUME_FG (+units) so FG rises
-  //   (b) write off as lost → reverse the pick (+units) AND record an ADJUSTMENT
-  //                           (−units) so the coffee leaves FG, marked as a loss
-  // Then zero the picks and cancel the order. Every row is stamped with the
-  // logged-in user; created_at supplies the timestamp.
-  const [cancelPicks, setCancelPicks] = useState<
-    { pickId: string; productId: string; productName: string; units: number }[] | null
-  >(null);
+  // Cancel confirmation modal. One modal, two variants keyed on whether the
+  // order has shipped:
+  //   * not shipped → cancel_order_with_picks in 'return' mode: picked/packed
+  //     FG re-enters stock via the ledger, picks are zeroed, status flips to
+  //     CANCELLED — all in one transaction. Ops adjusts with a floor count if
+  //     the physical coffee didn't actually make it back to the shelf.
+  //   * shipped → the coffee is gone, so nothing is returned; the order is only
+  //     marked CANCELLED. This path needs a DB change (the transition validator
+  //     and cancel_order_with_picks both refuse SHIPPED orders today) — see
+  //     cancelShippedMutation below.
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
-  const cancelWithPicksMutation = useMutation({
-    mutationFn: async (mode: 'return' | 'writeoff') => {
+  const cancelWithReturnMutation = useMutation({
+    mutationFn: async () => {
       // Delegates to the cancel_order_with_picks RPC, which reads the outstanding
       // picks server-side and reverses the FG ledger, zeroes the picks, and sets
-      // status = CANCELLED in one transaction. This replaces the former three
-      // separate writes that could credit FG while leaving the order live if the
-      // status change failed (and a retry then cancelled "clean").
+      // status = CANCELLED in one transaction. Orders with no picks fall through
+      // to a plain validated status change inside the same RPC.
       const { error } = await supabase.rpc('cancel_order_with_picks', {
         p_order_id: id!,
-        p_mode: mode,
+        p_mode: 'return',
       });
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success('Order cancelled');
-      setCancelPicks(null);
+      setShowCancelModal(false);
       queryClient.invalidateQueries({ queryKey: ['order', id] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-fg-ledger'] });
@@ -546,41 +560,39 @@ export default function OrderDetail() {
     },
   });
 
-  // Decide whether cancelling needs the FG-fate prompt. If the order has no
-  // outstanding picked units, cancel straight through the normal path.
-  const initiateCancel = useCallback(async () => {
-    // The authoritative "does this order have outstanding picks?" signal is the
-    // ship_picks rows themselves — NOT a client-side join. Product enrichment is
-    // pulled in the same query so a missing/stale `lineItems` cache can never
-    // suppress the prompt or drop a pick from the ledger reversal.
-    const { data: picks, error } = await supabase
-      .from('ship_picks')
-      .select('id, order_line_item_id, units_picked, order_line_item:order_line_items(product_id, product:products(product_name))')
-      .eq('order_id', id!)
-      .gt('units_picked', 0);
-    if (error) {
-      toast.error('Failed to check picked units');
-      return;
-    }
-    // No picked units → nothing to decide, cancel straight through.
-    if (!picks || picks.length === 0) {
-      handleStatusChange('CANCELLED');
-      return;
-    }
-    // Outstanding picks exist → ALWAYS prompt; the mutation acts only on choice.
-    type PickRow = {
-      id: string;
-      units_picked: number;
-      order_line_item: { product_id: string; product: { product_name: string } | null } | null;
-    };
-    const outstanding = (picks as unknown as PickRow[]).map((p) => ({
-      pickId: p.id,
-      productId: p.order_line_item?.product_id ?? '',
-      productName: p.order_line_item?.product?.product_name ?? 'Unknown',
-      units: p.units_picked,
-    }));
-    setCancelPicks(outstanding);
-  }, [id, handleStatusChange]);
+  // PLACEHOLDER — cancel an already-SHIPPED order WITHOUT touching inventory.
+  // The `cancel_shipped_order` RPC does not exist yet: today both the
+  // transition validator (SHIPPED → CANCELLED is not an allowed transition)
+  // and cancel_order_with_picks refuse shipped orders. A follow-up migration
+  // will add the RPC (mark CANCELLED + audit row, NO ledger writes — shipped
+  // coffee already left the building). Until it is deployed, confirming the
+  // shipped-cancel modal surfaces a "function not found" error toast. Once the
+  // RPC lands, this wiring needs no further changes.
+  const cancelShippedMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('cancel_shipped_order' as any, {
+        p_order_id: id!,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Order cancelled — inventory untouched');
+      setShowCancelModal(false);
+      queryClient.invalidateQueries({ queryKey: ['order', id] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      supabase.functions.invoke('notify-order-event', {
+        body: { order_id: id, event_type: 'ORDER_CANCELLED', details: 'Status changed by ops' },
+      }).catch((e) => console.warn('[notify-order-event] CANCELLED failed:', e));
+    },
+    onError: (err: any) => {
+      console.error(err);
+      toast.error(err?.message || 'Failed to cancel shipped order');
+    },
+  });
+
+  const initiateCancel = useCallback(() => {
+    setShowCancelModal(true);
+  }, []);
 
   if (isLoading) {
     return (
@@ -676,12 +688,13 @@ export default function OrderDetail() {
   );
 
   // Cancel is a side-exit from the pipeline, not a forward status step — it must
-  // be available at ANY active stage, so its visibility is derived from status
-  // directly rather than the forward-transition ladder. Only already-shipped or
-  // already-cancelled orders cannot be cancelled. It gets the prominent
-  // always-visible button; Delete is destructive and demoted into "More actions".
-  // The menu therefore excludes CANCELLED.
-  const canCancel = order.status !== 'SHIPPED' && order.status !== 'CANCELLED';
+  // be available at ANY stage (including SHIPPED, which cancels without an
+  // inventory return), so its visibility is derived from status directly rather
+  // than the forward-transition ladder. Only already-cancelled orders cannot be
+  // cancelled. It gets the prominent always-visible button; Delete is
+  // destructive and demoted into "More actions". The menu excludes CANCELLED.
+  const canCancel = order.status !== 'CANCELLED';
+  const isCancelled = order.status === 'CANCELLED';
   const menuTransitions = secondaryTransitions.filter((t) => t !== 'CANCELLED');
 
   return (
@@ -728,26 +741,30 @@ export default function OrderDetail() {
             </Button>
           )}
 
-          {/* Print Packing Slips - one slip per shipment */}
-          <Button
-            variant="outline"
-            onClick={() => {
-              printPackingSlips(order.id).catch((err) => {
-                console.error(err);
-                toast.error(err instanceof Error ? err.message : 'Failed to print packing slips');
-              });
-            }}
-            className="gap-2"
-          >
-            <Printer className="h-4 w-4" />
-            Print Packing Slips
-          </Button>
+          {/* Print + Edit are hidden for cancelled orders: cancelled is terminal
+              and read-only (their default order reads can no longer see the row). */}
+          {!isCancelled && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                printPackingSlips(order.id).catch((err) => {
+                  console.error(err);
+                  toast.error(err instanceof Error ? err.message : 'Failed to print packing slips');
+                });
+              }}
+              className="gap-2"
+            >
+              <Printer className="h-4 w-4" />
+              Print Packing Slips
+            </Button>
+          )}
 
-          {/* Edit Order button */}
-          <Button variant="outline" onClick={() => setShowEditModal(true)} className="gap-2">
-            <PenSquare className="h-4 w-4" />
-            Edit Order
-          </Button>
+          {!isCancelled && (
+            <Button variant="outline" onClick={() => setShowEditModal(true)} className="gap-2">
+              <PenSquare className="h-4 w-4" />
+              Edit Order
+            </Button>
+          )}
           
           {/* Primary next-action button — the one obvious step for this status */}
           {primaryNext && (
@@ -847,7 +864,15 @@ export default function OrderDetail() {
               <WorkDeadlinePicker
                 value={workDeadlineAt}
                 onChange={setWorkDeadlineAt}
-                onSave={() => saveWorkDeadlineMutation.mutate(workDeadlineAt)}
+                onSave={() => {
+                  // Cancelled orders are read-only: the default-hidden RLS rule
+                  // makes direct updates to them match zero rows.
+                  if (isCancelled) {
+                    toast.error('Order is cancelled — read-only');
+                    return;
+                  }
+                  saveWorkDeadlineMutation.mutate(workDeadlineAt);
+                }}
                 isSaving={saveWorkDeadlineMutation.isPending}
               />
               <p className="text-xs text-muted-foreground mt-1">
@@ -1010,7 +1035,8 @@ export default function OrderDetail() {
               size="sm"
               variant="outline"
               onClick={() => saveNotesMutation.mutate(opsNotes)}
-              disabled={saveNotesMutation.isPending}
+              disabled={saveNotesMutation.isPending || isCancelled}
+              title={isCancelled ? 'Order is cancelled — read-only' : undefined}
             >
               {saveNotesMutation.isPending ? 'Saving…' : 'Save Notes'}
             </Button>
@@ -1175,37 +1201,42 @@ export default function OrderDetail() {
         />
       )}
 
-      {/* Cancel-with-picks: decide the fate of already-picked FG */}
-      <Dialog open={cancelPicks !== null} onOpenChange={(o) => { if (!o) setCancelPicks(null); }}>
+      {/* Cancel confirmation — copy and confirm action depend on shipped state */}
+      <Dialog open={showCancelModal} onOpenChange={setShowCancelModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Cancel order — picked coffee</DialogTitle>
+            <DialogTitle>Cancel order {order.order_number}</DialogTitle>
             <DialogDescription>
-              This order has finished goods already picked off the shelf. Choose what happens to them — either way it's recorded in the inventory ledger with your name and the time.
+              {order.status === 'SHIPPED'
+                ? 'This order already shipped, so inventory is not returned. Make any inventory adjustments via floor count.'
+                : 'Cancelling this order. Any packed or picked coffee returns to inventory. Adjust with floor count if needed.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
-            {(cancelPicks ?? []).map((p) => (
-              <div key={p.pickId} className="flex justify-between">
-                <span>{p.productName}</span>
-                <span className="font-mono">{p.units} units</span>
-              </div>
-            ))}
-          </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button
               variant="outline"
-              disabled={cancelWithPicksMutation.isPending}
-              onClick={() => cancelWithPicksMutation.mutate('writeoff')}
+              disabled={cancelWithReturnMutation.isPending || cancelShippedMutation.isPending}
+              onClick={() => setShowCancelModal(false)}
             >
-              Write off as lost
+              Keep Order
             </Button>
-            <Button
-              disabled={cancelWithPicksMutation.isPending}
-              onClick={() => cancelWithPicksMutation.mutate('return')}
-            >
-              {cancelWithPicksMutation.isPending ? 'Working…' : 'Return bags to stock'}
-            </Button>
+            {order.status === 'SHIPPED' ? (
+              <Button
+                variant="destructive"
+                disabled={cancelShippedMutation.isPending}
+                onClick={() => cancelShippedMutation.mutate()}
+              >
+                {cancelShippedMutation.isPending ? 'Working…' : 'Cancel Order'}
+              </Button>
+            ) : (
+              <Button
+                variant="destructive"
+                disabled={cancelWithReturnMutation.isPending}
+                onClick={() => cancelWithReturnMutation.mutate()}
+              >
+                {cancelWithReturnMutation.isPending ? 'Working…' : 'Cancel Order'}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
