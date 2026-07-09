@@ -10,12 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { 
-  ChevronDown, 
-  ChevronRight, 
-  Flame, 
-  Check, 
-  Trash2, 
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Flame,
+  Check,
+  Trash2,
   Plus,
   Minus,
   Undo2,
@@ -23,7 +24,6 @@ import {
   Clock,
   Loader2,
   AlertTriangle,
-  GripVertical,
   Package,
   Layers,
   Leaf,
@@ -41,8 +41,6 @@ import {
 import { OhShitModal } from './OhShitModal';
 import { DepletionWarningModal, executeDepletionSwaps, type DepletionSwap } from './DepletionWarningModal';
 import { evaluateMultiRoastGroupImpacts, type MultiRgImpact } from '@/hooks/useGreenLotDepletion';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { type RoastGroupComponent, getComponentBreakdown, type ComponentDisplay } from '@/hooks/useRoastGroupComponents';
 import { useBlendReadiness } from '@/hooks/useBlendReadiness';
 
@@ -89,7 +87,10 @@ interface RoastGroupDrawerProps {
   onOpenConfig: (roastGroup: string) => void;
   onEditingChange: (isEditing: boolean) => void;
   onAdjustWipFg: (roastGroup: string) => void;
-  isDragging?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
   isBlend?: boolean;
   isPreRoastBlend?: boolean;
   isCompleted?: boolean; // true if no remaining demand but has activity (batches/WIP)
@@ -115,7 +116,10 @@ export function RoastGroupDrawer({
   onOpenConfig,
   onEditingChange,
   onAdjustWipFg,
-  isDragging = false,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp = false,
+  canMoveDown = false,
   isBlend = false,
   isPreRoastBlend = false,
   isCompleted = false,
@@ -127,16 +131,7 @@ export function RoastGroupDrawer({
 }: RoastGroupDrawerProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  
-  // Sortable hook for drag and drop
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({ id: roastGroup });
-  
+
   const [isExpanded, setIsExpanded] = useState(false);
   const [undoConfirmBatchId, setUndoConfirmBatchId] = useState<string | null>(null);
   const [deleteConfirmBatchId, setDeleteConfirmBatchId] = useState<string | null>(null);
@@ -696,23 +691,15 @@ export function RoastGroupDrawer({
     }
   };
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
   return (
     <>
       {/* Collapsed Row */}
-      <tr 
-        ref={setNodeRef}
-        style={style}
-        className={`border-b cursor-pointer transition-colors 
+      <tr
+        className={`border-b cursor-pointer transition-colors
           ${isFullyRoasted || isCompleted || isBlendComplete ? 'opacity-60' : ''}
           ${hasTimeSensitive && !isFullyRoasted && !isCompleted && !isBlendComplete ? 'bg-destructive/5' : ''}
           ${(isCompleted || isBlendComplete) && !isExpanded ? 'bg-muted/30' : ''}
-          ${isExpanded ? 'bg-muted/50 border-l-2 border-l-primary' : 'hover:bg-muted/50'}
-          ${isDragging ? 'opacity-50' : ''}`}
+          ${isExpanded ? 'bg-muted/50 border-l-2 border-l-primary' : 'hover:bg-muted/50'}`}
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <td className="py-3 w-8 px-2">
@@ -722,13 +709,27 @@ export function RoastGroupDrawer({
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           )}
         </td>
-        <td 
-          className="py-1 w-10 cursor-grab active:cursor-grabbing" 
-          onClick={(e) => e.stopPropagation()}
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        <td className="py-1 w-10" onClick={(e) => e.stopPropagation()}>
+          <div className="flex flex-col items-center -my-1">
+            <button
+              type="button"
+              aria-label="Move up"
+              disabled={!canMoveUp}
+              onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }}
+              className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronUp className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Move down"
+              disabled={!canMoveDown}
+              onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }}
+              className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </button>
+          </div>
         </td>
         <td className="py-3">
           <div className="flex flex-col gap-0.5">
