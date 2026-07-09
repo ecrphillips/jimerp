@@ -26,12 +26,13 @@ interface SortablePackRowProps {
   packagingVariant: PackagingVariant | null;
   roastGroup: string | null;
   demandedUnits: number;
-  /** Gross FG produced (sum of PACK_PRODUCE_FG). Binds to the editable numeric
-   *  input only — it's the baseline the reversal RPC reverses against. Do NOT
-   *  use for completeness; it never drops when bags ship. */
+  /** Gross FG produced (sum of PACK_PRODUCE_FG), all-time. Used only for the
+   *  "covered by picks" comparison; it never drops when bags ship, so do NOT
+   *  use it for the input value or completeness. */
   packedUnits: number;
-  /** Net FG on-hand (created + shipNet + adjust). Drives completeness/shortage
-   *  so a SKU whose stock already shipped stops reading as packed. */
+  /** Net FG on-hand (created + shipNet + adjust). Drives the editable input
+   *  value AND completeness/shortage — the RPC baseline is this same net figure,
+   *  so a SKU whose stock already shipped shows 0 packed and reads pending. */
   availableUnits: number;
   /** Downstream picks for open orders. Counted as implicit packs so the row
    *  is flagged complete and won't pressure the packer to over-pack a SKU the
@@ -110,8 +111,9 @@ export function SortablePackRow({
   // subtracts every ship (incl. bags shipped to past orders), so adding back
   // the open-order picks yields "FG physically in play for current demand" =
   // on-shelf + already-picked. Using gross packedUnits here would keep a SKU
-  // marked complete on stock that already shipped away. The numeric input still
-  // shows raw pack count so packers keep recording physical work.
+  // marked complete on stock that already shipped away. The numeric input binds
+  // to availableUnits (net on-hand) — matching the RPC baseline — so editing it
+  // drives real stock and never shows shipped-away bags as still packed.
   const effectivePacked = availableUnits + pickedUnits;
   const isComplete = effectivePacked >= demandedUnits;
   const coveredByPicks = pickedUnits > packedUnits && isComplete;
@@ -276,7 +278,7 @@ export function SortablePackRow({
         <td className="py-3" onClick={(e) => e.stopPropagation()}>
           {requiresProduction ? (
             <InlinePackingControl
-              value={packedUnits}
+              value={availableUnits}
               onCommit={onUpdatePackedUnits}
               onEditingChange={onEditingChange}
               isComplete={isComplete}

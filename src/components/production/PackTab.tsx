@@ -258,11 +258,9 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       )) as PackingRun[],
   });
 
-  // "Units packed" per product comes from the authoritative FG ledger (net
-  // sum of PACK_PRODUCE_FG), NOT the legacy per-day packing_runs rows. This is
-  // the same date-agnostic baseline update_packing_units reverses against, so
-  // completeness, the editable units field, and the reversal RPC all agree —
-  // editing units down reverses the run instead of diverging from the ledger.
+  // Gross FG produced per product (all-time sum of PACK_PRODUCE_FG). Only used
+  // for the "covered by picks" comparison — it never drops when bags ship, so
+  // it must NOT drive the input value or completeness (see availableByProductUnits).
   const packingByProductUnits = useMemo(() => {
     const map: Record<string, number> = {};
     for (const [pid, f] of Object.entries(authFg ?? {})) {
@@ -271,12 +269,11 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     return map;
   }, [authFg]);
 
-  // Net FG on-hand per product (created + shipNet + adjust). Unlike
-  // fg_created_units this drops when bags ship, so completeness/shortage is
-  // measured against stock that still physically exists — a SKU whose FG was
-  // packed then shipped to a past order no longer counts toward today's demand.
-  // The editable "units packed" input still binds to gross created above so the
-  // reversal RPC baseline is unchanged.
+  // Net FG on-hand per product (created + shipNet + adjust, floored at 0). Drives
+  // BOTH the editable "units packed" input and completeness/shortage. update_packing_units
+  // now baselines on this same net figure, so the on-screen value and the RPC
+  // baseline agree — a SKU whose FG was packed then shipped shows 0 packed and
+  // reads pending instead of falsely complete on stock that no longer exists.
   const availableByProductUnits = useMemo(() => {
     const map: Record<string, number> = {};
     for (const [pid, f] of Object.entries(authFg ?? {})) {
@@ -1046,11 +1043,11 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                           deemphasized={deemphasizedIds?.has(product.product_id) ?? false}
                           onToggleExpand={() => setExpandedProductId(isExpanded ? null : product.product_id)}
                           onUpdatePackedUnits={(newValue) => updatePackingUnits(
-                            product.product_id, 
-                            newValue, 
+                            product.product_id,
+                            newValue,
                             product.bag_size_g,
                             product.roast_group,
-                            packed
+                            available
                           )}
                           onEditingChange={(isEditing) => handleEditingChange(product.product_id, isEditing)}
                         />
