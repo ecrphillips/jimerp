@@ -420,11 +420,14 @@ async function pullSource(
             }
           }
           const grind = parseGrind(li.variantTitle);
-          // Grind alarm: the lineitem "name" is title + variant joined by " / ";
-          // the shared helper takes the text after the FINAL "/" (handles a variant
-          // title that itself contains a size segment, e.g. "250 G / Whole Bean").
-          const liName = [li.title, li.variantTitle].filter(Boolean).join(' / ');
-          const { needsGrind, grindLabel } = parseGrindSignal(liName);
+          // Grind alarm: parse the VARIANT TITLE only — never the product title.
+          // Retail variants carry the grind as the last segment after a "/", e.g.
+          // "250G / Whole Bean" or "250G / French Press". Wholesale variants have a
+          // single Size axis with no "/" ("2LB", "250G"), so parseGrindSignal returns
+          // no grind for them. Joining the product title in with a " / " (as this once
+          // did) manufactured a separator that made every wholesale size read as a
+          // grind label — every "(Wholesale) / 2LB" falsely flagged GRIND "2LB".
+          const { needsGrind, grindLabel } = parseGrindSignal(li.variantTitle);
           // Key by grind_label so distinct grinds split into their own lines while
           // whole-bean lines (label null) aggregate together.
           const key = `${fate.productId}|${grindLabel ?? ''}`;

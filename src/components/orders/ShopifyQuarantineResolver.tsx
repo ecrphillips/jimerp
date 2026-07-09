@@ -32,6 +32,13 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -79,6 +86,10 @@ interface ProductOption {
 }
 
 const QK = ['shopify-quarantine', 'open'];
+
+// Grind override for a resolved line. 'auto' = let the RPC parse the variant
+// title; 'none' = force whole bean; 'grind' = force the GRIND alarm.
+type GrindMode = 'auto' | 'none' | 'grind';
 
 function useOpenQuarantine(enabled: boolean) {
   return useQuery({
@@ -228,6 +239,11 @@ function ResolverBody({ onCountChange }: { onCountChange?: (n: number) => void }
   const [selected, setSelected] = React.useState<Record<string, string>>({});
   // Units of the mapped JIM product inside ONE unit of the Shopify item (≥1).
   const [unitsPer, setUnitsPer] = React.useState<Record<string, number>>({});
+  // Grind override per line: 'auto' parses the variant title (wholesale sizes
+  // resolve to no grind); 'none' forces whole bean; 'grind' forces the GRIND
+  // alarm with an editable label.
+  const [grindMode, setGrindMode] = React.useState<Record<string, GrindMode>>({});
+  const [grindLabel, setGrindLabel] = React.useState<Record<string, string>>({});
   const [busyId, setBusyId] = React.useState<string | null>(null);
   const [confirmLine, setConfirmLine] = React.useState<QuarantineLine | null>(null);
 
@@ -235,6 +251,8 @@ function ResolverBody({ onCountChange }: { onCountChange?: (n: number) => void }
     const n = Math.trunc(unitsPer[lineId] ?? 1);
     return Number.isFinite(n) && n >= 1 ? n : 1;
   };
+
+  const grindModeFor = (lineId: string): GrindMode => grindMode[lineId] ?? 'auto';
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: QK });
@@ -256,10 +274,19 @@ function ResolverBody({ onCountChange }: { onCountChange?: (n: number) => void }
     setBusyId(l.id);
     try {
       const units = unitsFor(l.id);
+      const mode = grindModeFor(l.id);
+      // auto -> null (RPC parses variant title); none -> false; grind -> true.
+      const needsGrind = mode === 'auto' ? null : mode === 'grind';
+      const labelOverride =
+        mode === 'grind'
+          ? (grindLabel[l.id] ?? l.shopify_variant_title ?? '').trim() || null
+          : null;
       const { error } = await sb.rpc('resolve_shopify_quarantined_line', {
         p_line_id: l.id,
         p_jim_product_id: productId,
         p_units_per_shopify_unit: units,
+        p_needs_grind: needsGrind,
+        p_grind_label: labelOverride,
       });
       if (error) throw error;
       const qty = l.quantity ?? 0;
@@ -412,6 +439,40 @@ function ResolverBody({ onCountChange }: { onCountChange?: (n: number) => void }
                               }));
                             }}
                           />
+                          <label
+                            htmlFor={`grind-${l.id}`}
+                            className="text-xs text-muted-foreground"
+                          >
+                            Grind
+                          </label>
+                          <Select
+                            value={grindModeFor(l.id)}
+                            disabled={busyId === l.id}
+                            onValueChange={(v) =>
+                              setGrindMode((s) => ({ ...s, [l.id]: v as GrindMode }))
+                            }
+                          >
+                            <SelectTrigger id={`grind-${l.id}`} className="h-9 w-[140px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="auto">Auto (from variant)</SelectItem>
+                              <SelectItem value="none">Whole bean</SelectItem>
+                              <SelectItem value="grind">Needs grind</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {grindModeFor(l.id) === 'grind' && (
+                            <Input
+                              aria-label="Grind label"
+                              placeholder="Grind label"
+                              className="h-9 w-40"
+                              disabled={busyId === l.id}
+                              value={grindLabel[l.id] ?? l.shopify_variant_title ?? ''}
+                              onChange={(e) =>
+                                setGrindLabel((s) => ({ ...s, [l.id]: e.target.value }))
+                              }
+                            />
+                          )}
                           <Button
                             size="sm"
                             disabled={busyId === l.id || !selected[l.id]}
