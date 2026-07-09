@@ -33,20 +33,6 @@ import { PlanBlendBatchesModal } from './PlanBlendBatchesModal';
 import { BlendExecuteModal } from './BlendExecuteModal';
 import { DepletionWarningModal, executeDepletionSwaps, type DepletionSwap } from './DepletionWarningModal';
 import { evaluateMultiRoastGroupImpacts, type MultiRgImpact } from '@/hooks/useGreenLotDepletion';
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
 import type { DateFilterConfig } from './types';
 // Use AUTHORITATIVE inventory hooks - computed from source-of-truth tables
 import { useAuthoritativeWip, useAuthoritativeRoastDemand } from '@/hooks/useAuthoritativeInventory';
@@ -655,57 +641,53 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     return computedSortedGroups;
   }, [editingGroupId, frozenOrder, computedSortedGroups, demandByRoastGroup, groupMatchesRoasterFilter]);
 
-  // Manual ordering mutations
-  const updateDisplayOrderMutation = useMutation({
-    mutationFn: async ({ roastGroup, newOrder }: { roastGroup: string; newOrder: number }) => {
-      const { error } = await supabase
-        .from('roast_groups')
-        .update({ display_order: newOrder })
-        .eq('roast_group', roastGroup);
-      if (error) throw error;
+  // Manual ordering. Persists a full reindex of the visible groups in one
+  // optimistic mutation: the query cache is reordered synchronously (so the row
+  // moves instantly), all rows are written in parallel as a single mutation, and
+  // the cache is invalidated once on settle. No drag transform, no snap-back.
+  const reorderMutation = useMutation({
+    mutationFn: async (orderedGroups: string[]) => {
+      await Promise.all(
+        orderedGroups.map((roastGroup, i) =>
+          supabase
+            .from('roast_groups')
+            .update({ display_order: (i + 1) * 10 })
+            .eq('roast_group', roastGroup)
+            .then(({ error }) => {
+              if (error) throw error;
+            }),
+        ),
+      );
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['roast-groups-config'] });
+    onMutate: async (orderedGroups: string[]) => {
+      await queryClient.cancelQueries({ queryKey: ['roast-groups-config'] });
+      const prev = queryClient.getQueryData<RoastGroupConfig[]>(['roast-groups-config']);
+      const orderMap = new Map(orderedGroups.map((rg, i) => [rg, (i + 1) * 10]));
+      queryClient.setQueryData<RoastGroupConfig[]>(['roast-groups-config'], (old) =>
+        old?.map((c) =>
+          orderMap.has(c.roast_group) ? { ...c, display_order: orderMap.get(c.roast_group)! } : c,
+        ),
+      );
+      return { prev };
     },
-    onError: (err) => {
+    onError: (err, _vars, ctx) => {
       console.error(err);
-      toast.error('Failed to update order');
+      if (ctx?.prev) queryClient.setQueryData(['roast-groups-config'], ctx.prev);
+      toast.error('Failed to reorder');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['roast-groups-config'] });
     },
   });
 
-  // Handle drag end for reordering
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    const { active, over } = event;
-    
-    if (!over || active.id === over.id) return;
-    
-    const oldIndex = sortedGroups.findIndex(g => g.roast_group === active.id);
-    const newIndex = sortedGroups.findIndex(g => g.roast_group === over.id);
-    
-    if (oldIndex === -1 || newIndex === -1) return;
-    
-    // Calculate new display_order values - reindex all groups
-    const reorderedGroups = [...sortedGroups];
-    const [movedGroup] = reorderedGroups.splice(oldIndex, 1);
-    reorderedGroups.splice(newIndex, 0, movedGroup);
-    
-    // Update all groups with new display_order
-    reorderedGroups.forEach((group, index) => {
-      updateDisplayOrderMutation.mutate({ roastGroup: group.roast_group, newOrder: (index + 1) * 10 });
-    });
-  }, [sortedGroups, updateDisplayOrderMutation]);
-
-  // DnD sensors
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
+  // Shift a group one slot up (dir=-1) or down (dir=+1) within the visible list.
+  const moveGroup = useCallback((index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= sortedGroups.length) return;
+    const order = sortedGroups.map(g => g.roast_group);
+    [order[index], order[target]] = [order[target], order[index]];
+    reorderMutation.mutate(order);
+  }, [sortedGroups, reorderMutation]);
 
   // Auto-prioritize: reorder based on urgency
   const autoPrioritizeMutation = useMutation({
@@ -921,7 +903,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                 Roast Plan
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Drag the grip handle to reorder groups manually. Order persists across sessions.
+                Use the up/down arrows to reorder groups manually. Order persists across sessions.
               </p>
             </div>
             <div className="flex items-center gap-4 flex-wrap">
@@ -1015,15 +997,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
               </p>
             </div>
           ) : (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={sortedGroups.map(g => g.roast_group)}
-                strategy={verticalListSortingStrategy}
-              >
+            <div>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left">
@@ -1074,6 +1048,10 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                             onOpenConfig={openConfigDialog}
                             onEditingChange={(isEditing) => handleEditingChange(group.roast_group, isEditing)}
                             onAdjustWipFg={(rg) => setWipFgModalGroup(rg)}
+                            onMoveUp={() => moveGroup(index, -1)}
+                            onMoveDown={() => moveGroup(index, 1)}
+                            canMoveUp={index > 0}
+                            canMoveDown={index < sortedGroups.length - 1}
                             isBlend={config?.is_blend ?? false}
                             isPreRoastBlend={config?.is_blend === true && config?.blend_type === 'PRE_ROAST'}
                             isCompleted={group.isCompleted}
@@ -1191,8 +1169,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                     )}
                   </tbody>
                 </table>
-              </SortableContext>
-            </DndContext>
+            </div>
           )}
         </CardContent>
       </Card>
