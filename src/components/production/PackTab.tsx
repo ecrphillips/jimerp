@@ -271,6 +271,20 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     return map;
   }, [authFg]);
 
+  // Net FG on-hand per product (created + shipNet + adjust). Unlike
+  // fg_created_units this drops when bags ship, so completeness/shortage is
+  // measured against stock that still physically exists — a SKU whose FG was
+  // packed then shipped to a past order no longer counts toward today's demand.
+  // The editable "units packed" input still binds to gross created above so the
+  // reversal RPC baseline is unchanged.
+  const availableByProductUnits = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const [pid, f] of Object.entries(authFg ?? {})) {
+      map[pid] = f.fg_available_units;
+    }
+    return map;
+  }, [authFg]);
+
   // Fetch ship_picks for OPEN orders, aggregated by product.
   // A pick is physical evidence that a bag was packed — the downstream station
   // can't pick a bag that wasn't produced. We treat each picked unit as an
@@ -383,9 +397,14 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
         continue;
       }
 
-      const packed = packingByProductUnits[product.product_id] ?? 0;
+      // Completeness/shortage use net available + open-order picks, NOT gross
+      // created. available already subtracts every SHIP_CONSUME_FG (incl. bags
+      // shipped to past orders); adding back the open-order picks reconstructs
+      // "FG physically in play for current demand" = on-shelf + already-picked.
+      // Gross created would falsely mark a SKU complete on stock that shipped.
+      const available = availableByProductUnits[product.product_id] ?? 0;
       const picked = pickedByProductUnits?.[product.product_id] ?? 0;
-      const effectivePacked = Math.max(packed, picked);
+      const effectivePacked = available + picked;
       product.shortage = Math.max(0, product.demanded_units - effectivePacked);
 
       // Get earliest ship date
@@ -952,6 +971,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                       // Authoritative net produced (ledger) — matches the RPC baseline
                       // so the units field reverses correctly; packing_runs is legacy.
                       const packed = packingByProductUnits[product.product_id] ?? 0;
+                      const available = availableByProductUnits[product.product_id] ?? 0;
                       const picked = pickedByProductUnits?.[product.product_id] ?? 0;
                       const isExpanded = expandedProductId === product.product_id;
                       const groupKey = groupKeyOf(product);
@@ -1008,6 +1028,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                           roastGroup={product.roast_group}
                           demandedUnits={product.demanded_units}
                           packedUnits={packed}
+                          availableUnits={available}
                           pickedUnits={picked}
                           wholeBeanUnits={product.wholeBeanUnits}
                           grindUnits={product.grindUnits}

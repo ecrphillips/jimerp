@@ -26,7 +26,13 @@ interface SortablePackRowProps {
   packagingVariant: PackagingVariant | null;
   roastGroup: string | null;
   demandedUnits: number;
+  /** Gross FG produced (sum of PACK_PRODUCE_FG). Binds to the editable numeric
+   *  input only — it's the baseline the reversal RPC reverses against. Do NOT
+   *  use for completeness; it never drops when bags ship. */
   packedUnits: number;
+  /** Net FG on-hand (created + shipNet + adjust). Drives completeness/shortage
+   *  so a SKU whose stock already shipped stops reading as packed. */
+  availableUnits: number;
   /** Downstream picks for open orders. Counted as implicit packs so the row
    *  is flagged complete and won't pressure the packer to over-pack a SKU the
    *  shipper has already grabbed. The numeric input still edits raw packs. */
@@ -67,6 +73,7 @@ export function SortablePackRow({
   roastGroup,
   demandedUnits,
   packedUnits,
+  availableUnits,
   pickedUnits = 0,
   wholeBeanUnits = 0,
   grindUnits = 0,
@@ -99,11 +106,13 @@ export function SortablePackRow({
     transition,
   };
 
-  // Effective packed counts picks as implicit packs so the row can be marked
-  // complete when downstream has already grabbed bags faster than the packer
-  // has clicked through. The numeric input still shows the raw pack count so
-  // packers can keep recording physical work without it appearing double.
-  const effectivePacked = Math.max(packedUnits, pickedUnits);
+  // Effective packed = net on-hand + open-order picks. availableUnits already
+  // subtracts every ship (incl. bags shipped to past orders), so adding back
+  // the open-order picks yields "FG physically in play for current demand" =
+  // on-shelf + already-picked. Using gross packedUnits here would keep a SKU
+  // marked complete on stock that already shipped away. The numeric input still
+  // shows raw pack count so packers keep recording physical work.
+  const effectivePacked = availableUnits + pickedUnits;
   const isComplete = effectivePacked >= demandedUnits;
   const coveredByPicks = pickedUnits > packedUnits && isComplete;
 
