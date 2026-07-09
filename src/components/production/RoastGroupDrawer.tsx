@@ -285,18 +285,26 @@ export function RoastGroupDrawer({
     wipKg
   );
   
-  // Blend coverage. A blend is never roasted directly (`roastedTotal` is always
-  // 0 for it), so the standard `coverageDelta` reads perpetually short. Instead
-  // measure coverage from on-hand blended WIP + finished goods — the same
-  // wip/fg figures the inventory screens show — against gross demand:
+  // Only POST_ROAST blends use the WIP+FG coverage model. A PRE_ROAST blend is
+  // blended green then roasted directly, producing roasted batches on this group
+  // itself — its coverage works exactly like a single-origin group (planned +
+  // roasted vs net demand), so it must NOT go through the blend path below.
+  const isPostRoastBlend = isBlend && !isPreRoastBlend;
+
+  // Post-roast blend coverage. Such a blend is never roasted directly
+  // (`roastedTotal` is always 0 for it), so the standard `coverageDelta` reads
+  // perpetually short. Instead measure coverage from on-hand blended WIP +
+  // finished goods — the same wip/fg figures the inventory screens show —
+  // against gross demand:
   //   coverage = net WIP + FG (kg) - demand
   // >= 0 means the blend is fully covered (net demand is 0); < 0 is the shortfall.
   const blendCoverageDelta = wipKg + fgKg - demandKg;
-  const isBlendComplete = isBlend && blendCoverageDelta >= 0;
+  const isBlendComplete = isPostRoastBlend && blendCoverageDelta >= 0;
 
-  // For blends: "expected" column should show staged-for-blend kg instead of planned batches
-  // This reflects component inventory ready for blending, not direct roast batches
-  const displayExpectedOutput = isBlend && blendReadiness
+  // For post-roast blends: "expected" column shows staged-for-blend kg instead of
+  // planned batches — reflects component inventory ready for blending. Pre-roast
+  // blends fall through to their own planned-batch expected output.
+  const displayExpectedOutput = isPostRoastBlend && blendReadiness
     ? blendReadiness.stagedForBlendKg
     : plannedExpectedOutput;
 
@@ -768,7 +776,7 @@ export function RoastGroupDrawer({
           <div className="flex flex-col items-end">
             <span className="font-medium">{displayExpectedOutput.toFixed(1)}</span>
             <span className="text-muted-foreground text-xs">
-              {isBlend && blendReadiness ? 'staged' : 'expected'}
+              {isPostRoastBlend && blendReadiness ? 'staged' : 'expected'}
             </span>
           </div>
         </td>
@@ -777,8 +785,10 @@ export function RoastGroupDrawer({
           <span className="text-muted-foreground text-xs ml-1">kg</span>
         </td>
         <td className="py-3 text-right">
-          {/* Blends: coverage is WIP + FG vs demand, not roasted weight (always 0) */}
-          {isBlend ? (
+          {/* Post-roast blends: coverage is WIP + FG vs demand, not roasted weight
+              (always 0). Pre-roast blends roast directly, so they use the normal
+              planned+roasted coverageDelta path below (same as single-origin). */}
+          {isPostRoastBlend ? (
             blendCoverageDelta >= 0 ? (
               <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
                 Covered +{blendCoverageDelta.toFixed(1)} kg
