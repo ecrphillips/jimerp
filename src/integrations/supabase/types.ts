@@ -5927,10 +5927,7 @@ export type Database = {
         Args: { p_mode: string; p_order_id: string }
         Returns: undefined
       }
-      cancel_shipped_order: {
-        Args: { p_order_id: string }
-        Returns: undefined
-      }
+      cancel_shipped_order: { Args: { p_order_id: string }; Returns: undefined }
       client_cancel_own_order: {
         Args: { p_order_id: string }
         Returns: boolean
@@ -6173,8 +6170,10 @@ export type Database = {
       }
       resolve_shopify_quarantined_line: {
         Args: {
+          p_grind_label?: string
           p_jim_product_id: string
           p_line_id: string
+          p_needs_grind?: boolean
           p_units_per_shopify_unit?: number
         }
         Returns: undefined
