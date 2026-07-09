@@ -6170,8 +6170,10 @@ export type Database = {
       }
       resolve_shopify_quarantined_line: {
         Args: {
+          p_grind_label?: string
           p_jim_product_id: string
           p_line_id: string
+          p_needs_grind?: boolean
           p_units_per_shopify_unit?: number
         }
         Returns: undefined
