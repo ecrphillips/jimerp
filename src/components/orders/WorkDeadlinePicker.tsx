@@ -91,9 +91,15 @@ export function WorkDeadlinePicker({
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedTime, setSelectedTime] = useState<string>(DEFAULT_TIME);
   const [hasInteracted, setHasInteracted] = useState(false);
-  
+
   // Track the last value we emitted to avoid re-syncing our own updates
   const lastEmittedValueRef = useRef<string | null>(null);
+  // Mirror of hasInteracted read inside the sync effect WITHOUT making it a
+  // dependency. If hasInteracted were a dep, the first interaction (false→true)
+  // would re-run this effect while `value` still holds the OLD prop value,
+  // clobbering the date the user just picked — which is what caused the
+  // "first click doesn't register" bug.
+  const hasInteractedRef = useRef(false);
 
   // Parse incoming value to local date and time
   // Only sync from prop if it's a genuinely new external value
@@ -102,7 +108,7 @@ export function WorkDeadlinePicker({
     if (value === lastEmittedValueRef.current) {
       return;
     }
-    
+
     if (value) {
       try {
         const parsed = parseISO(value);
@@ -124,12 +130,12 @@ export function WorkDeadlinePicker({
       }
     } else {
       // No value - set defaults only if user hasn't interacted
-      if (!hasInteracted) {
+      if (!hasInteractedRef.current) {
         setSelectedDate(undefined);
         setSelectedTime(DEFAULT_TIME);
       }
     }
-  }, [value, hasInteracted]);
+  }, [value]);
 
   // Combine date and time into ISO string
   const combinedValue = useMemo(() => {
@@ -174,6 +180,7 @@ export function WorkDeadlinePicker({
   }, [combinedValue, hasInteracted, onChange, value]);
 
   const handleDateSelect = (date: Date | undefined) => {
+    hasInteractedRef.current = true;
     setHasInteracted(true);
     if (date) {
       // Auto-bump weekend dates to next Monday
@@ -188,6 +195,7 @@ export function WorkDeadlinePicker({
   };
 
   const handleTimeSelect = (time: string) => {
+    hasInteractedRef.current = true;
     setHasInteracted(true);
     setSelectedTime(time);
   };
