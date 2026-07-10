@@ -29,6 +29,7 @@ import { RoastGroupDrawer } from './RoastGroupDrawer';
 import { WipFgAdjustModal } from './WipFgAdjustModal';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
+import { computeRoastCoverage } from '@/lib/roastCoverage';
 import { PlanBlendBatchesModal } from './PlanBlendBatchesModal';
 import { BlendExecuteModal } from './BlendExecuteModal';
 import { DepletionWarningModal, executeDepletionSwaps, type DepletionSwap } from './DepletionWarningModal';
@@ -823,7 +824,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     setShowConfigDialog(true);
   };
 
-  const handleCreateSuggestedBatches = (roastGroup: string, demandKg: number) => {
+  const handleCreateSuggestedBatches = (roastGroup: string, netDemandKg: number) => {
     const config = configByGroup[roastGroup];
     const standardBatch = config?.standard_batch_kg ?? 20;
     const defaultRoaster = config?.default_roaster ?? 'EITHER';
@@ -836,9 +837,11 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
         const inboundKg = b.planned_output_kg ?? 0;
         return sum + inboundKg * (1 - yieldLossPct / 100);
       }, 0);
-    const roastedKg = roastedInventory[roastGroup] ?? 0;
-    const remainingNeed = demandKg - roastedKg - plannedExpectedOutput;
-    
+    const { remainingNeedKg: remainingNeed } = computeRoastCoverage({
+      netDemandKg,
+      plannedExpectedKg: plannedExpectedOutput,
+    });
+
     if (remainingNeed <= 0) {
       toast.info('No additional batches needed');
       return;
@@ -1027,7 +1030,10 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                           const inboundKg = b.planned_output_kg ?? 0;
                           return sum + inboundKg * (1 - yieldLossPct / 100);
                         }, 0);
-                      const remainingNeed = Math.max(0, group.total_kg - roastedTotal - plannedExpectedOutput);
+                      const remainingNeed = computeRoastCoverage({
+                        netDemandKg: group.net_demand_kg,
+                        plannedExpectedKg: plannedExpectedOutput,
+                      }).remainingNeedKg;
                       const expectedOutputPerBatch = standardBatch * (1 - yieldLossPct / 100);
                       const suggestedBatches = remainingNeed > 0 ? Math.ceil(remainingNeed / expectedOutputPerBatch) : 0;
                       
@@ -1110,8 +1116,10 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                       const plannedExpectedOutput = groupBatches
                         .filter(b => b.status === 'PLANNED')
                         .reduce((sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - yieldLossPct / 100), 0);
-                      const roastedTotal = roastedInventory[g.roast_group] ?? 0;
-                      const remainingNeed = Math.max(0, g.total_kg - roastedTotal - plannedExpectedOutput);
+                      const remainingNeed = computeRoastCoverage({
+                        netDemandKg: g.net_demand_kg,
+                        plannedExpectedKg: plannedExpectedOutput,
+                      }).remainingNeedKg;
                       return remainingNeed > 0;
                     }) && (
                       <tr className="bg-primary/5 border-t-2 border-primary/20">
@@ -1126,8 +1134,10 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                               const plannedExpectedOutput = groupBatches
                                 .filter(b => b.status === 'PLANNED')
                                 .reduce((sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - yieldLossPct / 100), 0);
-                              const roastedTotal = roastedInventory[g.roast_group] ?? 0;
-                              const remainingNeed = Math.max(0, g.total_kg - roastedTotal - plannedExpectedOutput);
+                              const remainingNeed = computeRoastCoverage({
+                                netDemandKg: g.net_demand_kg,
+                                plannedExpectedKg: plannedExpectedOutput,
+                              }).remainingNeedKg;
                               const expectedOutputPerBatch = config.standard_batch_kg * (1 - yieldLossPct / 100);
                               const suggestedBatches = remainingNeed > 0 ? Math.ceil(remainingNeed / expectedOutputPerBatch) : 0;
                               
@@ -1145,7 +1155,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                                         variant="outline"
                                         className="h-7 text-xs"
                                         aria-label={ariaLabel}
-                                        onClick={() => handleCreateSuggestedBatches(g.roast_group, g.total_kg)}
+                                        onClick={() => handleCreateSuggestedBatches(g.roast_group, g.net_demand_kg)}
                                       >
                                         <Plus className="h-3 w-3 mr-1" />
                                         {g.roast_group} (+{suggestedBatches})
