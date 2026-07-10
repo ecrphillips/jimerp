@@ -147,6 +147,29 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   const [sortMode, setSortMode] = useState<PackSortMode>('wip');
   const [manualGroupOrder, setManualGroupOrder] = useState<string[] | null>(null);
 
+  // Collapsible roast-group headers — persisted in sessionStorage for the session.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
+    try {
+      const raw = sessionStorage.getItem('pack-collapsed-groups');
+      return new Set<string>(raw ? JSON.parse(raw) : []);
+    } catch {
+      return new Set<string>();
+    }
+  });
+
+  const toggleGroupCollapsed = useCallback((groupKey: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      sessionStorage.setItem('pack-collapsed-groups', JSON.stringify(Array.from(next)));
+      return next;
+    });
+  }, []);
+
   // Roast-group config for display names + the Roast-tab sequence (display_order),
   // used as the tie-break for the "no WIP" tier so it mirrors the Roast tab.
   const { data: roastGroupsConfig } = useQuery({
