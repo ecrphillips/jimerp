@@ -24,7 +24,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { fetchAllRows } from '@/lib/fetchAllRows';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Package, Layers, GripVertical, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
+import { Package, Layers, GripVertical, RotateCcw, ChevronDown, ChevronRight, ChevronsUpDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { type PackagingVariant } from '@/components/PackagingBadge';
 import { SortablePackRow } from './SortablePackRow';
@@ -169,6 +169,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       return next;
     });
   }, []);
+
 
   // Roast-group config for display names + the Roast-tab sequence (display_order),
   // used as the tie-break for the "no WIP" tier so it mirrors the Roast tab.
@@ -613,6 +614,19 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     [frozenGroupOrder, groupMetas, sortMode, manualGroupOrder],
   );
 
+  const allCollapsed = groupOrder.length > 0 && groupOrder.every(k => collapsedGroups.has(k));
+
+  const collapseAllGroups = useCallback(() => {
+    if (allCollapsed) {
+      setCollapsedGroups(new Set());
+      sessionStorage.setItem('pack-collapsed-groups', JSON.stringify([]));
+    } else {
+      const allKeys = new Set(groupOrder);
+      setCollapsedGroups(allKeys);
+      sessionStorage.setItem('pack-collapsed-groups', JSON.stringify(Array.from(allKeys)));
+    }
+  }, [groupOrder, allCollapsed]);
+
   const metaByKey = useMemo(
     () => new Map(groupMetas.map((m) => [m.roastGroup, m])),
     [groupMetas],
@@ -901,6 +915,15 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
               >
                 <RotateCcw className="h-4 w-4 mr-1" />
                 Refresh complete
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={collapseAllGroups}
+                title={allCollapsed ? 'Expand all roast groups' : 'Collapse all roast groups'}
+              >
+                <ChevronsUpDown className="h-4 w-4 mr-1" />
+                {allCollapsed ? 'Expand all' : 'Collapse all'}
               </Button>
               <Button variant="outline" size="sm" asChild>
                 <Link to="/inventory?tab=wip&from=pack">
