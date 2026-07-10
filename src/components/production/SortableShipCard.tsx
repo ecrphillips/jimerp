@@ -91,6 +91,15 @@ export function SortableShipCard({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isLineItemsExpanded, setIsLineItemsExpanded] = useState(false);
+  const notesStorageKey = `ship-card-notes-${order.cardId}`;
+  const [areNotesOpen, setAreNotesOpen] = useState(() => {
+    const stored = sessionStorage.getItem(notesStorageKey);
+    return stored === 'true';
+  });
+  const handleNotesOpenChange = useCallback((open: boolean) => {
+    setAreNotesOpen(open);
+    sessionStorage.setItem(notesStorageKey, String(open));
+  }, [notesStorageKey]);
   
   const {
     attributes,
