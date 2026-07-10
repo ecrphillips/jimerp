@@ -43,6 +43,7 @@ import { DepletionWarningModal, executeDepletionSwaps, type DepletionSwap } from
 import { evaluateMultiRoastGroupImpacts, type MultiRgImpact } from '@/hooks/useGreenLotDepletion';
 import { type RoastGroupComponent, getComponentBreakdown, type ComponentDisplay } from '@/hooks/useRoastGroupComponents';
 import { useBlendReadiness } from '@/hooks/useBlendReadiness';
+import { computeRoastCoverage } from '@/lib/roastCoverage';
 
 type RoasterMachine = 'SAMIAC' | 'LORING';
 type DefaultRoaster = 'SAMIAC' | 'LORING' | 'EITHER';
@@ -241,10 +242,12 @@ export function RoastGroupDrawer({
   // ROASTED batches use actual output
   const roastedTodayKg = roastedBatches.reduce((sum, b) => sum + b.actual_output_kg, 0);
   
-  // Total coverage = expected from planned + actual from roasted
-  // Compare against NET demand (demand - WIP - FG)
-  const totalCoverage = plannedExpectedOutput + roastedTotal;
-  const coverageDelta = totalCoverage - netDemandKg;
+  // Coverage = FUTURE planned output vs NET demand (see computeRoastCoverage for
+  // why lifetime roasted must NOT be added here).
+  const { coverageDeltaKg: coverageDelta } = computeRoastCoverage({
+    netDemandKg,
+    plannedExpectedKg: plannedExpectedOutput,
+  });
 
   // Calculate component breakdown for display
   const componentBreakdown = useMemo(() => {
