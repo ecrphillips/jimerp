@@ -170,6 +170,19 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     });
   }, []);
 
+  const allCollapsed = groupOrder.length > 0 && groupOrder.every(k => collapsedGroups.has(k));
+
+  const collapseAllGroups = useCallback(() => {
+    if (allCollapsed) {
+      setCollapsedGroups(new Set());
+      sessionStorage.setItem('pack-collapsed-groups', JSON.stringify([]));
+    } else {
+      const allKeys = new Set(groupOrder);
+      setCollapsedGroups(allKeys);
+      sessionStorage.setItem('pack-collapsed-groups', JSON.stringify(Array.from(allKeys)));
+    }
+  }, [groupOrder, allCollapsed]);
+
   // Roast-group config for display names + the Roast-tab sequence (display_order),
   // used as the tie-break for the "no WIP" tier so it mirrors the Roast tab.
   const { data: roastGroupsConfig } = useQuery({
