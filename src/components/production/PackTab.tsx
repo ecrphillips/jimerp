@@ -614,6 +614,19 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     [frozenGroupOrder, groupMetas, sortMode, manualGroupOrder],
   );
 
+  const allCollapsed = groupOrder.length > 0 && groupOrder.every(k => collapsedGroups.has(k));
+
+  const collapseAllGroups = useCallback(() => {
+    if (allCollapsed) {
+      setCollapsedGroups(new Set());
+      sessionStorage.setItem('pack-collapsed-groups', JSON.stringify([]));
+    } else {
+      const allKeys = new Set(groupOrder);
+      setCollapsedGroups(allKeys);
+      sessionStorage.setItem('pack-collapsed-groups', JSON.stringify(Array.from(allKeys)));
+    }
+  }, [groupOrder, allCollapsed]);
+
   const metaByKey = useMemo(
     () => new Map(groupMetas.map((m) => [m.roastGroup, m])),
     [groupMetas],
