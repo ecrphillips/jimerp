@@ -91,6 +91,15 @@ export function SortableShipCard({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isLineItemsExpanded, setIsLineItemsExpanded] = useState(false);
+  const notesStorageKey = `ship-card-notes-${order.cardId}`;
+  const [areNotesOpen, setAreNotesOpen] = useState(() => {
+    const stored = sessionStorage.getItem(notesStorageKey);
+    return stored === 'true';
+  });
+  const handleNotesOpenChange = useCallback((open: boolean) => {
+    setAreNotesOpen(open);
+    sessionStorage.setItem(notesStorageKey, String(open));
+  }, [notesStorageKey]);
   
   const {
     attributes,
@@ -441,7 +450,7 @@ export function SortableShipCard({
 
       {/* Notes - always show if present */}
       {hasNotes && (
-        <Collapsible defaultOpen={false}>
+        <Collapsible open={areNotesOpen} onOpenChange={handleNotesOpenChange}>
           <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground mt-2 hover:text-foreground">
             <MessageSquare className="h-3 w-3" />
             {hasOpsNotes ? 'View notes (has ops note)' : 'View notes'}
