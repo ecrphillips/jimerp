@@ -441,7 +441,7 @@ export function SortableShipCard({
 
       {/* Notes - always show if present */}
       {hasNotes && (
-        <Collapsible defaultOpen={hasOpsNotes}>
+        <Collapsible defaultOpen={false}>
           <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground mt-2 hover:text-foreground">
             <MessageSquare className="h-3 w-3" />
             {hasOpsNotes ? 'View notes (has ops note)' : 'View notes'}
