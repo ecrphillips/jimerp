@@ -1013,18 +1013,25 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                         : undefined;
                       
                       return (
-                        <React.Fragment key={product.product_id}>
+                      <React.Fragment key={product.product_id}>
                           {showHeader && (
                             <tr
-                              aria-hidden="true"
-                              className={`bg-muted/60 border-b border-t ${index > 0 ? '[&>td]:pt-4' : ''}`}
+                              className={`bg-muted/60 border-b border-t ${index > 0 ? '[&>td]:pt-4' : ''} cursor-pointer hover:bg-muted/80 transition-colors`}
+                              onClick={() => toggleGroupCollapsed(groupKey)}
                             >
                               <td colSpan={7} className="py-2 px-3">
                                 <div className="flex items-center justify-between gap-3">
-                                  <span className="text-sm font-bold text-foreground uppercase tracking-wide">
-                                    {headerLabel}
-                                  </span>
-                                  {showHeaderWip && (
+                                  <div className="flex items-center gap-2">
+                                    {collapsedGroups.has(groupKey) ? (
+                                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                    ) : (
+                                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                    )}
+                                    <span className="text-sm font-bold text-foreground uppercase tracking-wide">
+                                      {headerLabel}
+                                    </span>
+                                  </div>
+                                  {showHeaderWip && !collapsedGroups.has(groupKey) && (
                                     <span className="text-xs font-medium text-muted-foreground">
                                       {headerWipKg.toFixed(1)} kg WIP available
                                       {headerPlanned && headerPlanned.count > 0 && (
@@ -1039,42 +1046,44 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                               </td>
                             </tr>
                           )}
-                        <SortablePackRow
-                          productId={product.product_id}
-                          productName={product.product_name}
-                          sku={product.sku}
-                          bagSizeG={product.bag_size_g}
-                          packagingVariant={product.packaging_variant}
-                          roastGroup={product.roast_group}
-                          demandedUnits={product.demanded_units}
-                          packedUnits={packed}
-                          availableUnits={available}
-                          pickedUnits={picked}
-                          wholeBeanUnits={product.wholeBeanUnits}
-                          grindUnits={product.grindUnits}
-                          grindByLabel={product.grindByLabel}
-                          hasTimeSensitive={product.hasTimeSensitive}
-                          wipStatus={product.wipStatus}
-                          unblocksOrders={product.unblocksOrders}
-                          wipAvailableKg={product.wipAvailableKg}
-                          requiredKg={product.requiredKg}
-                          plannedKg={product.plannedKg}
-                          plannedCount={product.plannedCount}
-                          packingRun={packing}
-                          requiresProduction={product.requiresProduction}
-                          isExpanded={isExpanded && !(deemphasizedIds?.has(product.product_id) ?? false)}
-                          deemphasized={deemphasizedIds?.has(product.product_id) ?? false}
-                          onToggleExpand={() => setExpandedProductId(isExpanded ? null : product.product_id)}
-                          onUpdatePackedUnits={(newValue) => updatePackingUnits(
-                            product.product_id,
-                            newValue,
-                            product.bag_size_g,
-                            product.roast_group,
-                            available
-                          )}
-                          onEditingChange={(isEditing) => handleEditingChange(product.product_id, isEditing)}
-                        />
-                        </React.Fragment>
+                        {!collapsedGroups.has(groupKey) && (
+                          <SortablePackRow
+                            productId={product.product_id}
+                            productName={product.product_name}
+                            sku={product.sku}
+                            bagSizeG={product.bag_size_g}
+                            packagingVariant={product.packaging_variant}
+                            roastGroup={product.roast_group}
+                            demandedUnits={product.demanded_units}
+                            packedUnits={packed}
+                            availableUnits={available}
+                            pickedUnits={picked}
+                            wholeBeanUnits={product.wholeBeanUnits}
+                            grindUnits={product.grindUnits}
+                            grindByLabel={product.grindByLabel}
+                            hasTimeSensitive={product.hasTimeSensitive}
+                            wipStatus={product.wipStatus}
+                            unblocksOrders={product.unblocksOrders}
+                            wipAvailableKg={product.wipAvailableKg}
+                            requiredKg={product.requiredKg}
+                            plannedKg={product.plannedKg}
+                            plannedCount={product.plannedCount}
+                            packingRun={packing}
+                            requiresProduction={product.requiresProduction}
+                            isExpanded={isExpanded && !(deemphasizedIds?.has(product.product_id) ?? false)}
+                            deemphasized={deemphasizedIds?.has(product.product_id) ?? false}
+                            onToggleExpand={() => setExpandedProductId(isExpanded ? null : product.product_id)}
+                            onUpdatePackedUnits={(newValue) => updatePackingUnits(
+                              product.product_id,
+                              newValue,
+                              product.bag_size_g,
+                              product.roast_group,
+                              available
+                            )}
+                            onEditingChange={(isEditing) => handleEditingChange(product.product_id, isEditing)}
+                          />
+                        )}
+                      </React.Fragment>
                       );
                     })}
                   </tbody>
