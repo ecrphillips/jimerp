@@ -916,6 +916,15 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                 <RotateCcw className="h-4 w-4 mr-1" />
                 Refresh complete
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={collapseAllGroups}
+                title={allCollapsed ? 'Expand all roast groups' : 'Collapse all roast groups'}
+              >
+                <ChevronsUpDown className="h-4 w-4 mr-1" />
+                {allCollapsed ? 'Expand all' : 'Collapse all'}
+              </Button>
               <Button variant="outline" size="sm" asChild>
                 <Link to="/inventory?tab=wip&from=pack">
                   <Layers className="h-4 w-4 mr-1" />
