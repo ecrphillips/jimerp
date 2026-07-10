@@ -49,7 +49,9 @@ const DISMISS_STORAGE_KEY = 'plan-tab-dismissed-orphans-v1';
 
 function readDismissed(): Set<string> {
   try {
-    const raw = sessionStorage.getItem(DISMISS_STORAGE_KEY);
+    // localStorage (not sessionStorage) so a dismissed orphan stays hidden
+    // across browser sessions, not just the current tab.
+    const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
     if (!raw) return new Set();
     return new Set(JSON.parse(raw) as string[]);
   } catch {
@@ -58,7 +60,7 @@ function readDismissed(): Set<string> {
 }
 function writeDismissed(set: Set<string>) {
   try {
-    sessionStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify([...set]));
+    localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify([...set]));
   } catch {
     /* ignore */
   }
@@ -593,9 +595,11 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
       if (allBatches.length > 0) {
         const ids = allBatches.map((b) => b.id);
         // A batch "has a ledger entry" when an inventory_transactions row carries
-        // its id in source_batch_id (written by mark_batch_roasted for every
-        // ROAST_OUTPUT). The retired wip_ledger table never carried batch refs,
-        // so checking it flagged every batch as an orphan.
+        // its id in source_batch_id — stamped by mark_batch_roasted on every
+        // ROAST_OUTPUT (and backfilled for historical rows) as of
+        // 20260710120000_populate_roast_output_source_batch_id.sql. Before that
+        // migration the column was never written, so this set was always empty
+        // and every roasted batch false-flagged as a ghost.
         const ledgerData = await fetchAllRows((from, to) =>
           supabase
             .from('inventory_transactions')
