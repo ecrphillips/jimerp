@@ -24,7 +24,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { fetchAllRows } from '@/lib/fetchAllRows';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Package, Layers, GripVertical, RotateCcw } from 'lucide-react';
+import { Package, Layers, GripVertical, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { type PackagingVariant } from '@/components/PackagingBadge';
 import { SortablePackRow } from './SortablePackRow';
