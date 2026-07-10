@@ -33,7 +33,11 @@ const INVALIDATE_KEYS: string[] = [
   'authoritative-roasted-batches',
   'authoritative-packing-runs',
   'authoritative-wip-ledger',
-  'authoritative-wip-manual-adjustments',
+  // FG on-hand ledger — feeds Ship-tab "FG Avail" and the Short List. Its source
+  // table (inventory_transactions) is watched, but this key was missing here, so
+  // neither realtime nor the 30s poll refreshed FG; only per-mutation invalidations
+  // did, leaving FG stale after any out-of-tab / cross-user change.
+  'authoritative-fg-ledger',
   'authoritative-ship-picks',
   'authoritative-confirmed-demand',
   'authoritative-open-demand',

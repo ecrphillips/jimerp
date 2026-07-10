@@ -536,7 +536,6 @@ export function RoastGroupDrawer({
       queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
-      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-manual-adjustments'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
       setUndoConfirmBatchId(null);
       // Refresh frozen batch order to reflect new status positions
@@ -580,7 +579,6 @@ export function RoastGroupDrawer({
       queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
-      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-manual-adjustments'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
       refreshFrozenBatches();
     },
