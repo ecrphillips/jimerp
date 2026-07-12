@@ -26,7 +26,7 @@ export function WaiverHistoryPanel({ open, onOpenChange, memberId, memberName }:
     queryKey: ['waiver-history', memberId],
     enabled: open && !!memberId,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('coroast_waiver_log')
         .select('id, fee_amount_waived, waive_reason, waived_by, created_at, coroast_bookings:booking_id(booking_date)')
         .eq('member_id', memberId)
