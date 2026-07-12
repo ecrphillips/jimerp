@@ -206,7 +206,7 @@ export default function CoRoastBilling() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_bookings')
-        .select('id, member_id, account_id, booking_date, start_time, end_time, duration_hours, status')
+        .select('id, account_id, booking_date, start_time, end_time, duration_hours, status')
         .gte('booking_date', periodStart)
         .lte('booking_date', periodEnd)
         .in('status', BILLABLE_STATUSES);
@@ -221,7 +221,7 @@ export default function CoRoastBilling() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_bookings')
-        .select('id, member_id, account_id, start_time, end_time, duration_hours, status')
+        .select('id, account_id, start_time, end_time, duration_hours, status')
         .gte('booking_date', prevPeriodStart)
         .lte('booking_date', prevPeriodEnd)
         .in('status', BILLABLE_STATUSES);
@@ -326,7 +326,7 @@ export default function CoRoastBilling() {
     const map = new Map<string, number>();
     for (const bk of bookings) {
       const hours = calcBookingHours(bk);
-      map.set(((bk as any).account_id ?? bk.member_id), (map.get(((bk as any).account_id ?? bk.member_id)) ?? 0) + hours);
+      map.set(bk.account_id, (map.get(bk.account_id) ?? 0) + hours);
     }
     return map;
   }, [bookings]);
@@ -335,7 +335,7 @@ export default function CoRoastBilling() {
     const map = new Map<string, number>();
     for (const bk of prevBookings) {
       const hours = calcBookingHours(bk as any);
-      map.set(((bk as any).account_id ?? bk.member_id), (map.get(((bk as any).account_id ?? bk.member_id)) ?? 0) + hours);
+      map.set(bk.account_id, (map.get(bk.account_id) ?? 0) + hours);
     }
     return map;
   }, [prevBookings]);
