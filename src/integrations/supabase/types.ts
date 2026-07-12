@@ -809,7 +809,6 @@ export type Database = {
           end_time: string
           id: string
           is_prime_time: boolean
-          member_id: string | null
           notes_internal: string | null
           notes_member: string | null
           recurring_block_id: string | null
@@ -833,7 +832,6 @@ export type Database = {
           end_time: string
           id?: string
           is_prime_time?: boolean
-          member_id?: string | null
           notes_internal?: string | null
           notes_member?: string | null
           recurring_block_id?: string | null
@@ -857,7 +855,6 @@ export type Database = {
           end_time?: string
           id?: string
           is_prime_time?: boolean
-          member_id?: string | null
           notes_internal?: string | null
           notes_member?: string | null
           recurring_block_id?: string | null
@@ -901,7 +898,6 @@ export type Database = {
           entry_type: Database["public"]["Enums"]["coroast_ledger_entry_type"]
           hours_delta: number
           id: string
-          member_id: string | null
           notes: string
         }
         Insert: {
@@ -913,7 +909,6 @@ export type Database = {
           entry_type: Database["public"]["Enums"]["coroast_ledger_entry_type"]
           hours_delta: number
           id?: string
-          member_id?: string | null
           notes?: string
         }
         Update: {
@@ -925,7 +920,6 @@ export type Database = {
           entry_type?: Database["public"]["Enums"]["coroast_ledger_entry_type"]
           hours_delta?: number
           id?: string
-          member_id?: string | null
           notes?: string
         }
         Relationships: [
@@ -1595,7 +1589,6 @@ export type Database = {
           created_at: string
           fee_amount_waived: number
           id: string
-          member_id: string | null
           waive_reason: string | null
           waived_by: string | null
         }
@@ -1605,7 +1598,6 @@ export type Database = {
           created_at?: string
           fee_amount_waived: number
           id?: string
-          member_id?: string | null
           waive_reason?: string | null
           waived_by?: string | null
         }
@@ -1615,7 +1607,6 @@ export type Database = {
           created_at?: string
           fee_amount_waived?: number
           id?: string
-          member_id?: string | null
           waive_reason?: string | null
           waived_by?: string | null
         }
