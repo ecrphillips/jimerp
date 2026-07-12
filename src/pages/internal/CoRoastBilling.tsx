@@ -335,7 +335,7 @@ export default function CoRoastBilling() {
     const map = new Map<string, number>();
     for (const bk of prevBookings) {
       const hours = calcBookingHours(bk as any);
-      map.set(((bk as any).account_id ?? bk.member_id), (map.get(((bk as any).account_id ?? bk.member_id)) ?? 0) + hours);
+      map.set(bk.account_id, (map.get(bk.account_id) ?? 0) + hours);
     }
     return map;
   }, [prevBookings]);
