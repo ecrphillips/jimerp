@@ -84,7 +84,7 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
       .filter(b => !CANCELLED_STATUSES.includes(b.status))
       .sort((a, b) => a.booking_date.localeCompare(b.booking_date) || a.start_time.localeCompare(b.start_time));
     for (const bk of sorted) {
-      const key = `${bk.member_id}:${bk.booking_date.slice(0, 7)}`;
+      const key = `${bk.account_id}:${bk.booking_date.slice(0, 7)}`;
       if (!grouped.has(key)) grouped.set(key, []);
       grouped.get(key)!.push(bk);
     }
@@ -128,7 +128,7 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
       if (CANCELLED_STATUSES.includes(bk.status)) continue;
       const isNoShow = bk.status === 'NO_SHOW';
       const isCompleted = bk.status === 'COMPLETED';
-      const baseColor = getMemberColor(bk.member_id, allMemberIds);
+      const baseColor = getMemberColor(bk.account_id ?? '', allMemberIds);
       const color = isNoShow
         ? { bg: NO_SHOW_BG, text: '#fff' }
         : isCompleted
