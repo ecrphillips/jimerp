@@ -113,7 +113,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['booking-calendar'] });
     if (booking) {
-      const accountId = booking.account_id ?? booking.member_id;
+      const accountId = booking.account_id;
       const periodKey = booking.booking_date.slice(0, 7);
       queryClient.invalidateQueries({ queryKey: ['coroast-hour-ledger', accountId] });
       queryClient.invalidateQueries({ queryKey: ['coroast-billing-period', accountId, periodKey] });
