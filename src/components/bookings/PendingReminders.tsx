@@ -15,7 +15,7 @@ interface ReminderBooking {
   start_time: string;
   end_time: string;
   reminder_sent_at: string | null;
-  coroast_members: { business_name: string } | null;
+  accounts: { account_name: string } | null;
 }
 
 function formatTime(t: string): string {
@@ -37,7 +37,7 @@ export function PendingReminders() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('coroast_bookings')
-        .select('id, booking_date, start_time, end_time, reminder_sent_at, coroast_members:member_id(business_name)')
+        .select('id, booking_date, start_time, end_time, reminder_sent_at, accounts:account_id(account_name)')
         .eq('status', 'CONFIRMED')
         .is('reminder_sent_at', null)
         .gte('booking_date', today)
@@ -78,7 +78,7 @@ export function PendingReminders() {
           {reminders.map(r => (
             <li key={r.id} className="flex items-center justify-between text-sm border-b pb-2 last:border-0">
               <div>
-                <span className="font-medium">{r.coroast_members?.business_name ?? 'Unknown'}</span>
+                <span className="font-medium">{r.accounts?.account_name ?? 'Unknown'}</span>
                 <span className="ml-2 text-muted-foreground">
                   {format(parseDateOnly(r.booking_date)!, 'EEE, MMM d')}
                 </span>

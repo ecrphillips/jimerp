@@ -45,11 +45,11 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
   const [editEndTime, setEditEndTime] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
 
-  const member = booking ? members.find(m => m.id === booking.member_id) : undefined;
+  const member = booking ? members.find(m => m.id === booking.account_id) : undefined;
   const durationHrs = booking ? (timeToMinutes(booking.end_time) - timeToMinutes(booking.start_time)) / 60 : 0;
   const tier = member?.tier ?? 'MEMBER';
   const tierDefaults = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
-  const { data: pricing } = useAccountPricing(booking?.member_id);
+  const { data: pricing } = useAccountPricing(booking?.account_id);
   const rates = {
     overageRate: pricing?.overageRate.value ?? tierDefaults.overageRate,
     includedHours: pricing?.includedHours.value ?? tierDefaults.includedHours,
@@ -97,7 +97,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
     if (!booking) return 'Included';
     const month = booking.booking_date.slice(0, 7);
     const monthBookings = allBookings
-      .filter(b => b.member_id === booking.member_id && b.booking_date.startsWith(month) && !['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CANCELLED_WAIVED'].includes(b.status))
+      .filter(b => b.account_id === booking.account_id && b.booking_date.startsWith(month) && !['CANCELLED_FREE', 'CANCELLED_CHARGED', 'CANCELLED_WAIVED'].includes(b.status))
       .sort((a, b) => a.booking_date.localeCompare(b.booking_date) || a.start_time.localeCompare(b.start_time));
     let running = 0;
     for (const bk of monthBookings) {
@@ -130,7 +130,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
       }).eq('id', booking.id);
       if (error) throw error;
       await supabase.from('coroast_hour_ledger').insert({
-        member_id: booking.member_id, billing_period_id: booking.billing_period_id,
+        account_id: booking.account_id, billing_period_id: booking.billing_period_id,
         booking_id: booking.id, entry_type: 'BOOKING_RETURNED' as any,
         hours_delta: -durationHrs, notes: `Free cancellation for ${booking.booking_date}`,
       });
@@ -150,7 +150,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
       }).eq('id', booking.id);
       if (error) throw error;
       await supabase.from('coroast_hour_ledger').insert({
-        member_id: booking.member_id, billing_period_id: booking.billing_period_id,
+        account_id: booking.account_id, billing_period_id: booking.billing_period_id,
         booking_id: booking.id, entry_type: 'BOOKING_RETURNED' as any,
         hours_delta: refundedHoursFiftyPercent(durationHrs),
         notes: `50% cancellation for ${booking.booking_date}`,
@@ -195,11 +195,11 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
       }).eq('id', booking.id);
       if (error) throw error;
       await supabase.from('coroast_waiver_log').insert({
-        member_id: booking.member_id, booking_id: booking.id,
+        account_id: booking.account_id, booking_id: booking.id,
         fee_amount_waived: fullFee, waive_reason: waiveReason.trim(),
       });
       await supabase.from('coroast_hour_ledger').insert({
-        member_id: booking.member_id, billing_period_id: booking.billing_period_id,
+        account_id: booking.account_id, billing_period_id: booking.billing_period_id,
         booking_id: booking.id, entry_type: 'BOOKING_RETURNED' as any,
         hours_delta: -durationHrs, notes: `Waived cancellation for ${booking.booking_date}`,
       });
