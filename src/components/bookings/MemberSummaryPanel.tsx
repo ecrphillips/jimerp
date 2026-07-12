@@ -15,7 +15,7 @@ interface MemberSummaryPanelProps {
 
 function getMonthBookings(bookings: BookingRow[], memberId: string, month: string) {
   return bookings.filter(
-    b => (b.account_id === memberId || b.member_id === memberId) && b.booking_date.startsWith(month) && !['CANCELLED', 'CANCELLED_FREE', 'CANCELLED_CHARGED', 'CANCELLED_WAIVED', 'NO_SHOW'].includes(b.status)
+    b => b.account_id === memberId && b.booking_date.startsWith(month) && !['CANCELLED', 'CANCELLED_FREE', 'CANCELLED_CHARGED', 'CANCELLED_WAIVED', 'NO_SHOW'].includes(b.status)
   );
 }
 
