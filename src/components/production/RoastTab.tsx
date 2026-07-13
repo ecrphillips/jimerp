@@ -1067,6 +1067,37 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                 <Plus className="h-4 w-4 mr-1" />
                 Add Batch
               </Button>
+
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAutoPlanAllBatches}
+                      disabled={autoPlanAllBatchesMutation.isPending || autoPlanPreview.rows.length === 0}
+                      className="border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
+                    >
+                      <Sparkles className="h-4 w-4 mr-1" />
+                      Auto-plan all batches
+                      {autoPlanPreview.rows.length > 0 && (
+                        <span className="ml-1 text-xs opacity-80">
+                          (+{autoPlanPreview.rows.length})
+                        </span>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <div className="text-xs space-y-1">
+                      <div className="font-medium">Auto-calculated — review before roasting</div>
+                      <div className="text-muted-foreground">
+                        Adds every batch shown in the "Quick add batches" ribbon in one click.
+                        Counts come from current demand, planned coverage, standard batch size, and expected yield loss — double-check for hallucinations.
+                      </div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
         </CardHeader>
