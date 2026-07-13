@@ -486,10 +486,14 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     });
   }, [orderLineItems, timeSensitiveProducts, inventoryLevelsByGroup, picksByLineItemId, batches, authWip]);
 
-  // Calculate roasted inventory per roast_group (sum of ROASTED batches)
+  // Calculate roasted inventory per roast_group (sum of ROASTED batches).
+  // Exclude batches earmarked for a post-roast blend — those are ring-fenced to
+  // the parent blend drawer and must not surface as independent component
+  // inventory at the top level.
   const roastedInventory = useMemo(() => {
     const inventory: Record<string, number> = {};
     for (const b of batches ?? []) {
+      if (b.planned_for_blend_roast_group) continue;
       if (b.status === 'ROASTED') {
         inventory[b.roast_group] = (inventory[b.roast_group] ?? 0) + b.actual_output_kg;
       }
@@ -506,17 +510,15 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     return Array.from(groups).sort();
   }, [products]);
 
-  // Group batches by roast_group
-  // Exclude PLANNED batches that are earmarked for a post-roast blend — those
-  // belong conceptually to the blend's drawer (which fetches them separately
-  // via planned_for_blend_roast_group). Showing them in the component RG's
-  // drawer too is confusing and double-counts coverage. Once roasted they
-  // remain visible here because the WIP physically belongs to the component RG
-  // until the blend consumes it.
+  // Group batches by roast_group.
+  // Fully ring-fence post-roast blend batches (both PLANNED and ROASTED) to the
+  // parent blend drawer, which fetches them separately via
+  // planned_for_blend_roast_group. Showing them under the component RG here
+  // would double-count coverage and spawn a spurious independent drawer.
   const batchesByGroup = useMemo(() => {
     const grouped: Record<string, RoastBatch[]> = {};
     for (const b of batches ?? []) {
-      if (b.status === 'PLANNED' && b.planned_for_blend_roast_group) continue;
+      if (b.planned_for_blend_roast_group) continue;
       if (!grouped[b.roast_group]) grouped[b.roast_group] = [];
       grouped[b.roast_group].push(b);
     }
