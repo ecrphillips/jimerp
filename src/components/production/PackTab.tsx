@@ -477,13 +477,13 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     const sorted = [...demandByProduct];
 
     sorted.sort((a, b) => {
-      const packedA = packingByProductUnits[a.product_id] ?? 0;
+      const availableA = availableByProductUnits[a.product_id] ?? 0;
       const pickedA = pickedByProductUnits?.[a.product_id] ?? 0;
-      const completeA = a.demanded_units > 0 && Math.max(packedA, pickedA) >= a.demanded_units;
+      const completeA = a.demanded_units > 0 && availableA + pickedA >= a.demanded_units;
 
-      const packedB = packingByProductUnits[b.product_id] ?? 0;
+      const availableB = availableByProductUnits[b.product_id] ?? 0;
       const pickedB = pickedByProductUnits?.[b.product_id] ?? 0;
-      const completeB = b.demanded_units > 0 && Math.max(packedB, pickedB) >= b.demanded_units;
+      const completeB = b.demanded_units > 0 && availableB + pickedB >= b.demanded_units;
 
       if (completeA !== completeB) return completeA ? 1 : -1;
 
@@ -494,7 +494,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     });
 
     return sorted;
-  }, [demandByProduct, packingByProductUnits, pickedByProductUnits]);
+  }, [demandByProduct, availableByProductUnits, pickedByProductUnits]);
 
   // Sync local state from server data, but only when not actively reordering
   useEffect(() => {
@@ -661,15 +661,15 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
         ids.add(p.product_id);
         continue;
       }
-      const packed = packingByProductUnits[p.product_id] ?? 0;
+      const available = availableByProductUnits[p.product_id] ?? 0;
       const picked = pickedByProductUnits?.[p.product_id] ?? 0;
-      const effective = Math.max(packed, picked);
+      const effective = available + picked;
       if (p.demanded_units > 0 && effective >= p.demanded_units) {
         ids.add(p.product_id);
       }
     }
     return ids;
-  }, [displayProducts, packingByProductUnits, pickedByProductUnits]);
+  }, [displayProducts, availableByProductUnits, pickedByProductUnits]);
 
   // Complete PRODUCED rows only — the de-emphasized (faded) treatment must not
   // swallow bought-in rows, whose amber "pull from stock" cue has to stay loud.
