@@ -193,11 +193,21 @@ export function BlendExecuteModal({
   }, [blendComponents, configByGroup]);
   
   // Calculate available kg per batch (output - already consumed via pack)
-  // For MVP, we'll use a simple approach: assume batches are consumed FIFO within a roast group
+  //
+  // Ring-fence rule: batches with planned_for_blend_roast_group are earmarked
+  // for a blend and MUST NOT be drained by PACK_CONSUME_WIP FIFO. Single-origin
+  // packing of the same component roast group can only draw from non-earmarked
+  // batches; earmarked batches always show full actual_output_kg here until the
+  // blend consumes them (consumed_by_blend_at is set, at which point they're
+  // filtered out upstream by the roasted-batches query).
+  //
+  // Without this split, over-packing a single-origin variant of the same
+  // roast group visually "steals" kg from a blend-earmarked batch even though
+  // the earmarked kg were never physically touched.
   const batchesWithAvailable = useMemo(() => {
     if (!roastedBatches) return [];
-    
-    // Group batches by roast_group and calculate remaining available
+
+    // Group batches by roast_group
     const batchesByGroup: Record<string, RoastedBatch[]> = {};
     for (const batch of roastedBatches) {
       if (!batchesByGroup[batch.roast_group]) {
@@ -205,35 +215,51 @@ export function BlendExecuteModal({
       }
       batchesByGroup[batch.roast_group].push(batch);
     }
-    
+
     const result: Array<RoastedBatch & { availableKg: number; linkedToThisBlend: boolean }> = [];
-    
+
     for (const [roastGroup, batches] of Object.entries(batchesByGroup)) {
       const totalConsumed = wipConsumptions?.[roastGroup] ?? 0;
-      let remainingConsumed = totalConsumed;
-      
-      // Sort by created_at for FIFO consumption
-      const sortedBatches = [...batches].sort((a, b) => 
-        (a.created_at ?? '').localeCompare(b.created_at ?? '')
-      );
-      
-      for (const batch of sortedBatches) {
-        const consumedFromThis = Math.min(remainingConsumed, batch.actual_output_kg);
-        const available = batch.actual_output_kg - consumedFromThis;
-        remainingConsumed -= consumedFromThis;
-        
-        if (available > 0.01) { // Only show if there's meaningful available kg
+
+      // Split earmarked vs. free batches — pack consumption only drains free ones.
+      const earmarked = batches.filter(b => !!b.planned_for_blend_roast_group);
+      const free = batches.filter(b => !b.planned_for_blend_roast_group);
+
+      // Earmarked batches: always fully available to their target blend.
+      for (const batch of earmarked) {
+        if (batch.actual_output_kg > 0.01) {
           result.push({
             ...batch,
-            availableKg: available,
+            availableKg: batch.actual_output_kg,
             linkedToThisBlend: batch.planned_for_blend_roast_group === blendRoastGroup,
           });
         }
       }
+
+      // Free batches: FIFO-drain the pack consumption.
+      let remainingConsumed = totalConsumed;
+      const sortedFree = [...free].sort((a, b) =>
+        (a.created_at ?? '').localeCompare(b.created_at ?? '')
+      );
+
+      for (const batch of sortedFree) {
+        const consumedFromThis = Math.min(remainingConsumed, batch.actual_output_kg);
+        const available = batch.actual_output_kg - consumedFromThis;
+        remainingConsumed -= consumedFromThis;
+
+        if (available > 0.01) {
+          result.push({
+            ...batch,
+            availableKg: available,
+            linkedToThisBlend: false,
+          });
+        }
+      }
     }
-    
+
     return result;
   }, [roastedBatches, wipConsumptions, blendRoastGroup]);
+
   
   // Group available batches by component
   const batchesByComponent = useMemo(() => {
