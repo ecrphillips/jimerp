@@ -1093,8 +1093,9 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                             plannedCount={product.plannedCount}
                             packingRun={packing}
                             requiresProduction={product.requiresProduction}
-                            isExpanded={isExpanded && !(deemphasizedIds?.has(product.product_id) ?? false)}
-                            deemphasized={deemphasizedIds?.has(product.product_id) ?? false}
+                            isExpanded={isExpanded && !((deemphasizedIds?.has(product.product_id) ?? false) && completeProductIds.has(product.product_id))}
+                            deemphasized={(deemphasizedIds?.has(product.product_id) ?? false) && completeProductIds.has(product.product_id)}
+
                             onToggleExpand={() => setExpandedProductId(isExpanded ? null : product.product_id)}
                             onUpdatePackedUnits={(newValue) => updatePackingUnits(
                               product.product_id,
