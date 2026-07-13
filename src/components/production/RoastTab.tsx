@@ -945,18 +945,20 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     return { rows, summary };
   }, [sortedGroups, configByGroup, batchesByGroup, today, user?.id]);
 
+  const [showAutoPlanConfirm, setShowAutoPlanConfirm] = useState(false);
+
   const handleAutoPlanAllBatches = () => {
-    const { rows, summary } = autoPlanPreview;
-    if (rows.length === 0) {
+    if (autoPlanPreview.rows.length === 0) {
       toast.info('No batches to auto-plan — every roast group is covered.');
       return;
     }
-    const lines = summary.map((s) => `• ${s.roastGroup}: ${s.count} × ${s.batchKg}kg`).join('\n');
-    const ok = window.confirm(
-      `Auto-plan ${rows.length} batches across ${summary.length} roast group${summary.length === 1 ? '' : 's'}?\n\n${lines}\n\nThese counts are auto-calculated from current demand — review before roasting.`
-    );
-    if (!ok) return;
-    autoPlanAllBatchesMutation.mutate(rows);
+    setShowAutoPlanConfirm(true);
+  };
+
+  const confirmAutoPlanAllBatches = () => {
+    autoPlanAllBatchesMutation.mutate(autoPlanPreview.rows, {
+      onSettled: () => setShowAutoPlanConfirm(false),
+    });
   };
 
   const handleSaveConfig = () => {
