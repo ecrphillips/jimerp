@@ -867,6 +867,98 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     });
   };
 
+  // Bulk auto-plan: mirrors the "Quick add batches" ribbon at the bottom of the
+  // table and inserts every suggested batch across all currently-visible roast
+  // groups in a single write.
+  const autoPlanAllBatchesMutation = useMutation({
+    mutationFn: async (rows: Array<{
+      roast_group: string;
+      target_date: string;
+      planned_output_kg: number;
+      actual_output_kg: number;
+      status: 'PLANNED';
+      assigned_roaster: RoasterMachine | null;
+      created_by: string | undefined;
+    }>) => {
+      const { error } = await supabase.from('roasted_batches').insert(rows);
+      if (error) throw error;
+    },
+    onSuccess: (_, rows) => {
+      const groupCount = new Set(rows.map((r) => r.roast_group)).size;
+      toast.success(`Auto-planned ${rows.length} batches across ${groupCount} roast group${groupCount === 1 ? '' : 's'}`);
+      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to auto-plan batches');
+    },
+  });
+
+  const autoPlanPreview = useMemo(() => {
+    const rows: Array<{
+      roast_group: string;
+      target_date: string;
+      planned_output_kg: number;
+      actual_output_kg: number;
+      status: 'PLANNED';
+      assigned_roaster: RoasterMachine | null;
+      created_by: string | undefined;
+    }> = [];
+    const summary: Array<{ roastGroup: string; count: number; batchKg: number }> = [];
+
+    for (const g of sortedGroups) {
+      const config = configByGroup[g.roast_group];
+      if (!config) continue;
+      const yieldLossPct = config.expected_yield_loss_pct ?? 16;
+      const standardBatch = config.standard_batch_kg ?? 20;
+      const defaultRoaster = config.default_roaster ?? 'EITHER';
+      const groupBatches = batchesByGroup[g.roast_group] ?? [];
+      const plannedExpectedOutput = groupBatches
+        .filter((b) => b.status === 'PLANNED')
+        .reduce((sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - yieldLossPct / 100), 0);
+      const remainingNeed = computeRoastCoverage({
+        netDemandKg: g.net_demand_kg,
+        plannedExpectedKg: plannedExpectedOutput,
+      }).remainingNeedKg;
+      if (remainingNeed <= 0) continue;
+      const expectedOutputPerBatch = standardBatch * (1 - yieldLossPct / 100);
+      const count = Math.ceil(remainingNeed / expectedOutputPerBatch);
+      if (count <= 0) continue;
+
+      let roaster: RoasterMachine | null = null;
+      if (defaultRoaster === 'SAMIAC') roaster = 'SAMIAC';
+      else if (defaultRoaster === 'LORING') roaster = 'LORING';
+
+      summary.push({ roastGroup: g.roast_group, count, batchKg: standardBatch });
+      for (let i = 0; i < count; i++) {
+        rows.push({
+          roast_group: g.roast_group,
+          target_date: today,
+          planned_output_kg: standardBatch,
+          actual_output_kg: 0,
+          status: 'PLANNED',
+          assigned_roaster: roaster,
+          created_by: user?.id,
+        });
+      }
+    }
+    return { rows, summary };
+  }, [sortedGroups, configByGroup, batchesByGroup, today, user?.id]);
+
+  const handleAutoPlanAllBatches = () => {
+    const { rows, summary } = autoPlanPreview;
+    if (rows.length === 0) {
+      toast.info('No batches to auto-plan — every roast group is covered.');
+      return;
+    }
+    const lines = summary.map((s) => `• ${s.roastGroup}: ${s.count} × ${s.batchKg}kg`).join('\n');
+    const ok = window.confirm(
+      `Auto-plan ${rows.length} batches across ${summary.length} roast group${summary.length === 1 ? '' : 's'}?\n\n${lines}\n\nThese counts are auto-calculated from current demand — review before roasting.`
+    );
+    if (!ok) return;
+    autoPlanAllBatchesMutation.mutate(rows);
+  };
+
   const handleSaveConfig = () => {
     const batchKg = parseFloat(configStandardBatch);
     if (!batchKg || batchKg <= 0) {
@@ -975,6 +1067,37 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                 <Plus className="h-4 w-4 mr-1" />
                 Add Batch
               </Button>
+
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAutoPlanAllBatches}
+                      disabled={autoPlanAllBatchesMutation.isPending || autoPlanPreview.rows.length === 0}
+                      className="border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
+                    >
+                      <Sparkles className="h-4 w-4 mr-1" />
+                      Auto-plan all batches
+                      {autoPlanPreview.rows.length > 0 && (
+                        <span className="ml-1 text-xs opacity-80">
+                          (+{autoPlanPreview.rows.length})
+                        </span>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <div className="text-xs space-y-1">
+                      <div className="font-medium">Auto-calculated — review before roasting</div>
+                      <div className="text-muted-foreground">
+                        Adds every batch shown in the "Quick add batches" ribbon in one click.
+                        Counts come from current demand, planned coverage, standard batch size, and expected yield loss — double-check for hallucinations.
+                      </div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
         </CardHeader>
