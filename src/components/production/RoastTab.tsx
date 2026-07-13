@@ -1880,6 +1880,53 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
           }}
         />
       )}
+
+      <AlertDialog open={showAutoPlanConfirm} onOpenChange={setShowAutoPlanConfirm}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              Auto-plan {autoPlanPreview.rows.length} batches?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 pt-1">
+                <div className="text-sm">
+                  Across {autoPlanPreview.summary.length} roast group
+                  {autoPlanPreview.summary.length === 1 ? '' : 's'}:
+                </div>
+                <ul className="max-h-64 overflow-y-auto rounded-md border bg-muted/40 p-2 text-sm space-y-1">
+                  {autoPlanPreview.summary.map((s) => (
+                    <li key={s.roastGroup} className="flex justify-between gap-3">
+                      <span className="truncate font-medium text-foreground">{s.roastGroup}</span>
+                      <span className="text-muted-foreground whitespace-nowrap">
+                        {s.count} × {s.batchKg}kg
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="text-xs text-muted-foreground">
+                  These counts are auto-calculated from current demand, planned coverage, standard
+                  batch size, and expected yield loss. Review before roasting.
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={autoPlanAllBatchesMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                confirmAutoPlanAllBatches();
+              }}
+              disabled={autoPlanAllBatchesMutation.isPending}
+            >
+              {autoPlanAllBatchesMutation.isPending ? 'Adding…' : 'Auto-plan batches'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
