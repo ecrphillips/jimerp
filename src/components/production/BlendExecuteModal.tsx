@@ -462,17 +462,11 @@ export function BlendExecuteModal({
               Blend recipe percentages must sum to 100%. Current total: {recipeTotalPct}%.
             </AlertDescription>
           </Alert>
-        ) : !hasAvailableBatches ? (
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              No roasted component batches available for blending. Roast component batches first, then return here to blend.
-            </AlertDescription>
-          </Alert>
         ) : showSuccess ? (
           <div className="space-y-4">
             <Alert className="border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800">
               <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+
               <AlertDescription className="text-green-800 dark:text-green-200">
                 Successfully created {blendedAmount.toFixed(1)} kg of {blendDisplayName} WIP!
               </AlertDescription>
@@ -486,7 +480,15 @@ export function BlendExecuteModal({
               <Button onClick={() => onOpenChange(false)}>Done</Button>
             </DialogFooter>
           </div>
+        ) : !hasAvailableBatches ? (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              No roasted component batches available for blending. Roast component batches first, then return here to blend.
+            </AlertDescription>
+          </Alert>
         ) : (
+
           <div className="space-y-4">
             {/* Recipe summary */}
             <div className="bg-muted/50 rounded-lg p-3">
