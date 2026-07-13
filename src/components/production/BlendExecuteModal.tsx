@@ -480,7 +480,15 @@ export function BlendExecuteModal({
               <Button onClick={() => onOpenChange(false)}>Done</Button>
             </DialogFooter>
           </div>
+        ) : !hasAvailableBatches ? (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              No roasted component batches available for blending. Roast component batches first, then return here to blend.
+            </AlertDescription>
+          </Alert>
         ) : (
+
           <div className="space-y-4">
             {/* Recipe summary */}
             <div className="bg-muted/50 rounded-lg p-3">
