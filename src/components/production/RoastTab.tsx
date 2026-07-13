@@ -424,12 +424,12 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     const groupsWithActivity = new Set<string>();
     
     // Groups with batches (planned or roasted).
-    // For PLANNED batches earmarked for a post-roast blend, the activity
-    // belongs to the PARENT blend drawer — not the component RG. Without this
-    // remap, adding component batches from inside the Technicolour drawer
-    // causes each component to spawn its own drawer at the top level.
+    // Batches earmarked for a post-roast blend (planned_for_blend_roast_group)
+    // are ring-fenced to the PARENT blend drawer at every status. Without this
+    // remap, component RGs would spawn their own top-level drawer (or get pinned
+    // by roasted component inventory that only exists to feed the blend).
     for (const b of batches ?? []) {
-      if (b.status === 'PLANNED' && b.planned_for_blend_roast_group) {
+      if (b.planned_for_blend_roast_group) {
         groupsWithActivity.add(b.planned_for_blend_roast_group);
         continue;
       }
