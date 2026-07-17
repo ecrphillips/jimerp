@@ -181,6 +181,7 @@ export function RoastGroupDrawer({
         .from('roasted_batches')
         .select('*')
         .eq('planned_for_blend_roast_group', roastGroup)
+        .is('consumed_by_blend_at', null)
         .in('status', ['PLANNED', 'ROASTED'])
         .order('created_at', { ascending: true });
       

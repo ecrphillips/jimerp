@@ -493,6 +493,10 @@ export function PlanBlendBatchesModal({
           : `Created ${totalBatchesToCreate} planned batches for ${blendDisplayName}`,
       );
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+      // The blend drawer reads component batches from a separate query — invalidate
+      // it so newly planned batches appear immediately without a collapse/expand.
+      queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend', blendRoastGroup] });
+      queryClient.invalidateQueries({ queryKey: ['roasted-component-batches-for-blending'] });
       setCreatedSummary(summary);
       setShowSuccess(true);
       setDepletionState(null);

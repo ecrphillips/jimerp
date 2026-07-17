@@ -424,12 +424,12 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     const groupsWithActivity = new Set<string>();
     
     // Groups with batches (planned or roasted).
-    // For PLANNED batches earmarked for a post-roast blend, the activity
-    // belongs to the PARENT blend drawer — not the component RG. Without this
-    // remap, adding component batches from inside the Technicolour drawer
-    // causes each component to spawn its own drawer at the top level.
+    // Batches earmarked for a post-roast blend (planned_for_blend_roast_group)
+    // are ring-fenced to the PARENT blend drawer at every status. Without this
+    // remap, component RGs would spawn their own top-level drawer (or get pinned
+    // by roasted component inventory that only exists to feed the blend).
     for (const b of batches ?? []) {
-      if (b.status === 'PLANNED' && b.planned_for_blend_roast_group) {
+      if (b.planned_for_blend_roast_group) {
         groupsWithActivity.add(b.planned_for_blend_roast_group);
         continue;
       }
@@ -486,10 +486,14 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     });
   }, [orderLineItems, timeSensitiveProducts, inventoryLevelsByGroup, picksByLineItemId, batches, authWip]);
 
-  // Calculate roasted inventory per roast_group (sum of ROASTED batches)
+  // Calculate roasted inventory per roast_group (sum of ROASTED batches).
+  // Exclude batches earmarked for a post-roast blend — those are ring-fenced to
+  // the parent blend drawer and must not surface as independent component
+  // inventory at the top level.
   const roastedInventory = useMemo(() => {
     const inventory: Record<string, number> = {};
     for (const b of batches ?? []) {
+      if (b.planned_for_blend_roast_group) continue;
       if (b.status === 'ROASTED') {
         inventory[b.roast_group] = (inventory[b.roast_group] ?? 0) + b.actual_output_kg;
       }
@@ -506,17 +510,15 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     return Array.from(groups).sort();
   }, [products]);
 
-  // Group batches by roast_group
-  // Exclude PLANNED batches that are earmarked for a post-roast blend — those
-  // belong conceptually to the blend's drawer (which fetches them separately
-  // via planned_for_blend_roast_group). Showing them in the component RG's
-  // drawer too is confusing and double-counts coverage. Once roasted they
-  // remain visible here because the WIP physically belongs to the component RG
-  // until the blend consumes it.
+  // Group batches by roast_group.
+  // Fully ring-fence post-roast blend batches (both PLANNED and ROASTED) to the
+  // parent blend drawer, which fetches them separately via
+  // planned_for_blend_roast_group. Showing them under the component RG here
+  // would double-count coverage and spawn a spurious independent drawer.
   const batchesByGroup = useMemo(() => {
     const grouped: Record<string, RoastBatch[]> = {};
     for (const b of batches ?? []) {
-      if (b.status === 'PLANNED' && b.planned_for_blend_roast_group) continue;
+      if (b.planned_for_blend_roast_group) continue;
       if (!grouped[b.roast_group]) grouped[b.roast_group] = [];
       grouped[b.roast_group].push(b);
     }
@@ -867,6 +869,100 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     });
   };
 
+  // Bulk auto-plan: mirrors the "Quick add batches" ribbon at the bottom of the
+  // table and inserts every suggested batch across all currently-visible roast
+  // groups in a single write.
+  const autoPlanAllBatchesMutation = useMutation({
+    mutationFn: async (rows: Array<{
+      roast_group: string;
+      target_date: string;
+      planned_output_kg: number;
+      actual_output_kg: number;
+      status: 'PLANNED';
+      assigned_roaster: RoasterMachine | null;
+      created_by: string | undefined;
+    }>) => {
+      const { error } = await supabase.from('roasted_batches').insert(rows);
+      if (error) throw error;
+    },
+    onSuccess: (_, rows) => {
+      const groupCount = new Set(rows.map((r) => r.roast_group)).size;
+      toast.success(`Auto-planned ${rows.length} batches across ${groupCount} roast group${groupCount === 1 ? '' : 's'}`);
+      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to auto-plan batches');
+    },
+  });
+
+  const autoPlanPreview = useMemo(() => {
+    const rows: Array<{
+      roast_group: string;
+      target_date: string;
+      planned_output_kg: number;
+      actual_output_kg: number;
+      status: 'PLANNED';
+      assigned_roaster: RoasterMachine | null;
+      created_by: string | undefined;
+    }> = [];
+    const summary: Array<{ roastGroup: string; count: number; batchKg: number }> = [];
+
+    for (const g of sortedGroups) {
+      const config = configByGroup[g.roast_group];
+      if (!config) continue;
+      const yieldLossPct = config.expected_yield_loss_pct ?? 16;
+      const standardBatch = config.standard_batch_kg ?? 20;
+      const defaultRoaster = config.default_roaster ?? 'EITHER';
+      const groupBatches = batchesByGroup[g.roast_group] ?? [];
+      const plannedExpectedOutput = groupBatches
+        .filter((b) => b.status === 'PLANNED')
+        .reduce((sum, b) => sum + (b.planned_output_kg ?? 0) * (1 - yieldLossPct / 100), 0);
+      const remainingNeed = computeRoastCoverage({
+        netDemandKg: g.net_demand_kg,
+        plannedExpectedKg: plannedExpectedOutput,
+      }).remainingNeedKg;
+      if (remainingNeed <= 0) continue;
+      const expectedOutputPerBatch = standardBatch * (1 - yieldLossPct / 100);
+      const count = Math.ceil(remainingNeed / expectedOutputPerBatch);
+      if (count <= 0) continue;
+
+      let roaster: RoasterMachine | null = null;
+      if (defaultRoaster === 'SAMIAC') roaster = 'SAMIAC';
+      else if (defaultRoaster === 'LORING') roaster = 'LORING';
+
+      summary.push({ roastGroup: g.roast_group, count, batchKg: standardBatch });
+      for (let i = 0; i < count; i++) {
+        rows.push({
+          roast_group: g.roast_group,
+          target_date: today,
+          planned_output_kg: standardBatch,
+          actual_output_kg: 0,
+          status: 'PLANNED',
+          assigned_roaster: roaster,
+          created_by: user?.id,
+        });
+      }
+    }
+    return { rows, summary };
+  }, [sortedGroups, configByGroup, batchesByGroup, today, user?.id]);
+
+  const [showAutoPlanConfirm, setShowAutoPlanConfirm] = useState(false);
+
+  const handleAutoPlanAllBatches = () => {
+    if (autoPlanPreview.rows.length === 0) {
+      toast.info('No batches to auto-plan — every roast group is covered.');
+      return;
+    }
+    setShowAutoPlanConfirm(true);
+  };
+
+  const confirmAutoPlanAllBatches = () => {
+    autoPlanAllBatchesMutation.mutate(autoPlanPreview.rows, {
+      onSettled: () => setShowAutoPlanConfirm(false),
+    });
+  };
+
   const handleSaveConfig = () => {
     const batchKg = parseFloat(configStandardBatch);
     if (!batchKg || batchKg <= 0) {
@@ -975,6 +1071,37 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                 <Plus className="h-4 w-4 mr-1" />
                 Add Batch
               </Button>
+
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAutoPlanAllBatches}
+                      disabled={autoPlanAllBatchesMutation.isPending || autoPlanPreview.rows.length === 0}
+                      className="border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
+                    >
+                      <Sparkles className="h-4 w-4 mr-1" />
+                      Auto-plan all batches
+                      {autoPlanPreview.rows.length > 0 && (
+                        <span className="ml-1 text-xs opacity-80">
+                          (+{autoPlanPreview.rows.length})
+                        </span>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <div className="text-xs space-y-1">
+                      <div className="font-medium">Auto-calculated — review before roasting</div>
+                      <div className="text-muted-foreground">
+                        Adds every batch shown in the "Quick add batches" ribbon in one click.
+                        Counts come from current demand, planned coverage, standard batch size, and expected yield loss — double-check for hallucinations.
+                      </div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
         </CardHeader>
@@ -1755,6 +1882,53 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
           }}
         />
       )}
+
+      <AlertDialog open={showAutoPlanConfirm} onOpenChange={setShowAutoPlanConfirm}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              Auto-plan {autoPlanPreview.rows.length} batches?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 pt-1">
+                <div className="text-sm">
+                  Across {autoPlanPreview.summary.length} roast group
+                  {autoPlanPreview.summary.length === 1 ? '' : 's'}:
+                </div>
+                <ul className="max-h-64 overflow-y-auto rounded-md border bg-muted/40 p-2 text-sm space-y-1">
+                  {autoPlanPreview.summary.map((s) => (
+                    <li key={s.roastGroup} className="flex justify-between gap-3">
+                      <span className="truncate font-medium text-foreground">{s.roastGroup}</span>
+                      <span className="text-muted-foreground whitespace-nowrap">
+                        {s.count} × {s.batchKg}kg
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="text-xs text-muted-foreground">
+                  These counts are auto-calculated from current demand, planned coverage, standard
+                  batch size, and expected yield loss. Review before roasting.
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={autoPlanAllBatchesMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                confirmAutoPlanAllBatches();
+              }}
+              disabled={autoPlanAllBatchesMutation.isPending}
+            >
+              {autoPlanAllBatchesMutation.isPending ? 'Adding…' : 'Auto-plan batches'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

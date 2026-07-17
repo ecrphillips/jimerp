@@ -113,7 +113,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['booking-calendar'] });
     if (booking) {
-      const accountId = booking.account_id ?? booking.member_id;
+      const accountId = booking.account_id;
       const periodKey = booking.booking_date.slice(0, 7);
       queryClient.invalidateQueries({ queryKey: ['coroast-hour-ledger', accountId] });
       queryClient.invalidateQueries({ queryKey: ['coroast-billing-period', accountId, periodKey] });
@@ -260,7 +260,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
       const delta = newDur - oldDur;
       if (delta !== 0) {
         await supabase.from('coroast_hour_ledger').insert({
-          account_id: booking.account_id ?? booking.member_id,
+          account_id: booking.account_id,
           billing_period_id: booking.billing_period_id,
           booking_id: booking.id,
           entry_type: (delta > 0 ? 'MANUAL_DEBIT' : 'MANUAL_CREDIT') as any,

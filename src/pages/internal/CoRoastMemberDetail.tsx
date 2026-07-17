@@ -205,7 +205,7 @@ export default function CoRoastMemberDetail() {
       const t12Start = format(subMonths(now, 12), 'yyyy-MM-dd');
 
       // Bookings
-      const { data: bookings } = await supabase
+      const { data: bookings } = await (supabase as any)
         .from('coroast_bookings')
         .select('booking_date, status, duration_hours')
         .eq('member_id', id!)
