@@ -28,6 +28,13 @@ import { Package, Layers, GripVertical, RotateCcw, ChevronDown, ChevronRight, Ch
 import { Link } from 'react-router-dom';
 import { type PackagingVariant } from '@/components/PackagingBadge';
 import { SortablePackRow } from './SortablePackRow';
+import {
+  PackGroupedView,
+  type PackGroupMode,
+  type PackL1Node,
+  type PackL2Node,
+  type PackLeafNode,
+} from './PackGroupedView';
 import type { DateFilterConfig } from './types';
 // Use AUTHORITATIVE inventory hooks - computed from source-of-truth tables
 import { useAuthoritativeWip, useAuthoritativePlannedWip, useAuthoritativeFg } from '@/hooks/useAuthoritativeInventory';
@@ -170,6 +177,60 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     });
   }, []);
 
+  // ===== Nested grouping (account ⇄ roast group) =====
+  // Two nested layouts, toggled here. Both replace the flat roast-group table.
+  const [groupMode, setGroupMode] = useState<PackGroupMode>(() => {
+    try {
+      const raw = sessionStorage.getItem('pack-group-mode');
+      return raw === 'roastgroup' ? 'roastgroup' : 'account';
+    } catch {
+      return 'account';
+    }
+  });
+  const setGroupModePersisted = useCallback((mode: PackGroupMode) => {
+    setGroupMode(mode);
+    try {
+      sessionStorage.setItem('pack-group-mode', mode);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Which drawers are OPEN. Empty = everything collapsed (the default the packer
+  // asked for: land on a wall of collapsed account drawers, open what you need).
+  // Keyed per mode so switching modes doesn't leak open-state across layouts.
+  const expandStorageKey = `pack-nested-expanded-${groupMode}`;
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(expandStorageKey);
+      setExpandedKeys(new Set<string>(raw ? JSON.parse(raw) : []));
+    } catch {
+      setExpandedKeys(new Set<string>());
+    }
+  }, [expandStorageKey]);
+
+  const toggleNestedKey = useCallback((key: string) => {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      try {
+        sessionStorage.setItem(expandStorageKey, JSON.stringify(Array.from(next)));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, [expandStorageKey]);
+
+  // Leaf (product) expansion — a single open product at a time, path-scoped so the
+  // same SKU under two accounts opens independently.
+  const [expandedLeafKey, setExpandedLeafKey] = useState<string | null>(null);
+  const toggleLeaf = useCallback((key: string) => {
+    setExpandedLeafKey((prev) => (prev === key ? null : key));
+  }, []);
+
 
   // Roast-group config for display names + the Roast-tab sequence (display_order),
   // used as the tie-break for the "no WIP" tier so it mirrors the Roast tab.
@@ -179,6 +240,21 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       const { data, error } = await supabase
         .from('roast_groups')
         .select('roast_group, display_name, display_order');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30000,
+  });
+
+  // Account names for the nested (account-grouped) pack views. account_id on the
+  // order is the canonical owner; legacy orders may have a null account_id and
+  // fall into an "Unassigned account" bucket.
+  const { data: accountsConfig } = useQuery({
+    queryKey: ['pack-accounts-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('accounts')
+        .select('id, account_name');
       if (error) throw error;
       return data ?? [];
     },
@@ -217,7 +293,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
           needs_grind,
           grind_label,
           order_id,
-          order:orders!inner(id, status, work_deadline_at, manually_deprioritized),
+          order:orders!inner(id, status, work_deadline_at, manually_deprioritized, account_id),
           product:products(id, product_name, sku, bag_size_g, packaging_variant, roast_group, requires_production)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
@@ -469,6 +545,251 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
 
     return Object.values(productMap).map(({ orderIds, shipDates, ...rest }) => rest);
   }, [orderLineItems, checkmarks, packingByProductUnits, pickedByProductUnits, roastedInventory, products, plannedWip]);
+
+  // ===== Nested (account ⇄ roast group) demand tree =====
+  // Packing itself stays SUM-per-SKU (you pack the product once). These maps feed
+  // the nested leaf detail; the per-account quantities below are display-only.
+  const NO_ACCOUNT = '__no_account__';
+
+  const accountNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of accountsConfig ?? []) m.set(a.id, a.account_name);
+    return m;
+  }, [accountsConfig]);
+
+  // Roast-group label/order helpers (mirror the flat header logic + Roast-tab order).
+  const roastGroupInfo = useMemo(() => {
+    const byKey = new Map((roastGroupsConfig ?? []).map((c) => [c.roast_group, c]));
+    return {
+      labelOf: (key: string) =>
+        key === NO_PRODUCTION
+          ? 'No production required'
+          : key === UNASSIGNED
+            ? 'Unassigned'
+            : byKey.get(key)?.display_name?.trim() || key.replace(/_/g, ' '),
+      // Sort real groups by the Roast-tab sequence; bought-in / unassigned sink last.
+      orderOf: (key: string) =>
+        key === NO_PRODUCTION
+          ? 2_000_000
+          : key === UNASSIGNED
+            ? 1_000_000
+            : byKey.get(key)?.display_order ?? 900_000,
+    };
+  }, [roastGroupsConfig]);
+
+  // Global per-SKU maps consumed by the nested leaf detail.
+  const globalMapsByProduct = useMemo(() => {
+    const demand: Record<string, number> = {};
+    const wipStatus: Record<string, 'full' | 'partial' | 'none'> = {};
+    const wipKg: Record<string, number> = {};
+    const requiredKg: Record<string, number> = {};
+    const timeSensitive: Record<string, boolean> = {};
+    for (const p of demandByProduct) {
+      demand[p.product_id] = p.demanded_units;
+      wipStatus[p.product_id] = p.wipStatus;
+      wipKg[p.product_id] = p.wipAvailableKg;
+      requiredKg[p.product_id] = p.requiredKg;
+      timeSensitive[p.product_id] = p.hasTimeSensitive;
+    }
+    return { demand, wipStatus, wipKg, requiredKg, timeSensitive };
+  }, [demandByProduct]);
+
+  // Per-(account × product) leaf demand, built from the same filtered line items.
+  interface RawLeaf {
+    accountKey: string;
+    accountName: string;
+    productId: string;
+    productName: string;
+    sku: string | null;
+    bagSizeG: number;
+    packagingVariant: PackagingVariant | null;
+    roastGroupKey: string;
+    units: number;
+    wholeBeanUnits: number;
+    grindUnits: number;
+    grindByLabel: Record<string, number>;
+    requiresProduction: boolean;
+    packDisplayOrder: number;
+    orderIds: Set<string>;
+  }
+
+  const rawLeaves = useMemo((): RawLeaf[] => {
+    const map = new Map<string, RawLeaf>();
+    for (const li of orderLineItems ?? []) {
+      if (!li.product) continue;
+      const accountId = li.order?.account_id ?? null;
+      const accountKey = accountId ?? NO_ACCOUNT;
+      const requiresProduction = li.product.requires_production !== false;
+      const roastGroupKey = requiresProduction
+        ? (li.product.roast_group ?? UNASSIGNED)
+        : NO_PRODUCTION;
+      const k = `${accountKey}::${li.product_id}`;
+      let leaf = map.get(k);
+      if (!leaf) {
+        leaf = {
+          accountKey,
+          accountName: accountId
+            ? (accountNameById.get(accountId) ?? 'Unknown account')
+            : 'Unassigned account',
+          productId: li.product_id,
+          productName: li.product.product_name,
+          sku: li.product.sku,
+          bagSizeG: li.product.bag_size_g,
+          packagingVariant: li.product.packaging_variant as PackagingVariant | null,
+          roastGroupKey,
+          units: 0,
+          wholeBeanUnits: 0,
+          grindUnits: 0,
+          grindByLabel: {},
+          requiresProduction,
+          packDisplayOrder:
+            products?.find((p) => p.id === li.product_id)?.pack_display_order ?? 999999,
+          orderIds: new Set<string>(),
+        };
+        map.set(k, leaf);
+      }
+      leaf.units += li.quantity_units;
+      if (li.needs_grind) {
+        leaf.grindUnits += li.quantity_units;
+        const label = li.grind_label || 'Grind';
+        leaf.grindByLabel[label] = (leaf.grindByLabel[label] ?? 0) + li.quantity_units;
+      } else {
+        leaf.wholeBeanUnits += li.quantity_units;
+      }
+      leaf.orderIds.add(li.order_id);
+    }
+    return Array.from(map.values());
+  }, [orderLineItems, accountNameById, products]);
+
+  // Assemble the two-level tree for the active mode.
+  // account mode : L1 = account,     L2 = roast group
+  // roast mode   : L1 = roast group, L2 = account
+  const packTree = useMemo((): PackL1Node[] => {
+    const l1Map = new Map<string, Map<string, RawLeaf[]>>();
+    for (const leaf of rawLeaves) {
+      const l1Key = groupMode === 'account' ? leaf.accountKey : leaf.roastGroupKey;
+      const l2Key = groupMode === 'account' ? leaf.roastGroupKey : leaf.accountKey;
+      let l2 = l1Map.get(l1Key);
+      if (!l2) {
+        l2 = new Map();
+        l1Map.set(l1Key, l2);
+      }
+      const arr = l2.get(l2Key) ?? [];
+      arr.push(leaf);
+      l2.set(l2Key, arr);
+    }
+
+    const accountLabelOf = (key: string) =>
+      key === NO_ACCOUNT
+        ? 'Unassigned account'
+        : accountNameById.get(key) ?? 'Unknown account';
+
+    const sortLeaves = (a: RawLeaf, b: RawLeaf) =>
+      a.packDisplayOrder - b.packDisplayOrder || a.productName.localeCompare(b.productName);
+
+    const toLeafNode = (leaf: RawLeaf, l1Key: string, l2Key: string): PackLeafNode => ({
+      key: `${l1Key}::${l2Key}::${leaf.productId}`,
+      productId: leaf.productId,
+      productName: leaf.productName,
+      sku: leaf.sku,
+      bagSizeG: leaf.bagSizeG,
+      packagingVariant: leaf.packagingVariant,
+      roastGroupKey: leaf.roastGroupKey,
+      roastGroupLabel: roastGroupInfo.labelOf(leaf.roastGroupKey),
+      units: leaf.units,
+      wholeBeanUnits: leaf.wholeBeanUnits,
+      grindUnits: leaf.grindUnits,
+      grindByLabel: leaf.grindByLabel,
+      requiresProduction: leaf.requiresProduction,
+    });
+
+    const nodes: PackL1Node[] = [];
+    for (const [l1Key, l2Map] of l1Map) {
+      const l2Nodes: PackL2Node[] = [];
+      for (const [l2Key, leaves] of l2Map) {
+        const sorted = [...leaves].sort(sortLeaves);
+        const roastKey = groupMode === 'account' ? l2Key : l1Key;
+        const isRoastLevel: PackGroupMode = groupMode === 'account' ? 'roastgroup' : 'account';
+        const orderIds = new Set<string>();
+        leaves.forEach((l) => l.orderIds.forEach((id) => orderIds.add(id)));
+        l2Nodes.push({
+          key: `L2:${l1Key}::${l2Key}`,
+          label:
+            groupMode === 'account' ? roastGroupInfo.labelOf(l2Key) : accountLabelOf(l2Key),
+          kind: isRoastLevel,
+          totalUnits: leaves.reduce((s, l) => s + l.units, 0),
+          orderCount: isRoastLevel === 'account' ? orderIds.size : undefined,
+          wipKg: isRoastLevel === 'roastgroup' ? (roastedInventory[roastKey] ?? null) : undefined,
+          planned:
+            isRoastLevel === 'roastgroup' ? (plannedWip?.[roastKey] ?? null) : undefined,
+          leaves: sorted.map((l) => toLeafNode(l, l1Key, l2Key)),
+        });
+      }
+
+      // Order L2 children: roast groups by Roast-tab order; accounts by volume.
+      l2Nodes.sort((a, b) => {
+        if (groupMode === 'account') {
+          // l2 = roast group
+          const ak = a.key.split('::').pop()!;
+          const bk = b.key.split('::').pop()!;
+          return roastGroupInfo.orderOf(ak) - roastGroupInfo.orderOf(bk);
+        }
+        // l2 = account → volume desc, then name
+        return b.totalUnits - a.totalUnits || a.label.localeCompare(b.label);
+      });
+
+      const l1IsRoast: PackGroupMode = groupMode === 'account' ? 'account' : 'roastgroup';
+      const l1OrderIds = new Set<string>();
+      for (const l2 of l2Map.values())
+        l2.forEach((l) => l.orderIds.forEach((id) => l1OrderIds.add(id)));
+      nodes.push({
+        key: `L1:${l1Key}`,
+        label: groupMode === 'account' ? accountLabelOf(l1Key) : roastGroupInfo.labelOf(l1Key),
+        kind: l1IsRoast,
+        totalUnits: l2Nodes.reduce((s, n) => s + n.totalUnits, 0),
+        orderCount: l1IsRoast === 'account' ? l1OrderIds.size : undefined,
+        wipKg: l1IsRoast === 'roastgroup' ? (roastedInventory[l1Key] ?? null) : undefined,
+        planned: l1IsRoast === 'roastgroup' ? (plannedWip?.[l1Key] ?? null) : undefined,
+        children: l2Nodes,
+      });
+    }
+
+    // Order L1: accounts by volume desc (big-account days on top); roast groups by
+    // Roast-tab order.
+    nodes.sort((a, b) => {
+      if (groupMode === 'account') {
+        return b.totalUnits - a.totalUnits || a.label.localeCompare(b.label);
+      }
+      const ak = a.key.slice('L1:'.length);
+      const bk = b.key.slice('L1:'.length);
+      return roastGroupInfo.orderOf(ak) - roastGroupInfo.orderOf(bk);
+    });
+
+    return nodes;
+  }, [rawLeaves, groupMode, accountNameById, roastGroupInfo, roastedInventory, plannedWip]);
+
+  // Every expandable key, for the collapse-all / expand-all control.
+  const allNestedKeys = useMemo(() => {
+    const keys: string[] = [];
+    for (const l1 of packTree) {
+      keys.push(l1.key);
+      for (const l2 of l1.children) keys.push(l2.key);
+    }
+    return keys;
+  }, [packTree]);
+
+  const allNestedExpanded = allNestedKeys.length > 0 && allNestedKeys.every((k) => expandedKeys.has(k));
+  const toggleExpandAllNested = useCallback(() => {
+    setExpandedKeys(() => {
+      const next = allNestedExpanded ? new Set<string>() : new Set(allNestedKeys);
+      try {
+        sessionStorage.setItem(expandStorageKey, JSON.stringify(Array.from(next)));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, [allNestedExpanded, allNestedKeys, expandStorageKey]);
 
   // Sort products by completion first, then pack_display_order, then name.
   // Incomplete rows surface to the top so the packer's eye lands on outstanding
@@ -886,19 +1207,24 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                 Pack SKUs
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Drag rows to reorder within a group. Green = WIP covers full row. Amber = partial WIP.
+                {groupMode === 'account'
+                  ? 'Grouped by account → roast group → product. Open an account to work it top to bottom.'
+                  : 'Grouped by roast group → account → product. See every account that needs a coffee while it’s out.'}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Sort control — overrides the default WIP-priority group order */}
+              {/* Grouping toggle — swaps the two nested layouts */}
               <div className="flex items-center rounded-md border p-0.5">
-                {SORT_OPTIONS.map((opt) => (
+                {([
+                  { value: 'account', label: 'Account → Roast' },
+                  { value: 'roastgroup', label: 'Roast → Account' },
+                ] as { value: PackGroupMode; label: string }[]).map((opt) => (
                   <button
                     key={opt.value}
                     type="button"
-                    onClick={() => { setSortMode(opt.value); setManualGroupOrder(null); }}
+                    onClick={() => setGroupModePersisted(opt.value)}
                     className={`px-2 py-1 text-xs rounded ${
-                      sortMode === opt.value && !manualGroupOrder
+                      groupMode === opt.value
                         ? 'bg-primary text-primary-foreground'
                         : 'text-muted-foreground hover:bg-muted'
                     }`}
@@ -910,20 +1236,11 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleRefreshComplete}
-                title="Fold completed rows into the de-emphasized state without reloading"
-              >
-                <RotateCcw className="h-4 w-4 mr-1" />
-                Refresh complete
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={collapseAllGroups}
-                title={allCollapsed ? 'Expand all roast groups' : 'Collapse all roast groups'}
+                onClick={toggleExpandAllNested}
+                title={allNestedExpanded ? 'Collapse all drawers' : 'Expand all drawers'}
               >
                 <ChevronsUpDown className="h-4 w-4 mr-1" />
-                {allCollapsed ? 'Expand all' : 'Collapse all'}
+                {allNestedExpanded ? 'Collapse all' : 'Expand all'}
               </Button>
               <Button variant="outline" size="sm" asChild>
                 <Link to="/inventory?tab=wip&from=pack">
@@ -934,52 +1251,14 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
             </div>
           </div>
 
-          {/* Group-order bar: drag pills to reorder roast groups themselves */}
-          {groupOrder.length > 1 && (
-            <div className="mt-3 rounded-md border bg-muted/30 p-2">
-              <div className="flex items-center justify-between gap-2 mb-1.5">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Group order {manualGroupOrder ? '(manual)' : `(${SORT_OPTIONS.find(o => o.value === sortMode)?.label})`} — drag to reorder
-                </span>
-                {manualGroupOrder && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2 text-xs"
-                    onClick={() => setManualGroupOrder(null)}
-                  >
-                    <RotateCcw className="h-3 w-3 mr-1" />
-                    Reset
-                  </Button>
-                )}
-              </div>
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleGroupDragEnd}>
-                <SortableContext items={groupOrder} strategy={horizontalListSortingStrategy}>
-                  <div className="flex flex-wrap gap-1.5">
-                    {groupOrder.map((key) => {
-                      const meta = metaByKey.get(key);
-                      return (
-                        <GroupOrderPill
-                          key={key}
-                          id={key}
-                          label={meta?.displayName ?? key}
-                          tier={meta?.tier ?? 'none'}
-                        />
-                      );
-                    })}
-                  </div>
-                </SortableContext>
-              </DndContext>
-            </div>
-          )}
         </CardHeader>
         <CardContent>
-          {displayProducts.length === 0 ? (
+          {packTree.length === 0 ? (
             <div className="py-8 text-center">
               <div className="text-4xl mb-3">📦</div>
               <p className="text-lg font-medium text-foreground mb-1">No packing demand right now</p>
               <p className="text-muted-foreground text-sm">
-                {dateFilterConfig.mode === 'today' 
+                {dateFilterConfig.mode === 'today'
                   ? "Check 'Tomorrow' or 'All' for future orders, or enjoy being caught up!"
                   : dateFilterConfig.mode === 'tomorrow'
                     ? "Check 'All' for future orders, or enjoy being caught up!"
@@ -987,133 +1266,23 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
               </p>
             </div>
           ) : (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={displayProducts.map(p => p.product_id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left">
-                      <th className="pb-2 w-10"></th>
-                      <th className="pb-2 w-8"></th>
-                      <th className="pb-2">Product</th>
-                      <th className="pb-2">Roast Group</th>
-                      <th className="pb-2 text-right">Demanded</th>
-                      <th className="pb-2 text-right">Packed</th>
-                      <th className="pb-2 text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayProducts.map((product, index) => {
-                      const packing = packingByProduct[product.product_id];
-                      // Authoritative net produced (ledger) — matches the RPC baseline
-                      // so the units field reverses correctly; packing_runs is legacy.
-                      const packed = packingByProductUnits[product.product_id] ?? 0;
-                      const available = availableByProductUnits[product.product_id] ?? 0;
-                      const picked = pickedByProductUnits?.[product.product_id] ?? 0;
-                      const isExpanded = expandedProductId === product.product_id;
-                      const groupKey = groupKeyOf(product);
-                      const prevGroupKey = index > 0 ? groupKeyOf(displayProducts[index - 1]) : undefined;
-                      const showHeader = groupKey !== prevGroupKey;
-                      const isNoProductionGroup = groupKey === NO_PRODUCTION;
-                      const headerLabel = isNoProductionGroup
-                        ? 'No production required'
-                        : product.roast_group
-                          ? product.roast_group.replace(/_/g, ' ')
-                          : 'Unassigned';
-                      // WIP stats are meaningless for the bought-in section.
-                      const showHeaderWip = !isNoProductionGroup && !!product.roast_group;
-                      const headerWipKg = showHeaderWip
-                        ? (roastedInventory[product.roast_group!] ?? 0)
-                        : 0;
-                      const headerPlanned = showHeaderWip
-                        ? plannedWip?.[product.roast_group!]
-                        : undefined;
-                      
-                      return (
-                      <React.Fragment key={product.product_id}>
-                          {showHeader && (
-                            <tr
-                              className={`bg-muted/60 border-b border-t ${index > 0 ? '[&>td]:pt-4' : ''} cursor-pointer hover:bg-muted/80 transition-colors`}
-                              onClick={() => toggleGroupCollapsed(groupKey)}
-                            >
-                              <td colSpan={7} className="py-2 px-3">
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="flex items-center gap-2">
-                                    {collapsedGroups.has(groupKey) ? (
-                                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                                    ) : (
-                                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                    )}
-                                    <span className="text-sm font-bold text-foreground uppercase tracking-wide">
-                                      {headerLabel}
-                                    </span>
-                                  </div>
-                                  {showHeaderWip && !collapsedGroups.has(groupKey) && (
-                                    <span className="text-xs font-medium text-muted-foreground">
-                                      {headerWipKg.toFixed(1)} kg WIP available
-                                      {headerPlanned && headerPlanned.count > 0 && (
-                                        <>
-                                          {' · '}
-                                          {headerPlanned.count} planned (~{headerPlanned.planned_kg.toFixed(1)} kg)
-                                        </>
-                                      )}
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        {!collapsedGroups.has(groupKey) && (
-                          <SortablePackRow
-                            productId={product.product_id}
-                            productName={product.product_name}
-                            sku={product.sku}
-                            bagSizeG={product.bag_size_g}
-                            packagingVariant={product.packaging_variant}
-                            roastGroup={product.roast_group}
-                            demandedUnits={product.demanded_units}
-                            packedUnits={packed}
-                            availableUnits={available}
-                            pickedUnits={picked}
-                            wholeBeanUnits={product.wholeBeanUnits}
-                            grindUnits={product.grindUnits}
-                            grindByLabel={product.grindByLabel}
-                            hasTimeSensitive={product.hasTimeSensitive}
-                            wipStatus={product.wipStatus}
-                            unblocksOrders={product.unblocksOrders}
-                            wipAvailableKg={product.wipAvailableKg}
-                            requiredKg={product.requiredKg}
-                            plannedKg={product.plannedKg}
-                            plannedCount={product.plannedCount}
-                            packingRun={packing}
-                            requiresProduction={product.requiresProduction}
-                            isExpanded={isExpanded && !((deemphasizedIds?.has(product.product_id) ?? false) && completeProductIds.has(product.product_id))}
-                            deemphasized={(deemphasizedIds?.has(product.product_id) ?? false) && completeProductIds.has(product.product_id)}
-
-                            onToggleExpand={() => setExpandedProductId(isExpanded ? null : product.product_id)}
-                            onUpdatePackedUnits={(newValue) => updatePackingUnits(
-                              product.product_id,
-                              newValue,
-                              product.bag_size_g,
-                              product.roast_group,
-                              available
-                            )}
-                            onEditingChange={(isEditing) => handleEditingChange(product.product_id, isEditing)}
-                          />
-                        )}
-                      </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </SortableContext>
-            </DndContext>
+            <PackGroupedView
+              tree={packTree}
+              mode={groupMode}
+              expandedKeys={expandedKeys}
+              onToggle={toggleNestedKey}
+              expandedLeafKey={expandedLeafKey}
+              onToggleLeaf={toggleLeaf}
+              globalDemandByProduct={globalMapsByProduct.demand}
+              availableByProduct={availableByProductUnits}
+              pickedByProduct={pickedByProductUnits ?? {}}
+              wipStatusByProduct={globalMapsByProduct.wipStatus}
+              wipAvailableKgByProduct={globalMapsByProduct.wipKg}
+              requiredKgByProduct={globalMapsByProduct.requiredKg}
+              timeSensitiveByProduct={globalMapsByProduct.timeSensitive}
+              onUpdatePackedUnits={updatePackingUnits}
+              onEditingChange={handleEditingChange}
+            />
           )}
         </CardContent>
       </Card>
