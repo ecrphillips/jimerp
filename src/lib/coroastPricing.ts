@@ -234,6 +234,7 @@ export function buildResolvedPricing(
  * and the audit metadata for overridden fields.
  */
 export async function resolveAccountPricing(accountId: string): Promise<ResolvedAccountPricing> {
+  const globalRates = await fetchGlobalTierRates();
   const { data: account, error } = await supabase
     .from('accounts')
     .select(ACCOUNT_PRICING_COLUMNS)
@@ -268,7 +269,7 @@ export async function resolveAccountPricing(accountId: string): Promise<Resolved
     }
   }
 
-  return buildResolvedPricing(accountRow, latestAuditByField);
+  return buildResolvedPricing(accountRow, latestAuditByField, globalRates);
 }
 
 /**
@@ -281,6 +282,7 @@ export async function resolveAccountPricingBatch(
   const result = new Map<string, ResolvedAccountPricing>();
   if (accountIds.length === 0) return result;
 
+  const globalRates = await fetchGlobalTierRates();
   const { data, error } = await supabase
     .from('accounts')
     .select(ACCOUNT_PRICING_COLUMNS)
@@ -288,7 +290,7 @@ export async function resolveAccountPricingBatch(
 
   if (error) throw error;
   for (const row of (data ?? []) as unknown as AccountPricingRow[]) {
-    result.set(row.id, buildResolvedPricing(row, {}));
+    result.set(row.id, buildResolvedPricing(row, {}, globalRates));
   }
   return result;
 }
