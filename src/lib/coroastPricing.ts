@@ -188,13 +188,14 @@ const ACCOUNT_PRICING_COLUMNS =
 export function buildResolvedPricing(
   account: AccountPricingRow,
   latestAuditByField: Record<string, PricingAuditRow | undefined> = {},
+  globalRates?: GlobalTierRates,
 ): ResolvedAccountPricing {
   const tier = account.coroast_tier ?? 'MEMBER';
   const fields: Partial<Record<PricingFieldKey, PricingField>> = {};
 
   for (const meta of PRICING_FIELDS) {
     const overrideRaw = (account as unknown as Record<string, number | null>)[meta.accountColumn];
-    const tierDefault = tierDefaultValue(tier, meta.key);
+    const tierDefault = tierDefaultValue(tier, meta.key, globalRates);
     if (overrideRaw != null) {
       const audit = latestAuditByField[meta.auditField];
       fields[meta.key] = {
