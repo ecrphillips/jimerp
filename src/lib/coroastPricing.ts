@@ -55,15 +55,99 @@ export const PRICING_FIELDS: readonly PricingFieldMeta[] = [
   { key: 'packagingBlockRate',      accountColumn: 'coroast_custom_packaging_block_rate',        auditField: 'packaging_block_rate',       label: 'Packaging Block Rate',            isCurrency: true,  isInteger: false, unit: '/2-hr block' },
 ] as const;
 
-function tierDefaultValue(tier: string, key: PricingFieldKey): number {
-  const t = TIER_RATES[tier] ?? TIER_RATES.MEMBER;
-  const s = STORAGE_RATES[tier] ?? STORAGE_RATES.MEMBER;
+/**
+ * Global (master) co-roast tier rates as edited on the Co-Roasting Pricing
+ * admin page. Stored in `app_settings` under this key; the bundled
+ * CO_ROAST_TIER_DEFAULTS constants are only the fallback seed.
+ */
+export const TIER_RATES_SETTINGS_KEY = 'coroast_tier_rates';
+
+export interface GlobalTierRate {
+  base: number;
+  includedHours: number;
+  overageRate: number;
+  includedPallets: number;
+  storageRate: number;
+  packagingBlocksIncluded: number;
+  packagingBlockRate: number;
+}
+
+export type GlobalTierRates = Record<string, GlobalTierRate>;
+
+function bundledTierRates(): GlobalTierRates {
+  const out: GlobalTierRates = {};
+  for (const tier of Object.keys(TIER_RATES)) {
+    const t = TIER_RATES[tier];
+    const s = STORAGE_RATES[tier] ?? STORAGE_RATES.MEMBER;
+    out[tier] = {
+      base: t.base,
+      includedHours: t.includedHours,
+      overageRate: t.overageRate,
+      includedPallets: s.includedPallets,
+      storageRate: s.ratePerPallet,
+      packagingBlocksIncluded: t.packagingBlocksIncluded,
+      packagingBlockRate: t.packagingBlockRate,
+    };
+  }
+  return out;
+}
+
+export function mergeGlobalTierRates(raw: unknown): GlobalTierRates {
+  const base = bundledTierRates();
+  if (!raw || typeof raw !== 'object') return base;
+  for (const [tier, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (!val || typeof val !== 'object') continue;
+    const partial = val as Partial<GlobalTierRate>;
+    const current = base[tier] ?? base.MEMBER;
+    base[tier] = {
+      base: numOr(partial.base, current.base),
+      includedHours: numOr(partial.includedHours, current.includedHours),
+      overageRate: numOr(partial.overageRate, current.overageRate),
+      includedPallets: numOr(partial.includedPallets, current.includedPallets),
+      storageRate: numOr(partial.storageRate, current.storageRate),
+      packagingBlocksIncluded: numOr(partial.packagingBlocksIncluded, current.packagingBlocksIncluded),
+      packagingBlockRate: numOr(partial.packagingBlockRate, current.packagingBlockRate),
+    };
+  }
+  return base;
+}
+
+function numOr(v: unknown, fallback: number): number {
+  const n = Number(v);
+  return v == null || !Number.isFinite(n) ? fallback : n;
+}
+
+/**
+ * Reads the master tier rates from app_settings. Fails soft to the bundled
+ * defaults (e.g. if the caller's role cannot read app_settings).
+ */
+export async function fetchGlobalTierRates(): Promise<GlobalTierRates> {
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('value_json')
+      .eq('key', TIER_RATES_SETTINGS_KEY)
+      .maybeSingle();
+    if (error) throw error;
+    return mergeGlobalTierRates(data?.value_json ?? null);
+  } catch {
+    return bundledTierRates();
+  }
+}
+
+function tierDefaultValue(
+  tier: string,
+  key: PricingFieldKey,
+  globalRates?: GlobalTierRates,
+): number {
+  const rates = globalRates ?? bundledTierRates();
+  const t = rates[tier] ?? rates.MEMBER;
   switch (key) {
     case 'monthlyFee': return t.base;
     case 'includedHours': return t.includedHours;
     case 'overageRate': return t.overageRate;
-    case 'storageIncludedPallets': return s.includedPallets;
-    case 'storageOverageRate': return s.ratePerPallet;
+    case 'storageIncludedPallets': return t.includedPallets;
+    case 'storageOverageRate': return t.storageRate;
     case 'packagingBlocksIncluded': return t.packagingBlocksIncluded;
     case 'packagingBlockRate': return t.packagingBlockRate;
   }
@@ -104,13 +188,14 @@ const ACCOUNT_PRICING_COLUMNS =
 export function buildResolvedPricing(
   account: AccountPricingRow,
   latestAuditByField: Record<string, PricingAuditRow | undefined> = {},
+  globalRates?: GlobalTierRates,
 ): ResolvedAccountPricing {
   const tier = account.coroast_tier ?? 'MEMBER';
   const fields: Partial<Record<PricingFieldKey, PricingField>> = {};
 
   for (const meta of PRICING_FIELDS) {
     const overrideRaw = (account as unknown as Record<string, number | null>)[meta.accountColumn];
-    const tierDefault = tierDefaultValue(tier, meta.key);
+    const tierDefault = tierDefaultValue(tier, meta.key, globalRates);
     if (overrideRaw != null) {
       const audit = latestAuditByField[meta.auditField];
       fields[meta.key] = {
@@ -149,6 +234,7 @@ export function buildResolvedPricing(
  * and the audit metadata for overridden fields.
  */
 export async function resolveAccountPricing(accountId: string): Promise<ResolvedAccountPricing> {
+  const globalRates = await fetchGlobalTierRates();
   const { data: account, error } = await supabase
     .from('accounts')
     .select(ACCOUNT_PRICING_COLUMNS)
@@ -183,7 +269,7 @@ export async function resolveAccountPricing(accountId: string): Promise<Resolved
     }
   }
 
-  return buildResolvedPricing(accountRow, latestAuditByField);
+  return buildResolvedPricing(accountRow, latestAuditByField, globalRates);
 }
 
 /**
@@ -196,6 +282,7 @@ export async function resolveAccountPricingBatch(
   const result = new Map<string, ResolvedAccountPricing>();
   if (accountIds.length === 0) return result;
 
+  const globalRates = await fetchGlobalTierRates();
   const { data, error } = await supabase
     .from('accounts')
     .select(ACCOUNT_PRICING_COLUMNS)
@@ -203,7 +290,7 @@ export async function resolveAccountPricingBatch(
 
   if (error) throw error;
   for (const row of (data ?? []) as unknown as AccountPricingRow[]) {
-    result.set(row.id, buildResolvedPricing(row, {}));
+    result.set(row.id, buildResolvedPricing(row, {}, globalRates));
   }
   return result;
 }

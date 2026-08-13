@@ -2,8 +2,23 @@ import { useQuery } from '@tanstack/react-query';
 import {
   resolveAccountPricing,
   resolveAccountPricingBatch,
+  fetchGlobalTierRates,
+  type GlobalTierRates,
   type ResolvedAccountPricing,
 } from '@/lib/coroastPricing';
+
+/**
+ * Master co-roast tier rates (from the Co-Roasting Pricing admin page).
+ * These are the defaults every account inherits unless it has an override.
+ */
+export function useGlobalTierRates() {
+  return useQuery<GlobalTierRates>({
+    queryKey: ['coroast-global-tier-rates'],
+    queryFn: fetchGlobalTierRates,
+    staleTime: 60 * 1000,
+  });
+}
+
 
 export function useAccountPricing(accountId: string | null | undefined) {
   return useQuery({

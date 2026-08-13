@@ -123,6 +123,10 @@ export default function CoRoastPricing() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['app-settings', SETTINGS_KEY] });
+      // Master rate change must propagate to every account that has no override.
+      queryClient.invalidateQueries({ queryKey: ['coroast-global-tier-rates'] });
+      queryClient.invalidateQueries({ queryKey: ['coroast-resolved-pricing'] });
+      queryClient.invalidateQueries({ queryKey: ['coroast-resolved-pricing-batch'] });
       toast.success(`${TIER_LABELS[editingTier!]} rates updated`);
       setEditingTier(null);
     },
