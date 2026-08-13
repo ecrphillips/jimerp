@@ -32,6 +32,7 @@ import PricingAnalysisTab from '@/components/account/PricingAnalysisTab';
 import OfferWorkspaceTab from '@/components/account/OfferWorkspaceTab';
 import { formatAuditEntry, type PricingAuditRow } from '@/lib/coroastPricing';
 import { CO_ROAST_TIER_DEFAULTS } from '@/components/bookings/bookingUtils';
+import { useGlobalTierRates } from '@/hooks/useAccountPricing';
 
 // PricingTierCard removed — pricing tiers are no longer in the data model.
 function PricingTierCard(_props: { accountId: string; pricingTierId: string | null }) {
@@ -1714,6 +1715,8 @@ function CustomRateOverrides({ account, refetch }: { account: any; refetch: () =
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
 
+  const { data: globalRates } = useGlobalTierRates();
+
   const isAdmin = authUser?.role === 'ADMIN';
   const hasCoroasting = account.programs?.includes('COROASTING');
 
@@ -1739,7 +1742,10 @@ function CustomRateOverrides({ account, refetch }: { account: any; refetch: () =
   if (!isAdmin || !hasCoroasting) return null;
 
   const tier = account.coroast_tier ?? 'MEMBER';
-  const tierDefaults = TIER_DEFAULTS[tier] ?? TIER_DEFAULTS.MEMBER;
+  const tierDefaults = (globalRates?.[tier] ??
+    globalRates?.MEMBER ??
+    TIER_DEFAULTS[tier] ??
+    TIER_DEFAULTS.MEMBER) as Record<string, number>;
 
   const startEdit = () => {
     const f: Record<string, string> = {};
