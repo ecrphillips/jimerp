@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Pencil, Save, X, Info } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database, Json } from '@/integrations/supabase/types';
+
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
