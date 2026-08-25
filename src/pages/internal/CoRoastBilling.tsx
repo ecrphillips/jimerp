@@ -519,6 +519,25 @@ export default function CoRoastBilling() {
     },
   });
 
+  const sendReportMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('coroast-monthly-report', {
+        body: { manual: true, month: selectedMonth },
+      });
+      if (error) throw error;
+      return data as { recipients?: { email: string }[] };
+    },
+    onSuccess: (data) => {
+      const count = data?.recipients?.length ?? 0;
+      toast.success(
+        count > 0
+          ? `Billing summary emailed to ${count} admin${count === 1 ? '' : 's'}`
+          : 'Report generated, but no admin recipients were found',
+      );
+    },
+    onError: (err: Error) => toast.error(`Could not send report: ${err.message}`),
+  });
+
   const recordAllMutation = useMutation({
     mutationFn: async (rows: (typeof memberBillingData)) => {
       const payload = rows.map((data) => ({
