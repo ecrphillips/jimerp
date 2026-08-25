@@ -8,6 +8,17 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+
 import { CheckCircle2, TrendingUp, Lock, Trash2, Plus, RotateCcw } from 'lucide-react';
 import { format, endOfMonth, subMonths, addMonths, startOfMonth, getDaysInMonth, isAfter } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -52,6 +63,8 @@ export default function CoRoastBilling() {
   const [modalData, setModalData] = useState<any>(null);
   const [undoInvoiceId, setUndoInvoiceId] = useState<string | null>(null);
   const [resetConfirmId, setResetConfirmId] = useState<string | null>(null);
+  const [confirmRecordAll, setConfirmRecordAll] = useState(false);
+
 
   // Inline add-charge form state per member
   const [addingForMember, setAddingForMember] = useState<string | null>(null);
@@ -506,6 +519,51 @@ export default function CoRoastBilling() {
     },
   });
 
+  const recordAllMutation = useMutation({
+    mutationFn: async (rows: (typeof memberBillingData)) => {
+      const payload = rows.map((data) => ({
+        account_id: data.member.id,
+        billing_period_id: data.bp!.id,
+        period_start: periodStart,
+        period_end: periodEnd,
+        tier_snapshot: data.tier,
+        base_fee: data.baseFee,
+        included_hours: data.includedHours,
+        used_hours: data.usedHours,
+        overage_hours: data.overageHours,
+        overage_rate: data.overageRate,
+        overage_charge: data.overageCharge,
+        included_pallets: data.includedPallets,
+        paid_pallets: data.paidPallets,
+        pallet_rate: data.palletRate,
+        storage_charge: data.storageCharge,
+        total_amount: data.grandTotal,
+      }));
+      const { error } = await supabase.from('coroast_invoices').insert(payload as any);
+      if (error) throw error;
+      return payload.length;
+    },
+    onSuccess: (count) => {
+      toast.success(`${count} invoice${count === 1 ? '' : 's'} recorded`);
+      refetchInvoices();
+      setConfirmRecordAll(false);
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
+      setConfirmRecordAll(false);
+    },
+  });
+
+  const pendingInvoiceRows = useMemo(
+    () => memberBillingData.filter((d) => d.bp && !d.invoice),
+    [memberBillingData],
+  );
+  const pendingInvoiceTotal = useMemo(
+    () => pendingInvoiceRows.reduce((sum, d) => sum + d.grandTotal, 0),
+    [pendingInvoiceRows],
+  );
+
+
   const addExtraMutation = useMutation({
     mutationFn: async (payload: { billing_period_id: string; description: string; qty: number; unit_price: number; apply_gst: boolean; apply_pst: boolean }) => {
       const { error } = await supabase.from('coroast_billing_extras').insert({
@@ -581,19 +639,66 @@ export default function CoRoastBilling() {
             Monthly billing summary for all co-roasting members
           </p>
         </div>
-        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {monthOptions.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          {pendingInvoiceRows.length > 0 && (
+            <Button
+              size="sm"
+              onClick={() => setConfirmRecordAll(true)}
+              disabled={recordAllMutation.isPending}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+              Record all {pendingInvoiceRows.length} invoices
+            </Button>
+          )}
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {monthOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+
+      <AlertDialog open={confirmRecordAll} onOpenChange={setConfirmRecordAll}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Record {pendingInvoiceRows.length} invoice{pendingInvoiceRows.length === 1 ? '' : 's'}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This records invoices for every member without one this period, totalling $
+              {fmt(pendingInvoiceTotal)}. Each can still be undone individually afterwards.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-56 overflow-y-auto rounded-md border divide-y text-sm">
+            {pendingInvoiceRows.map((d) => (
+              <div key={d.member.id} className="flex items-center justify-between px-3 py-2">
+                <span className="truncate">{d.member.business_name}</span>
+                <span className="font-medium tabular-nums">${fmt(d.grandTotal)}</span>
+              </div>
+            ))}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={recordAllMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                recordAllMutation.mutate(pendingInvoiceRows);
+              }}
+              disabled={recordAllMutation.isPending}
+            >
+              {recordAllMutation.isPending ? 'Recording…' : 'Record all'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
 
       {memberBillingData.length === 0 && (
         <Card>
