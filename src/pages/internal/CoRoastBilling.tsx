@@ -19,7 +19,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-import { CheckCircle2, TrendingUp, Lock, Trash2, Plus, RotateCcw } from 'lucide-react';
+import { CheckCircle2, TrendingUp, Lock, Trash2, Plus, RotateCcw, Mail } from 'lucide-react';
 import { format, endOfMonth, subMonths, addMonths, startOfMonth, getDaysInMonth, isAfter } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -640,6 +640,15 @@ export default function CoRoastBilling() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => sendReportMutation.mutate()}
+            disabled={sendReportMutation.isPending}
+          >
+            <Mail className="h-4 w-4 mr-1.5" />
+            {sendReportMutation.isPending ? 'Sending…' : 'Email report'}
+          </Button>
           {pendingInvoiceRows.length > 0 && (
             <Button
               size="sm"
