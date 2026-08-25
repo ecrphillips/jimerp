@@ -679,7 +679,7 @@ export default function CoRoastBilling() {
           <div className="max-h-56 overflow-y-auto rounded-md border divide-y text-sm">
             {pendingInvoiceRows.map((d) => (
               <div key={d.member.id} className="flex items-center justify-between px-3 py-2">
-                <span className="truncate">{d.member.account_name}</span>
+                <span className="truncate">{d.member.business_name}</span>
                 <span className="font-medium tabular-nums">${fmt(d.grandTotal)}</span>
               </div>
             ))}
