@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,7 +9,6 @@ import { Pencil, Save, X, Info } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { formatMoney } from '@/lib/formatMoney';
 import { format } from 'date-fns';
 import { CO_ROAST_TIER_DEFAULTS } from '@/components/bookings/bookingUtils';
 
@@ -99,12 +98,13 @@ export default function CoRoastPricing() {
     mutationFn: async () => {
       if (!editingTier) return;
       const updated = { ...currentRates, [editingTier]: editForm };
+      const tierLabel = TIER_LABELS[editingTier] ?? editingTier;
 
       if (settingsRow) {
         const { error } = await supabase
           .from('app_settings')
           .update({
-            value_json: updated as any,
+            value_json: updated,
             updated_at: new Date().toISOString(),
             updated_by: authUser?.id ?? null,
           })
@@ -115,11 +115,22 @@ export default function CoRoastPricing() {
           .from('app_settings')
           .insert({
             key: SETTINGS_KEY,
-            value_json: updated as any,
+            value_json: updated,
             updated_by: authUser?.id ?? null,
           });
         if (error) throw error;
       }
+
+      const { error: tierRatesError } = await supabase.from('coroast_tier_rates').upsert({
+        tier: editingTier,
+        label: tierLabel,
+        base_fee: editForm.base,
+        included_hours: editForm.includedHours,
+        overage_rate_per_hr: editForm.overageRate,
+        is_legacy: false,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'tier' });
+      if (tierRatesError) throw tierRatesError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['app-settings', SETTINGS_KEY] });
@@ -127,7 +138,8 @@ export default function CoRoastPricing() {
       queryClient.invalidateQueries({ queryKey: ['coroast-global-tier-rates'] });
       queryClient.invalidateQueries({ queryKey: ['coroast-resolved-pricing'] });
       queryClient.invalidateQueries({ queryKey: ['coroast-resolved-pricing-batch'] });
-      toast.success(`${TIER_LABELS[editingTier!]} rates updated`);
+      queryClient.invalidateQueries({ queryKey: ['coroast_tier_rates'] });
+      toast.success(`${editingTier ? TIER_LABELS[editingTier] : 'Tier'} rates updated`);
       setEditingTier(null);
     },
     onError: (err: Error) => toast.error(err.message),

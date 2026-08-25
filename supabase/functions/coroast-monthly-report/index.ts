@@ -9,6 +9,75 @@ const GST_RATE = 0.05
 const PST_RATE = 0.07
 const BILLABLE_STATUSES = ['CONFIRMED', 'COMPLETED', 'NO_SHOW']
 const TZ = 'America/Vancouver'
+const TIER_RATES_SETTINGS_KEY = 'coroast_tier_rates'
+
+type TierRate = {
+  base: number
+  includedHours: number
+  overageRate: number
+  includedPallets: number
+  storageRate: number
+}
+
+type AccountRow = {
+  id: string
+  account_name: string
+  coroast_tier?: string | null
+  coroast_custom_base_fee?: number | null
+  coroast_custom_included_hours?: number | null
+  coroast_custom_overage_rate?: number | null
+  coroast_custom_included_pallets?: number | null
+  coroast_custom_storage_rate?: number | null
+}
+
+type TierRateDbRow = {
+  tier?: string | null
+  base_fee?: number | string | null
+  included_hours?: number | string | null
+  overage_rate_per_hr?: number | string | null
+}
+
+type BillingPeriodRow = {
+  id: string
+  account_id: string | null
+  included_hours: number | string | null
+  overage_rate_per_hr: number | string | null
+  base_fee: number | string | null
+  prorated_base_fee: number | string | null
+  proration_note: string | null
+  is_closed: boolean | null
+}
+
+type BookingRow = {
+  account_id: string
+  duration_hours: number | string | null
+  start_time: string | null
+  end_time: string | null
+}
+
+type StorageRow = {
+  billing_period_id: string | null
+  account_id: string | null
+  paid_pallets: number | string | null
+  rate_per_add_pallet: number | string | null
+}
+
+type ExtraRow = {
+  billing_period_id: string | null
+  qty: number | string | null
+  unit_price: number | string | null
+  apply_gst: boolean | null
+  apply_pst: boolean | null
+}
+
+type InvoiceRow = {
+  billing_period_id: string | null
+  used_hours: number | string | null
+  overage_hours: number | string | null
+}
+
+type AdminRoleRow = { user_id: string | null }
+type ProfileRow = { email: string | null; is_active: boolean | null }
 
 function vancouverParts(d = new Date()) {
   const fmt = new Intl.DateTimeFormat('en-CA', {
@@ -43,6 +112,68 @@ function monthLabel(year: number, month: number) {
     year: 'numeric',
     timeZone: 'UTC',
   })
+}
+
+function numOr(v: unknown, fallback: number) {
+  const n = Number(v)
+  return v == null || !Number.isFinite(n) ? fallback : n
+}
+
+function mergeTierRates(dbRows: TierRateDbRow[] = [], settingsValue: unknown): Record<string, TierRate> {
+  const rates: Record<string, TierRate> = {}
+
+  for (const r of dbRows) {
+    const tier = String(r.tier ?? '')
+    if (!tier) continue
+    rates[tier] = {
+      base: Number(r.base_fee ?? 0),
+      includedHours: Number(r.included_hours ?? 0),
+      overageRate: Number(r.overage_rate_per_hr ?? 0),
+      includedPallets: 0,
+      storageRate: 0,
+    }
+  }
+
+  if (settingsValue && typeof settingsValue === 'object') {
+    for (const [tier, value] of Object.entries(settingsValue as Record<string, unknown>)) {
+      if (!value || typeof value !== 'object') continue
+      const raw = value as Partial<TierRate>
+      const current = rates[tier] ?? rates.MEMBER ?? {
+        base: 0,
+        includedHours: 0,
+        overageRate: 0,
+        includedPallets: 0,
+        storageRate: 0,
+      }
+      rates[tier] = {
+        base: numOr(raw.base, current.base),
+        includedHours: numOr(raw.includedHours, current.includedHours),
+        overageRate: numOr(raw.overageRate, current.overageRate),
+        includedPallets: numOr(raw.includedPallets, current.includedPallets),
+        storageRate: numOr(raw.storageRate, current.storageRate),
+      }
+    }
+  }
+
+  return rates
+}
+
+function accountRates(account: AccountRow, globalRates: Record<string, TierRate>): TierRate {
+  const tier = account.coroast_tier ?? 'MEMBER'
+  const fallback = globalRates[tier] ?? globalRates.MEMBER ?? {
+    base: 0,
+    includedHours: 0,
+    overageRate: 0,
+    includedPallets: 0,
+    storageRate: 0,
+  }
+  return {
+    base: numOr(account.coroast_custom_base_fee, fallback.base),
+    includedHours: numOr(account.coroast_custom_included_hours, fallback.includedHours),
+    overageRate: numOr(account.coroast_custom_overage_rate, fallback.overageRate),
+    includedPallets: numOr(account.coroast_custom_included_pallets, fallback.includedPallets),
+    storageRate: numOr(account.coroast_custom_storage_rate, fallback.storageRate),
+  }
 }
 
 Deno.serve(async (req) => {
@@ -127,7 +258,7 @@ Deno.serve(async (req) => {
   const [{ data: accounts }, { data: periods }, { data: bookings }] = await Promise.all([
     admin
       .from('accounts')
-      .select('id, account_name, coroast_tier, is_active, programs')
+      .select('id, account_name, coroast_tier, is_active, programs, coroast_custom_base_fee, coroast_custom_included_hours, coroast_custom_overage_rate, coroast_custom_included_pallets, coroast_custom_storage_rate')
       .contains('programs', ['COROASTING'])
       .eq('is_active', true)
       .order('account_name'),
@@ -144,71 +275,80 @@ Deno.serve(async (req) => {
       .in('status', BILLABLE_STATUSES),
   ])
 
-  const periodIds = (periods ?? []).map((p: any) => p.id)
+  const accountRows = (accounts ?? []) as AccountRow[]
+  const periodRows = (periods ?? []) as BillingPeriodRow[]
+  const bookingRows = (bookings ?? []) as BookingRow[]
+  const periodIds = periodRows.map((p) => p.id)
   const [{ data: storage }, { data: extras }, { data: invoices }, { data: tierRates }] =
     await Promise.all([
       periodIds.length
         ? admin.from('coroast_storage_allocations').select('*').in('billing_period_id', periodIds)
-        : Promise.resolve({ data: [] as any[] }),
+        : Promise.resolve({ data: [] as StorageRow[] }),
       periodIds.length
         ? admin
             .from('coroast_billing_extras')
             .select('billing_period_id, description, qty, unit_price, apply_gst, apply_pst')
             .in('billing_period_id', periodIds)
-        : Promise.resolve({ data: [] as any[] }),
+        : Promise.resolve({ data: [] as ExtraRow[] }),
       periodIds.length
         ? admin.from('coroast_invoices').select('*').in('billing_period_id', periodIds)
-        : Promise.resolve({ data: [] as any[] }),
+        : Promise.resolve({ data: [] as InvoiceRow[] }),
       admin.from('coroast_tier_rates').select('*'),
     ])
 
+  const storageRows = (storage ?? []) as StorageRow[]
+  const extraRows = (extras ?? []) as ExtraRow[]
+  const invoiceRows = (invoices ?? []) as InvoiceRow[]
+
+  const { data: settingsRow } = await admin
+    .from('app_settings')
+    .select('value_json')
+    .eq('key', TIER_RATES_SETTINGS_KEY)
+    .maybeSingle()
+  const globalRates = mergeTierRates((tierRates ?? []) as TierRateDbRow[], settingsRow?.value_json ?? null)
+
   const hoursByAccount = new Map<string, number>()
-  for (const bk of bookings ?? []) {
-    const dh = Number((bk as any).duration_hours)
+  for (const bk of bookingRows) {
+    const dh = Number(bk.duration_hours)
     const hours =
       !isNaN(dh) && dh > 0
         ? dh
-        : Math.max(0, (timeToMinutes((bk as any).end_time) - timeToMinutes((bk as any).start_time)) / 60)
+        : Math.max(0, (timeToMinutes(bk.end_time ?? '0:0') - timeToMinutes(bk.start_time ?? '0:0')) / 60)
     hoursByAccount.set(bk.account_id, (hoursByAccount.get(bk.account_id) ?? 0) + hours)
   }
 
-  const rateFor = (tier: string) =>
-    (tierRates ?? []).find((r: any) => r.tier === tier) ?? null
-
-  const rows = (accounts ?? []).map((a: any) => {
+  const rows = accountRows.map((a) => {
     const tier = a.coroast_tier ?? 'MEMBER'
-    const bp = (periods ?? []).find((p: any) => p.account_id === a.id)
-    const fallback = rateFor(tier)
+    const bp = periodRows.find((p) => p.account_id === a.id)
+    const rates = accountRates(a, globalRates)
 
     const includedHours = Number(
-      bp?.included_hours ?? fallback?.included_hours ?? 0,
+      bp?.included_hours ?? rates.includedHours,
     )
-    const overageRate = Number(
-      bp?.overage_rate_per_hr ?? fallback?.overage_rate_per_hr ?? 0,
-    )
+    const overageRate = rates.overageRate
     const baseFee = Number(
-      bp?.prorated_base_fee ?? bp?.base_fee ?? fallback?.base_fee ?? 0,
+      bp?.prorated_base_fee ?? bp?.base_fee ?? rates.base,
     )
 
     const invoice = bp
-      ? (invoices ?? []).find((inv: any) => inv.billing_period_id === bp.id)
+      ? invoiceRows.find((inv) => inv.billing_period_id === bp.id)
       : null
 
     let usedHours: number
     let overageHours: number
     let overageCharge: number
-    if (invoice) {
+    if (bp?.is_closed && invoice) {
       usedHours = Number(invoice.used_hours ?? 0)
       overageHours = Number(invoice.overage_hours ?? 0)
-      overageCharge = Number(invoice.overage_charge ?? 0)
+      overageCharge = overageHours * overageRate
     } else {
       usedHours = hoursByAccount.get(a.id) ?? 0
       overageHours = Math.max(0, usedHours - includedHours)
       overageCharge = overageHours * overageRate
     }
 
-    const alloc = (storage ?? []).find(
-      (s: any) => s.billing_period_id === bp?.id && s.account_id === a.id,
+    const alloc = storageRows.find(
+      (s) => s.billing_period_id === bp?.id && s.account_id === a.id,
     )
     const storageCharge =
       Number(alloc?.paid_pallets ?? 0) * Number(alloc?.rate_per_add_pallet ?? 0)
@@ -216,11 +356,11 @@ Deno.serve(async (req) => {
     let extrasSubtotal = 0
     let extrasGst = 0
     let extrasPst = 0
-    for (const ex of (extras ?? []).filter((e: any) => e.billing_period_id === bp?.id)) {
-      const lineTotal = Number((ex as any).qty) * Number((ex as any).unit_price)
+    for (const ex of extraRows.filter((e) => e.billing_period_id === bp?.id)) {
+      const lineTotal = Number(ex.qty) * Number(ex.unit_price)
       extrasSubtotal += lineTotal
-      if ((ex as any).apply_gst) extrasGst += lineTotal * GST_RATE
-      if ((ex as any).apply_pst) extrasPst += lineTotal * PST_RATE
+      if (ex.apply_gst) extrasGst += lineTotal * GST_RATE
+      if (ex.apply_pst) extrasPst += lineTotal * PST_RATE
     }
 
     const coreSubtotal = baseFee + overageCharge + storageCharge
@@ -260,7 +400,7 @@ Deno.serve(async (req) => {
 
   // ---- Recipients: every active ADMIN user ----
   const { data: adminRoles } = await admin.from('user_roles').select('user_id').eq('role', 'ADMIN')
-  const adminIds = [...new Set((adminRoles ?? []).map((r: any) => r.user_id))]
+  const adminIds = [...new Set(((adminRoles ?? []) as AdminRoleRow[]).map((r) => r.user_id).filter((id): id is string => !!id))]
   let recipients: string[] = []
   if (adminIds.length) {
     const { data: profiles } = await admin
@@ -270,8 +410,8 @@ Deno.serve(async (req) => {
     recipients = [
       ...new Set(
         (profiles ?? [])
-          .filter((p: any) => p.is_active !== false && !!p.email)
-          .map((p: any) => String(p.email).toLowerCase()),
+          .filter((p: ProfileRow) => p.is_active !== false && !!p.email)
+          .map((p: ProfileRow) => String(p.email).toLowerCase()),
       ),
     ]
   }
