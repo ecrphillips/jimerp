@@ -506,6 +506,51 @@ export default function CoRoastBilling() {
     },
   });
 
+  const recordAllMutation = useMutation({
+    mutationFn: async (rows: (typeof memberBillingData)) => {
+      const payload = rows.map((data) => ({
+        account_id: data.member.id,
+        billing_period_id: data.bp!.id,
+        period_start: periodStart,
+        period_end: periodEnd,
+        tier_snapshot: data.tier,
+        base_fee: data.baseFee,
+        included_hours: data.includedHours,
+        used_hours: data.usedHours,
+        overage_hours: data.overageHours,
+        overage_rate: data.overageRate,
+        overage_charge: data.overageCharge,
+        included_pallets: data.includedPallets,
+        paid_pallets: data.paidPallets,
+        pallet_rate: data.palletRate,
+        storage_charge: data.storageCharge,
+        total_amount: data.grandTotal,
+      }));
+      const { error } = await supabase.from('coroast_invoices').insert(payload as any);
+      if (error) throw error;
+      return payload.length;
+    },
+    onSuccess: (count) => {
+      toast.success(`${count} invoice${count === 1 ? '' : 's'} recorded`);
+      refetchInvoices();
+      setConfirmRecordAll(false);
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
+      setConfirmRecordAll(false);
+    },
+  });
+
+  const pendingInvoiceRows = useMemo(
+    () => memberBillingData.filter((d) => d.bp && !d.invoice),
+    [memberBillingData],
+  );
+  const pendingInvoiceTotal = useMemo(
+    () => pendingInvoiceRows.reduce((sum, d) => sum + d.grandTotal, 0),
+    [pendingInvoiceRows],
+  );
+
+
   const addExtraMutation = useMutation({
     mutationFn: async (payload: { billing_period_id: string; description: string; qty: number; unit_price: number; apply_gst: boolean; apply_pst: boolean }) => {
       const { error } = await supabase.from('coroast_billing_extras').insert({
