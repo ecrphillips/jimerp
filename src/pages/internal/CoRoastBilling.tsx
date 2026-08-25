@@ -52,6 +52,8 @@ export default function CoRoastBilling() {
   const [modalData, setModalData] = useState<any>(null);
   const [undoInvoiceId, setUndoInvoiceId] = useState<string | null>(null);
   const [resetConfirmId, setResetConfirmId] = useState<string | null>(null);
+  const [confirmRecordAll, setConfirmRecordAll] = useState(false);
+
 
   // Inline add-charge form state per member
   const [addingForMember, setAddingForMember] = useState<string | null>(null);
