@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
       bp?.overage_rate_per_hr ?? fallback?.overage_rate_per_hr ?? 0,
     )
     const baseFee = Number(
-      bp?.prorated_base_fee ?? bp?.base_fee ?? fallback?.monthly_fee ?? 0,
+      bp?.prorated_base_fee ?? bp?.base_fee ?? fallback?.base_fee ?? 0,
     )
 
     const invoice = bp
