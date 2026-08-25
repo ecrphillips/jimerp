@@ -628,19 +628,66 @@ export default function CoRoastBilling() {
             Monthly billing summary for all co-roasting members
           </p>
         </div>
-        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {monthOptions.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          {pendingInvoiceRows.length > 0 && (
+            <Button
+              size="sm"
+              onClick={() => setConfirmRecordAll(true)}
+              disabled={recordAllMutation.isPending}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+              Record all {pendingInvoiceRows.length} invoices
+            </Button>
+          )}
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {monthOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+
+      <AlertDialog open={confirmRecordAll} onOpenChange={setConfirmRecordAll}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Record {pendingInvoiceRows.length} invoice{pendingInvoiceRows.length === 1 ? '' : 's'}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This records invoices for every member without one this period, totalling $
+              {fmt(pendingInvoiceTotal)}. Each can still be undone individually afterwards.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-56 overflow-y-auto rounded-md border divide-y text-sm">
+            {pendingInvoiceRows.map((d) => (
+              <div key={d.member.id} className="flex items-center justify-between px-3 py-2">
+                <span className="truncate">{d.member.account_name}</span>
+                <span className="font-medium tabular-nums">${fmt(d.grandTotal)}</span>
+              </div>
+            ))}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={recordAllMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                recordAllMutation.mutate(pendingInvoiceRows);
+              }}
+              disabled={recordAllMutation.isPending}
+            >
+              {recordAllMutation.isPending ? 'Recording…' : 'Record all'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
 
       {memberBillingData.length === 0 && (
         <Card>
