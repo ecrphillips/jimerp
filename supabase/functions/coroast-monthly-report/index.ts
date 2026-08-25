@@ -9,6 +9,26 @@ const GST_RATE = 0.05
 const PST_RATE = 0.07
 const BILLABLE_STATUSES = ['CONFIRMED', 'COMPLETED', 'NO_SHOW']
 const TZ = 'America/Vancouver'
+const TIER_RATES_SETTINGS_KEY = 'coroast_tier_rates'
+
+type TierRate = {
+  base: number
+  includedHours: number
+  overageRate: number
+  includedPallets: number
+  storageRate: number
+}
+
+type AccountRow = {
+  id: string
+  account_name: string
+  coroast_tier?: string | null
+  coroast_custom_base_fee?: number | null
+  coroast_custom_included_hours?: number | null
+  coroast_custom_overage_rate?: number | null
+  coroast_custom_included_pallets?: number | null
+  coroast_custom_storage_rate?: number | null
+}
 
 function vancouverParts(d = new Date()) {
   const fmt = new Intl.DateTimeFormat('en-CA', {
@@ -43,6 +63,68 @@ function monthLabel(year: number, month: number) {
     year: 'numeric',
     timeZone: 'UTC',
   })
+}
+
+function numOr(v: unknown, fallback: number) {
+  const n = Number(v)
+  return v == null || !Number.isFinite(n) ? fallback : n
+}
+
+function mergeTierRates(dbRows: any[] = [], settingsValue: unknown): Record<string, TierRate> {
+  const rates: Record<string, TierRate> = {}
+
+  for (const r of dbRows) {
+    const tier = String(r.tier ?? '')
+    if (!tier) continue
+    rates[tier] = {
+      base: Number(r.base_fee ?? 0),
+      includedHours: Number(r.included_hours ?? 0),
+      overageRate: Number(r.overage_rate_per_hr ?? 0),
+      includedPallets: 0,
+      storageRate: 0,
+    }
+  }
+
+  if (settingsValue && typeof settingsValue === 'object') {
+    for (const [tier, value] of Object.entries(settingsValue as Record<string, unknown>)) {
+      if (!value || typeof value !== 'object') continue
+      const raw = value as Partial<TierRate>
+      const current = rates[tier] ?? rates.MEMBER ?? {
+        base: 0,
+        includedHours: 0,
+        overageRate: 0,
+        includedPallets: 0,
+        storageRate: 0,
+      }
+      rates[tier] = {
+        base: numOr(raw.base, current.base),
+        includedHours: numOr(raw.includedHours, current.includedHours),
+        overageRate: numOr(raw.overageRate, current.overageRate),
+        includedPallets: numOr(raw.includedPallets, current.includedPallets),
+        storageRate: numOr(raw.storageRate, current.storageRate),
+      }
+    }
+  }
+
+  return rates
+}
+
+function accountRates(account: AccountRow, globalRates: Record<string, TierRate>): TierRate {
+  const tier = account.coroast_tier ?? 'MEMBER'
+  const fallback = globalRates[tier] ?? globalRates.MEMBER ?? {
+    base: 0,
+    includedHours: 0,
+    overageRate: 0,
+    includedPallets: 0,
+    storageRate: 0,
+  }
+  return {
+    base: numOr(account.coroast_custom_base_fee, fallback.base),
+    includedHours: numOr(account.coroast_custom_included_hours, fallback.includedHours),
+    overageRate: numOr(account.coroast_custom_overage_rate, fallback.overageRate),
+    includedPallets: numOr(account.coroast_custom_included_pallets, fallback.includedPallets),
+    storageRate: numOr(account.coroast_custom_storage_rate, fallback.storageRate),
+  }
 }
 
 Deno.serve(async (req) => {
@@ -127,7 +209,7 @@ Deno.serve(async (req) => {
   const [{ data: accounts }, { data: periods }, { data: bookings }] = await Promise.all([
     admin
       .from('accounts')
-      .select('id, account_name, coroast_tier, is_active, programs')
+      .select('id, account_name, coroast_tier, is_active, programs, coroast_custom_base_fee, coroast_custom_included_hours, coroast_custom_overage_rate, coroast_custom_included_pallets, coroast_custom_storage_rate')
       .contains('programs', ['COROASTING'])
       .eq('is_active', true)
       .order('account_name'),
@@ -162,6 +244,13 @@ Deno.serve(async (req) => {
       admin.from('coroast_tier_rates').select('*'),
     ])
 
+  const { data: settingsRow } = await admin
+    .from('app_settings')
+    .select('value_json')
+    .eq('key', TIER_RATES_SETTINGS_KEY)
+    .maybeSingle()
+  const globalRates = mergeTierRates(tierRates ?? [], settingsRow?.value_json ?? null)
+
   const hoursByAccount = new Map<string, number>()
   for (const bk of bookings ?? []) {
     const dh = Number((bk as any).duration_hours)
@@ -172,22 +261,17 @@ Deno.serve(async (req) => {
     hoursByAccount.set(bk.account_id, (hoursByAccount.get(bk.account_id) ?? 0) + hours)
   }
 
-  const rateFor = (tier: string) =>
-    (tierRates ?? []).find((r: any) => r.tier === tier) ?? null
-
   const rows = (accounts ?? []).map((a: any) => {
     const tier = a.coroast_tier ?? 'MEMBER'
     const bp = (periods ?? []).find((p: any) => p.account_id === a.id)
-    const fallback = rateFor(tier)
+    const rates = accountRates(a as AccountRow, globalRates)
 
     const includedHours = Number(
-      bp?.included_hours ?? fallback?.included_hours ?? 0,
+      bp?.included_hours ?? rates.includedHours,
     )
-    const overageRate = Number(
-      bp?.overage_rate_per_hr ?? fallback?.overage_rate_per_hr ?? 0,
-    )
+    const overageRate = rates.overageRate
     const baseFee = Number(
-      bp?.prorated_base_fee ?? bp?.base_fee ?? fallback?.base_fee ?? 0,
+      bp?.prorated_base_fee ?? bp?.base_fee ?? rates.base,
     )
 
     const invoice = bp
@@ -197,10 +281,10 @@ Deno.serve(async (req) => {
     let usedHours: number
     let overageHours: number
     let overageCharge: number
-    if (invoice) {
+    if (bp?.is_closed && invoice) {
       usedHours = Number(invoice.used_hours ?? 0)
       overageHours = Number(invoice.overage_hours ?? 0)
-      overageCharge = Number(invoice.overage_charge ?? 0)
+      overageCharge = overageHours * overageRate
     } else {
       usedHours = hoursByAccount.get(a.id) ?? 0
       overageHours = Math.max(0, usedHours - includedHours)
