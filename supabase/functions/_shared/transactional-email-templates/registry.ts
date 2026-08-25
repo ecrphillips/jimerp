@@ -14,6 +14,7 @@ import { template as orderConfirmedNotification } from './order-confirmed.tsx'
 import { template as orderShippedNotification } from './order-shipped.tsx'
 import { template as orderCancelledNotification } from './order-cancelled.tsx'
 import { template as orderChangesRequestedNotification } from './order-changes-requested.tsx'
+import { template as coroastMonthlyBillingReport } from './coroast-monthly-billing-report.tsx'
 
 export const TEMPLATES: Record<string, TemplateEntry> = {
   order_submitted_notification: orderSubmittedNotification,
@@ -21,4 +22,5 @@ export const TEMPLATES: Record<string, TemplateEntry> = {
   order_shipped_notification: orderShippedNotification,
   order_cancelled_notification: orderCancelledNotification,
   order_changes_requested_notification: orderChangesRequestedNotification,
+  coroast_monthly_billing_report: coroastMonthlyBillingReport,
 }
