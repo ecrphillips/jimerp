@@ -104,7 +104,7 @@ export default function CoRoastPricing() {
         const { error } = await supabase
           .from('app_settings')
           .update({
-            value_json: updated,
+            value_json: updated as unknown as Json,
             updated_at: new Date().toISOString(),
             updated_by: authUser?.id ?? null,
           })
@@ -115,14 +115,15 @@ export default function CoRoastPricing() {
           .from('app_settings')
           .insert({
             key: SETTINGS_KEY,
-            value_json: updated,
+            value_json: updated as unknown as Json,
             updated_by: authUser?.id ?? null,
           });
         if (error) throw error;
       }
 
       const { error: tierRatesError } = await supabase.from('coroast_tier_rates').upsert({
-        tier: editingTier,
+        tier: editingTier as Database['public']['Enums']['coroast_tier'],
+
         label: tierLabel,
         base_fee: editForm.base,
         included_hours: editForm.includedHours,
