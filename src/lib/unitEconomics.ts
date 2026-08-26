@@ -19,6 +19,13 @@ export type DisplayUnit = 'BAG' | 'KG' | 'LB';
 export type GreenPriceUnit = 'KG' | 'LB';
 export type CoroastTier = 'MEMBER' | 'GROWTH' | 'PRODUCTION';
 
+/**
+ * Roaster throughput in kg of ROASTED coffee per hour (not green).
+ * Every consumer divides this into a roasted-kg quantity — see costPerUnit().
+ * Green-kg/hr is a different number: roasted = green x (1 - yieldLoss).
+ * Slated to move into the editable pricing assumptions table; do not
+ * duplicate this literal anywhere — import the constant.
+ */
 export const ROASTER_THROUGHPUT_KG_PER_HR = 40;
 export const KG_PER_LB = 0.45359237;
 export const G_PER_KG = 1000;
