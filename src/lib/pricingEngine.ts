@@ -276,6 +276,15 @@ export interface PricingLineResult {
   config: CostStackConfig;
   lines: CostLine[];
 
+  /**
+   * Whether this line has a finished unit to price.
+   *
+   * Toll work packages nothing, so there is no bag to divide into and the whole
+   * line is priced per green kg. Asking for a packaging variant and a finished
+   * weight in that case is asking for inputs that do not exist.
+   */
+  isWeightPriced: boolean;
+
   /** Which green number priced this line. */
   greenBasis: GreenBasis;
   /**
@@ -482,6 +491,11 @@ export function calculateLine(
   const config: CostStackConfig = { ...tier.config, ...(input.configOverrides ?? {}) };
 
   const warnings: PricingWarning[] = [];
+
+  // No per-unit cost line means nothing is charged per finished item, so the
+  // line is priced by weight alone.
+  const isWeightPriced =
+    !config.packagingMaterial && !config.packLabour && !config.downstreamServices;
 
   // --- green consumed by one unit -----------------------------------------
   const greenKg = isNum(input.gramsPerUnit)
@@ -701,6 +715,8 @@ export function calculateLine(
 
   // --- margin and price -----------------------------------------------------
   const baseMarginPerGreenKg = isNum(input.marginPerGreenKg) ? input.marginPerGreenKg : null;
+  // For a weight-priced line the volume figure is green kg, so the break
+  // triggers on the same quantity the line is sold in.
   const appliedBreak = resolvePriceBreak(input.priceBreaks, input.unitsPerPeriod);
 
   const marginPerGreenKg = appliedBreak
@@ -757,6 +773,7 @@ export function calculateLine(
     tier,
     config,
     lines,
+    isWeightPriced,
     greenBasis,
     greenMarketValuePerKg: marketValue.rate,
     greenKgPerUnit,
@@ -784,7 +801,9 @@ export type VolumeCadence = 'WEEKLY' | 'MONTHLY';
 export interface VolumeForecast {
   cadence: VolumeCadence;
   /** Units per period, for lines priced per finished unit. */
-  unitsPerPeriod: number | null;
+  unitsPerPeriod?: number | null;
+  /** Green kg per period, for weight-priced lines that have no unit. */
+  greenKgPerPeriod?: number | null;
 }
 
 export interface ForecastResult {
@@ -803,16 +822,44 @@ export function forecast(
   result: PricingLineResult,
   volume: VolumeForecast,
 ): ForecastResult {
-  const units = volume.unitsPerPeriod;
-  if (!isNum(units) || units <= 0) {
+  const empty: ForecastResult = {
+    greenKgPerPeriod: null,
+    revenuePerPeriod: null,
+    marginPerPeriod: null,
+    costPerPeriod: null,
+    marginPerMonth: null,
+  };
+
+  const toMonthly = (v: number | null) =>
+    !isNum(v) ? null : volume.cadence === 'MONTHLY' ? v : D(v).times(WEEKS_PER_MONTH).toNumber();
+
+  // Weight-priced: the volume IS green kg, so everything multiplies the
+  // per-green-kg figures directly. There is no unit to go through.
+  if (result.isWeightPriced) {
+    const greenKg = volume.greenKgPerPeriod;
+    if (!isNum(greenKg) || greenKg <= 0) return empty;
+
+    const revenuePerPeriod = isNum(result.pricePerGreenKg)
+      ? D(result.pricePerGreenKg).times(greenKg).toNumber()
+      : null;
+    const marginPerPeriod = isNum(result.marginPerGreenKg)
+      ? D(result.marginPerGreenKg).times(greenKg).toNumber()
+      : null;
+    const costPerPeriod = isNum(result.costFloorPerGreenKg)
+      ? D(result.costFloorPerGreenKg).times(greenKg).toNumber()
+      : null;
+
     return {
-      greenKgPerPeriod: null,
-      revenuePerPeriod: null,
-      marginPerPeriod: null,
-      costPerPeriod: null,
-      marginPerMonth: null,
+      greenKgPerPeriod: greenKg,
+      revenuePerPeriod,
+      marginPerPeriod,
+      costPerPeriod,
+      marginPerMonth: toMonthly(marginPerPeriod),
     };
   }
+
+  const units = volume.unitsPerPeriod;
+  if (!isNum(units) || units <= 0) return empty;
 
   const greenKgPerPeriod = isNum(result.greenKgPerUnit)
     ? D(result.greenKgPerUnit).times(units).toNumber()
@@ -830,13 +877,13 @@ export function forecast(
     ? D(result.costFloorPerUnit).times(units).toNumber()
     : null;
 
-  const marginPerMonth = isNum(marginPerPeriod)
-    ? volume.cadence === 'MONTHLY'
-      ? marginPerPeriod
-      : D(marginPerPeriod).times(WEEKS_PER_MONTH).toNumber()
-    : null;
-
-  return { greenKgPerPeriod, revenuePerPeriod, marginPerPeriod, costPerPeriod, marginPerMonth };
+  return {
+    greenKgPerPeriod,
+    revenuePerPeriod,
+    marginPerPeriod,
+    costPerPeriod,
+    marginPerMonth: toMonthly(marginPerPeriod),
+  };
 }
 
 /** Convert a finished unit weight to kg, for display alongside grams. */
