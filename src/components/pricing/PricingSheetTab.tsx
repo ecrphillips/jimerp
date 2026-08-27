@@ -60,6 +60,7 @@ import {
   type PricingLineResult,
   type VolumeCadence,
   type PriceBreak,
+  type SaleBasis,
 } from '@/lib/pricingEngine';
 
 // ---------------------------------------------------------------------------
@@ -87,6 +88,8 @@ interface SheetLine {
   greenMode: 'FLAT' | 'BLEND';
   /** Undefined follows the tier default. */
   greenBasis?: GreenBasis;
+  /** Undefined follows the tier default. Only meaningful with no packaging. */
+  saleBasis?: SaleBasis;
   greenPrice: string;
   greenBenchmark: string;
   blend: BlendRow[];
@@ -286,6 +289,7 @@ export function PricingSheetTab() {
             green: buildGreen(line),
             greenBenchmarkPerKg: asPerKg(line.greenBenchmark),
             greenBasis: line.greenBasis,
+            saleBasis: line.saleBasis,
             gramsPerUnit: toNum(line.grams),
             packagingMaterialPerUnit: toNum(line.packagingMaterial),
             marginPerGreenKg: marginKg,
@@ -699,9 +703,25 @@ function LineCard({
   const benchmark = toNum(line.greenBenchmark);
   // No per-unit cost line means there is no bag: the line is sold by weight.
   const weightPriced = result?.isWeightPriced ?? false;
+  const saleBasis = result?.saleBasis ?? 'UNIT';
   /** A canonical per-kg figure from the engine, shown in the chosen unit. */
   const asDisplayRate = (perKg: number | null) =>
     perKg == null ? null : w.rateToDisplay(perKg);
+
+  // Which set of per-weight figures this line is actually sold on.
+  const roasted = saleBasis === 'ROASTED_WEIGHT';
+  const soldFloor = roasted
+    ? (result?.costFloorPerRoastedKg ?? null)
+    : (result?.costFloorPerGreenKg ?? null);
+  const soldMargin = roasted
+    ? (result?.marginPerRoastedKg ?? null)
+    : (result?.marginPerGreenKg ?? null);
+  const soldPrice = roasted
+    ? (result?.pricePerRoastedKg ?? null)
+    : (result?.pricePerGreenKg ?? null);
+  const soldSuffix = roasted ? `roasted ${w.suffix}` : w.greenSuffix;
+  const soldSuffixKg = roasted ? 'roasted kg' : 'green kg';
+  const soldSuffixLb = roasted ? 'roasted lb' : 'green lb';
   const pkgReference = line.variant
     ? (packagingCosts[line.variant]?.material_cost_per_unit ?? null)
     : null;
@@ -715,9 +735,11 @@ function LineCard({
     result && units
       ? forecast(
           result,
-          weightPriced
-            ? { cadence, greenKgPerPeriod: w.weightFromDisplay(units) }
-            : { cadence, unitsPerPeriod: units },
+          !weightPriced
+            ? { cadence, unitsPerPeriod: units }
+            : saleBasis === 'ROASTED_WEIGHT'
+              ? { cadence, roastedKgPerPeriod: w.weightFromDisplay(units) }
+              : { cadence, greenKgPerPeriod: w.weightFromDisplay(units) },
         )
       : null;
 
@@ -770,7 +792,14 @@ function LineCard({
               <Label htmlFor={`tier-${line.id}`}>Configuration</Label>
               <Select
                 value={line.tier}
-                onValueChange={(v) => onPatch({ tier: v as TierKey, overrides: {}, greenBasis: undefined })}
+                onValueChange={(v) =>
+                  onPatch({
+                    tier: v as TierKey,
+                    overrides: {},
+                    greenBasis: undefined,
+                    saleBasis: undefined,
+                  })
+                }
               >
                 <SelectTrigger id={`tier-${line.id}`}>
                   <SelectValue />
@@ -973,10 +1002,41 @@ function LineCard({
               </div>
             )}
 
+            {weightPriced && (
+              <div>
+                <Label htmlFor={`sold-${line.id}`}>Sold by</Label>
+                <Select
+                  value={saleBasis}
+                  onValueChange={(v) => onPatch({ saleBasis: v as SaleBasis })}
+                >
+                  <SelectTrigger id={`sold-${line.id}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ROASTED_WEIGHT">Roasted weight</SelectItem>
+                    <SelectItem value="GREEN_WEIGHT">Green weight</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {saleBasis === 'ROASTED_WEIGHT'
+                    ? `Bulk roasted coffee sold by weight. One roasted ${w.suffix} consumes ${
+                        result?.greenKgPerRoastedKg
+                          ? result.greenKgPerRoastedKg.toFixed(3)
+                          : '—'
+                      } green, so it costs more than a green ${w.suffix}.`
+                    : `Charged on green throughput — what goes into the roaster, not what comes out.`}
+                </p>
+              </div>
+            )}
+
             <div>
               <Label htmlFor={`units-${line.id}`}>
-                {weightPriced ? `Green ${w.suffix}` : 'Units'} per{' '}
-                {cadence === 'MONTHLY' ? 'month' : 'week'}
+                {!weightPriced
+                  ? 'Units'
+                  : saleBasis === 'ROASTED_WEIGHT'
+                    ? `Roasted ${w.suffix}`
+                    : `Green ${w.suffix}`}{' '}
+                per {cadence === 'MONTHLY' ? 'month' : 'week'}
               </Label>
               <Input
                 id={`units-${line.id}`}
@@ -1051,29 +1111,36 @@ function LineCard({
                 <>
                   <Row
                     label="Cost floor"
-                    value={money(asDisplayRate(result?.costFloorPerGreenKg ?? null), 4)}
-                    hint={`per ${w.greenSuffix}`}
+                    value={money(asDisplayRate(soldFloor), 4)}
+                    hint={`per ${soldSuffix}`}
                     tone="floor"
                   />
                   <Row
                     label="Margin"
-                    value={money(asDisplayRate(result?.marginPerGreenKg ?? null), 4)}
-                    hint={`per ${w.greenSuffix}`}
+                    value={money(asDisplayRate(soldMargin), 4)}
+                    hint={`per ${soldSuffix}`}
                   />
                   <div className="border-t pt-2">
                     <Row
                       label="Price"
-                      value={money(asDisplayRate(result?.pricePerGreenKg ?? null), 2)}
-                      hint={`per ${w.greenSuffix}`}
+                      value={money(asDisplayRate(soldPrice), 2)}
+                      hint={`per ${soldSuffix}`}
                       tone="price"
                       big
                     />
                   </div>
-                  {result?.pricePerGreenKg != null && (
+                  {soldPrice != null && (
                     <p className="text-xs text-muted-foreground">
                       {w.unit === 'LB'
-                        ? `${money(result.pricePerGreenKg, 2)} per green kg`
-                        : `${money(perKgToPerLb(result.pricePerGreenKg), 2)} per green lb`}
+                        ? `${money(soldPrice, 2)} per ${soldSuffixKg}`
+                        : `${money(perKgToPerLb(soldPrice), 2)} per ${soldSuffixLb}`}
+                    </p>
+                  )}
+                  {saleBasis === 'ROASTED_WEIGHT' && result?.pricePerGreenKg != null && (
+                    <p className="text-xs text-muted-foreground border-t pt-2">
+                      Green basis for reference:{' '}
+                      {money(asDisplayRate(result.pricePerGreenKg), 4)} per {w.greenSuffix}. Quoting
+                      that for roasted coffee would undercharge by the yield loss.
                     </p>
                   )}
                 </>

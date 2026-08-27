@@ -79,6 +79,8 @@ export interface TierPreset {
    * $7.99 we charge $7.99, so a ceiling would misprice it.
    */
   defaultGreenBasis: GreenBasis;
+  /** Applies only when no packaging is charged, so there is no unit. */
+  defaultWeightSaleBasis: Exclude<SaleBasis, 'UNIT'>;
 }
 
 const stack = (
@@ -102,6 +104,7 @@ export const TIER_PRESETS: Record<TierKey, TierPreset> = {
     description: 'Their green, our roaster and our hands. No packaging.',
     config: stack(false, false, false),
     defaultGreenBasis: 'BENCHMARK',
+    defaultWeightSaleBasis: 'GREEN_WEIGHT',
   },
   T3_TOLL_PLUS: {
     key: 'T3_TOLL_PLUS',
@@ -110,6 +113,7 @@ export const TIER_PRESETS: Record<TierKey, TierPreset> = {
     description: 'Toll roasting with downstream services. Packaging optional.',
     config: stack(false, false, true),
     defaultGreenBasis: 'BENCHMARK',
+    defaultWeightSaleBasis: 'GREEN_WEIGHT',
   },
   T4_PRIVATE_LABEL: {
     key: 'T4_PRIVATE_LABEL',
@@ -118,6 +122,7 @@ export const TIER_PRESETS: Record<TierKey, TierPreset> = {
     description: 'Finished product built from roasted coffee we already hold.',
     config: stack(true, true, false),
     defaultGreenBasis: 'BENCHMARK',
+    defaultWeightSaleBasis: 'ROASTED_WEIGHT',
   },
   T5_CO_PACK: {
     key: 'T5_CO_PACK',
@@ -126,6 +131,7 @@ export const TIER_PRESETS: Record<TierKey, TierPreset> = {
     description: 'Same stack as private label, built from green components.',
     config: stack(true, true, false),
     defaultGreenBasis: 'BENCHMARK',
+    defaultWeightSaleBasis: 'ROASTED_WEIGHT',
   },
   T6_WHITE_GLOVE: {
     key: 'T6_WHITE_GLOVE',
@@ -134,6 +140,7 @@ export const TIER_PRESETS: Record<TierKey, TierPreset> = {
     description: 'Full service. Green passed through at market value, lot by lot.',
     config: stack(true, true, true),
     defaultGreenBasis: 'MARKET',
+    defaultWeightSaleBasis: 'ROASTED_WEIGHT',
   },
 };
 
@@ -203,6 +210,13 @@ export interface PricingLineInput {
   greenBasis?: GreenBasis;
 
   /**
+   * What the client is buying. Defaults to a finished unit where packaging is
+   * charged, otherwise to the tier's own default: green weight for toll work,
+   * roasted weight once we own the coffee and are selling it by weight.
+   */
+  saleBasis?: SaleBasis;
+
+  /**
    * Finished roasted weight of one unit. Null prices the line per green kg
    * only — toll work has no bag, so there is no unit to divide into.
    */
@@ -227,6 +241,21 @@ export interface PricingLineInput {
 // ---------------------------------------------------------------------------
 // Outputs
 // ---------------------------------------------------------------------------
+
+/**
+ * What the client is actually buying, which decides what a price is *per*.
+ *
+ * UNIT — a finished item. There is packaging, so there is a bag.
+ *
+ * GREEN_WEIGHT — toll work. The client owns the green and pays for what goes
+ * through the roaster, so the charge follows green weight.
+ *
+ * ROASTED_WEIGHT — bulk roasted coffee, sold by the weight that leaves the
+ * roaster. Distinct from GREEN_WEIGHT and not a formatting detail: a roasted
+ * kilogram consumes 1/(1-yield loss) green kilograms, so quoting the green
+ * figure for roasted coffee undercharges by the whole yield loss.
+ */
+export type SaleBasis = 'UNIT' | 'GREEN_WEIGHT' | 'ROASTED_WEIGHT';
 
 export type LineBasis = 'PER_GREEN_KG' | 'PER_UNIT';
 
@@ -279,11 +308,24 @@ export interface PricingLineResult {
   /**
    * Whether this line has a finished unit to price.
    *
-   * Toll work packages nothing, so there is no bag to divide into and the whole
-   * line is priced per green kg. Asking for a packaging variant and a finished
-   * weight in that case is asking for inputs that do not exist.
+   * Work that packages nothing has no bag to divide into, so the line is priced
+   * by weight. Asking for a packaging variant and a finished weight in that
+   * case is asking for inputs that do not exist.
    */
   isWeightPriced: boolean;
+
+  /** What the client is buying, and therefore what the price is per. */
+  saleBasis: SaleBasis;
+
+  /**
+   * Green consumed to produce one roasted kg — 1/(1 - yield loss).
+   * The whole difference between a green price and a roasted one.
+   */
+  greenKgPerRoastedKg: number | null;
+
+  costFloorPerRoastedKg: number | null;
+  marginPerRoastedKg: number | null;
+  pricePerRoastedKg: number | null;
 
   /** Which green number priced this line. */
   greenBasis: GreenBasis;
@@ -496,6 +538,12 @@ export function calculateLine(
   // line is priced by weight alone.
   const isWeightPriced =
     !config.packagingMaterial && !config.packLabour && !config.downstreamServices;
+
+  const saleBasis: SaleBasis = isWeightPriced
+    ? (input.saleBasis && input.saleBasis !== 'UNIT'
+        ? input.saleBasis
+        : tier.defaultWeightSaleBasis)
+    : 'UNIT';
 
   // --- green consumed by one unit -----------------------------------------
   const greenKg = isNum(input.gramsPerUnit)
@@ -769,11 +817,24 @@ export function calculateLine(
     });
   }
 
+  // Every per-green-kg figure restated per roasted kg. A roasted kilogram
+  // costs more than a green one because making it consumes more than one.
+  const greenPerRoasted = deriveGreenKgConsumed(assumptions, G_PER_KG)?.value ?? null;
+  const perRoasted = (perGreenKg: number | null) =>
+    isNum(perGreenKg) && isNum(greenPerRoasted)
+      ? D(perGreenKg).times(greenPerRoasted).toNumber()
+      : null;
+
   return {
     tier,
     config,
     lines,
     isWeightPriced,
+    saleBasis,
+    greenKgPerRoastedKg: greenPerRoasted,
+    costFloorPerRoastedKg: perRoasted(costFloorPerGreenKg),
+    marginPerRoastedKg: perRoasted(marginPerGreenKg),
+    pricePerRoastedKg: perRoasted(pricePerGreenKg),
     greenBasis,
     greenMarketValuePerKg: marketValue.rate,
     greenKgPerUnit,
@@ -802,8 +863,10 @@ export interface VolumeForecast {
   cadence: VolumeCadence;
   /** Units per period, for lines priced per finished unit. */
   unitsPerPeriod?: number | null;
-  /** Green kg per period, for weight-priced lines that have no unit. */
+  /** Green kg per period, for lines charged on green throughput. */
   greenKgPerPeriod?: number | null;
+  /** Roasted kg per period, for bulk roasted coffee sold by weight. */
+  roastedKgPerPeriod?: number | null;
 }
 
 export interface ForecastResult {
@@ -833,27 +896,42 @@ export function forecast(
   const toMonthly = (v: number | null) =>
     !isNum(v) ? null : volume.cadence === 'MONTHLY' ? v : D(v).times(WEEKS_PER_MONTH).toNumber();
 
-  // Weight-priced: the volume IS green kg, so everything multiplies the
-  // per-green-kg figures directly. There is no unit to go through.
-  if (result.isWeightPriced) {
+  // Sold by roasted weight: the volume is roasted kg, and the green it consumes
+  // is more than that. Multiplying the roasted volume by a per-green rate would
+  // undercharge by exactly the yield loss.
+  if (result.saleBasis === 'ROASTED_WEIGHT') {
+    const roastedKg = volume.roastedKgPerPeriod;
+    if (!isNum(roastedKg) || roastedKg <= 0) return empty;
+
+    const times = (perRoastedKg: number | null) =>
+      isNum(perRoastedKg) ? D(perRoastedKg).times(roastedKg).toNumber() : null;
+
+    const marginPerPeriod = times(result.marginPerRoastedKg);
+    return {
+      greenKgPerPeriod: isNum(result.greenKgPerRoastedKg)
+        ? D(result.greenKgPerRoastedKg).times(roastedKg).toNumber()
+        : null,
+      revenuePerPeriod: times(result.pricePerRoastedKg),
+      marginPerPeriod,
+      costPerPeriod: times(result.costFloorPerRoastedKg),
+      marginPerMonth: toMonthly(marginPerPeriod),
+    };
+  }
+
+  // Charged on green throughput: the volume IS green kg.
+  if (result.saleBasis === 'GREEN_WEIGHT') {
     const greenKg = volume.greenKgPerPeriod;
     if (!isNum(greenKg) || greenKg <= 0) return empty;
 
-    const revenuePerPeriod = isNum(result.pricePerGreenKg)
-      ? D(result.pricePerGreenKg).times(greenKg).toNumber()
-      : null;
-    const marginPerPeriod = isNum(result.marginPerGreenKg)
-      ? D(result.marginPerGreenKg).times(greenKg).toNumber()
-      : null;
-    const costPerPeriod = isNum(result.costFloorPerGreenKg)
-      ? D(result.costFloorPerGreenKg).times(greenKg).toNumber()
-      : null;
+    const times = (perGreenKg: number | null) =>
+      isNum(perGreenKg) ? D(perGreenKg).times(greenKg).toNumber() : null;
 
+    const marginPerPeriod = times(result.marginPerGreenKg);
     return {
       greenKgPerPeriod: greenKg,
-      revenuePerPeriod,
+      revenuePerPeriod: times(result.pricePerGreenKg),
       marginPerPeriod,
-      costPerPeriod,
+      costPerPeriod: times(result.costFloorPerGreenKg),
       marginPerMonth: toMonthly(marginPerPeriod),
     };
   }
