@@ -339,7 +339,9 @@ function ProfileTab({ account, refetch }: { account: any; refetch: () => void })
       };
 
       if (programs.includes('COROASTING')) {
-        payload.coroast_tier = form.coroast_tier;
+        // The tier Select falls back to MEMBER for display; persist that same
+        // fallback so an untouched dropdown doesn't silently save a null tier.
+        payload.coroast_tier = form.coroast_tier || 'MEMBER';
         payload.coroast_joined_date = form.coroast_joined_date;
         payload.coroast_certified = form.coroast_certified;
         payload.coroast_certified_date = form.coroast_certified_date || null;
