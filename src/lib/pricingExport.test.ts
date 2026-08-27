@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildPricingWorkbook, exportFilename, type ExportInput } from './pricingExport';
 import type { PricingAssumptions, PackSpeedBand } from './pricingAssumptions';
 import type { CostStackConfig } from './pricingEngine';
+import { KG_PER_LB } from './pricingAssumptions';
 
 const A: PricingAssumptions = {
   roast_throughput_green_kg_per_hr: 50,
@@ -34,6 +35,7 @@ const FULL: CostStackConfig = {
 const TOLL: CostStackConfig = { ...FULL, green: false, packagingMaterial: false, packLabour: false };
 
 const input = (over: Partial<ExportInput> = {}): ExportInput => ({
+  unit: 'KG',
   assumptions: A,
   bands: BANDS,
   marginPerGreenKg: 4,
@@ -124,7 +126,7 @@ describe('formulas survive the round trip — Gate E', () => {
 
   it('falls back to the base dial when there are no breaks', async () => {
     const cell = await cellOf('Pricing', 'W2');
-    expect((cell.value as { formula: string }).formula).toBe('MarginPerKg');
+    expect((cell.value as { formula: string }).formula).toBe('MarginRate');
   });
 
   it('looks pack speed up from the bands tab rather than freezing it', async () => {
@@ -149,7 +151,7 @@ describe('volume breaks reprice inside the workbook', () => {
   it('looks the margin up from the line volume', async () => {
     const cell = await cellOf('Pricing', 'W2', { priceBreaks: BREAKS });
     expect((cell.value as { formula: string }).formula).toBe(
-      'IFERROR(LOOKUP(T2,Breaks!$A$2:$A$3,Breaks!$B$2:$B$3),MarginPerKg)',
+      'IFERROR(LOOKUP(T2,Breaks!$A$2:$A$3,Breaks!$B$2:$B$3),MarginRate)',
     );
   });
 
@@ -174,8 +176,63 @@ describe('volume breaks reprice inside the workbook', () => {
   });
 });
 
-describe('pound equivalents for reference', () => {
-  it('derives the pound rates from the kilogram ones rather than freezing them', async () => {
+describe('the workbook is written in the chosen unit', () => {
+  it('labels and states kilograms by default', async () => {
+    const wb = await buildPricingWorkbook(input());
+    const note = String(wb.getWorksheet('Assumptions')!.getCell('A2').value);
+    expect(note).toContain('per green kg');
+    expect(wb.getWorksheet('Pricing')!.getCell('I1').value).toBe('Green kg/unit');
+  });
+
+  it('labels and states pounds when asked', async () => {
+    const wb = await buildPricingWorkbook(input({ unit: 'LB' }));
+    const note = String(wb.getWorksheet('Assumptions')!.getCell('A2').value);
+    expect(note).toContain('per green lb');
+    expect(wb.getWorksheet('Pricing')!.getCell('I1').value).toBe('Green lb/unit');
+    expect(wb.getWorksheet('Pricing')!.getCell('E1').value).toBe('Benchmark $/lb');
+  });
+
+  it('writes throughput in pounds per hour, converted from the stored kilograms', async () => {
+    const wb = await buildPricingWorkbook(input({ unit: 'LB' }));
+    const as = wb.getWorksheet('Assumptions')!;
+    // The fixture roasts 50 green kg/hr, which is about 110.2 green lb/hr —
+    // a weight gets larger when counted in the smaller unit.
+    expect(Number(as.getCell('B4').value)).toBeCloseTo(50 / KG_PER_LB, 4);
+    expect(String(as.getCell('A4').value)).toContain('green lb/hr');
+  });
+
+  it('converts green weight per unit into pounds on the pricing tab', async () => {
+    const kg = await cellOf('Pricing', 'I2');
+    expect((kg.value as { formula: string }).formula).toBe('H2/1000/(1-YieldLossPct/100)');
+    const lb = await cellOf('Pricing', 'I2', { unit: 'LB' });
+    expect((lb.value as { formula: string }).formula).toBe(
+      `H2/1000/(1-YieldLossPct/100)/${KG_PER_LB}`,
+    );
+  });
+
+  it('writes the margin dial in pounds, smaller than the per-kilogram figure', async () => {
+    const wb = await buildPricingWorkbook(input({ unit: 'LB', marginPerGreenKg: 11.5743 }));
+    const as = wb.getWorksheet('Assumptions')!;
+    let margin: unknown = null;
+    as.eachRow((r) => r.eachCell((c) => { if (c.name === 'MarginRate') margin = c.value; }));
+    // A rate falls when restated per pound: $11.57/kg is $5.25/lb.
+    expect(Number(margin)).toBeCloseTo(5.25, 3);
+  });
+
+  it('names the rate cells without a unit, since the workbook may be either', async () => {
+    const wb = await buildPricingWorkbook(input({ unit: 'LB' }));
+    const as = wb.getWorksheet('Assumptions')!;
+    const names: string[] = [];
+    as.eachRow((r) => r.eachCell((c) => { if (c.name) names.push(c.name); }));
+    // A cell called MarginPerKg holding a per-pound figure is the mismatch
+    // this whole change exists to remove.
+    expect(names).toContain('MarginRate');
+    expect(names).not.toContain('MarginPerKg');
+  });
+});
+
+describe('the other unit is carried for reference', () => {
+  it('derives it from the primary rate rather than freezing it', async () => {
     const wb = await buildPricingWorkbook(input());
     const as = wb.getWorksheet('Assumptions')!;
     const found: string[] = [];
@@ -186,24 +243,38 @@ describe('pound equivalents for reference', () => {
         }
       }),
     );
-    // A converted constant would go stale the moment the kilogram rate moved.
-    expect(found.some((f) => f.startsWith('MachinePerKg*'))).toBe(true);
-    expect(found.some((f) => f.startsWith('RoastLabourPerKg*'))).toBe(true);
-    expect(found.some((f) => f.startsWith('Throughput/'))).toBe(true);
+    // A converted constant would go stale the moment the primary rate moved.
+    expect(found.some((f) => f.startsWith('MachineRate'))).toBe(true);
+    expect(found.some((f) => f.startsWith('RoastLabourRate'))).toBe(true);
+    expect(found.some((f) => f.startsWith('Throughput'))).toBe(true);
   });
 
-  it('gives each break a pound column driven by its kilogram cell', async () => {
+  it('converts the reference the correct way in each direction', async () => {
+    const inKg = await buildPricingWorkbook(input());
+    const inLb = await buildPricingWorkbook(input({ unit: 'LB' }));
+    const formulaFor = (wb: Awaited<ReturnType<typeof buildPricingWorkbook>>, name: string) => {
+      let out = '';
+      wb.getWorksheet('Assumptions')!.eachRow((r) =>
+        r.eachCell((c) => {
+          if (c.name === name && typeof c.value === 'object' && c.value && 'formula' in c.value) {
+            out = (c.value as { formula: string }).formula;
+          }
+        }),
+      );
+      return out;
+    };
+    // In a kilogram workbook the pound reference multiplies; in a pound
+    // workbook the kilogram reference divides.
+    expect(formulaFor(inKg, 'MachineRateOther')).toBe(`MachineRate*${KG_PER_LB}`);
+    expect(formulaFor(inLb, 'MachineRateOther')).toBe(`MachineRate/${KG_PER_LB}`);
+  });
+
+  it('gives each break a reference column driven by its primary cell', async () => {
     const wb = await buildPricingWorkbook(
       input({ priceBreaks: [{ minUnitsPerPeriod: 200, marginPerGreenKg: 9 }] }),
     );
     const brs = wb.getWorksheet('Breaks')!;
-    expect((brs.getCell('C2').value as { formula: string }).formula).toMatch(/^B2\*/);
-  });
-
-  it('says which unit the workbook is in', async () => {
-    const wb = await buildPricingWorkbook(input());
-    const note = String(wb.getWorksheet('Assumptions')!.getCell('A2').value);
-    expect(note).toContain('per green kilogram');
+    expect((brs.getCell('C2').value as { formula: string }).formula).toMatch(/^B2[*/]/);
   });
 });
 
@@ -234,7 +305,7 @@ describe('unset values fail loudly rather than becoming zero', () => {
     let marginCell: unknown = null;
     as.eachRow((r) =>
       r.eachCell((c) => {
-        if (c.name === 'MarginPerKg') marginCell = c.value;
+        if (c.name === 'MarginRate') marginCell = c.value;
       }),
     );
     expect(marginCell).toBe('NOT SET');
