@@ -81,7 +81,7 @@ export function PackagingCostsTab() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const { data: rows, isLoading } = useQuery({
-    queryKey: ['packaging_costs'],
+    queryKey: ['packaging_costs', 'list'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('packaging_costs')
