@@ -1,11 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.91.0";
 import {
-  ensureUnsubscribeToken,
   fanOutNotification,
   renderOrderItemsHtml,
   renderOrderItemsText,
-  unsubscribeFooter,
+  sendNotificationEmail,
 } from "../_shared/notifications.ts";
 
 const corsHeaders = {
@@ -20,8 +19,6 @@ interface NotifyRequest {
 }
 
 const SHARED_MAILBOX = "orders@homeislandcoffee.com";
-const FROM_DISPLAY = "Home Island Coffee Partners <noreply@homeislandcoffee.com>";
-const FROM_DOMAIN = "homeislandcoffee.com";
 
 function escapeHtml(s: string): string {
   return s
@@ -72,63 +69,20 @@ function formatShipTo(ship: ShipTo | null): { text: string; html: string } {
 }
 
 // deno-lint-ignore no-explicit-any
-async function enqueueShared(adminClient: any, subject: string, text: string, html: string) {
-  let unsubscribeToken: string;
-  try {
-    unsubscribeToken = await ensureUnsubscribeToken(adminClient, SHARED_MAILBOX);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[notify-new-order] shared mailbox token failed:", msg);
-    return { ok: false, error: `unsubscribe token: ${msg}` };
+async function sendShared(adminClient: any, orderId: string, subject: string, text: string, html: string) {
+  const { ok, suppressed, error } = await sendNotificationEmail(
+    adminClient,
+    SHARED_MAILBOX,
+    "order_submitted_notification",
+    { subject, text, html },
+    `order-submitted-shared-${orderId}`,
+  );
+  if (suppressed) {
+    console.log("[notify-new-order] shared mailbox is suppressed — skipped");
+  } else if (error) {
+    console.error("[notify-new-order] shared mailbox send failed:", error);
   }
-  const footer = unsubscribeFooter(unsubscribeToken);
-  const finalText = `${text}${footer.text}`;
-  const finalHtml = html.replace(/<\/body>/i, `${footer.html}</body>`);
-
-  const messageId = crypto.randomUUID();
-  const { data: logRow, error: logError } = await adminClient
-    .from("email_send_log")
-    .insert({
-      message_id: messageId,
-      template_name: "order_submitted_notification",
-      recipient_email: SHARED_MAILBOX,
-      status: "pending",
-    })
-    .select("id")
-    .maybeSingle();
-  if (logError) {
-    console.error("[notify-new-order] email_send_log insert failed:", logError.message);
-  }
-
-  const { error } = await adminClient.rpc("enqueue_email", {
-    queue_name: "transactional_emails",
-    payload: {
-      message_id: messageId,
-      idempotency_key: messageId,
-      to: SHARED_MAILBOX,
-      from: FROM_DISPLAY,
-      sender_domain: FROM_DOMAIN,
-      subject,
-      text: finalText,
-      html: finalHtml,
-      purpose: "transactional",
-      label: "order_submitted_notification",
-      unsubscribe_token: unsubscribeToken,
-      queued_at: new Date().toISOString(),
-    },
-  });
-
-  if (error) {
-    console.error("[notify-new-order] shared mailbox enqueue failed:", error.message);
-    if (logRow?.id) {
-      await adminClient
-        .from("email_send_log")
-        .update({ status: "failed", error_message: `Failed to enqueue: ${error.message}` })
-        .eq("id", logRow.id);
-    }
-    return { ok: false, error: error.message };
-  }
-  return { ok: true };
+  return { ok, error };
 }
 
 serve(async (req: Request) => {
@@ -380,7 +334,7 @@ serve(async (req: Request) => {
     let sharedEnqueued = 0;
     if (!sharedAlreadySent) {
       console.log(`[notify-new-order] Guaranteed shared mailbox enqueue → ${SHARED_MAILBOX}`);
-      const { ok } = await enqueueShared(adminClient, subject, text, html);
+      const { ok } = await sendShared(adminClient, order.id, subject, text, html);
       if (ok) sharedEnqueued = 1;
     } else {
       console.log(`[notify-new-order] Shared mailbox ${SHARED_MAILBOX} already covered by fan-out`);

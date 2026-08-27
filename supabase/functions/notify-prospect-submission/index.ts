@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { sendNotificationEmail } from '../_shared/notifications.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,8 +8,6 @@ const corsHeaders = {
 
 const SITE_URL = Deno.env.get('SITE_URL') || 'https://homeislandcoffeepartners.lovable.app'
 const SITE_NAME = 'Home Island Coffee Partners'
-const FROM_ADDRESS = `${SITE_NAME} <noreply@notify.homeislandcoffee.com>`
-const SENDER_DOMAIN = 'notify.homeislandcoffee.com'
 const NOTIFY_RECIPIENTS = ['ted@homeislandcoffee.com', 'aaron@homeislandcoffee.com']
 
 const TIER_LABELS: Record<string, string> = {
@@ -94,10 +93,9 @@ Deno.serve(async (req) => {
     const subject = `${sub.company_name || businessName} expressed interest in the ${TIER_LABELS[sub.selected_tier] ?? sub.selected_tier} tier`
     const html = buildEmailHtml(sub, businessName, prospectUrl)
     const text = buildEmailText(sub, businessName, prospectUrl)
-    const now = new Date().toISOString()
 
     for (const recipient of NOTIFY_RECIPIENTS) {
-      // Idempotency: skip if we've already enqueued for this (submission, recipient) pair.
+      // Idempotency: skip if we've already notified for this (submission, recipient) pair.
       // This prevents email flooding on a public endpoint by replaying the same submission_id.
       const messageId = `prospect-submit-${submission_id}-${recipient}`
       const { data: existing } = await adminClient
@@ -110,28 +108,30 @@ Deno.serve(async (req) => {
         continue
       }
 
-      await adminClient.from('email_send_log').insert({
+      const { ok, suppressed, error } = await sendNotificationEmail(
+        adminClient,
+        recipient,
+        'prospect_submission_notify',
+        { subject, text, html },
+        messageId,
+      )
+      if (suppressed) {
+        console.log('[notify-prospect-submission] recipient suppressed — skipped')
+      } else if (!ok) {
+        console.error('[notify-prospect-submission] send failed:', error)
+      }
+
+      // Idempotency marker keyed on the deterministic message id.
+      const { error: markerError } = await adminClient.from('email_send_log').insert({
         message_id: messageId,
         template_name: 'prospect_submission_notify',
         recipient_email: recipient,
-        status: 'pending',
+        status: ok ? 'sent' : suppressed ? 'suppressed' : 'failed',
+        error_message: ok || suppressed ? null : (error ?? 'Send failed'),
       })
-      await adminClient.rpc('enqueue_email', {
-        queue_name: 'transactional_emails',
-        payload: {
-          message_id: messageId,
-          idempotency_key: messageId,
-          to: recipient,
-          from: FROM_ADDRESS,
-          sender_domain: SENDER_DOMAIN,
-          subject,
-          html,
-          text,
-          purpose: 'transactional',
-          label: 'prospect_submission_notify',
-          queued_at: now,
-        },
-      })
+      if (markerError) {
+        console.error('[notify-prospect-submission] email_send_log insert failed:', markerError.code, markerError.message)
+      }
     }
 
     console.log('[notify-prospect-submission] Notified team for submission', submission_id)

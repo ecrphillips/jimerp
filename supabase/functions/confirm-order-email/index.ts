@@ -15,10 +15,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.91.0";
 import {
-  ensureUnsubscribeToken,
   renderOrderItemsHtml,
   renderOrderItemsText,
-  unsubscribeFooter,
+  sendNotificationEmail,
 } from "../_shared/notifications.ts";
 
 const corsHeaders = {
@@ -27,8 +26,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const FROM_ADDRESS = "noreply@homeislandcoffee.com";
-const FROM_DISPLAY = "Home Island Manufacturing <noreply@homeislandcoffee.com>";
 
 interface ConfirmRequest {
   order_id: string;
@@ -293,68 +290,25 @@ Home Island Manufacturing`;
   <p style="margin:0;color:#666;font-size:13px;">Thank you,<br/>Home Island Manufacturing</p>
 </body></html>`;
 
-    const senderDomain = FROM_ADDRESS.split("@")[1];
-
-    async function enqueueOne(recipient: string): Promise<{ ok: boolean; message_id: string; error?: string }> {
-      let unsubscribeToken: string;
-      try {
-        unsubscribeToken = await ensureUnsubscribeToken(adminClient, recipient);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return { ok: false, message_id: "", error: `unsubscribe token: ${msg}` };
+    async function sendOne(recipient: string): Promise<{ ok: boolean; message_id: string; error?: string }> {
+      const { ok, message_id, suppressed, error } = await sendNotificationEmail(
+        adminClient,
+        recipient,
+        "order_confirmation",
+        { subject, text: emailText, html: emailHtml },
+        `order-confirmation-${order.id}-${recipient}`,
+      );
+      if (suppressed) {
+        console.log("[confirm-order-email] recipient suppressed — skipped");
+      } else if (error) {
+        console.error("[confirm-order-email] send failed:", error);
       }
-      const footer = unsubscribeFooter(unsubscribeToken);
-      const finalText = `${emailText}${footer.text}`;
-      const finalHtml = emailHtml.replace(/<\/body>/i, `${footer.html}</body>`);
-
-      const messageId = crypto.randomUUID();
-      const { data: logRow, error: logError } = await adminClient
-        .from("email_send_log")
-        .insert({
-          message_id: messageId,
-          template_name: "order_confirmation",
-          recipient_email: recipient,
-          status: "pending",
-        })
-        .select("id")
-        .maybeSingle();
-      if (logError) {
-        console.error("[confirm-order-email] email_send_log insert failed:", logError.message);
-      }
-
-      const { error: enqueueError } = await adminClient.rpc("enqueue_email", {
-        queue_name: "transactional_emails",
-        payload: {
-          message_id: messageId,
-          idempotency_key: messageId,
-          to: recipient,
-          from: FROM_DISPLAY,
-          sender_domain: senderDomain,
-          subject,
-          text: finalText,
-          html: finalHtml,
-          purpose: "transactional",
-          label: "order_confirmation",
-          unsubscribe_token: unsubscribeToken,
-          queued_at: new Date().toISOString(),
-        },
-      });
-
-      if (enqueueError) {
-        if (logRow?.id) {
-          await adminClient
-            .from("email_send_log")
-            .update({ status: "failed", error_message: `Failed to enqueue: ${enqueueError.message}` })
-            .eq("id", logRow.id);
-        }
-        return { ok: false, message_id: messageId, error: enqueueError.message };
-      }
-      return { ok: true, message_id: messageId };
+      return { ok, message_id, error };
     }
 
     const results: { recipient: string; ok: boolean; message_id: string; error?: string }[] = [];
     for (const r of recipients) {
-      const result = await enqueueOne(r);
+      const result = await sendOne(r);
       results.push({ recipient: r, ...result });
     }
 

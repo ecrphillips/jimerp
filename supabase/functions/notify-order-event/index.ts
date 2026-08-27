@@ -15,10 +15,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.91.0";
 import {
-  ensureUnsubscribeToken,
   renderOrderItemsHtml,
   renderOrderItemsText,
-  unsubscribeFooter,
+  sendNotificationEmail,
 } from "../_shared/notifications.ts";
 
 const corsHeaders = {
@@ -45,8 +44,6 @@ interface NotifyBody {
 // source here; the only exception is an explicit app_settings override row
 // keyed `notification_routes.<EVENT>`.
 
-const FROM_DISPLAY = "Home Island Coffee Partners <noreply@notify.homeislandcoffee.com>";
-const FROM_DOMAIN = "notify.homeislandcoffee.com";
 
 interface LineItem {
   product_name: string;
@@ -195,56 +192,26 @@ function buildHtml(
 }
 
 // deno-lint-ignore no-explicit-any
-async function enqueueEmail(adminClient: any, recipient: string, label: string, subject: string, text: string, html: string) {
-  let unsubscribeToken: string;
-  try {
-    unsubscribeToken = await ensureUnsubscribeToken(adminClient, recipient);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `unsubscribe token: ${msg}` };
+async function sendEmail(
+  adminClient: any,
+  recipient: string,
+  label: string,
+  subject: string,
+  text: string,
+  html: string,
+  idempotencyKey?: string,
+) {
+  const { ok, suppressed, error } = await sendNotificationEmail(
+    adminClient,
+    recipient,
+    label,
+    { subject, text, html },
+    idempotencyKey,
+  );
+  if (suppressed) {
+    console.log("[notify-order-event] recipient suppressed — skipped", label);
   }
-  const footer = unsubscribeFooter(unsubscribeToken);
-  const finalText = `${text}${footer.text}`;
-  const finalHtml = html.replace(/<\/body>/i, `${footer.html}</body>`);
-
-  const messageId = crypto.randomUUID();
-  const { data: logRow } = await adminClient
-    .from("email_send_log")
-    .insert({
-      message_id: messageId,
-      template_name: label,
-      recipient_email: recipient,
-      status: "pending",
-    })
-    .select("id")
-    .single();
-
-  const { error } = await adminClient.rpc("enqueue_email", {
-    queue_name: "transactional_emails",
-    payload: {
-      message_id: messageId,
-      idempotency_key: messageId,
-      to: recipient,
-      from: FROM_DISPLAY,
-      sender_domain: FROM_DOMAIN,
-      subject,
-      text: finalText,
-      html: finalHtml,
-      purpose: "transactional",
-      label,
-      unsubscribe_token: unsubscribeToken,
-      queued_at: new Date().toISOString(),
-    },
-  });
-
-  if (error && logRow?.id) {
-    await adminClient
-      .from("email_send_log")
-      .update({ status: "failed", error_message: `Failed to enqueue: ${error.message}` })
-      .eq("id", logRow.id);
-    return { ok: false, error: error.message };
-  }
-  return { ok: true };
+  return { ok, error };
 }
 
 serve(async (req: Request) => {
@@ -411,7 +378,7 @@ serve(async (req: Request) => {
     let enqueued = 0;
     const errors: string[] = [];
     for (const r of recipients) {
-      const { ok, error } = await enqueueEmail(adminClient, r, label, subject, text, html);
+      const { ok, error } = await sendEmail(adminClient, r, label, subject, text, html, `${label}-${order.id}-${r}`);
       if (ok) enqueued++; else if (error) errors.push(`${r}: ${error}`);
     }
 

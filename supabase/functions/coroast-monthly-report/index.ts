@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
+import { sendTemplateEmail } from '../_shared/transactional-email-templates/send-email.ts'
 
 // Monthly co-roasting billing summary.
 // Triggered by pg_cron on the last day of the month (06:00 America/Vancouver)
@@ -425,27 +426,26 @@ Deno.serve(async (req) => {
 
   const label = monthLabel(year, month)
   const generatedAt = new Date().toLocaleString('en-CA', { timeZone: TZ })
-  const sendUrl = `${supabaseUrl}/functions/v1/send-transactional-email`
   const results: { email: string; ok: boolean; detail?: string }[] = []
 
   for (const email of recipients) {
     const idemSuffix = manual ? `-manual-${Date.now()}` : ''
-    const res = await fetch(sendUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${serviceKey}`,
-      },
-      body: JSON.stringify({
-        templateName: 'coroast_monthly_billing_report',
-        recipientEmail: email,
-        idempotencyKey: `coroast-billing-${year}-${String(month).padStart(2, '0')}-${email}${idemSuffix}`,
+    try {
+      const result = await sendTemplateEmail('coroast_monthly_billing_report', email, {
         templateData: { monthLabel: label, rows, totals, generatedAt },
-      }),
-    })
-    const detail = res.ok ? undefined : await res.text()
-    if (!res.ok) console.error(`coroast-monthly-report: send failed for ${email}`, res.status, detail)
-    results.push({ email, ok: res.ok, detail })
+        idempotencyKey: `coroast-billing-${year}-${String(month).padStart(2, '0')}-${email}${idemSuffix}`,
+      })
+      if (result.sent) {
+        results.push({ email, ok: true })
+      } else {
+        console.log(`coroast-monthly-report: skipped ${email} (${result.reason})`)
+        results.push({ email, ok: true, detail: result.reason })
+      }
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err)
+      console.error(`coroast-monthly-report: send failed for ${email}`, detail)
+      results.push({ email, ok: false, detail })
+    }
   }
 
   return new Response(
