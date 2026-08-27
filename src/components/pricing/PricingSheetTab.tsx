@@ -163,6 +163,10 @@ export function PricingSheetTab() {
   );
   const [breaks, setBreaks, clearBreaks] = useSessionState<BreakRow[]>(KEY.breaks, []);
 
+  const assumptions: PricingAssumptions | null = assumptionsRow ?? null;
+
+  const w = useWeightUnit();
+
   const priceBreaks: PriceBreak[] = useMemo(
     () =>
       breaks.map((b) => ({
@@ -173,9 +177,6 @@ export function PricingSheetTab() {
     [breaks, w.unit],
   );
 
-  const assumptions: PricingAssumptions | null = assumptionsRow ?? null;
-
-  const w = useWeightUnit();
 
   /**
    * Values are held in whichever unit is on screen, so nothing converts while
