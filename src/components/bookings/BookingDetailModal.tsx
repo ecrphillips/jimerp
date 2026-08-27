@@ -5,13 +5,17 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Lock, Unlock, AlertTriangle, Clock, Pencil } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import { Lock, Unlock, AlertTriangle, Clock, Pencil, CalendarIcon } from 'lucide-react';
 import { format, differenceInHours, parseISO } from 'date-fns';
 import { fromZonedTime } from 'date-fns-tz';
 import { DEFAULT_TZ } from '@/lib/timezone';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatTime12, timeToMinutes, checkOverlap, TIER_RATES, type BookingRow, type MemberRow, type BlockRow } from './bookingUtils';
+
 import { AvailabilityTimeSelect } from './AvailabilityTimeSelect';
 import { useAccountPricing } from '@/hooks/useAccountPricing';
 import { refundedHoursFiftyPercent } from '@/lib/coroastHoursLedger';
@@ -41,7 +45,9 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
   const [cancelMode, setCancelMode] = useState<CancelMode>(null);
   const [waiveReason, setWaiveReason] = useState('');
   const [editing, setEditing] = useState(false);
+  const [editDate, setEditDate] = useState('');
   const [editStart, setEditStart] = useState('');
+
   const [editEndTime, setEditEndTime] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -88,6 +94,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
     if (!booking) return;
     setCancelMode(null);
     setEditError(null);
+    setEditDate(booking.booking_date.slice(0, 10));
     setEditStart(booking.start_time.slice(0, 5));
     setEditEndTime(booking.end_time.slice(0, 5));
     setEditing(true);
@@ -237,19 +244,27 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
   const editTimesMutation = useMutation({
     mutationFn: async () => {
       if (!booking) return;
+      if (!editDate) throw new Error('Date is required');
       if (!editStart || !editEndTime) throw new Error('Start and end times required');
       const oldDur = (timeToMinutes(booking.end_time) - timeToMinutes(booking.start_time)) / 60;
       const newDur = (timeToMinutes(editEndTime) - timeToMinutes(editStart)) / 60;
       if (newDur <= 0) throw new Error('End time must be after start time');
+      // Billing periods are monthly; moving a booking across months would strand
+      // its hour ledger in the wrong period.
+      if (editDate.slice(0, 7) !== booking.booking_date.slice(0, 7)) {
+        throw new Error('Bookings can only be moved within the same month (billing period)');
+      }
       // Overlap check against blocks + other bookings (exclude self). Availability
       // windows are intentionally not enforced — post-hoc corrections may run late.
-      const overlap = checkOverlap(booking.booking_date, editStart, editEndTime, blocks, allBookings, booking.id);
+      const overlap = checkOverlap(editDate, editStart, editEndTime, blocks, allBookings, booking.id);
       if (overlap) throw new Error(overlap);
 
       const oldStart = formatTime12(booking.start_time);
       const oldEnd = formatTime12(booking.end_time);
+      const dateChanged = editDate !== booking.booking_date.slice(0, 10);
 
       const { error: updErr } = await supabase.from('coroast_bookings').update({
+        booking_date: editDate,
         start_time: editStart,
         end_time: editEndTime,
         // NO_SHOW fee scales with duration; keep it in sync. Harmless otherwise.
@@ -265,12 +280,14 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
           booking_id: booking.id,
           entry_type: (delta > 0 ? 'MANUAL_DEBIT' : 'MANUAL_CREDIT') as any,
           hours_delta: delta,
-          notes: `Time adjusted ${oldStart}–${oldEnd} → ${formatTime12(editStart)}–${formatTime12(editEndTime)}`,
+          notes: `Time adjusted ${oldStart}–${oldEnd} → ${formatTime12(editStart)}–${formatTime12(editEndTime)}`
+            + (dateChanged ? ` (moved ${booking.booking_date.slice(0, 10)} → ${editDate})` : ''),
         });
       }
+
     },
     onSuccess: () => {
-      toast.success('Booking times updated');
+      toast.success('Booking updated');
       invalidateAll();
       setEditing(false);
       onOpenChange(false);
@@ -342,7 +359,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
           {editable && !editing && !cancelMode && (
             <div className="pt-2 border-t">
               <Button variant="outline" size="sm" className="w-full" onClick={startEdit} disabled={isPending}>
-                <Pencil className="h-3.5 w-3.5 mr-1" /> Edit Times
+                <Pencil className="h-3.5 w-3.5 mr-1" /> Edit Day &amp; Times
               </Button>
             </div>
           )}
@@ -350,8 +367,35 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
           {editing && (
             <div className="space-y-3 pt-2 border-t">
               <p className="text-xs text-muted-foreground">
-                Adjust the actual start/end for billing. Hours used and overages recalculate automatically.
+                Adjust the actual day/start/end for billing. Hours used and overages recalculate automatically.
               </p>
+              <div>
+                <Label className="text-xs">Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn('w-full justify-start text-left font-normal', !editDate && 'text-muted-foreground')}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {editDate ? format(parseISO(editDate), 'EEE, MMM d, yyyy') : 'Pick a date'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={editDate ? parseISO(editDate) : undefined}
+                      onSelect={(d) => {
+                        if (!d) return;
+                        setEditDate(format(d, 'yyyy-MM-dd'));
+                        setEditError(null);
+                      }}
+                      initialFocus
+                      className={cn('p-3 pointer-events-auto')}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-xs">Start Time</Label>
@@ -359,7 +403,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
                     value={editStart}
                     onValueChange={(v) => { setEditStart(v); setEditError(null); }}
                     placeholder="Start"
-                    dateStr={booking.booking_date}
+                    dateStr={editDate}
                     blocks={blocks}
                     bookings={editableBookings}
                   />
@@ -370,13 +414,14 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
                     value={editEndTime}
                     onValueChange={(v) => { setEditEndTime(v); setEditError(null); }}
                     placeholder="End"
-                    dateStr={booking.booking_date}
+                    dateStr={editDate}
                     blocks={blocks}
                     bookings={editableBookings}
                     startTimeForRange={editStart || undefined}
                   />
                 </div>
               </div>
+
               {editStart && editEndTime && timeToMinutes(editEndTime) > timeToMinutes(editStart) && (
                 <p className="text-xs text-muted-foreground">
                   New duration: {((timeToMinutes(editEndTime) - timeToMinutes(editStart)) / 60).toFixed(1)}h
@@ -387,7 +432,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
                 <Button variant="outline" size="sm" onClick={() => setEditing(false)} disabled={isPending}>Cancel</Button>
                 <Button size="sm" onClick={() => { setEditError(null); editTimesMutation.mutate(); }}
                   disabled={isPending || !editStart || !editEndTime || timeToMinutes(editEndTime) <= timeToMinutes(editStart)}>
-                  {editTimesMutation.isPending ? 'Saving…' : 'Save Times'}
+                  {editTimesMutation.isPending ? 'Saving…' : 'Save Changes'}
                 </Button>
               </div>
             </div>

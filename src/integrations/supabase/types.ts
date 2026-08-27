@@ -6047,10 +6047,6 @@ export type Database = {
         Args: { p_client_id: string; p_force?: boolean }
         Returns: Json
       }
-      delete_email: {
-        Args: { message_id: number; queue_name: string }
-        Returns: boolean
-      }
       delete_market_price_audit: {
         Args: { _run_id: string }
         Returns: undefined
@@ -6072,11 +6068,6 @@ export type Database = {
       dev_reset_test_day: { Args: never; Returns: Json }
       dev_test_reset: { Args: never; Returns: Json }
       dev_test_seed_minimal: { Args: never; Returns: undefined }
-      email_queue_dispatch: { Args: never; Returns: undefined }
-      enqueue_email: {
-        Args: { payload: Json; queue_name: string }
-        Returns: number
-      }
       execute_blend: {
         Args: {
           p_batch_ids: string[]
@@ -6163,15 +6154,6 @@ export type Database = {
       mark_quote_accepted: { Args: { p_quote_id: string }; Returns: Json }
       mark_quote_sent: { Args: { p_quote_id: string }; Returns: undefined }
       mcp_run_read_sql: { Args: { query_text: string }; Returns: Json }
-      move_to_dlq: {
-        Args: {
-          dlq_name: string
-          message_id: number
-          payload: Json
-          source_queue: string
-        }
-        Returns: number
-      }
       nextval_text: { Args: { seq_name: string }; Returns: number }
       owner_create_location: {
         Args: {
@@ -6243,14 +6225,6 @@ export type Database = {
       publish_market_price_audit: {
         Args: { _run_id: string }
         Returns: undefined
-      }
-      read_email_batch: {
-        Args: { batch_size: number; queue_name: string; vt: number }
-        Returns: {
-          message: Json
-          msg_id: number
-          read_ct: number
-        }[]
       }
       resolve_shopify_quarantined_line: {
         Args: {
