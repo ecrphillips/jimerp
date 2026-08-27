@@ -410,17 +410,38 @@ export function PricingSheetTab() {
         </Alert>
       )}
 
+      {/* The unit governs the whole sheet, so it sits above the sections it
+          governs rather than inside one of them. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border bg-muted/40 px-4 py-3 print:hidden">
+        <Label htmlFor="unit" className="shrink-0">
+          Work in
+        </Label>
+        <Select value={w.unit} onValueChange={(v) => switchUnit(v as WeightUnit)}>
+          <SelectTrigger id="unit" className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="LB">Pounds</SelectItem>
+            <SelectItem value="KG">Kilograms</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Applies to every green price, margin and volume below. Switching converts what is already
+          entered. Stored and exported in kilograms either way.
+        </p>
+      </div>
+
       {/* --- Margin dial + cadence ------------------------------------------ */}
       <Card>
         <CardHeader>
           <CardTitle>Margin</CardTitle>
           <CardDescription>
-            Our fee, charged on every green kilogram consumed. Applies to every line below. Costs
+            Our fee, charged on every {w.greenSuffix} consumed. Applies to every line below. Costs
             are the floor; this is the part that creates cash.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
             <div>
               <Label htmlFor="margin">Margin per {w.greenSuffix}</Label>
               <Input
@@ -440,21 +461,6 @@ export function PricingSheetTab() {
               )}
             </div>
             <div>
-              <Label htmlFor="unit">Work in</Label>
-              <Select value={w.unit} onValueChange={(v) => switchUnit(v as WeightUnit)}>
-                <SelectTrigger id="unit">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="LB">Pounds</SelectItem>
-                  <SelectItem value="KG">Kilograms</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Converts what is already entered. Stored and exported in kg either way.
-              </p>
-            </div>
-            <div>
               <Label htmlFor="cadence">Volume cadence</Label>
               <Select value={cadence} onValueChange={(v) => setCadence(v as VolumeCadence)}>
                 <SelectTrigger id="cadence">
@@ -472,7 +478,8 @@ export function PricingSheetTab() {
             rows={breaks}
             onChange={setBreaks}
             cadence={cadence}
-            baseMargin={marginKg}
+            baseMargin={marginDisplay}
+            greenSuffix={w.greenSuffix}
           />
         </CardContent>
       </Card>
@@ -553,11 +560,13 @@ function VolumeBreaks({
   onChange,
   cadence,
   baseMargin,
+  greenSuffix,
 }: {
   rows: BreakRow[];
   onChange: (next: BreakRow[]) => void;
   cadence: VolumeCadence;
   baseMargin: number | null;
+  greenSuffix: string;
 }) {
   const period = cadence === 'MONTHLY' ? 'month' : 'week';
 
@@ -582,7 +591,7 @@ function VolumeBreaks({
         <div className="space-y-2">
           <div className="grid grid-cols-[1fr_1fr_auto] gap-2 text-xs text-muted-foreground">
             <span>From units per {period}</span>
-            <span>Margin $/green kg</span>
+            <span>Margin $/{greenSuffix}</span>
             <span className="w-8" />
           </div>
           {rows.map((r) => {
