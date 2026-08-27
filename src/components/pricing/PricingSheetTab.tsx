@@ -169,13 +169,17 @@ export function PricingSheetTab() {
 
   const priceBreaks: PriceBreak[] = useMemo(
     () =>
-      breaks.map((b) => ({
-        minUnitsPerPeriod: toNum(b.minUnits) ?? 0,
-        marginPerGreenKg: asPerKg(b.margin),
-      })),
+      breaks.map((b) => {
+        const n = toNum(b.margin);
+        return {
+          minUnitsPerPeriod: toNum(b.minUnits) ?? 0,
+          marginPerGreenKg: n == null ? null : w.rateFromDisplay(n),
+        };
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [breaks, w.unit],
   );
+
 
 
   /**
