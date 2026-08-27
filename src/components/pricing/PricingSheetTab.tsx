@@ -593,13 +593,23 @@ function LineCard({
   const config = result?.config;
   const basis = line.greenBasis ?? preset.defaultGreenBasis;
   const benchmark = toNum(line.greenBenchmark);
+  // No per-unit cost line means there is no bag: the line is sold by weight.
+  const weightPriced = result?.isWeightPriced ?? false;
   const pkgReference = line.variant
     ? (packagingCosts[line.variant]?.material_cost_per_unit ?? null)
     : null;
   const market = result?.greenMarketValuePerKg ?? null;
   const headroom = benchmark != null && market != null ? benchmark - market : null;
   const units = toNum(line.units);
-  const f = result && units ? forecast(result, { cadence, unitsPerPeriod: units }) : null;
+  const f =
+    result && units
+      ? forecast(
+          result,
+          weightPriced
+            ? { cadence, greenKgPerPeriod: units }
+            : { cadence, unitsPerPeriod: units },
+        )
+      : null;
 
   const setBlend = (next: BlendRow[]) => onPatch({ blend: next });
 
@@ -775,6 +785,7 @@ function LineCard({
               </div>
             )}
 
+            {!weightPriced && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label htmlFor={`variant-${line.id}`}>Packaging</Label>
@@ -812,6 +823,7 @@ function LineCard({
                 </div>
               </div>
             </div>
+            )}
 
             {config?.packagingMaterial && (
               <div>
@@ -851,7 +863,8 @@ function LineCard({
 
             <div>
               <Label htmlFor={`units-${line.id}`}>
-                Units per {cadence === 'MONTHLY' ? 'month' : 'week'}
+                {weightPriced ? 'Green kg' : 'Units'} per{' '}
+                {cadence === 'MONTHLY' ? 'month' : 'week'}
               </Label>
               <Input
                 id={`units-${line.id}`}
@@ -922,6 +935,36 @@ function LineCard({
             )}
 
             <div className="rounded-md border-2 p-3 space-y-2">
+              {weightPriced ? (
+                <>
+                  <Row
+                    label="Cost floor"
+                    value={money(result?.costFloorPerGreenKg ?? null, 4)}
+                    hint="per green kg"
+                    tone="floor"
+                  />
+                  <Row
+                    label="Margin"
+                    value={money(result?.marginPerGreenKg ?? null, 4)}
+                    hint="per green kg"
+                  />
+                  <div className="border-t pt-2">
+                    <Row
+                      label="Price"
+                      value={money(result?.pricePerGreenKg ?? null, 2)}
+                      hint="per green kg"
+                      tone="price"
+                      big
+                    />
+                  </div>
+                  {result?.pricePerGreenKg != null && (
+                    <p className="text-xs text-muted-foreground">
+                      {money(perKgToPerLb(result.pricePerGreenKg), 2)} per green lb
+                    </p>
+                  )}
+                </>
+              ) : (
+              <>
               <Row
                 label="Cost floor"
                 value={money(result?.costFloorPerUnit ?? null, 4)}
@@ -969,6 +1012,8 @@ function LineCard({
                   muted
                 />
               </div>
+              </>
+              )}
             </div>
 
             {f && f.marginPerPeriod != null && (
