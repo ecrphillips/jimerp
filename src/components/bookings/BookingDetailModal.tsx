@@ -5,13 +5,17 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Lock, Unlock, AlertTriangle, Clock, Pencil } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import { Lock, Unlock, AlertTriangle, Clock, Pencil, CalendarIcon } from 'lucide-react';
 import { format, differenceInHours, parseISO } from 'date-fns';
 import { fromZonedTime } from 'date-fns-tz';
 import { DEFAULT_TZ } from '@/lib/timezone';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatTime12, timeToMinutes, checkOverlap, TIER_RATES, type BookingRow, type MemberRow, type BlockRow } from './bookingUtils';
+
 import { AvailabilityTimeSelect } from './AvailabilityTimeSelect';
 import { useAccountPricing } from '@/hooks/useAccountPricing';
 import { refundedHoursFiftyPercent } from '@/lib/coroastHoursLedger';
