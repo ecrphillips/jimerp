@@ -3,11 +3,10 @@
 //   1. per-user EMAIL preferences (user_notification_preferences + enabled=true)
 //   2. shared mailbox (app_settings.notification_routes.<EVENT>, when enabled)
 //
-// All transactional email enqueues MUST include an `unsubscribe_token` — the
-// Lovable email API rejects payloads without one ("missing_unsubscribe" 400).
-// This helper resolves a per-recipient token from public.email_unsubscribe_tokens
-// (creating one on first send) and appends a "click here to unsubscribe" line
-// to the text and html bodies.
+// Emails are sent synchronously through Lovable's managed email API. Delivery,
+// retries, rate limits, suppression and the unsubscribe footer/page are handled
+// by Lovable — this module only builds content and records outcomes in
+// public.email_send_log.
 //
 // In-app delivery is intentionally NOT handled here — callers continue to
 // insert their domain-specific notification rows (order_notifications,
@@ -15,14 +14,17 @@
 //
 // deno-lint-ignore-file no-explicit-any
 
+import { EmailAPIError, sendLovableEmail } from 'npm:@lovable.dev/email-js@0.1.0';
+
 export type NotificationEventType =
   | 'ORDER_SUBMITTED'
   | 'ORDER_CONFIRMED'
   | 'BOOKING_CREATED'
   | 'BOOKING_CANCELLED';
 
-const FROM_DISPLAY = 'Home Island Coffee Partners <noreply@homeislandcoffee.com>';
-const FROM_DOMAIN = 'homeislandcoffee.com';
+const FROM_DISPLAY = 'Home Island Coffee Partners <noreply@notify.homeislandcoffee.com>';
+// SENDER_DOMAIN is the verified delegated sender subdomain — never the root domain.
+export const SENDER_DOMAIN = 'notify.homeislandcoffee.com';
 
 export interface EmailContent {
   subject: string;
@@ -34,9 +36,9 @@ export interface FanOutOptions {
   eventType: NotificationEventType;
   label: string;
   buildEmail: (recipient: string) => EmailContent;
-  /** When true, also enqueue email to ADMIN/OPS users whose EMAIL pref is on. */
+  /** When true, also email ADMIN/OPS users whose EMAIL pref is on. */
   includePerUserEmails?: boolean;
-  /** When true, also enqueue email to the shared mailbox configured for the event. */
+  /** When true, also email the shared mailbox configured for the event. */
   includeSharedMailbox?: boolean;
 }
 
@@ -45,66 +47,6 @@ interface FanOutResult {
   shared_recipients: string[];
   enqueued: number;
   errors: string[];
-}
-
-// ---------------------------------------------------------------------------
-// Unsubscribe token helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Look up an unsubscribe token for the recipient email; create one if missing.
- * Email is the unique key in email_unsubscribe_tokens, so this is idempotent.
- */
-export async function ensureUnsubscribeToken(
-  adminClient: any,
-  email: string,
-): Promise<string> {
-  const normalized = email.toLowerCase().trim();
-
-  const { data: existing, error: selectErr } = await adminClient
-    .from('email_unsubscribe_tokens')
-    .select('token')
-    .eq('email', normalized)
-    .maybeSingle();
-
-  if (selectErr) {
-    console.error('[notifications] token lookup failed:', selectErr.message);
-  }
-  if (existing?.token) return existing.token;
-
-  const newToken = crypto.randomUUID();
-  const { error: insertErr } = await adminClient
-    .from('email_unsubscribe_tokens')
-    .insert({ token: newToken, email: normalized });
-
-  if (insertErr) {
-    // Likely a race: another concurrent enqueue inserted the row. Re-select.
-    const { data: raced } = await adminClient
-      .from('email_unsubscribe_tokens')
-      .select('token')
-      .eq('email', normalized)
-      .maybeSingle();
-    if (raced?.token) return raced.token;
-    throw new Error(`Failed to create unsubscribe token: ${insertErr.message}`);
-  }
-  return newToken;
-}
-
-export function buildUnsubscribeUrl(token: string): string {
-  const base =
-    Deno.env.get('APP_PUBLIC_URL') ||
-    Deno.env.get('SUPABASE_URL') ||
-    'https://homeislandcoffeepartners.lovable.app';
-  // If APP_PUBLIC_URL points at the app rather than Supabase, route through
-  // the supabase functions URL directly to avoid needing a frontend handler.
-  if (base.includes('supabase.co') || base.includes('supabase.in')) {
-    return `${base.replace(/\/$/, '')}/functions/v1/unsubscribe?token=${encodeURIComponent(token)}`;
-  }
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  if (supabaseUrl) {
-    return `${supabaseUrl.replace(/\/$/, '')}/functions/v1/unsubscribe?token=${encodeURIComponent(token)}`;
-  }
-  return `${base.replace(/\/$/, '')}/functions/v1/unsubscribe?token=${encodeURIComponent(token)}`;
 }
 
 export function escapeHtml(s: string): string {
@@ -167,86 +109,111 @@ export function renderOrderItemsHtml(items: OrderLineItemRow[]): string {
   return headerRow + bodyRows;
 }
 
-/** Inline-able footer lines to append at the end of a transactional email body. */
-export function unsubscribeFooter(token: string): { text: string; html: string } {
-  const url = buildUnsubscribeUrl(token);
-  return {
-    text: `\n\nTo unsubscribe from these notifications, click here: ${url}`,
-    html: `<p style="margin:24px 0 0 0;color:#999;font-size:12px;border-top:1px solid #eee;padding-top:12px;">To unsubscribe from these notifications, <a href="${escapeHtml(url)}" style="color:#999;">click here</a>.</p>`,
-  };
-}
-
-/** Append the unsubscribe footer to an existing EmailContent. */
-export function withUnsubscribe(content: EmailContent, token: string): EmailContent {
-  const footer = unsubscribeFooter(token);
-  return {
-    subject: content.subject,
-    text: `${content.text}${footer.text}`,
-    html: content.html ? content.html.replace(/<\/body>/i, `${footer.html}</body>`) : undefined,
-  };
-}
-
 // ---------------------------------------------------------------------------
-// Enqueue + fan-out
+// Managed send
 // ---------------------------------------------------------------------------
 
-async function enqueueOne(
+export interface SendNotificationEmailResult {
+  ok: boolean;
+  message_id: string;
+  suppressed?: boolean;
+  error?: string;
+}
+
+/** Append a send-outcome row to public.email_send_log (never blocks the send result). */
+async function logSend(
+  adminClient: any,
+  row: {
+    message_id: string | null;
+    template_name: string;
+    recipient_email: string;
+    status: 'sent' | 'suppressed' | 'failed';
+    error_message?: string;
+  },
+): Promise<void> {
+  const { error } = await adminClient.from('email_send_log').insert(row);
+  if (error) {
+    console.error('[notifications] email_send_log insert failed:', error.code, error.message);
+  }
+}
+
+/**
+ * Send one hand-authored notification email through Lovable's managed email API.
+ * Suppression is enforced server-side by Lovable; a suppressed recipient is an
+ * expected outcome, not an error.
+ */
+export async function sendNotificationEmail(
   adminClient: any,
   recipient: string,
   label: string,
   content: EmailContent,
-): Promise<{ ok: boolean; error?: string }> {
-  let unsubscribeToken: string;
-  try {
-    unsubscribeToken = await ensureUnsubscribeToken(adminClient, recipient);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `unsubscribe token: ${msg}` };
-  }
+  idempotencyKey?: string,
+): Promise<SendNotificationEmailResult> {
+  const apiKey = Deno.env.get('LOVABLE_API_KEY');
+  const messageId = idempotencyKey ?? crypto.randomUUID();
 
-  const final = withUnsubscribe(content, unsubscribeToken);
-  const messageId = crypto.randomUUID();
-
-  const { data: logRow } = await adminClient
-    .from('email_send_log')
-    .insert({
-      message_id: messageId,
+  if (!apiKey) {
+    const error = 'LOVABLE_API_KEY is not configured';
+    console.error('[notifications]', error);
+    await logSend(adminClient, {
+      message_id: null,
       template_name: label,
       recipient_email: recipient,
-      status: 'pending',
-    })
-    .select('id')
-    .single();
-
-  const { error } = await adminClient.rpc('enqueue_email', {
-    queue_name: 'transactional_emails',
-    payload: {
-      message_id: messageId,
-      idempotency_key: messageId,
-      to: recipient,
-      from: FROM_DISPLAY,
-      sender_domain: FROM_DOMAIN,
-      subject: final.subject,
-      text: final.text,
-      html: final.html,
-      purpose: 'transactional',
-      label,
-      unsubscribe_token: unsubscribeToken,
-      queued_at: new Date().toISOString(),
-    },
-  });
-
-  if (error) {
-    if (logRow?.id) {
-      await adminClient
-        .from('email_send_log')
-        .update({ status: 'failed', error_message: `Failed to enqueue: ${error.message}` })
-        .eq('id', logRow.id);
-    }
-    return { ok: false, error: error.message };
+      status: 'failed',
+      error_message: error,
+    });
+    return { ok: false, message_id: messageId, error };
   }
-  return { ok: true };
+
+  try {
+    await sendLovableEmail(
+      {
+        to: recipient,
+        from: FROM_DISPLAY,
+        sender_domain: SENDER_DOMAIN,
+        subject: content.subject,
+        html: content.html ?? undefined,
+        text: content.text,
+        purpose: 'transactional',
+        label,
+        idempotency_key: messageId,
+      },
+      { apiKey, sendUrl: Deno.env.get('LOVABLE_SEND_URL') },
+    );
+  } catch (err) {
+    if (err instanceof EmailAPIError && err.code === 'recipient_suppressed') {
+      await logSend(adminClient, {
+        message_id: null,
+        template_name: label,
+        recipient_email: recipient,
+        status: 'suppressed',
+      });
+      return { ok: false, message_id: messageId, suppressed: true };
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[notifications] send failed:', label, msg);
+    await logSend(adminClient, {
+      message_id: null,
+      template_name: label,
+      recipient_email: recipient,
+      status: 'failed',
+      error_message: msg.slice(0, 1000),
+    });
+    return { ok: false, message_id: messageId, error: msg };
+  }
+
+  await logSend(adminClient, {
+    message_id: null,
+    template_name: label,
+    recipient_email: recipient,
+    status: 'sent',
+  });
+  return { ok: true, message_id: messageId };
 }
+
+// ---------------------------------------------------------------------------
+// Fan-out
+// ---------------------------------------------------------------------------
 
 export async function fanOutNotification(
   adminClient: any,
@@ -308,27 +275,18 @@ export async function fanOutNotification(
     }
   }
 
-  // ---- suppression filter ----
-  let active = [...recipients];
-  if (active.length > 0) {
-    const { data: suppressed, error: suppErr } = await adminClient
-      .from('suppressed_emails')
-      .select('email')
-      .in('email', active);
-    if (suppErr) {
-      result.errors.push(`suppression check failed: ${suppErr.message}`);
-    } else if (suppressed && suppressed.length > 0) {
-      const blocked = new Set(suppressed.map((s: any) => String(s.email).toLowerCase()));
-      active = active.filter((r) => !blocked.has(r));
-    }
-  }
-
-  // ---- enqueue ----
-  for (const recipient of active) {
+  // ---- send (suppression is enforced by Lovable at send time) ----
+  for (const recipient of recipients) {
     const content = opts.buildEmail(recipient);
-    const { ok, error } = await enqueueOne(adminClient, recipient, opts.label, content);
+    const { ok, suppressed, error } = await sendNotificationEmail(
+      adminClient,
+      recipient,
+      opts.label,
+      content,
+    );
     if (ok) result.enqueued += 1;
     else if (error) result.errors.push(`${recipient}: ${error}`);
+    else if (suppressed) console.log('[notifications] recipient suppressed for', opts.label);
   }
 
   return result;

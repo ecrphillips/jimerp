@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { sendNotificationEmail } from '../_shared/notifications.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,8 +8,6 @@ const corsHeaders = {
 
 const SITE_URL = Deno.env.get('SITE_URL') || 'https://homeislandcoffeepartners.lovable.app'
 const SITE_NAME = 'Home Island Coffee Partners'
-const FROM_ADDRESS = `${SITE_NAME} <noreply@notify.homeislandcoffee.com>`
-const SENDER_DOMAIN = 'notify.homeislandcoffee.com'
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -137,36 +136,21 @@ Deno.serve(async (req) => {
     const subject = `You're invited to explore co-roasting with Home Island Coffee Partners`
     const html = buildEmailHtml(firstName, exploreUrl)
     const text = buildEmailText(firstName, exploreUrl)
-    const messageId = crypto.randomUUID()
+    const { ok, suppressed, error: sendError } = await sendNotificationEmail(
+      adminClient,
+      prospect.prospect_email,
+      'prospect_invitation',
+      { subject, text, html },
+      `prospect-invitation-${invitation.id}`,
+    )
 
-    // Log pending
-    await adminClient.from('email_send_log').insert({
-      message_id: messageId,
-      template_name: 'prospect_invitation',
-      recipient_email: prospect.prospect_email,
-      status: 'pending',
-    })
-
-    const { error: enqueueErr } = await adminClient.rpc('enqueue_email', {
-      queue_name: 'transactional_emails',
-      payload: {
-        message_id: messageId,
-        idempotency_key: messageId,
-        to: prospect.prospect_email,
-        from: FROM_ADDRESS,
-        sender_domain: SENDER_DOMAIN,
-        subject,
-        html,
-        text,
-        purpose: 'transactional',
-        label: 'prospect_invitation',
-        queued_at: now,
-      },
-    })
-
-    if (enqueueErr) {
-      console.error('[send-prospect-invitation] Enqueue failed:', enqueueErr.message)
-      return json({ ok: false, error: 'Failed to enqueue email' }, 500)
+    if (suppressed) {
+      console.log('[send-prospect-invitation] recipient suppressed — not delivered')
+      return json({ ok: false, error: 'Recipient has unsubscribed or is undeliverable' }, 200)
+    }
+    if (!ok) {
+      console.error('[send-prospect-invitation] Send failed:', sendError)
+      return json({ ok: false, error: 'Failed to send email' }, 500)
     }
 
     console.log('[send-prospect-invitation] Sent to', prospect.prospect_email, 'url', exploreUrl)

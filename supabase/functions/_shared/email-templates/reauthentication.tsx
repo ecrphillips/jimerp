@@ -7,7 +7,6 @@ import {
   Container,
   Head,
   Heading,
-  Hr,
   Html,
   Preview,
   Text,
@@ -20,22 +19,15 @@ interface ReauthenticationEmailProps {
 export const ReauthenticationEmail = ({ token }: ReauthenticationEmailProps) => (
   <Html lang="en" dir="ltr">
     <Head />
-    <Preview>Your verification code for Home Island Coffee Partners</Preview>
+    <Preview>Your verification code</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Heading style={h1}>Verification code</Heading>
-        <Text style={text}>
-          Use the code below to confirm your identity for Home Island Coffee
-          Partners:
-        </Text>
+        <Heading style={h1}>Confirm reauthentication</Heading>
+        <Text style={text}>Use the code below to confirm your identity:</Text>
         <Text style={codeStyle}>{token}</Text>
-        <Text style={text}>
+        <Text style={footer}>
           This code will expire shortly. If you didn't request this, you can
           safely ignore this email.
-        </Text>
-        <Hr style={hr} />
-        <Text style={footer}>
-          Home Island Coffee Partners — homeislandcoffee.com
         </Text>
       </Container>
     </Body>
@@ -44,27 +36,25 @@ export const ReauthenticationEmail = ({ token }: ReauthenticationEmailProps) => 
 
 export default ReauthenticationEmail
 
-const main = { backgroundColor: '#ffffff', fontFamily: 'Arial, Helvetica, sans-serif' }
-const container = { padding: '24px', maxWidth: '560px', margin: '0 auto' }
+const main = { backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif' }
+const container = { padding: '20px 25px' }
 const h1 = {
-  fontSize: '20px',
+  fontSize: '22px',
   fontWeight: 'bold' as const,
-  color: '#0B3E5E',
+  color: '#000000',
   margin: '0 0 20px',
 }
 const text = {
   fontSize: '14px',
-  color: '#222222',
-  lineHeight: '1.6',
-  margin: '0 0 16px',
+  color: '#55575d',
+  lineHeight: '1.5',
+  margin: '0 0 25px',
 }
 const codeStyle = {
   fontFamily: 'Courier, monospace',
-  fontSize: '24px',
+  fontSize: '22px',
   fontWeight: 'bold' as const,
-  color: '#0B3E5E',
-  letterSpacing: '2px',
-  margin: '16px 0 24px',
+  color: '#000000',
+  margin: '0 0 30px',
 }
-const hr = { borderColor: '#e6e6e6', margin: '32px 0 16px' }
-const footer = { fontSize: '12px', color: '#999999', margin: '0' }
+const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0' }
