@@ -244,19 +244,27 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
   const editTimesMutation = useMutation({
     mutationFn: async () => {
       if (!booking) return;
+      if (!editDate) throw new Error('Date is required');
       if (!editStart || !editEndTime) throw new Error('Start and end times required');
       const oldDur = (timeToMinutes(booking.end_time) - timeToMinutes(booking.start_time)) / 60;
       const newDur = (timeToMinutes(editEndTime) - timeToMinutes(editStart)) / 60;
       if (newDur <= 0) throw new Error('End time must be after start time');
+      // Billing periods are monthly; moving a booking across months would strand
+      // its hour ledger in the wrong period.
+      if (editDate.slice(0, 7) !== booking.booking_date.slice(0, 7)) {
+        throw new Error('Bookings can only be moved within the same month (billing period)');
+      }
       // Overlap check against blocks + other bookings (exclude self). Availability
       // windows are intentionally not enforced — post-hoc corrections may run late.
-      const overlap = checkOverlap(booking.booking_date, editStart, editEndTime, blocks, allBookings, booking.id);
+      const overlap = checkOverlap(editDate, editStart, editEndTime, blocks, allBookings, booking.id);
       if (overlap) throw new Error(overlap);
 
       const oldStart = formatTime12(booking.start_time);
       const oldEnd = formatTime12(booking.end_time);
+      const dateChanged = editDate !== booking.booking_date.slice(0, 10);
 
       const { error: updErr } = await supabase.from('coroast_bookings').update({
+        booking_date: editDate,
         start_time: editStart,
         end_time: editEndTime,
         // NO_SHOW fee scales with duration; keep it in sync. Harmless otherwise.
@@ -272,9 +280,11 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
           booking_id: booking.id,
           entry_type: (delta > 0 ? 'MANUAL_DEBIT' : 'MANUAL_CREDIT') as any,
           hours_delta: delta,
-          notes: `Time adjusted ${oldStart}–${oldEnd} → ${formatTime12(editStart)}–${formatTime12(editEndTime)}`,
+          notes: `Time adjusted ${oldStart}–${oldEnd} → ${formatTime12(editStart)}–${formatTime12(editEndTime)}`
+            + (dateChanged ? ` (moved ${booking.booking_date.slice(0, 10)} → ${editDate})` : ''),
         });
       }
+
     },
     onSuccess: () => {
       toast.success('Booking times updated');
