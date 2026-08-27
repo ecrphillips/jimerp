@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,16 +25,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { BulkEditGrid } from '@/components/bulk-edit/BulkEditGrid';
 import { useProductsBulkEdit } from '@/components/bulk-edit/configs/products';
 import { useBulkEditLogoutCleanup } from '@/components/bulk-edit/useChangeHighlights';
-import { MixingConsole, buildEmptyMixingConsoleValue, stripRedundantOverrides, hasMixingConsoleErrors, type MixingConsoleValue, type PricingProfilePreset } from '@/components/pricing/MixingConsole';
 import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
 import { deriveVariantSku } from '@/lib/skuGenerator';
 
-const FALLBACK_PRESET: PricingProfilePreset = {
-  yield_loss_pct: 16,
-  process_per_kg_green: 0,
-  pkg_labour_per_unit: 0,
-};
-const PKG_DEFAULTS: Record<number, { material: number; labour: number }> = {};
 
 interface Product {
   id: string;
@@ -141,7 +134,6 @@ export function ProductsListTab() {
   const productsBulk = useProductsBulkEdit(bulkEditOpen);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [overridesValue, setOverridesValue] = useState<MixingConsoleValue>({});
   const [pricingOverridesOpen, setPricingOverridesOpen] = useState(false);
   const editingGreenValue = useRoastGroupGreenValue(editingProduct?.roast_group ?? null);
   const editingGreenMarketPerKg = editingGreenValue.data?.marketValuePerKg && editingGreenValue.data.marketValuePerKg > 0
@@ -604,30 +596,6 @@ export function ProductsListTab() {
     },
     onSuccess: () => { toast.success('Product set to inactive'); queryClient.invalidateQueries({ queryKey: ['all-products'] }); },
     onError: (err) => { console.error(err); toast.error('Failed to set product inactive'); },
-  });
-
-  const saveOverridesMutation = useMutation({
-    mutationFn: async () => {
-      if (!editingProduct) return;
-      if (hasMixingConsoleErrors(overridesValue)) {
-        throw new Error('Adjustment requires a note.');
-      }
-      const consoleVariants = [{ key: editingProduct.id, label: editingProduct.product_name, bagSizeG: editingProduct.bag_size_g }];
-      const cleaned = stripRedundantOverrides(overridesValue, consoleVariants, FALLBACK_PRESET, PKG_DEFAULTS);
-      const ov = cleaned[editingProduct.id];
-      if (!ov) return;
-      const { error } = await supabase.from('products').update({
-        yield_loss_pct_override: ov.yield_loss_pct_override,
-        process_per_kg_green_override: ov.process_per_kg_green_override,
-        pkg_material_per_unit_override: ov.pkg_material_per_unit_override,
-        pkg_labour_per_unit_override: ov.pkg_labour_per_unit_override,
-        adjustment_per_unit: ov.adjustment_per_unit,
-        adjustment_note: ov.adjustment_note,
-      } as any).eq('id', editingProduct.id);
-      if (error) throw error;
-    },
-    onSuccess: () => { toast.success('Pricing overrides saved'); queryClient.invalidateQueries({ queryKey: ['all-products'] }); },
-    onError: (e: any) => { toast.error(e?.message ?? 'Failed to save overrides'); },
   });
 
   const variantBaseName = variantSource ? stripPackagingSuffix(variantSource.product_name) : '';
@@ -1120,36 +1088,19 @@ export function ProductsListTab() {
               </div>
             </div>
 
-            {/* Pricing Overrides (ADMIN/OPS only) */}
+            {/* Pricing lives on the pricing sheet, which is the only surface
+                that builds a price from a visible cost floor. */}
             {isInternal && editingProduct && (
-              <Collapsible open={pricingOverridesOpen} onOpenChange={setPricingOverridesOpen}>
-                <div className="border rounded-md">
-                  <CollapsibleTrigger className="w-full px-3 py-2 flex items-center justify-between hover:bg-muted/50">
-                    <span className="text-sm font-medium">Pricing Overrides</span>
-                    {pricingOverridesOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="p-3 border-t space-y-3">
-                    <MixingConsole
-                      variants={[{
-                        key: editingProduct.id,
-                        label: editingProduct.packaging_variant ?? editingProduct.product_name,
-                        bagSizeG: editingProduct.bag_size_g,
-                      }]}
-                      value={overridesValue}
-                      onChange={setOverridesValue}
-                      greenMarketPerKg={editingGreenMarketPerKg}
-                      roastGroupLabel={editingProduct.roast_group ?? null}
-                      preset={FALLBACK_PRESET}
-                      pkgDefaults={PKG_DEFAULTS}
-                    />
-                    <div className="flex justify-end">
-                      <Button size="sm" onClick={() => saveOverridesMutation.mutate()} disabled={saveOverridesMutation.isPending}>
-                        {saveOverridesMutation.isPending ? 'Saving…' : 'Save Overrides'}
-                      </Button>
-                    </div>
-                  </CollapsibleContent>
-                </div>
-              </Collapsible>
+              <div className="rounded-md border p-3 space-y-2">
+                <p className="text-sm font-medium">Pricing</p>
+                <p className="text-xs text-muted-foreground">
+                  Prices are built on the pricing sheet, where the cost floor and every rate behind
+                  it are visible. Build a line there and save it to this product.
+                </p>
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/accounts/pricing">Open the pricing sheet</Link>
+                </Button>
+              </div>
             )}
           </div>
 
