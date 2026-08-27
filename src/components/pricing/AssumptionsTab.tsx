@@ -62,7 +62,7 @@ const toNum = (s: string): number | null => {
 };
 
 const asAssumptions = (f: FormState): PricingAssumptions =>
-  Object.fromEntries(FIELD_KEYS.map((k) => [k, toNum(f[k])])) as PricingAssumptions;
+  Object.fromEntries(FIELD_KEYS.map((k) => [k, toNum(f[k])])) as unknown as PricingAssumptions;
 
 /** Money to four decimal places. The default for cost rates. */
 const asMoney = (n: number): string => `$${n.toFixed(4)}`;
