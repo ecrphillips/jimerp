@@ -7,6 +7,7 @@
  */
 import {
   DEFAULT_INPUTS,
+  ROASTER_THROUGHPUT_KG_PER_HR,
   costPerUnit,
   marginAt,
   monthlyView,
@@ -96,7 +97,7 @@ export function toEngineInputs(c: ClientUnitEconomicsInputs): UnitEconomicsInput
   //   equivalentRatePerHour = (hoursPerBatch * rate / batchSize) * throughput
   const batch = Math.max(1, c.batchSizeKg || 40);
   const equivalentLabourRatePerHour =
-    (c.labourHoursPerBatch * c.labourRatePerHr / batch) * 40; // 40 = ROASTER_THROUGHPUT_KG_PER_HR
+    (c.labourHoursPerBatch * c.labourRatePerHr / batch) * ROASTER_THROUGHPUT_KG_PER_HR;
 
   return {
     ...DEFAULT_INPUTS,
