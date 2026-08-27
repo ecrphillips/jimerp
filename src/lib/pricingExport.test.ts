@@ -174,6 +174,39 @@ describe('volume breaks reprice inside the workbook', () => {
   });
 });
 
+describe('pound equivalents for reference', () => {
+  it('derives the pound rates from the kilogram ones rather than freezing them', async () => {
+    const wb = await buildPricingWorkbook(input());
+    const as = wb.getWorksheet('Assumptions')!;
+    const found: string[] = [];
+    as.eachRow((r) =>
+      r.eachCell((c) => {
+        if (typeof c.value === 'object' && c.value && 'formula' in c.value) {
+          found.push((c.value as { formula: string }).formula);
+        }
+      }),
+    );
+    // A converted constant would go stale the moment the kilogram rate moved.
+    expect(found.some((f) => f.startsWith('MachinePerKg*'))).toBe(true);
+    expect(found.some((f) => f.startsWith('RoastLabourPerKg*'))).toBe(true);
+    expect(found.some((f) => f.startsWith('Throughput/'))).toBe(true);
+  });
+
+  it('gives each break a pound column driven by its kilogram cell', async () => {
+    const wb = await buildPricingWorkbook(
+      input({ priceBreaks: [{ minUnitsPerPeriod: 200, marginPerGreenKg: 9 }] }),
+    );
+    const brs = wb.getWorksheet('Breaks')!;
+    expect((brs.getCell('C2').value as { formula: string }).formula).toMatch(/^B2\*/);
+  });
+
+  it('says which unit the workbook is in', async () => {
+    const wb = await buildPricingWorkbook(input());
+    const note = String(wb.getWorksheet('Assumptions')!.getCell('A2').value);
+    expect(note).toContain('per green kilogram');
+  });
+});
+
 describe('unset values fail loudly rather than becoming zero', () => {
   it('writes NOT SET for a missing assumption', async () => {
     const cell = await cellOf('Assumptions', 'B4', {

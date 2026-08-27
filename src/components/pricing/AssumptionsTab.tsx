@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertTriangle, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { useWeightUnit } from '@/hooks/useWeightUnit';
 import {
   usePricingAssumptions,
   usePackSpeedBands,
@@ -27,8 +28,13 @@ import {
   type Derived,
 } from '@/lib/pricingAssumptions';
 
-/** Yield is illustrated off a round 1 kg so both directions read at a glance. */
-const YIELD_SAMPLE_G = 1000;
+/**
+ * Yield is illustrated off one round unit of whichever weight is being worked
+ * in, so the label and the arithmetic beneath it describe the same quantity.
+ * Labelling a 1000 g calculation "1 lb" would be exactly the kind of quiet
+ * mismatch this module exists to avoid.
+ */
+const YIELD_SAMPLE_G = { KG: 1000, LB: 454 } as const;
 
 type FieldKey = keyof PricingAssumptions;
 
@@ -150,6 +156,7 @@ function NumField({
 }
 
 export function AssumptionsTab() {
+  const w = useWeightUnit();
   const { data: row, isLoading } = usePricingAssumptions();
   const { data: bands = [] } = usePackSpeedBands();
   const saveAssumptions = useSaveAssumptions();
@@ -177,13 +184,45 @@ export function AssumptionsTab() {
 
   const set = (k: FieldKey) => (v: string) => setForm((p) => ({ ...p, [k]: v }));
 
+  /**
+   * Throughput is stored as green kg/hr and typed in whichever unit is being
+   * worked in, so the box holds its own text rather than re-deriving it from
+   * the stored value. A derived field re-formatted on every keystroke fights
+   * the person typing — the same failure the per-pound margin box had.
+   *
+   * It is reseeded when the row arrives or the unit changes, and never while
+   * being edited.
+   */
+  const [throughputText, setThroughputText] = useState('');
+
+  useEffect(() => {
+    const kg = row?.roast_throughput_green_kg_per_hr;
+    setThroughputText(kg == null ? '' : String(Number(w.weightToDisplay(kg).toFixed(4))));
+    // `w` is rebuilt every render; only the unit it carries matters here, and
+    // depending on the object would reseed the box mid-edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [row, w.unit]);
+
+  const onThroughputChange = (v: string) => {
+    setThroughputText(v);
+    const n = toNum(v);
+    set('roast_throughput_green_kg_per_hr')(
+      n == null ? '' : String(Number(w.weightFromDisplay(n).toFixed(6))),
+    );
+  };
+
+  /** A derived per-kg rate, restated in the chosen unit without losing its working. */
+  const asDisplayRate = (d: Derived | null): Derived | null =>
+    d == null ? null : { value: w.rateToDisplay(d.value), explanation: d.explanation };
+
   const a = asAssumptions(form);
   const baseLabour = deriveBaseLabourRate(a);
   const loadedLabour = deriveLoadedLabourRate(a);
   const machinePerKg = deriveMachineCostPerGreenKg(a);
   const roastLabourPerKg = deriveRoastLabourPerGreenKg(a);
-  const roastedFromGreen = deriveRoastedFromGreen(a, YIELD_SAMPLE_G);
-  const greenFromRoasted = deriveGreenFromRoasted(a, YIELD_SAMPLE_G);
+  const sampleG = YIELD_SAMPLE_G[w.unit];
+  const roastedFromGreen = deriveRoastedFromGreen(a, sampleG);
+  const greenFromRoasted = deriveGreenFromRoasted(a, sampleG);
   const coverageProblems = validateBandCoverage(bands);
 
   const onSave = () => {
@@ -237,18 +276,18 @@ export function AssumptionsTab() {
           <CardHeader>
             <CardTitle>Roasting</CardTitle>
             <CardDescription>
-              Throughput converts roaster hours into green kg. Everything charged per green kg
-              divides by it.
+              Throughput converts roaster hours into {w.greenSuffix}. Everything charged per{' '}
+              {w.greenSuffix} divides by it.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <NumField
               id="throughput"
               label="Roast throughput"
-              unit="green kg/hr"
-              value={form.roast_throughput_green_kg_per_hr}
-              onChange={set('roast_throughput_green_kg_per_hr')}
-              hint="Green kg through the roaster per hour — not roasted kg."
+              unit={`${w.greenSuffix}/hr`}
+              value={throughputText}
+              onChange={onThroughputChange}
+              hint={`Green ${w.suffix} through the roaster per hour — not roasted ${w.suffix}.`}
             />
             <NumField
               id="machine"
@@ -260,14 +299,14 @@ export function AssumptionsTab() {
             />
             <DerivedValue
               label="Roaster running cost"
-              derived={machinePerKg}
-              suffix="/ green kg"
+              derived={asDisplayRate(machinePerKg)}
+              suffix={`/ ${w.greenSuffix}`}
               missingHint="Needs machine running cost and throughput."
             />
             <DerivedValue
               label="Roast labour"
-              derived={roastLabourPerKg}
-              suffix="/ green kg"
+              derived={asDisplayRate(roastLabourPerKg)}
+              suffix={`/ ${w.greenSuffix}`}
               missingHint="Needs the loaded labour rate and throughput."
             />
           </CardContent>
@@ -350,20 +389,20 @@ export function AssumptionsTab() {
               hint="Set above true measured loss; the gap absorbs batch loss and overpacking."
             />
             <DerivedValue
-              label="1 kg green produces"
+              label={`1 ${w.suffix} green produces`}
               derived={roastedFromGreen}
               format={asGrams}
               missingHint="Needs a standard yield loss percentage."
             />
             <DerivedValue
-              label="1 kg roasted consumes"
+              label={`1 ${w.suffix} roasted consumes`}
               derived={greenFromRoasted}
               format={asGrams}
               missingHint="Needs a standard yield loss percentage."
             />
             <p className="text-xs text-muted-foreground">
-              Shown both ways off a round kilogram. Pricing uses the second direction — every
-              per-green-kg cost multiplies by the green a finished unit consumes.
+              Shown both ways off a round unit. Pricing uses the second direction — every
+              per-weight cost multiplies by the green a finished unit consumes.
             </p>
           </CardContent>
         </Card>
