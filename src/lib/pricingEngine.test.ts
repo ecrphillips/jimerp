@@ -46,7 +46,9 @@ const BANDS: PackSpeedBand[] = [
 
 const line = (over: Partial<PricingLineInput> = {}): PricingLineInput => ({
   tier: 'T4_PRIVATE_LABEL',
-  green: { kind: 'FLAT', pricePerKg: 10 },
+  // T4 prices on the benchmark; market value sits under it with headroom intact.
+  greenBenchmarkPerKg: 10,
+  green: { kind: 'FLAT', pricePerKg: 8 },
   gramsPerUnit: 1000,
   packagingMaterialPerUnit: 1,
   marginPerGreenKg: 4,
@@ -149,8 +151,14 @@ describe('the floor is a floor', () => {
 
   it('rises when any single input rises', () => {
     const base = run().costFloorPerUnit as number;
-    expect(run({ green: { kind: 'FLAT', pricePerKg: 11 } }).costFloorPerUnit as number).toBeGreaterThan(base);
+    expect(run({ greenBenchmarkPerKg: 11 }).costFloorPerUnit as number).toBeGreaterThan(base);
     expect(run({ packagingMaterialPerUnit: 2 }).costFloorPerUnit as number).toBeGreaterThan(base);
+  });
+
+  it('ignores market value under a benchmark basis — the ceiling is the price', () => {
+    const base = run().costFloorPerUnit as number;
+    // A cheaper lot does not cut the price; that headroom is the margin's job.
+    expect(run({ green: { kind: 'FLAT', pricePerKg: 3 } }).costFloorPerUnit).toBeCloseTo(base, 9);
   });
 
   it('excludes overhead entirely — that is handled at business level', () => {
@@ -284,8 +292,9 @@ describe('blends', () => {
     ).toBeNull();
   });
 
-  it('feeds the weighted price into the floor', () => {
+  it('feeds the weighted price into the floor under a market basis', () => {
     const r = run({
+      greenBasis: 'MARKET',
       green: {
         kind: 'BLEND',
         components: [
@@ -318,6 +327,78 @@ describe('blends', () => {
       },
     });
     expect(r.warnings.some((w) => w.kind === 'BLEND_SHARES_NOT_100')).toBe(true);
+  });
+});
+
+describe('green basis — benchmark vs market pass-through', () => {
+  it('prices T4 and T5 on the benchmark by default', () => {
+    expect(TIER_PRESETS.T4_PRIVATE_LABEL.defaultGreenBasis).toBe('BENCHMARK');
+    expect(TIER_PRESETS.T5_CO_PACK.defaultGreenBasis).toBe('BENCHMARK');
+  });
+
+  it('passes market value through on T6 — a ceiling would overcharge a cheap lot', () => {
+    expect(TIER_PRESETS.T6_WHITE_GLOVE.defaultGreenBasis).toBe('MARKET');
+    // "if the green is $7.99 then we charge $7.99"
+    const r = run({ tier: 'T6_WHITE_GLOVE', green: { kind: 'FLAT', pricePerKg: 7.99 } });
+    expect(lineByKey(r, 'green').rate).toBeCloseTo(7.99, 9);
+  });
+
+  it('uses the benchmark, not the market value, when the basis is BENCHMARK', () => {
+    const r = run({ greenBenchmarkPerKg: 10, green: { kind: 'FLAT', pricePerKg: 6 } });
+    expect(lineByKey(r, 'green').rate).toBeCloseTo(10, 9);
+    expect(r.greenMarketValuePerKg).toBeCloseTo(6, 9);
+  });
+
+  it('uses the market value, not the benchmark, when the basis is MARKET', () => {
+    const r = run({ greenBasis: 'MARKET', greenBenchmarkPerKg: 10, green: { kind: 'FLAT', pricePerKg: 6 } });
+    expect(lineByKey(r, 'green').rate).toBeCloseTo(6, 9);
+  });
+
+  it('reports both numbers so the headroom is visible, not implied', () => {
+    const r = run({ greenBenchmarkPerKg: 10, green: { kind: 'FLAT', pricePerKg: 6 } });
+    expect(lineByKey(r, 'green').rate).toBeCloseTo(10, 9);
+    expect(r.greenMarketValuePerKg).toBeCloseTo(6, 9);
+    expect(r.greenBasis).toBe('BENCHMARK');
+  });
+
+  it('names the basis in the line explanation', () => {
+    expect(lineByKey(run(), 'green').source).toBe('Benchmark');
+    expect(lineByKey(run({ greenBasis: 'MARKET' }), 'green').source).toBe('Market value');
+  });
+
+  it('has no floor when a benchmark-priced line has no benchmark', () => {
+    const r = run({ greenBenchmarkPerKg: null });
+    expect(lineByKey(r, 'green').rate).toBeNull();
+    expect(r.incomplete).toContain('Green');
+    expect(r.costFloorPerUnit).toBeNull();
+  });
+
+  it('has no floor when a market-priced line has no market value', () => {
+    const r = run({ greenBasis: 'MARKET', green: { kind: 'FLAT', pricePerKg: null } });
+    expect(r.incomplete).toContain('Green');
+    expect(r.costFloorPerUnit).toBeNull();
+  });
+
+  it('an explicit basis overrides the tier default', () => {
+    const r = run({ tier: 'T6_WHITE_GLOVE', greenBasis: 'BENCHMARK', greenBenchmarkPerKg: 10 });
+    expect(lineByKey(r, 'green').rate).toBeCloseTo(10, 9);
+  });
+
+  it('warns on the benchmark basis when the real coffee eats the headroom', () => {
+    const r = run({ greenBenchmarkPerKg: 8, green: { kind: 'FLAT', pricePerKg: 8.5 } });
+    const w = r.warnings.find((x) => x.kind === 'GREEN_AT_OR_OVER_BENCHMARK');
+    expect(w?.message).toContain('headroom');
+    // and the line is still priced at the benchmark, not the overrun value
+    expect(lineByKey(r, 'green').rate).toBeCloseTo(8, 9);
+  });
+
+  it('compares market against benchmark regardless of which one prices the line', () => {
+    const asMarket = run({
+      greenBasis: 'MARKET',
+      greenBenchmarkPerKg: 8,
+      green: { kind: 'FLAT', pricePerKg: 9 },
+    });
+    expect(asMarket.warnings.some((w) => w.kind === 'GREEN_AT_OR_OVER_BENCHMARK')).toBe(true);
   });
 });
 
