@@ -19,15 +19,16 @@ import {
   deriveMachineCostPerGreenKg,
   deriveRoastLabourPerGreenKg,
   derivePackLabourPerUnit,
-  deriveGreenKgConsumed,
+  deriveRoastedFromGreen,
+  deriveGreenFromRoasted,
   validateBandCoverage,
   perKgToPerLb,
   type PricingAssumptions,
   type Derived,
 } from '@/lib/pricingAssumptions';
 
-/** Bag size used purely to illustrate the yield and packing maths on screen. */
-const SAMPLE_BAG_G = 340;
+/** Yield is illustrated off a round 1 kg so both directions read at a glance. */
+const YIELD_SAMPLE_G = 1000;
 
 type FieldKey = keyof PricingAssumptions;
 
@@ -63,17 +64,29 @@ const toNum = (s: string): number | null => {
 const asAssumptions = (f: FormState): PricingAssumptions =>
   Object.fromEntries(FIELD_KEYS.map((k) => [k, toNum(f[k])])) as PricingAssumptions;
 
-/** Renders a derived value with the arithmetic that produced it, or "Not set". */
+/** Money to four decimal places. The default for cost rates. */
+const asMoney = (n: number): string => `$${n.toFixed(4)}`;
+
+/** Whole grams, thousands-separated. Weights are not currency. */
+const asGrams = (n: number): string => `${Math.round(n).toLocaleString('en-CA')} g`;
+
+/**
+ * Renders a derived value with the arithmetic that produced it, or "Not set".
+ * `format` decides the unit — never assume currency, since some derivations
+ * (yield) produce weights.
+ */
 function DerivedValue({
   label,
   derived,
   missingHint,
   suffix,
+  format = asMoney,
 }: {
   label: string;
   derived: Derived | null;
   missingHint: string;
   suffix?: string;
+  format?: (n: number) => string;
 }) {
   return (
     <div className="rounded-md border bg-muted/40 p-3">
@@ -81,7 +94,7 @@ function DerivedValue({
         <span className="text-sm text-muted-foreground">{label}</span>
         {derived ? (
           <span className="font-mono font-semibold">
-            ${derived.value.toFixed(4)}
+            {format(derived.value)}
             {suffix ? <span className="text-muted-foreground font-normal"> {suffix}</span> : null}
           </span>
         ) : (
@@ -169,7 +182,8 @@ export function AssumptionsTab() {
   const loadedLabour = deriveLoadedLabourRate(a);
   const machinePerKg = deriveMachineCostPerGreenKg(a);
   const roastLabourPerKg = deriveRoastLabourPerGreenKg(a);
-  const greenConsumed = deriveGreenKgConsumed(a, SAMPLE_BAG_G);
+  const roastedFromGreen = deriveRoastedFromGreen(a, YIELD_SAMPLE_G);
+  const greenFromRoasted = deriveGreenFromRoasted(a, YIELD_SAMPLE_G);
   const coverageProblems = validateBandCoverage(bands);
 
   const onSave = () => {
@@ -336,17 +350,20 @@ export function AssumptionsTab() {
               hint="Set above true measured loss; the gap absorbs batch loss and overpacking."
             />
             <DerivedValue
-              label={`Green consumed by a ${SAMPLE_BAG_G}g bag`}
-              derived={
-                greenConsumed
-                  ? { value: greenConsumed.value, explanation: greenConsumed.explanation }
-                  : null
-              }
+              label="1 kg green produces"
+              derived={roastedFromGreen}
+              format={asGrams}
+              missingHint="Needs a standard yield loss percentage."
+            />
+            <DerivedValue
+              label="1 kg roasted consumes"
+              derived={greenFromRoasted}
+              format={asGrams}
               missingHint="Needs a standard yield loss percentage."
             />
             <p className="text-xs text-muted-foreground">
-              Shown for a {SAMPLE_BAG_G}g bag as an illustration. Each pricing line uses its own
-              finished weight.
+              Shown both ways off a round kilogram. Pricing uses the second direction — every
+              per-green-kg cost multiplies by the green a finished unit consumes.
             </p>
           </CardContent>
         </Card>

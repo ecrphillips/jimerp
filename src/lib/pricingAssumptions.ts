@@ -141,11 +141,36 @@ export function derivePackLabourPerUnit(
   };
 }
 
+/** Grams, thousands-separated, rounded to whole grams. */
+const grams = (n: number): string =>
+  `${Math.round(n).toLocaleString('en-CA')} g`;
+
 /**
- * Green kg consumed to produce a finished unit.
- * grams roasted -> kg roasted -> / (1 - yield loss) -> kg green
+ * Roasted weight produced by a given green weight: green x (1 - loss).
+ * The forward direction — what comes out of the roaster.
  */
-export function deriveGreenKgConsumed(
+export function deriveRoastedFromGreen(
+  a: PricingAssumptions,
+  gramsGreen: number,
+): Derived | null {
+  const loss = a.standard_yield_loss_pct;
+  if (!isNum(gramsGreen) || gramsGreen <= 0) return null;
+  if (!isNum(loss) || loss < 0 || loss >= 100) return null;
+
+  const retained = new Decimal(1).minus(new Decimal(loss).div(100));
+  const roasted = new Decimal(gramsGreen).times(retained);
+  return {
+    value: roasted.toNumber(),
+    explanation: `${grams(gramsGreen)} green x (1 - ${loss}%) = ${grams(roasted.toNumber())} roasted`,
+  };
+}
+
+/**
+ * Green weight consumed to produce a given roasted weight: roasted / (1 - loss).
+ * The reverse direction — what has to go in. This is the one pricing uses,
+ * because every per-green-kg cost multiplies by it.
+ */
+export function deriveGreenFromRoasted(
   a: PricingAssumptions,
   gramsRoasted: number,
 ): Derived | null {
@@ -153,14 +178,30 @@ export function deriveGreenKgConsumed(
   if (!isNum(gramsRoasted) || gramsRoasted <= 0) return null;
   if (!isNum(loss) || loss < 0 || loss >= 100) return null;
 
-  const kgRoasted = new Decimal(gramsRoasted).div(G_PER_KG);
   const retained = new Decimal(1).minus(new Decimal(loss).div(100));
-  const greenKg = kgRoasted.div(retained);
+  const green = new Decimal(gramsRoasted).div(retained);
   return {
-    value: greenKg.toNumber(),
-    explanation:
-      `${gramsRoasted}g / 1000 = ${kgRoasted.toFixed(3)} kg roasted, ` +
-      `/ (1 - ${loss}%) = ${greenKg.toFixed(4)} green kg`,
+    value: green.toNumber(),
+    explanation: `${grams(gramsRoasted)} roasted / (1 - ${loss}%) = ${grams(green.toNumber())} green`,
+  };
+}
+
+/**
+ * Green kg consumed to produce a finished unit — the quantity every
+ * per-green-kg cost line multiplies by.
+ *
+ * Delegates to deriveGreenFromRoasted so the yield arithmetic exists in
+ * exactly one place; this wrapper only changes the unit to kg.
+ */
+export function deriveGreenKgConsumed(
+  a: PricingAssumptions,
+  gramsRoasted: number,
+): Derived | null {
+  const inGrams = deriveGreenFromRoasted(a, gramsRoasted);
+  if (!inGrams) return null;
+  return {
+    value: new Decimal(inGrams.value).div(G_PER_KG).toNumber(),
+    explanation: inGrams.explanation,
   };
 }
 

@@ -7,6 +7,8 @@ import {
   findPackSpeedBand,
   derivePackLabourPerUnit,
   deriveGreenKgConsumed,
+  deriveRoastedFromGreen,
+  deriveGreenFromRoasted,
   perKgToPerLb,
   perLbToPerKg,
   validateBandCoverage,
@@ -220,6 +222,59 @@ describe('band coverage validation', () => {
 
   it('treats an empty band list as no problems to report', () => {
     expect(validateBandCoverage([])).toEqual([]);
+  });
+});
+
+describe('yield shown in both directions', () => {
+  // The card illustrates yield off a round kilogram, each way.
+  const at17: PricingAssumptions = { ...FILLED, standard_yield_loss_pct: 17 };
+
+  it('reports what 1 kg of green produces', () => {
+    const r = deriveRoastedFromGreen(at17, 1000)!;
+    expect(r.value).toBeCloseTo(830, 6);
+    expect(r.explanation).toContain('830 g roasted');
+  });
+
+  it('reports what 1 kg of roasted consumes', () => {
+    const r = deriveGreenFromRoasted(at17, 1000)!;
+    expect(r.value).toBeCloseTo(1204.8193, 4);
+    expect(r.explanation).toContain('1,205 g green');
+  });
+
+  it('is not symmetric — the two directions are different numbers', () => {
+    // Guards the classic mix-up of multiplying where you should divide.
+    const out = deriveRoastedFromGreen(at17, 1000)!.value;
+    const back = deriveGreenFromRoasted(at17, 1000)!.value;
+    expect(out).toBeLessThan(1000);
+    expect(back).toBeGreaterThan(1000);
+  });
+
+  it('round-trips: green -> roasted -> green returns the original', () => {
+    const roasted = deriveRoastedFromGreen(at17, 1000)!.value;
+    const backToGreen = deriveGreenFromRoasted(at17, roasted)!.value;
+    expect(backToGreen).toBeCloseTo(1000, 6);
+  });
+
+  it('treats the input as loss, not retention', () => {
+    // 83 entered means 83% LOST, leaving 170g — not 830g.
+    const at83 = { ...FILLED, standard_yield_loss_pct: 83 };
+    expect(deriveRoastedFromGreen(at83, 1000)!.value).toBeCloseTo(170, 6);
+  });
+
+  it('passes weight straight through at zero loss', () => {
+    const noLoss = { ...FILLED, standard_yield_loss_pct: 0 };
+    expect(deriveRoastedFromGreen(noLoss, 1000)!.value).toBeCloseTo(1000, 9);
+    expect(deriveGreenFromRoasted(noLoss, 1000)!.value).toBeCloseTo(1000, 9);
+  });
+
+  it('returns null when yield loss is unset, in both directions', () => {
+    expect(deriveRoastedFromGreen(EMPTY, 1000)).toBeNull();
+    expect(deriveGreenFromRoasted(EMPTY, 1000)).toBeNull();
+  });
+
+  it('rejects non-positive weights in both directions', () => {
+    expect(deriveRoastedFromGreen(at17, 0)).toBeNull();
+    expect(deriveGreenFromRoasted(at17, -5)).toBeNull();
   });
 });
 
