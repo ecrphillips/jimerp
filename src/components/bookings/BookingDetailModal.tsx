@@ -94,6 +94,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
     if (!booking) return;
     setCancelMode(null);
     setEditError(null);
+    setEditDate(booking.booking_date.slice(0, 10));
     setEditStart(booking.start_time.slice(0, 5));
     setEditEndTime(booking.end_time.slice(0, 5));
     setEditing(true);
