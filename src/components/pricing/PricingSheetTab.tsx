@@ -272,6 +272,9 @@ export function PricingSheetTab() {
                 value={marginPerKg}
                 onChange={(e) => setMarginPerKg(e.target.value)}
               />
+              <p className="mt-1 text-xs text-muted-foreground invisible">
+                Same dial, shown both ways. Edit either.
+              </p>
             </div>
             <div>
               <Label htmlFor="margin-lb">Per green lb</Label>
@@ -301,6 +304,9 @@ export function PricingSheetTab() {
                   <SelectItem value="WEEKLY">Weekly (legacy accounts)</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="mt-1 text-xs text-muted-foreground invisible">
+                Same dial, shown both ways. Edit either.
+              </p>
             </div>
           </div>
         </CardContent>
