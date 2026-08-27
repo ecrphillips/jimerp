@@ -236,7 +236,9 @@ export type WarningKind =
   | 'GREEN_AT_OR_OVER_BENCHMARK'
   | 'BLEND_SHARES_NOT_100'
   | 'MISSING_INPUT'
-  | 'NEGATIVE_MARGIN';
+  | 'NEGATIVE_MARGIN'
+  | 'ZERO_COST_LINE'
+  | 'NO_MARKET_VALUE_TO_COMPARE';
 
 export interface PricingWarning {
   kind: WarningKind;
@@ -572,6 +574,32 @@ export function calculateLine(
 
   for (const label of incomplete) {
     warnings.push({ kind: 'MISSING_INPUT', message: `${label} has no value set.` });
+  }
+
+  // A charged line costing nothing is indistinguishable from one never filled
+  // in, because zero is a legitimate value. If the cost is genuinely zero the
+  // line should be switched off rather than zeroed, so say so instead of
+  // pricing the product as though the input were free.
+  for (const l of lines) {
+    if (l.included && l.rate === 0 && l.key !== 'downstreamServices') {
+      warnings.push({
+        kind: 'ZERO_COST_LINE',
+        message:
+          `${l.label} is charged but costs $0.00. If that is right, switch the line off; ` +
+          'if not, this price is missing a cost.',
+      });
+    }
+  }
+
+  // A benchmark with nothing to compare against can never warn, so the headroom
+  // it exists to protect is unmonitored.
+  if (config.green && greenBasis === 'BENCHMARK' && isNum(input.greenBenchmarkPerKg) && !isNum(marketValue.rate)) {
+    warnings.push({
+      kind: 'NO_MARKET_VALUE_TO_COMPARE',
+      message:
+        'No market value set, so nothing will tell you when green reaches this benchmark. ' +
+        'Set one from a roast group or lot.',
+    });
   }
 
   const hasUnit = isNum(greenKgPerUnit) && greenKgPerUnit > 0;
