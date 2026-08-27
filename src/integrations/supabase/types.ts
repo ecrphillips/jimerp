@@ -4186,6 +4186,98 @@ export type Database = {
         }
         Relationships: []
       }
+      product_pricing: {
+        Row: {
+          assumed_loaded_labour_rate_per_hr: number | null
+          assumed_machine_running_cost_per_hr: number | null
+          assumed_pack_units_per_hour: number | null
+          assumed_roast_throughput_green_kg_per_hr: number | null
+          assumed_yield_loss_pct: number | null
+          blend_components: Json | null
+          cost_floor_per_unit: number | null
+          created_at: string
+          green_basis: string
+          green_benchmark_per_kg: number | null
+          green_kg_per_unit: number | null
+          green_market_per_kg: number | null
+          green_used_per_kg: number | null
+          grams_per_unit: number | null
+          id: string
+          included_lines: Json
+          margin_per_green_kg: number | null
+          notes: string | null
+          packaging_material_per_unit: number | null
+          price_per_unit: number | null
+          priced_by: string | null
+          product_id: string
+          services_per_unit: number | null
+          tier: string
+          updated_at: string
+        }
+        Insert: {
+          assumed_loaded_labour_rate_per_hr?: number | null
+          assumed_machine_running_cost_per_hr?: number | null
+          assumed_pack_units_per_hour?: number | null
+          assumed_roast_throughput_green_kg_per_hr?: number | null
+          assumed_yield_loss_pct?: number | null
+          blend_components?: Json | null
+          cost_floor_per_unit?: number | null
+          created_at?: string
+          green_basis: string
+          green_benchmark_per_kg?: number | null
+          green_kg_per_unit?: number | null
+          green_market_per_kg?: number | null
+          green_used_per_kg?: number | null
+          grams_per_unit?: number | null
+          id?: string
+          included_lines: Json
+          margin_per_green_kg?: number | null
+          notes?: string | null
+          packaging_material_per_unit?: number | null
+          price_per_unit?: number | null
+          priced_by?: string | null
+          product_id: string
+          services_per_unit?: number | null
+          tier: string
+          updated_at?: string
+        }
+        Update: {
+          assumed_loaded_labour_rate_per_hr?: number | null
+          assumed_machine_running_cost_per_hr?: number | null
+          assumed_pack_units_per_hour?: number | null
+          assumed_roast_throughput_green_kg_per_hr?: number | null
+          assumed_yield_loss_pct?: number | null
+          blend_components?: Json | null
+          cost_floor_per_unit?: number | null
+          created_at?: string
+          green_basis?: string
+          green_benchmark_per_kg?: number | null
+          green_kg_per_unit?: number | null
+          green_market_per_kg?: number | null
+          green_used_per_kg?: number | null
+          grams_per_unit?: number | null
+          id?: string
+          included_lines?: Json
+          margin_per_green_kg?: number | null
+          notes?: string | null
+          packaging_material_per_unit?: number | null
+          price_per_unit?: number | null
+          priced_by?: string | null
+          product_id?: string
+          services_per_unit?: number | null
+          tier?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_pricing_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: true
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       production_checkmarks: {
         Row: {
           bag_size_g: number
