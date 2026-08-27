@@ -81,7 +81,8 @@ export async function buildPricingWorkbook(input: ExportInput) {
   as.getCell('A1').value = 'Pricing assumptions';
   as.getCell('A1').font = { bold: true, size: 14 };
   as.getCell('A2').value =
-    'Change any value here and every line on the Pricing tab recalculates.';
+    'Change any value here and every line on the Pricing tab recalculates. ' +
+    'Rates are per green kilogram throughout; pound equivalents are shown for reference.';
   as.getCell('A2').font = { italic: true, color: { argb: 'FF666666' } };
 
   let row = 4;
@@ -104,6 +105,21 @@ export async function buildPricingWorkbook(input: ExportInput) {
     ['Loaded labour rate ($/hr)', 'BaseLabour*(1+OncostPct/100)', 'LoadedLabour', MONEY_2],
     ['Roaster running ($/green kg)', 'MachineCostHr/Throughput', 'MachinePerKg', MONEY_4],
     ['Roast labour ($/green kg)', 'LoadedLabour/Throughput', 'RoastLabourPerKg', MONEY_4],
+    // Reference only, and formulas so they follow the kilogram rate above
+    // rather than freezing a converted number beside a live one.
+    [
+      'Roaster running ($/green lb)',
+      `MachinePerKg*${KG_PER_LB}`,
+      'MachinePerLb',
+      MONEY_4,
+    ],
+    [
+      'Roast labour ($/green lb)',
+      `RoastLabourPerKg*${KG_PER_LB}`,
+      'RoastLabourPerLb',
+      MONEY_4,
+    ],
+    ['Roast throughput (green lb/hr)', `Throughput/${KG_PER_LB}`, 'ThroughputLb', NUM_3],
   ];
   for (const [label, formula, name, fmt] of derived) {
     as.getCell(`A${row}`).value = label;
@@ -162,12 +178,20 @@ export async function buildPricingWorkbook(input: ExportInput) {
     .sort((a, b) => a.minUnitsPerPeriod - b.minUnitsPerPeriod);
 
   const brs = wb.addWorksheet('Breaks');
-  brs.columns = [{ width: 22 }, { width: 22 }];
-  brs.addRow([`From units per ${input.cadence === 'MONTHLY' ? 'month' : 'week'}`, 'Margin $/green kg']);
+  brs.columns = [{ width: 22 }, { width: 22 }, { width: 22 }];
+  brs.addRow([
+    `From units per ${input.cadence === 'MONTHLY' ? 'month' : 'week'}`,
+    'Margin $/green kg',
+    'Margin $/green lb',
+  ]);
   brs.getRow(1).font = { bold: true };
-  for (const b of usableBreaks) {
+  usableBreaks.forEach((b, i) => {
+    const r = i + 2;
     brs.addRow([b.minUnitsPerPeriod, b.marginPerGreenKg as number]);
-  }
+    brs.getCell(`C${r}`).value = { formula: `B${r}*${KG_PER_LB}` };
+    brs.getCell(`C${r}`).numFmt = MONEY_4;
+    brs.getCell(`B${r}`).numFmt = MONEY_4;
+  });
   brs.addRow([]);
   brs.addRow([
     usableBreaks.length === 0

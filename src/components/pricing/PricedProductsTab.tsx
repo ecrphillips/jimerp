@@ -9,6 +9,7 @@ import { useProductOptions } from '@/hooks/useProductPricing';
 import { usePricingAssumptions } from '@/hooks/usePricingAssumptions';
 import { deriveLoadedLabourRate } from '@/lib/pricingAssumptions';
 import { staleFields } from '@/lib/productPricingStaleness';
+import { useWeightUnit } from '@/hooks/useWeightUnit';
 import { TIER_PRESETS, type TierKey } from '@/lib/pricingEngine';
 
 const money = (n: number | null | undefined, dp = 2) =>
@@ -18,6 +19,7 @@ export function PricedProductsTab() {
   const { data: pricing = {}, isLoading } = useProductPricing();
   const { data: products = [] } = useProductOptions();
   const { data: assumptions } = usePricingAssumptions();
+  const w = useWeightUnit();
 
   const currentLabour = assumptions ? deriveLoadedLabourRate(assumptions)?.value ?? null : null;
 
@@ -80,7 +82,7 @@ export function PricedProductsTab() {
                     <th className="pb-2 pr-3">Configuration</th>
                     <th className="pb-2 pr-3 text-right">Floor</th>
                     <th className="pb-2 pr-3 text-right">Price</th>
-                    <th className="pb-2 pr-3 text-right">Margin $/green kg</th>
+                    <th className="pb-2 pr-3 text-right">Margin $/{w.greenSuffix}</th>
                     <th className="pb-2 pr-3 text-right">Labour $/hr used</th>
                     <th className="pb-2 pr-3 text-right">Yield used</th>
                     <th className="pb-2">Priced</th>
@@ -113,7 +115,11 @@ export function PricedProductsTab() {
                         {money(row.price_per_unit)}
                       </td>
                       <td className="py-2 pr-3 text-right font-mono">
-                        {money(row.margin_per_green_kg)}
+                        {money(
+                          row.margin_per_green_kg == null
+                            ? null
+                            : w.rateToDisplay(Number(row.margin_per_green_kg)),
+                        )}
                       </td>
                       <td className="py-2 pr-3 text-right font-mono">
                         {money(row.assumed_loaded_labour_rate_per_hr)}
