@@ -24,12 +24,16 @@ import {
   Plus,
   Trash2,
   Info,
+  FileSpreadsheet,
+  Printer,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePricingAssumptions, usePackSpeedBands } from '@/hooks/usePricingAssumptions';
 import { usePackagingCosts } from '@/hooks/usePackagingCosts';
 import { PACKAGING_OPTIONS, type PackagingVariant } from '@/components/PackagingBadge';
 import { gramsForVariant } from '@/lib/packagingWeights';
+import { downloadPricingWorkbook, type ExportLine } from '@/lib/pricingExport';
+import { toast } from 'sonner';
 import { perKgToPerLb, perLbToPerKg, type PricingAssumptions } from '@/lib/pricingAssumptions';
 import {
   calculateLine,
@@ -220,6 +224,43 @@ export function PricingSheetTab() {
     return { greenKg, revenue, margin, cost, complete };
   }, [lines, results, cadence]);
 
+  const [exporting, setExporting] = useState(false);
+
+  const onExportExcel = async () => {
+    if (!assumptions) return;
+    setExporting(true);
+    try {
+      const exportLines: ExportLine[] = lines.map((line) => {
+        const r = results.get(line.id);
+        return {
+          label: line.label,
+          tierLabel: TIER_PRESETS[line.tier].label,
+          includes: r?.config ?? TIER_PRESETS[line.tier].config,
+          greenBasis: r?.greenBasis ?? TIER_PRESETS[line.tier].defaultGreenBasis,
+          benchmarkPerKg: toNum(line.greenBenchmark),
+          marketPerKg: r?.greenMarketValuePerKg ?? null,
+          gramsPerUnit: toNum(line.grams),
+          packagingMaterialPerUnit: toNum(line.packagingMaterial),
+          servicesPerUnit: null,
+          unitsPerPeriod: toNum(line.units),
+        };
+      });
+      await downloadPricingWorkbook({
+        assumptions,
+        bands,
+        lines: exportLines,
+        marginPerGreenKg: marginKg,
+        cadence,
+        generatedAt: new Date(),
+      });
+      toast.success('Workbook exported');
+    } catch (e) {
+      toast.error(`Export failed: ${e instanceof Error ? e.message : 'unknown error'}`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (loadingAssumptions) return <p className="text-muted-foreground">Loading…</p>;
 
   if (!assumptions) {
@@ -333,9 +374,19 @@ export function PricingSheetTab() {
         />
       ))}
 
-      <Button variant="outline" onClick={addLine}>
-        <Plus className="h-4 w-4 mr-1" /> Add line
-      </Button>
+      <div className="flex flex-wrap gap-2 print:hidden">
+        <Button variant="outline" onClick={addLine}>
+          <Plus className="h-4 w-4 mr-1" /> Add line
+        </Button>
+        <div className="flex-1" />
+        <Button variant="outline" onClick={onExportExcel} disabled={exporting}>
+          <FileSpreadsheet className="h-4 w-4 mr-1" />
+          {exporting ? 'Building…' : 'Export to Excel'}
+        </Button>
+        <Button variant="outline" onClick={() => window.print()}>
+          <Printer className="h-4 w-4 mr-1" /> Print / Save as PDF
+        </Button>
+      </div>
 
       {/* --- Totals ----------------------------------------------------------- */}
       <Card>
@@ -417,7 +468,7 @@ function LineCard({
   const setBlend = (next: BlendRow[]) => onPatch({ blend: next });
 
   return (
-    <Card>
+    <Card data-line-card>
       <CardHeader className="pb-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex-1 min-w-[12rem]">

@@ -5,7 +5,7 @@ import { PackagingCostsTab } from '@/components/pricing/PackagingCostsTab';
 
 export default function PricingAdmin() {
   return (
-    <div className="container mx-auto p-6 space-y-6 max-w-6xl">
+    <div className="pricing-sheet container mx-auto p-6 space-y-6 max-w-6xl">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Pricing</h1>
         <p className="text-sm text-muted-foreground">

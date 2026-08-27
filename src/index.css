@@ -323,4 +323,36 @@
   .print\\:inline {
     font-size: 14pt !important;
   }
+
+  /* --- Pricing sheet ---------------------------------------------------- */
+  /* The sheet is input-heavy on screen. In print it should read as a
+     document, so form controls lose their chrome and show only their value. */
+  .pricing-sheet input {
+    border: 0 !important;
+    background: transparent !important;
+    padding-left: 0 !important;
+    font-weight: 600 !important;
+    color: black !important;
+    box-shadow: none !important;
+  }
+
+  /* Selects render their value in a span; drop the control styling. */
+  .pricing-sheet button[role="combobox"] {
+    border: 0 !important;
+    background: transparent !important;
+    padding-left: 0 !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+  }
+
+  /* Keep a product line intact across a page break where possible. */
+  .pricing-sheet [data-line-card] {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Only the active tab prints; the tab strip itself is navigation. */
+  .pricing-sheet [role="tablist"] {
+    display: none !important;
+  }
 }
