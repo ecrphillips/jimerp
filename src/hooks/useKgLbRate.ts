@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { perKgToPerLb, perLbToPerKg } from '@/lib/pricingAssumptions';
+import { useSessionState } from './useSessionState';
 
 /**
  * A rate the operator can type in either $/kg or $/lb, with the two kept in step.
@@ -31,12 +32,26 @@ export interface KgLbRate {
   reset: () => void;
 }
 
-export function useKgLbRate(initialKg = ''): KgLbRate {
-  const [kgText, setKgText] = useState(initialKg);
-  const [lbText, setLbText] = useState(() => {
+/**
+ * @param storageKey when given, both boxes survive navigation for the tab's
+ * lifetime — a rate typed into a half-built sheet should not be lost to a
+ * stray click on the sidebar.
+ */
+export function useKgLbRate(initialKg = '', storageKey?: string): KgLbRate {
+  const initialLb = (() => {
     const n = toNum(initialKg);
     return n == null ? '' : trimNum(perKgToPerLb(n), 4);
-  });
+  })();
+
+  const plainKg = useState(initialKg);
+  const plainLb = useState(initialLb);
+  const storedKg = useSessionState(`${storageKey ?? 'kglb'}.kg`, initialKg);
+  const storedLb = useSessionState(`${storageKey ?? 'kglb'}.lb`, initialLb);
+
+  // Both hooks always run — calling one conditionally would break the rules of
+  // hooks — and only the chosen pair is read from.
+  const [kgText, setKgText] = storageKey ? storedKg : plainKg;
+  const [lbText, setLbText] = storageKey ? storedLb : plainLb;
 
   const setKg = (text: string) => {
     setKgText(text);
@@ -53,6 +68,13 @@ export function useKgLbRate(initialKg = ''): KgLbRate {
   };
 
   const reset = () => {
+    if (storageKey) {
+      // clear() resets to the initial value and forgets the stored one; writing
+      // again afterwards would just put a value back over the key removed.
+      storedKg[2]();
+      storedLb[2]();
+      return;
+    }
     setKgText('');
     setLbText('');
   };
