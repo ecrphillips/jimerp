@@ -109,7 +109,6 @@ export function SaveToProductDialog({
       green_kg_per_unit: result.greenKgPerUnit,
       cost_floor_per_unit: result.costFloorPerUnit,
       price_per_unit: result.pricePerUnit,
-      blend_components: null,
       notes: null,
     };
 

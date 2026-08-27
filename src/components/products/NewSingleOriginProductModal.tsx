@@ -18,12 +18,6 @@ import { PackagingVariantsSection, type PackagingVariantEntry } from './Packagin
 import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
 import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
 
-const FALLBACK_PRESET: PricingProfilePreset = {
-  yield_loss_pct: 16,
-  process_per_kg_green: 0,
-  pkg_labour_per_unit: 0,
-};
-const PKG_DEFAULTS: Record<number, { material: number; labour: number }> = {};
 
 interface Client {
   id: string;
@@ -319,13 +313,6 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
       const hasPrice = !isNaN(priceValue);
 
 
-      const overrideFor = (skuData: typeof resolvedSkus[number]) => {
-        const ov = cleanedOverrides[`${skuData.packagingTypeId}-${skuData.grams}`];
-        if (!ov) return {};
-        return {
-        };
-      };
-
       const createdProducts: Array<{ id: string; sku: string; wasAdjusted: boolean }> = [];
 
       for (const skuData of resolvedSkus) {
@@ -342,7 +329,6 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
           is_active: true,
           is_perennial: lifecycle === 'perennial',
           pricing_incomplete: true,
-          ...overrideFor(skuData),
         };
         const { data: newProduct, error } = await supabase
           .from('products')
