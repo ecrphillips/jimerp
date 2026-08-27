@@ -27,10 +27,12 @@ import {
   FileSpreadsheet,
   Printer,
   Save,
+  RotateCcw,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePricingAssumptions, usePackSpeedBands } from '@/hooks/usePricingAssumptions';
 import { useKgLbRate } from '@/hooks/useKgLbRate';
+import { useSessionState } from '@/hooks/useSessionState';
 import { usePackagingCosts } from '@/hooks/usePackagingCosts';
 import { PACKAGING_OPTIONS, type PackagingVariant } from '@/components/PackagingBadge';
 import { gramsForVariant } from '@/lib/packagingWeights';
@@ -120,6 +122,17 @@ const toNum = (s: string): number | null => {
 const money = (n: number | null, dp = 2): string =>
   n == null ? '—' : `$${n.toFixed(dp)}`;
 
+/**
+ * Storage keys are versioned: a shape change in a later build must not try to
+ * restore state it can no longer read. Bump the suffix when SheetLine changes.
+ */
+const KEY = {
+  lines: 'jim.pricing-sheet.v1.lines',
+  breaks: 'jim.pricing-sheet.v1.breaks',
+  cadence: 'jim.pricing-sheet.v1.cadence',
+  margin: 'jim.pricing-sheet.v1.margin',
+} as const;
+
 const LINE_ORDER: CostLineKey[] = [
   'green',
   'roasterRunning',
@@ -136,10 +149,15 @@ export function PricingSheetTab() {
   const { data: bands = [] } = usePackSpeedBands();
   const { data: packagingCosts = {} } = usePackagingCosts();
 
-  const [lines, setLines] = useState<SheetLine[]>([emptyLine(1)]);
-  const margin = useKgLbRate();
-  const [cadence, setCadence] = useState<VolumeCadence>('MONTHLY');
-  const [breaks, setBreaks] = useState<BreakRow[]>([]);
+  const [lines, setLines, clearLines] = useSessionState<SheetLine[]>(KEY.lines, [
+    emptyLine(1),
+  ]);
+  const margin = useKgLbRate('', KEY.margin);
+  const [cadence, setCadence, clearCadence] = useSessionState<VolumeCadence>(
+    KEY.cadence,
+    'MONTHLY',
+  );
+  const [breaks, setBreaks, clearBreaks] = useSessionState<BreakRow[]>(KEY.breaks, []);
 
   const priceBreaks: PriceBreak[] = useMemo(
     () =>
@@ -252,6 +270,14 @@ export function PricingSheetTab() {
 
   const [exporting, setExporting] = useState(false);
 
+  const clearSheet = () => {
+    clearLines();
+    clearBreaks();
+    clearCadence();
+    margin.reset();
+    toast.success('Sheet cleared');
+  };
+
   const onExportExcel = async () => {
     if (!assumptions) return;
     setExporting(true);
@@ -309,6 +335,11 @@ export function PricingSheetTab() {
 
   return (
     <div className="space-y-6">
+      <p className="text-xs text-muted-foreground print:hidden">
+        This sheet is kept while the browser tab stays open, so you can navigate away and come
+        back. Closing the tab clears it — export before you go if you want to keep it.
+      </p>
+
       {assumptionsIncomplete && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
@@ -418,6 +449,9 @@ export function PricingSheetTab() {
         </Button>
         <Button variant="outline" onClick={() => window.print()}>
           <Printer className="h-4 w-4 mr-1" /> Print / Save as PDF
+        </Button>
+        <Button variant="ghost" onClick={clearSheet} title="Start a new sheet">
+          <RotateCcw className="h-4 w-4 mr-1" /> Clear sheet
         </Button>
       </div>
 
