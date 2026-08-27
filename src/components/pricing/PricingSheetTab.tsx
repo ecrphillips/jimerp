@@ -31,8 +31,8 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePricingAssumptions, usePackSpeedBands } from '@/hooks/usePricingAssumptions';
-import { useKgLbRate } from '@/hooks/useKgLbRate';
 import { useSessionState } from '@/hooks/useSessionState';
+import { useWeightUnit, type WeightUnit } from '@/hooks/useWeightUnit';
 import { usePackagingCosts } from '@/hooks/usePackagingCosts';
 import { PACKAGING_OPTIONS, type PackagingVariant } from '@/components/PackagingBadge';
 import { gramsForVariant } from '@/lib/packagingWeights';
@@ -42,6 +42,7 @@ import { GreenReferencePicker } from '@/components/pricing/GreenReferencePicker'
 import { toast } from 'sonner';
 import {
   perKgToPerLb,
+  KG_PER_LB,
   type PricingAssumptions,
   type PackSpeedBand,
 } from '@/lib/pricingAssumptions';
@@ -133,6 +134,9 @@ const KEY = {
   margin: 'jim.pricing-sheet.v1.margin',
 } as const;
 
+/** Convert once on toggle, trimmed so the result is comfortable to edit. */
+const trimText = (n: number): string => String(Number(n.toFixed(4)));
+
 const LINE_ORDER: CostLineKey[] = [
   'green',
   'roasterRunning',
@@ -152,7 +156,7 @@ export function PricingSheetTab() {
   const [lines, setLines, clearLines] = useSessionState<SheetLine[]>(KEY.lines, [
     emptyLine(1),
   ]);
-  const margin = useKgLbRate('', KEY.margin);
+  const [marginText, setMarginText, clearMargin] = useSessionState(KEY.margin, '');
   const [cadence, setCadence, clearCadence] = useSessionState<VolumeCadence>(
     KEY.cadence,
     'MONTHLY',
@@ -163,14 +167,55 @@ export function PricingSheetTab() {
     () =>
       breaks.map((b) => ({
         minUnitsPerPeriod: toNum(b.minUnits) ?? 0,
-        marginPerGreenKg: toNum(b.margin),
+        marginPerGreenKg: asPerKg(b.margin),
       })),
-    [breaks],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [breaks, w.unit],
   );
 
   const assumptions: PricingAssumptions | null = assumptionsRow ?? null;
 
-  const marginKg = margin.perKg;
+  const w = useWeightUnit();
+
+  /**
+   * Values are held in whichever unit is on screen, so nothing converts while
+   * being typed — that round trip is what made the old per-pound box
+   * unusable. Flipping the toggle converts what is already entered, once.
+   */
+  const switchUnit = (next: WeightUnit) => {
+    if (next === w.unit) return;
+    const toLb = next === 'LB';
+    const rate = (t: string) => {
+      const n = toNum(t);
+      if (n == null) return t;
+      return trimText(toLb ? n * KG_PER_LB : n / KG_PER_LB);
+    };
+    const weight = (t: string) => {
+      const n = toNum(t);
+      if (n == null) return t;
+      return trimText(toLb ? n / KG_PER_LB : n * KG_PER_LB);
+    };
+
+    setLines((prev) =>
+      prev.map((l) => ({
+        ...l,
+        greenPrice: rate(l.greenPrice),
+        greenBenchmark: rate(l.greenBenchmark),
+        blend: l.blend.map((b) => ({ ...b, price: rate(b.price) })),
+        // Only a weight-priced line counts volume in weight; a packaged line
+        // counts bags, which are not affected by the unit at all.
+        units: TIER_PRESETS[l.tier].config.packagingMaterial ? l.units : weight(l.units),
+      })),
+    );
+    setBreaks((prev) => prev.map((b) => ({ ...b, margin: rate(b.margin) })));
+    setMarginText(rate(marginText));
+    w.setUnit(next);
+  };
+
+  // Everything on screen is in the displayed unit; the engine only ever sees
+  // per green kg.
+  const marginDisplay = toNum(marginText);
+  const marginKg = marginDisplay == null ? null : w.rateFromDisplay(marginDisplay);
 
   const patch = (id: string, next: Partial<SheetLine>) =>
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...next } : l)));
@@ -205,16 +250,22 @@ export function PricingSheetTab() {
     });
   };
 
+  /** A rate typed in the displayed unit, as the per-kg the engine expects. */
+  const asPerKg = (text: string): number | null => {
+    const n = toNum(text);
+    return n == null ? null : w.rateFromDisplay(n);
+  };
+
   const buildGreen = (line: SheetLine): GreenSource => {
     if (line.greenMode === 'BLEND') {
       const components: BlendComponent[] = line.blend.map((b) => ({
         label: b.label || 'Component',
         pctOfBlend: toNum(b.pct) ?? 0,
-        pricePerKg: toNum(b.price),
+        pricePerKg: asPerKg(b.price),
       }));
       return { kind: 'BLEND', components };
     }
-    return { kind: 'FLAT', pricePerKg: toNum(line.greenPrice) };
+    return { kind: 'FLAT', pricePerKg: asPerKg(line.greenPrice) };
   };
 
   const results = useMemo(() => {
@@ -228,7 +279,7 @@ export function PricingSheetTab() {
             tier: line.tier,
             configOverrides: line.overrides,
             green: buildGreen(line),
-            greenBenchmarkPerKg: toNum(line.greenBenchmark),
+            greenBenchmarkPerKg: asPerKg(line.greenBenchmark),
             greenBasis: line.greenBasis,
             gramsPerUnit: toNum(line.grams),
             packagingMaterialPerUnit: toNum(line.packagingMaterial),
@@ -242,7 +293,7 @@ export function PricingSheetTab() {
       );
     }
     return out;
-  }, [lines, assumptions, bands, marginKg, priceBreaks]);
+  }, [lines, assumptions, bands, marginKg, priceBreaks, w.unit]);
 
   const totals = useMemo(() => {
     let greenKg = 0;
@@ -274,7 +325,7 @@ export function PricingSheetTab() {
     clearLines();
     clearBreaks();
     clearCadence();
-    margin.reset();
+    clearMargin();
     toast.success('Sheet cleared');
   };
 
@@ -366,31 +417,36 @@ export function PricingSheetTab() {
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
             <div>
-              <Label htmlFor="margin-kg">Margin per green kg</Label>
+              <Label htmlFor="margin">Margin per {w.greenSuffix}</Label>
               <Input
-                id="margin-kg"
+                id="margin"
                 type="number"
                 step="0.25"
                 placeholder="Not set"
-                value={margin.kgText}
-                onChange={(e) => margin.setKg(e.target.value)}
+                value={marginText}
+                onChange={(e) => setMarginText(e.target.value)}
               />
-              <p className="mt-1 text-xs text-muted-foreground invisible">
-                Same dial, shown both ways. Edit either.
-              </p>
+              {marginDisplay != null && (
+                <p className="mt-1 text-xs text-muted-foreground font-mono">
+                  {w.unit === 'LB'
+                    ? `$${w.rateFromDisplay(marginDisplay).toFixed(4)} per green kg`
+                    : `$${perKgToPerLb(marginDisplay).toFixed(4)} per green lb`}
+                </p>
+              )}
             </div>
             <div>
-              <Label htmlFor="margin-lb">Per green lb</Label>
-              <Input
-                id="margin-lb"
-                type="number"
-                step="0.25"
-                placeholder="Not set"
-                value={margin.lbText}
-                onChange={(e) => margin.setLb(e.target.value)}
-              />
+              <Label htmlFor="unit">Work in</Label>
+              <Select value={w.unit} onValueChange={(v) => switchUnit(v as WeightUnit)}>
+                <SelectTrigger id="unit">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="LB">Pounds</SelectItem>
+                  <SelectItem value="KG">Kilograms</SelectItem>
+                </SelectContent>
+              </Select>
               <p className="mt-1 text-xs text-muted-foreground">
-                Same dial, shown both ways. Edit either.
+                Converts what is already entered. Stored and exported in kg either way.
               </p>
             </div>
             <div>
@@ -404,9 +460,6 @@ export function PricingSheetTab() {
                   <SelectItem value="WEEKLY">Weekly (legacy accounts)</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="mt-1 text-xs text-muted-foreground invisible">
-                Same dial, shown both ways. Edit either.
-              </p>
             </div>
           </div>
 
@@ -429,6 +482,7 @@ export function PricingSheetTab() {
           cadence={cadence}
           assumptions={assumptions}
           bands={bands}
+          w={w}
           packagingCosts={packagingCosts}
           onPatch={(next) => patch(line.id, next)}
           onChooseVariant={(v) => chooseVariant(line, v)}
@@ -473,7 +527,10 @@ export function PricingSheetTab() {
             </Alert>
           )}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <Stat label="Green consumed" value={`${totals.greenKg.toFixed(1)} kg`} />
+            <Stat
+              label="Green consumed"
+              value={`${w.weightToDisplay(totals.greenKg).toFixed(1)} ${w.suffix}`}
+            />
             <Stat label="Cost" value={money(totals.cost)} />
             <Stat label="Revenue" value={money(totals.revenue)} />
             <Stat label="Margin" value={money(totals.margin)} accent />
@@ -596,6 +653,7 @@ interface LineCardProps {
   cadence: VolumeCadence;
   assumptions: PricingAssumptions;
   bands: PackSpeedBand[];
+  w: ReturnType<typeof useWeightUnit>;
   packagingCosts: Record<string, { material_cost_per_unit: number }>;
   onPatch: (next: Partial<SheetLine>) => void;
   onChooseVariant: (v: PackagingVariant) => void;
@@ -610,6 +668,7 @@ function LineCard({
   cadence,
   assumptions,
   bands,
+  w,
   packagingCosts,
   onPatch,
   onChooseVariant,
@@ -625,10 +684,16 @@ function LineCard({
   const benchmark = toNum(line.greenBenchmark);
   // No per-unit cost line means there is no bag: the line is sold by weight.
   const weightPriced = result?.isWeightPriced ?? false;
+  /** A canonical per-kg figure from the engine, shown in the chosen unit. */
+  const asDisplayRate = (perKg: number | null) =>
+    perKg == null ? null : w.rateToDisplay(perKg);
   const pkgReference = line.variant
     ? (packagingCosts[line.variant]?.material_cost_per_unit ?? null)
     : null;
-  const market = result?.greenMarketValuePerKg ?? null;
+  // Both sides in the displayed unit: benchmark as typed, market brought back
+  // from the engine's canonical per kg.
+  const market =
+    result?.greenMarketValuePerKg == null ? null : w.rateToDisplay(result.greenMarketValuePerKg);
   const headroom = benchmark != null && market != null ? benchmark - market : null;
   const units = toNum(line.units);
   const f =
@@ -636,7 +701,7 @@ function LineCard({
       ? forecast(
           result,
           weightPriced
-            ? { cadence, greenKgPerPeriod: units }
+            ? { cadence, greenKgPerPeriod: w.weightFromDisplay(units) }
             : { cadence, unitsPerPeriod: units },
         )
       : null;
@@ -749,6 +814,8 @@ function LineCard({
                 </div>
 
                 <GreenReferencePicker
+                  toDisplay={w.rateToDisplay}
+                  suffix={w.suffix}
                   onUseAsBenchmark={(v) => onPatch({ greenBenchmark: String(v.toFixed(2)) })}
                   onUseAsMarket={(v) =>
                     onPatch({ greenMode: 'FLAT', greenPrice: String(v.toFixed(2)) })
@@ -758,7 +825,7 @@ function LineCard({
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label htmlFor={`bench-${line.id}`} className="text-xs">
-                      Benchmark $/kg
+                      Benchmark $/{w.suffix}
                       {basis === 'BENCHMARK' && (
                         <span className="ml-1 text-emerald-600 dark:text-emerald-400">
                           · prices this line
@@ -776,7 +843,7 @@ function LineCard({
                   </div>
                   <div>
                     <Label htmlFor={`green-${line.id}`} className="text-xs">
-                      Market value $/kg
+                      Market value $/{w.suffix}
                       {basis === 'MARKET' && (
                         <span className="ml-1 text-emerald-600 dark:text-emerald-400">
                           · prices this line
@@ -803,12 +870,12 @@ function LineCard({
                 </div>
 
                 {line.greenMode === 'BLEND' && (
-                  <BlendEditor rows={line.blend} onChange={setBlend} />
+                  <BlendEditor rows={line.blend} onChange={setBlend} unitSuffix={w.suffix} />
                 )}
 
                 {headroom != null && (
                   <p className="text-xs font-mono text-muted-foreground">
-                    Headroom {headroom >= 0 ? '' : '−'}${Math.abs(headroom).toFixed(2)}/kg
+                    Headroom {headroom >= 0 ? '' : '−'}${Math.abs(headroom).toFixed(2)}/{w.suffix}
                     {headroom >= 0 ? ' under the benchmark' : ' over the benchmark'}
                   </p>
                 )}
@@ -893,7 +960,7 @@ function LineCard({
 
             <div>
               <Label htmlFor={`units-${line.id}`}>
-                {weightPriced ? 'Green kg' : 'Units'} per{' '}
+                {weightPriced ? `Green ${w.suffix}` : 'Units'} per{' '}
                 {cadence === 'MONTHLY' ? 'month' : 'week'}
               </Label>
               <Input
@@ -969,27 +1036,29 @@ function LineCard({
                 <>
                   <Row
                     label="Cost floor"
-                    value={money(result?.costFloorPerGreenKg ?? null, 4)}
-                    hint="per green kg"
+                    value={money(asDisplayRate(result?.costFloorPerGreenKg ?? null), 4)}
+                    hint={`per ${w.greenSuffix}`}
                     tone="floor"
                   />
                   <Row
                     label="Margin"
-                    value={money(result?.marginPerGreenKg ?? null, 4)}
-                    hint="per green kg"
+                    value={money(asDisplayRate(result?.marginPerGreenKg ?? null), 4)}
+                    hint={`per ${w.greenSuffix}`}
                   />
                   <div className="border-t pt-2">
                     <Row
                       label="Price"
-                      value={money(result?.pricePerGreenKg ?? null, 2)}
-                      hint="per green kg"
+                      value={money(asDisplayRate(result?.pricePerGreenKg ?? null), 2)}
+                      hint={`per ${w.greenSuffix}`}
                       tone="price"
                       big
                     />
                   </div>
                   {result?.pricePerGreenKg != null && (
                     <p className="text-xs text-muted-foreground">
-                      {money(perKgToPerLb(result.pricePerGreenKg), 2)} per green lb
+                      {w.unit === 'LB'
+                        ? `${money(result.pricePerGreenKg, 2)} per green kg`
+                        : `${money(perKgToPerLb(result.pricePerGreenKg), 2)} per green lb`}
                     </p>
                   )}
                 </>
@@ -1010,11 +1079,11 @@ function LineCard({
                 <p className="text-xs text-muted-foreground">
                   Volume break at {result.appliedBreak.minUnitsPerPeriod} units:{' '}
                   <span className="font-mono">
-                    ${Number(result.marginPerGreenKg).toFixed(2)}/green kg
+                    ${w.rateToDisplay(Number(result.marginPerGreenKg)).toFixed(2)}/{w.greenSuffix}
                   </span>{' '}
                   instead of{' '}
                   <span className="font-mono">
-                    ${Number(result.baseMarginPerGreenKg).toFixed(2)}
+                    ${w.rateToDisplay(Number(result.baseMarginPerGreenKg)).toFixed(2)}
                   </span>
                   .
                 </p>
@@ -1031,14 +1100,14 @@ function LineCard({
               <div className="border-t pt-2 space-y-1">
                 <Row
                   label="Cost floor"
-                  value={money(result?.costFloorPerGreenKg ?? null, 4)}
-                  hint="per green kg"
+                  value={money(asDisplayRate(result?.costFloorPerGreenKg ?? null), 4)}
+                  hint={`per ${w.greenSuffix}`}
                   muted
                 />
                 <Row
                   label="Price"
-                  value={money(result?.pricePerGreenKg ?? null, 4)}
-                  hint="per green kg"
+                  value={money(asDisplayRate(result?.pricePerGreenKg ?? null), 4)}
+                  hint={`per ${w.greenSuffix}`}
                   muted
                 />
               </div>
@@ -1062,7 +1131,7 @@ function LineCard({
                 )}
                 <Row
                   label="Green consumed"
-                  value={`${(f.greenKgPerPeriod ?? 0).toFixed(1)} kg`}
+                  value={`${w.weightToDisplay(f.greenKgPerPeriod ?? 0).toFixed(1)} ${w.suffix}`}
                   muted
                 />
               </div>
@@ -1169,9 +1238,11 @@ function ConfigToggles({
 function BlendEditor({
   rows,
   onChange,
+  unitSuffix,
 }: {
   rows: BlendRow[];
   onChange: (next: BlendRow[]) => void;
+  unitSuffix: string;
 }) {
   const total = rows.reduce((s, r) => s + (toNum(r.pct) ?? 0), 0);
   const add = () =>
@@ -1199,7 +1270,7 @@ function BlendEditor({
           <Input
             type="number"
             step="0.01"
-            placeholder="$/kg"
+            placeholder={`$/${unitSuffix}`}
             value={r.price}
             onChange={(e) => patch(r.id, { price: e.target.value })}
             className="h-8"

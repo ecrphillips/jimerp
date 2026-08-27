@@ -14,9 +14,23 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * failure to persist degrades to ordinary component state.
  */
 
-function read<T>(key: string, fallback: T): T {
+type StorageKind = 'session' | 'local';
+
+/**
+ * Resolved lazily and defensively: touching window.sessionStorage throws
+ * outright in some privacy modes, so even reaching for it is guarded.
+ */
+function store(kind: StorageKind): Storage | null {
   try {
-    const raw = sessionStorage.getItem(key);
+    return kind === 'local' ? window.localStorage : window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+function read<T>(kind: StorageKind, key: string, fallback: T): T {
+  try {
+    const raw = store(kind)?.getItem(key) ?? null;
     if (raw == null) return fallback;
     return JSON.parse(raw) as T;
   } catch {
@@ -26,11 +40,12 @@ function read<T>(key: string, fallback: T): T {
   }
 }
 
-export function useSessionState<T>(
+function useWebStorageState<T>(
+  kind: StorageKind,
   key: string,
   initial: T,
 ): [T, React.Dispatch<React.SetStateAction<T>>, () => void] {
-  const [value, setValue] = useState<T>(() => read(key, initial));
+  const [value, setValue] = useState<T>(() => read(kind, key, initial));
 
   // Skip the write triggered by the initial render: it would rewrite storage
   // with what was just read from it.
@@ -49,17 +64,17 @@ export function useSessionState<T>(
       return;
     }
     try {
-      sessionStorage.setItem(key, JSON.stringify(value));
+      store(kind)?.setItem(key, JSON.stringify(value));
     } catch {
       // Out of quota or storage unavailable. The value still lives in React
       // state for this mount; only persistence is lost.
     }
-  }, [key, value]);
+  }, [kind, key, value]);
 
   const clear = useCallback(() => {
     skipNextWrite.current = true;
     try {
-      sessionStorage.removeItem(key);
+      store(kind)?.removeItem(key);
     } catch {
       // Nothing to do — the reset below is what the caller actually wanted.
     }
@@ -67,7 +82,23 @@ export function useSessionState<T>(
     // `initial` is intentionally not a dependency: callers pass literals, and
     // depending on it would rebuild this callback on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [kind, key]);
 
   return [value, setValue, clear];
+}
+
+/** Working state: survives navigation, cleared when the tab closes. */
+export function useSessionState<T>(key: string, initial: T) {
+  return useWebStorageState('session', key, initial);
+}
+
+/**
+ * A setting: survives the tab closing.
+ *
+ * For preferences rather than work — a unit choice should not have to be made
+ * again every morning, whereas a half-built sheet turning up days later would
+ * be a surprise.
+ */
+export function useLocalState<T>(key: string, initial: T) {
+  return useWebStorageState('local', key, initial);
 }
