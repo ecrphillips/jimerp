@@ -854,6 +854,54 @@ export function calculateLine(
 }
 
 // ---------------------------------------------------------------------------
+// Solving backwards
+// ---------------------------------------------------------------------------
+
+/**
+ * The margin dial that produces a given final price.
+ *
+ * The engine runs cost-plus: a floor, then a dial on top. Quoting works the
+ * other way round — a client is told a round number, and the margin is whatever
+ * that leaves. This solves for the dial so the round number can be the input.
+ *
+ * Returns null when there is no floor to work back from, since a price with no
+ * known cost underneath it is not a margin, it is a guess. A target below the
+ * floor solves to a negative dial rather than being refused: selling at a loss
+ * is sometimes a decision, and the engine already warns about it.
+ *
+ * @param target in the same basis the line is sold on, per green kg.
+ */
+export function solveMarginForTargetPrice(
+  result: PricingLineResult,
+  target: number | null,
+): number | null {
+  if (!isNum(target)) return null;
+
+  switch (result.saleBasis) {
+    case 'UNIT': {
+      // price = floor + margin x green consumed per unit
+      const floor = result.costFloorPerUnit;
+      const greenKg = result.greenKgPerUnit;
+      if (!isNum(floor) || !isNum(greenKg) || greenKg <= 0) return null;
+      return D(target).minus(floor).div(greenKg).toNumber();
+    }
+    case 'GREEN_WEIGHT': {
+      // price = floor + margin, both per green kg
+      const floor = result.costFloorPerGreenKg;
+      if (!isNum(floor)) return null;
+      return D(target).minus(floor).toNumber();
+    }
+    case 'ROASTED_WEIGHT': {
+      // price per roasted kg = (floor per green kg + margin) x green per roasted
+      const floor = result.costFloorPerGreenKg;
+      const perRoasted = result.greenKgPerRoastedKg;
+      if (!isNum(floor) || !isNum(perRoasted) || perRoasted <= 0) return null;
+      return D(target).div(perRoasted).minus(floor).toNumber();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Forecasting
 // ---------------------------------------------------------------------------
 
