@@ -56,11 +56,18 @@ import {
   type BlendComponent,
   type PricingLineResult,
   type VolumeCadence,
+  type PriceBreak,
 } from '@/lib/pricingEngine';
 
 // ---------------------------------------------------------------------------
 // Sheet state
 // ---------------------------------------------------------------------------
+
+interface BreakRow {
+  id: string;
+  minUnits: string;
+  margin: string;
+}
 
 interface BlendRow {
   id: string;
@@ -132,6 +139,16 @@ export function PricingSheetTab() {
   const [lines, setLines] = useState<SheetLine[]>([emptyLine(1)]);
   const [marginPerKg, setMarginPerKg] = useState('');
   const [cadence, setCadence] = useState<VolumeCadence>('MONTHLY');
+  const [breaks, setBreaks] = useState<BreakRow[]>([]);
+
+  const priceBreaks: PriceBreak[] = useMemo(
+    () =>
+      breaks.map((b) => ({
+        minUnitsPerPeriod: toNum(b.minUnits) ?? 0,
+        marginPerGreenKg: toNum(b.margin),
+      })),
+    [breaks],
+  );
 
   const assumptions: PricingAssumptions | null = assumptionsRow ?? null;
 
@@ -199,6 +216,8 @@ export function PricingSheetTab() {
             gramsPerUnit: toNum(line.grams),
             packagingMaterialPerUnit: toNum(line.packagingMaterial),
             marginPerGreenKg: marginKg,
+            priceBreaks,
+            unitsPerPeriod: toNum(line.units),
           },
           assumptions,
           bands,
@@ -206,7 +225,7 @@ export function PricingSheetTab() {
       );
     }
     return out;
-  }, [lines, assumptions, bands, marginKg]);
+  }, [lines, assumptions, bands, marginKg, priceBreaks]);
 
   const totals = useMemo(() => {
     let greenKg = 0;
@@ -258,6 +277,7 @@ export function PricingSheetTab() {
         bands,
         lines: exportLines,
         marginPerGreenKg: marginKg,
+        priceBreaks,
         cadence,
         generatedAt: new Date(),
       });
@@ -362,6 +382,13 @@ export function PricingSheetTab() {
               </p>
             </div>
           </div>
+
+          <VolumeBreaks
+            rows={breaks}
+            onChange={setBreaks}
+            cadence={cadence}
+            baseMargin={marginKg}
+          />
         </CardContent>
       </Card>
 
@@ -428,6 +455,96 @@ export function PricingSheetTab() {
 }
 
 // ---------------------------------------------------------------------------
+
+function VolumeBreaks({
+  rows,
+  onChange,
+  cadence,
+  baseMargin,
+}: {
+  rows: BreakRow[];
+  onChange: (next: BreakRow[]) => void;
+  cadence: VolumeCadence;
+  baseMargin: number | null;
+}) {
+  const period = cadence === 'MONTHLY' ? 'month' : 'week';
+
+  const add = () =>
+    onChange([...rows, { id: newId(), minUnits: '', margin: '' }]);
+
+  const patch = (id: string, next: Partial<BreakRow>) =>
+    onChange(rows.map((r) => (r.id === id ? { ...r, ...next } : r)));
+
+  return (
+    <div className="mt-6 border-t pt-4 space-y-3">
+      <div>
+        <p className="text-sm font-medium">Volume breaks</p>
+        <p className="text-xs text-muted-foreground">
+          A break lowers the margin at volume, never the cost floor — so the floor stays visible
+          underneath and a discount can be checked against it. Each line takes the highest break its
+          own volume reaches.
+        </p>
+      </div>
+
+      {rows.length > 0 && (
+        <div className="space-y-2">
+          <div className="grid grid-cols-[1fr_1fr_auto] gap-2 text-xs text-muted-foreground">
+            <span>From units per {period}</span>
+            <span>Margin $/green kg</span>
+            <span className="w-8" />
+          </div>
+          {rows.map((r) => {
+            const margin = toNum(r.margin);
+            const delta = margin != null && baseMargin != null ? margin - baseMargin : null;
+            return (
+              <div key={r.id} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                <Input
+                  type="number"
+                  step="1"
+                  placeholder="e.g. 500"
+                  value={r.minUnits}
+                  onChange={(e) => patch(r.id, { minUnits: e.target.value })}
+                  className="h-8"
+                />
+                <div className="relative">
+                  <Input
+                    type="number"
+                    step="0.25"
+                    placeholder="Not set"
+                    value={r.margin}
+                    onChange={(e) => patch(r.id, { margin: e.target.value })}
+                    className="h-8"
+                  />
+                  {delta != null && delta !== 0 && (
+                    <span
+                      className={`absolute right-2 top-1/2 -translate-y-1/2 text-xs ${
+                        delta < 0 ? 'text-muted-foreground' : 'text-destructive'
+                      }`}
+                    >
+                      {delta < 0 ? '−' : '+'}${Math.abs(delta).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-8 px-0"
+                  onClick={() => onChange(rows.filter((x) => x.id !== r.id))}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <Button variant="outline" size="sm" onClick={add}>
+        <Plus className="h-3.5 w-3.5 mr-1" /> Add break
+      </Button>
+    </div>
+  );
+}
 
 function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
@@ -816,6 +933,19 @@ function LineCard({
                 value={money(result?.marginPerUnit ?? null, 4)}
                 hint="per unit"
               />
+              {result?.appliedBreak && (
+                <p className="text-xs text-muted-foreground">
+                  Volume break at {result.appliedBreak.minUnitsPerPeriod} units:{' '}
+                  <span className="font-mono">
+                    ${Number(result.marginPerGreenKg).toFixed(2)}/green kg
+                  </span>{' '}
+                  instead of{' '}
+                  <span className="font-mono">
+                    ${Number(result.baseMarginPerGreenKg).toFixed(2)}
+                  </span>
+                  .
+                </p>
+              )}
               <div className="border-t pt-2">
                 <Row
                   label="Price"

@@ -161,6 +161,21 @@ export type GreenSource =
   | { kind: 'FLAT'; label?: string; pricePerKg: number | null }
   | { kind: 'BLEND'; components: BlendComponent[] };
 
+/**
+ * A volume price break.
+ *
+ * Breaks move the margin dial, never the cost floor. Expressing a discount as a
+ * lower margin rather than a lower price means the floor stays visible
+ * underneath it, and a break can be checked against it — a discount that prices
+ * below cost is then arithmetic rather than a judgement call.
+ */
+export interface PriceBreak {
+  /** Units per period at which this margin starts applying. */
+  minUnitsPerPeriod: number;
+  /** The margin dial at that volume, in $/green kg. */
+  marginPerGreenKg: number | null;
+}
+
 export interface ServiceCharge {
   label: string;
   amountPerUnit: number | null;
@@ -196,8 +211,17 @@ export interface PricingLineInput {
   packagingMaterialPerUnit: number | null;
   services?: ServiceCharge[];
 
-  /** The dial. Expressed per green kg; pounds shown for reference. */
+  /** The dial at base volume. Expressed per green kg; pounds shown for reference. */
   marginPerGreenKg: number | null;
+
+  /**
+   * Volume breaks, applied against unitsPerPeriod. The highest break whose
+   * trigger the volume reaches wins; below every trigger the base dial applies.
+   */
+  priceBreaks?: PriceBreak[];
+
+  /** Volume for resolving a break. Cadence is the sheet's, not the line's. */
+  unitsPerPeriod?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +262,9 @@ export type WarningKind =
   | 'MISSING_INPUT'
   | 'NEGATIVE_MARGIN'
   | 'ZERO_COST_LINE'
-  | 'NO_MARKET_VALUE_TO_COMPARE';
+  | 'NO_MARKET_VALUE_TO_COMPARE'
+  | 'BREAK_BELOW_FLOOR'
+  | 'BREAK_NOT_ASCENDING';
 
 export interface PricingWarning {
   kind: WarningKind;
@@ -267,8 +293,13 @@ export interface PricingLineResult {
   costFloorPerGreenKg: number | null;
 
   marginPerUnit: number | null;
+  /** The dial actually used, after any volume break. */
   marginPerGreenKg: number | null;
   marginPerGreenLb: number | null;
+  /** The break that applied, or null when the base dial did. */
+  appliedBreak: PriceBreak | null;
+  /** The base dial before any break, for showing what the volume saved them. */
+  baseMarginPerGreenKg: number | null;
 
   pricePerUnit: number | null;
   pricePerGreenKg: number | null;
@@ -397,6 +428,45 @@ function resolveGreenCost(
         explanation: 'Benchmark not set — this configuration prices on the benchmark.',
         source: 'Benchmark',
       };
+}
+
+/**
+ * The break that applies at a given volume: the highest trigger the volume
+ * reaches. Below every trigger, none applies and the base dial stands.
+ *
+ * A break with no margin set is skipped rather than treated as zero — an
+ * unfilled tier must not silently price at no margin.
+ */
+export function resolvePriceBreak(
+  breaks: PriceBreak[] | undefined,
+  unitsPerPeriod: number | null | undefined,
+): PriceBreak | null {
+  if (!breaks || breaks.length === 0) return null;
+  if (!isNum(unitsPerPeriod) || unitsPerPeriod <= 0) return null;
+
+  const eligible = breaks
+    .filter((b) => isNum(b.minUnitsPerPeriod) && isNum(b.marginPerGreenKg))
+    .filter((b) => unitsPerPeriod >= b.minUnitsPerPeriod)
+    .sort((a, b) => a.minUnitsPerPeriod - b.minUnitsPerPeriod);
+
+  return eligible.length === 0 ? null : eligible[eligible.length - 1];
+}
+
+/**
+ * Breaks should reward volume, so margin should fall as the trigger rises.
+ * A break that pays better at lower volume is almost certainly a typo, and
+ * would quietly overcharge the larger customer.
+ */
+export function breaksDescendInMargin(breaks: PriceBreak[]): boolean {
+  const usable = breaks
+    .filter((b) => isNum(b.minUnitsPerPeriod) && isNum(b.marginPerGreenKg))
+    .sort((a, b) => a.minUnitsPerPeriod - b.minUnitsPerPeriod);
+  for (let i = 0; i < usable.length - 1; i++) {
+    if ((usable[i + 1].marginPerGreenKg as number) > (usable[i].marginPerGreenKg as number)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -630,7 +700,21 @@ export function calculateLine(
   }
 
   // --- margin and price -----------------------------------------------------
-  const marginPerGreenKg = isNum(input.marginPerGreenKg) ? input.marginPerGreenKg : null;
+  const baseMarginPerGreenKg = isNum(input.marginPerGreenKg) ? input.marginPerGreenKg : null;
+  const appliedBreak = resolvePriceBreak(input.priceBreaks, input.unitsPerPeriod);
+
+  const marginPerGreenKg = appliedBreak
+    ? (appliedBreak.marginPerGreenKg as number)
+    : baseMarginPerGreenKg;
+
+  if (input.priceBreaks && input.priceBreaks.length > 1 && !breaksDescendInMargin(input.priceBreaks)) {
+    warnings.push({
+      kind: 'BREAK_NOT_ASCENDING',
+      message:
+        'A higher volume break pays a better margin than a lower one. Buying more would cost more ' +
+        'per unit, which is almost certainly not intended.',
+    });
+  }
   const marginPerGreenLb = isNum(marginPerGreenKg)
     ? D(marginPerGreenKg).times(KG_PER_LB).toNumber()
     : null;
@@ -657,6 +741,18 @@ export function calculateLine(
     });
   }
 
+  // The point of expressing a break as a margin is that this check is possible
+  // at all: the floor is untouched, so a break that goes under it is arithmetic
+  // rather than something to be noticed later on an invoice.
+  if (appliedBreak && isNum(marginPerGreenKg) && marginPerGreenKg <= 0) {
+    warnings.push({
+      kind: 'BREAK_BELOW_FLOOR',
+      message:
+        `The break at ${appliedBreak.minUnitsPerPeriod} units leaves no margin over the cost ` +
+        'floor. At this volume the line earns nothing.',
+    });
+  }
+
   return {
     tier,
     config,
@@ -670,6 +766,8 @@ export function calculateLine(
     marginPerUnit,
     marginPerGreenKg,
     marginPerGreenLb,
+    appliedBreak,
+    baseMarginPerGreenKg,
     pricePerUnit,
     pricePerGreenKg,
     incomplete,

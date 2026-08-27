@@ -62,9 +62,14 @@ const cellOf = async (sheet: string, ref: string, over: Partial<ExportInput> = {
 };
 
 describe('workbook structure', () => {
-  it('has the three tabs the sheet needs', async () => {
+  it('has the four tabs the sheet needs', async () => {
     const wb = await buildPricingWorkbook(input());
-    expect(wb.worksheets.map((w) => w.name)).toEqual(['Assumptions', 'Bands', 'Pricing']);
+    expect(wb.worksheets.map((w) => w.name)).toEqual([
+      'Assumptions',
+      'Bands',
+      'Breaks',
+      'Pricing',
+    ]);
   });
 
   it('dates the filename so saved versions sort', () => {
@@ -112,9 +117,14 @@ describe('formulas survive the round trip — Gate E', () => {
     expect((cell.value as { formula: string }).formula).toBe('Q2+R2');
   });
 
-  it('drives margin from the shared dial', async () => {
+  it('drives margin from the resolved rate times green consumed', async () => {
     const cell = await cellOf('Pricing', 'R2');
-    expect((cell.value as { formula: string }).formula).toBe('MarginPerKg*I2');
+    expect((cell.value as { formula: string }).formula).toBe('W2*I2');
+  });
+
+  it('falls back to the base dial when there are no breaks', async () => {
+    const cell = await cellOf('Pricing', 'W2');
+    expect((cell.value as { formula: string }).formula).toBe('MarginPerKg');
   });
 
   it('looks pack speed up from the bands tab rather than freezing it', async () => {
@@ -127,6 +137,40 @@ describe('formulas survive the round trip — Gate E', () => {
   it('switches green source on the basis cell, so changing it recalculates', async () => {
     const cell = await cellOf('Pricing', 'G2');
     expect((cell.value as { formula: string }).formula).toBe('IF(D2="BENCHMARK",E2,F2)');
+  });
+});
+
+describe('volume breaks reprice inside the workbook', () => {
+  const BREAKS = [
+    { minUnitsPerPeriod: 200, marginPerGreenKg: 9 },
+    { minUnitsPerPeriod: 500, marginPerGreenKg: 8 },
+  ];
+
+  it('looks the margin up from the line volume', async () => {
+    const cell = await cellOf('Pricing', 'W2', { priceBreaks: BREAKS });
+    expect((cell.value as { formula: string }).formula).toBe(
+      'IFERROR(LOOKUP(T2,Breaks!$A$2:$A$3,Breaks!$B$2:$B$3),MarginPerKg)',
+    );
+  });
+
+  it('sorts breaks ascending so the lookup resolves correctly', async () => {
+    const wb = await buildPricingWorkbook(input({ priceBreaks: [BREAKS[1], BREAKS[0]] }));
+    const brs = wb.getWorksheet('Breaks')!;
+    expect([2, 3].map((r) => brs.getCell(`A${r}`).value)).toEqual([200, 500]);
+  });
+
+  it('omits a tier with no margin, matching the engine', async () => {
+    const wb = await buildPricingWorkbook(input({
+      priceBreaks: [...BREAKS, { minUnitsPerPeriod: 1000, marginPerGreenKg: null }],
+    }));
+    const brs = wb.getWorksheet('Breaks')!;
+    expect(brs.getCell('A4').value).toBeFalsy();
+  });
+
+  it('says so when there are no breaks rather than leaving the tab bare', async () => {
+    const wb = await buildPricingWorkbook(input());
+    const brs = wb.getWorksheet('Breaks')!;
+    expect(String(brs.getCell('A3').value)).toContain('No volume breaks');
   });
 });
 
