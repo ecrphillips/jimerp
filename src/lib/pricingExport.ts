@@ -18,6 +18,7 @@
 import type { PricingAssumptions, PackSpeedBand } from './pricingAssumptions';
 import { KG_PER_LB } from './pricingAssumptions';
 import type { CostStackConfig, GreenBasis, PriceBreak, VolumeCadence } from './pricingEngine';
+import type { WeightUnit } from '@/hooks/useWeightUnit';
 
 export interface ExportLine {
   label: string;
@@ -33,6 +34,12 @@ export interface ExportLine {
 }
 
 export interface ExportInput {
+  /**
+   * The unit the workbook is written in. Rates, weights and labels all follow
+   * it, and the other unit appears alongside for reference. Values arrive here
+   * canonical (per green kg) and are converted once, on the way out.
+   */
+  unit: WeightUnit;
   assumptions: PricingAssumptions;
   bands: PackSpeedBand[];
   lines: ExportLine[];
@@ -46,6 +53,15 @@ export interface ExportInput {
 
 const NOT_SET = 'NOT SET';
 
+/**
+ * A rate per kg is a smaller number per lb; a weight in kg is a larger number
+ * in lb. Converting both the same way would look plausible and misprice
+ * everything, so they are separate.
+ */
+const rateOut = (unit: WeightUnit, perKg: number) =>
+  unit === 'LB' ? perKg * KG_PER_LB : perKg;
+const weightOut = (unit: WeightUnit, kg: number) => (unit === 'LB' ? kg / KG_PER_LB : kg);
+
 /** A number, or the loud placeholder that makes dependent formulas fail. */
 const val = (n: number | null | undefined): number | string =>
   n == null || !Number.isFinite(n) ? NOT_SET : n;
@@ -55,9 +71,18 @@ const MONEY_4 = '$#,##0.0000';
 const NUM_3 = '#,##0.000';
 
 /** Assumption rows: [label, value, defined name, number format]. */
-function assumptionRows(a: PricingAssumptions): Array<[string, number | string, string, string?]> {
+function assumptionRows(
+  a: PricingAssumptions,
+  unit: WeightUnit,
+  wSuffix: string,
+): Array<[string, number | string, string, string?]> {
+  const tput = a.roast_throughput_green_kg_per_hr;
   return [
-    ['Roast throughput (green kg/hr)', val(a.roast_throughput_green_kg_per_hr), 'Throughput'],
+    [
+      `Roast throughput (green ${wSuffix}/hr)`,
+      tput == null ? NOT_SET : weightOut(unit, tput),
+      'Throughput',
+    ],
     ['Machine running cost ($/hr)', val(a.machine_running_cost_per_hr), 'MachineCostHr', MONEY_2],
     ['Salary ($/yr)', val(a.labour_salary_annual), 'Salary', MONEY_2],
     ['Weeks worked per year', val(a.labour_weeks_per_year), 'WeeksPerYear'],
@@ -70,6 +95,12 @@ function assumptionRows(a: PricingAssumptions): Array<[string, number | string, 
 export async function buildPricingWorkbook(input: ExportInput) {
   // Loaded on demand: exceljs is large and only needed when exporting.
   const ExcelJS = (await import('exceljs')).default;
+  const unit = input.unit;
+  const wSuffix = unit === 'LB' ? 'lb' : 'kg';
+  const otherSuffix = unit === 'LB' ? 'kg' : 'lb';
+  // Factor taking a figure in the workbook's unit to the other one.
+  const rateToOther = unit === 'LB' ? `/${KG_PER_LB}` : `*${KG_PER_LB}`;
+  const weightToOther = unit === 'LB' ? `*${KG_PER_LB}` : `/${KG_PER_LB}`;
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Home Island Coffee Partners — JIM';
   wb.created = input.generatedAt;
@@ -82,11 +113,11 @@ export async function buildPricingWorkbook(input: ExportInput) {
   as.getCell('A1').font = { bold: true, size: 14 };
   as.getCell('A2').value =
     'Change any value here and every line on the Pricing tab recalculates. ' +
-    'Rates are per green kilogram throughout; pound equivalents are shown for reference.';
+    `Rates are per green ${wSuffix} throughout; ${otherSuffix} equivalents are shown for reference.`;
   as.getCell('A2').font = { italic: true, color: { argb: 'FF666666' } };
 
   let row = 4;
-  for (const [label, value, name, fmt] of assumptionRows(input.assumptions)) {
+  for (const [label, value, name, fmt] of assumptionRows(input.assumptions, unit, wSuffix)) {
     as.getCell(`A${row}`).value = label;
     const cell = as.getCell(`B${row}`);
     cell.value = value;
@@ -103,24 +134,32 @@ export async function buildPricingWorkbook(input: ExportInput) {
   const derived: Array<[string, string, string, string]> = [
     ['Base labour rate ($/hr)', 'Salary/(WeeksPerYear*HoursPerWeek)', 'BaseLabour', MONEY_2],
     ['Loaded labour rate ($/hr)', 'BaseLabour*(1+OncostPct/100)', 'LoadedLabour', MONEY_2],
-    ['Roaster running ($/green kg)', 'MachineCostHr/Throughput', 'MachinePerKg', MONEY_4],
-    ['Roast labour ($/green kg)', 'LoadedLabour/Throughput', 'RoastLabourPerKg', MONEY_4],
-    // Reference only, and formulas so they follow the kilogram rate above
-    // rather than freezing a converted number beside a live one.
+    // Named without a unit: the workbook may be in either, and a name saying
+    // one while holding the other is the mismatch this all exists to avoid.
+    [`Roaster running ($/green ${wSuffix})`, 'MachineCostHr/Throughput', 'MachineRate', MONEY_4],
+    [`Roast labour ($/green ${wSuffix})`, 'LoadedLabour/Throughput', 'RoastLabourRate', MONEY_4],
+    // Reference only, and formulas so they follow the rates above rather than
+    // freezing a converted number beside a live one.
     [
-      'Roaster running ($/green lb)',
-      `MachinePerKg*${KG_PER_LB}`,
-      'MachinePerLb',
+      `Roaster running ($/green ${otherSuffix})`,
+      `MachineRate${rateToOther}`,
+      'MachineRateOther',
       MONEY_4,
     ],
     [
-      'Roast labour ($/green lb)',
-      `RoastLabourPerKg*${KG_PER_LB}`,
-      'RoastLabourPerLb',
+      `Roast labour ($/green ${otherSuffix})`,
+      `RoastLabourRate${rateToOther}`,
+      'RoastLabourRateOther',
       MONEY_4,
     ],
-    ['Roast throughput (green lb/hr)', `Throughput/${KG_PER_LB}`, 'ThroughputLb', NUM_3],
+    [
+      `Roast throughput (green ${otherSuffix}/hr)`,
+      `Throughput${weightToOther}`,
+      'ThroughputOther',
+      NUM_3,
+    ],
   ];
+
   for (const [label, formula, name, fmt] of derived) {
     as.getCell(`A${row}`).value = label;
     const cell = as.getCell(`B${row}`);
@@ -137,15 +176,16 @@ export async function buildPricingWorkbook(input: ExportInput) {
   as.getCell(`A${row}`).font = { bold: true };
   row += 1;
 
-  as.getCell(`A${row}`).value = 'Margin ($/green kg)';
+  as.getCell(`A${row}`).value = `Margin ($/green ${wSuffix})`;
   const marginCell = as.getCell(`B${row}`);
-  marginCell.value = val(input.marginPerGreenKg);
-  marginCell.name = 'MarginPerKg';
+  marginCell.value =
+    input.marginPerGreenKg == null ? NOT_SET : rateOut(unit, input.marginPerGreenKg);
+  marginCell.name = 'MarginRate';
   if (typeof marginCell.value === 'number') marginCell.numFmt = MONEY_2;
   row += 1;
 
-  as.getCell(`A${row}`).value = 'Margin ($/green lb)';
-  as.getCell(`B${row}`).value = { formula: `MarginPerKg*${KG_PER_LB}` };
+  as.getCell(`A${row}`).value = `Margin ($/green ${otherSuffix})`;
+  as.getCell(`B${row}`).value = { formula: `MarginRate${rateToOther}` };
   as.getCell(`B${row}`).numFmt = MONEY_2;
 
   // --------------------------------------------------------------------- Bands
@@ -181,14 +221,14 @@ export async function buildPricingWorkbook(input: ExportInput) {
   brs.columns = [{ width: 22 }, { width: 22 }, { width: 22 }];
   brs.addRow([
     `From units per ${input.cadence === 'MONTHLY' ? 'month' : 'week'}`,
-    'Margin $/green kg',
-    'Margin $/green lb',
+    `Margin $/green ${wSuffix}`,
+    `Margin $/green ${otherSuffix}`,
   ]);
   brs.getRow(1).font = { bold: true };
   usableBreaks.forEach((b, i) => {
     const r = i + 2;
-    brs.addRow([b.minUnitsPerPeriod, b.marginPerGreenKg as number]);
-    brs.getCell(`C${r}`).value = { formula: `B${r}*${KG_PER_LB}` };
+    brs.addRow([b.minUnitsPerPeriod, rateOut(unit, b.marginPerGreenKg as number)]);
+    brs.getCell(`C${r}`).value = { formula: `B${r}${rateToOther}` };
     brs.getCell(`C${r}`).numFmt = MONEY_4;
     brs.getCell(`B${r}`).numFmt = MONEY_4;
   });
@@ -208,8 +248,8 @@ export async function buildPricingWorkbook(input: ExportInput) {
    */
   const marginFormula = (unitsRef: string) =>
     usableBreaks.length === 0
-      ? 'MarginPerKg'
-      : `IFERROR(LOOKUP(${unitsRef},Breaks!$A$2:$A$${lastBreak},Breaks!$B$2:$B$${lastBreak}),MarginPerKg)`;
+      ? 'MarginRate'
+      : `IFERROR(LOOKUP(${unitsRef},Breaks!$A$2:$A$${lastBreak},Breaks!$B$2:$B$${lastBreak}),MarginRate)`;
 
   // ------------------------------------------------------------------- Pricing
   const ps = wb.addWorksheet('Pricing');
@@ -219,11 +259,11 @@ export async function buildPricingWorkbook(input: ExportInput) {
     'Configuration',
     'Included cost lines',
     'Green basis',
-    'Benchmark $/kg',
-    'Market $/kg',
-    'Green used $/kg',
+    `Benchmark $/${wSuffix}`,
+    `Market $/${wSuffix}`,
+    `Green used $/${wSuffix}`,
     'Roasted g/unit',
-    'Green kg/unit',
+    `Green ${wSuffix}/unit`,
     'Packaging $/unit',
     'Pack units/hr',
     'Pack labour $/unit',
@@ -237,7 +277,7 @@ export async function buildPricingWorkbook(input: ExportInput) {
     `Units per ${input.cadence === 'MONTHLY' ? 'month' : 'week'}`,
     'Revenue',
     'Margin total',
-    'Margin $/green kg applied',
+    `Margin $/green ${wSuffix} applied`,
   ];
   ps.addRow(headers);
   ps.getRow(1).font = { bold: true };
@@ -257,8 +297,9 @@ export async function buildPricingWorkbook(input: ExportInput) {
     ps.getCell(`B${r}`).value = line.tierLabel;
     ps.getCell(`C${r}`).value = included;
     ps.getCell(`D${r}`).value = line.greenBasis;
-    ps.getCell(`E${r}`).value = inc.green ? val(line.benchmarkPerKg) : 0;
-    ps.getCell(`F${r}`).value = inc.green ? val(line.marketPerKg) : 0;
+    const asRate = (v: number | null) => (v == null ? NOT_SET : rateOut(unit, v));
+    ps.getCell(`E${r}`).value = inc.green ? asRate(line.benchmarkPerKg) : 0;
+    ps.getCell(`F${r}`).value = inc.green ? asRate(line.marketPerKg) : 0;
 
     // Green used follows the basis, so switching D recalculates the line.
     ps.getCell(`G${r}`).value = inc.green
@@ -266,7 +307,14 @@ export async function buildPricingWorkbook(input: ExportInput) {
       : 0;
 
     ps.getCell(`H${r}`).value = val(line.gramsPerUnit);
-    ps.getCell(`I${r}`).value = { formula: `H${r}/1000/(1-YieldLossPct/100)` };
+    // Grams roasted to green weight, then into the workbook's unit. Rates above
+    // are per that same unit, so the products below stay in dollars either way.
+    ps.getCell(`I${r}`).value = {
+      formula:
+        unit === 'LB'
+          ? `H${r}/1000/(1-YieldLossPct/100)/${KG_PER_LB}`
+          : `H${r}/1000/(1-YieldLossPct/100)`,
+    };
     ps.getCell(`J${r}`).value = inc.packagingMaterial ? val(line.packagingMaterialPerUnit) : 0;
     ps.getCell(`K${r}`).value = inc.packLabour
       ? { formula: bandLookup(`H${r}`) }

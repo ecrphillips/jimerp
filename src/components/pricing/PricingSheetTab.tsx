@@ -354,6 +354,7 @@ export function PricingSheetTab() {
         };
       });
       await downloadPricingWorkbook({
+        unit: w.unit,
         assumptions,
         bands,
         lines: exportLines,
@@ -427,7 +428,7 @@ export function PricingSheetTab() {
         </Select>
         <p className="text-xs text-muted-foreground">
           Applies to every green price, margin and volume below. Switching converts what is already
-          entered. Stored and exported in kilograms either way.
+          entered. Stored in kilograms either way; the export follows this choice.
         </p>
       </div>
 
@@ -511,7 +512,7 @@ export function PricingSheetTab() {
         <div className="flex-1" />
         <Button variant="outline" onClick={onExportExcel} disabled={exporting}>
           <FileSpreadsheet className="h-4 w-4 mr-1" />
-          {exporting ? 'Building…' : 'Export to Excel'}
+          {exporting ? 'Building…' : `Export to Excel (${w.suffix})`}
         </Button>
         <Button variant="outline" onClick={() => window.print()}>
           <Printer className="h-4 w-4 mr-1" /> Print / Save as PDF
