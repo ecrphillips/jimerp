@@ -4196,12 +4196,12 @@ export type Database = {
           blend_components: Json | null
           cost_floor_per_unit: number | null
           created_at: string
+          grams_per_unit: number | null
           green_basis: string
           green_benchmark_per_kg: number | null
           green_kg_per_unit: number | null
           green_market_per_kg: number | null
           green_used_per_kg: number | null
-          grams_per_unit: number | null
           id: string
           included_lines: Json
           margin_per_green_kg: number | null
@@ -4223,12 +4223,12 @@ export type Database = {
           blend_components?: Json | null
           cost_floor_per_unit?: number | null
           created_at?: string
+          grams_per_unit?: number | null
           green_basis: string
           green_benchmark_per_kg?: number | null
           green_kg_per_unit?: number | null
           green_market_per_kg?: number | null
           green_used_per_kg?: number | null
-          grams_per_unit?: number | null
           id?: string
           included_lines: Json
           margin_per_green_kg?: number | null
@@ -4250,12 +4250,12 @@ export type Database = {
           blend_components?: Json | null
           cost_floor_per_unit?: number | null
           created_at?: string
+          grams_per_unit?: number | null
           green_basis?: string
           green_benchmark_per_kg?: number | null
           green_kg_per_unit?: number | null
           green_market_per_kg?: number | null
           green_used_per_kg?: number | null
-          grams_per_unit?: number | null
           id?: string
           included_lines?: Json
           margin_per_green_kg?: number | null

@@ -163,19 +163,24 @@ export function PricingSheetTab() {
   );
   const [breaks, setBreaks, clearBreaks] = useSessionState<BreakRow[]>(KEY.breaks, []);
 
+  const assumptions: PricingAssumptions | null = assumptionsRow ?? null;
+
+  const w = useWeightUnit();
+
   const priceBreaks: PriceBreak[] = useMemo(
     () =>
-      breaks.map((b) => ({
-        minUnitsPerPeriod: toNum(b.minUnits) ?? 0,
-        marginPerGreenKg: asPerKg(b.margin),
-      })),
+      breaks.map((b) => {
+        const n = toNum(b.margin);
+        return {
+          minUnitsPerPeriod: toNum(b.minUnits) ?? 0,
+          marginPerGreenKg: n == null ? null : w.rateFromDisplay(n),
+        };
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [breaks, w.unit],
   );
 
-  const assumptions: PricingAssumptions | null = assumptionsRow ?? null;
 
-  const w = useWeightUnit();
 
   /**
    * Values are held in whichever unit is on screen, so nothing converts while

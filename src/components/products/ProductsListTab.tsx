@@ -686,22 +686,7 @@ export function ProductsListTab() {
         : String(p.packaging_labour_override),
     );
     setPricingOverridesOpen(false);
-    // Load current overrides
-    const { data: ov } = await supabase
-      .from('products')
-      .select('yield_loss_pct_override, process_per_kg_green_override, pkg_material_per_unit_override, pkg_labour_per_unit_override, adjustment_per_unit, adjustment_note')
-      .eq('id', p.id)
-      .maybeSingle();
-    setOverridesValue({
-      [p.id]: {
-        yield_loss_pct_override: (ov as any)?.yield_loss_pct_override ?? null,
-        process_per_kg_green_override: (ov as any)?.process_per_kg_green_override ?? null,
-        pkg_material_per_unit_override: (ov as any)?.pkg_material_per_unit_override ?? null,
-        pkg_labour_per_unit_override: (ov as any)?.pkg_labour_per_unit_override ?? null,
-        adjustment_per_unit: (ov as any)?.adjustment_per_unit ?? null,
-        adjustment_note: (ov as any)?.adjustment_note ?? null,
-      },
-    });
+
     setDialogOpen(true);
   };
 
