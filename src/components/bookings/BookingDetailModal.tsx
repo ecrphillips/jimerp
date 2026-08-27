@@ -350,8 +350,35 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
           {editing && (
             <div className="space-y-3 pt-2 border-t">
               <p className="text-xs text-muted-foreground">
-                Adjust the actual start/end for billing. Hours used and overages recalculate automatically.
+                Adjust the actual day/start/end for billing. Hours used and overages recalculate automatically.
               </p>
+              <div>
+                <Label className="text-xs">Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn('w-full justify-start text-left font-normal', !editDate && 'text-muted-foreground')}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {editDate ? format(parseISO(editDate), 'EEE, MMM d, yyyy') : 'Pick a date'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={editDate ? parseISO(editDate) : undefined}
+                      onSelect={(d) => {
+                        if (!d) return;
+                        setEditDate(format(d, 'yyyy-MM-dd'));
+                        setEditError(null);
+                      }}
+                      initialFocus
+                      className={cn('p-3 pointer-events-auto')}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-xs">Start Time</Label>
@@ -359,7 +386,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
                     value={editStart}
                     onValueChange={(v) => { setEditStart(v); setEditError(null); }}
                     placeholder="Start"
-                    dateStr={booking.booking_date}
+                    dateStr={editDate}
                     blocks={blocks}
                     bookings={editableBookings}
                   />
@@ -370,13 +397,14 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
                     value={editEndTime}
                     onValueChange={(v) => { setEditEndTime(v); setEditError(null); }}
                     placeholder="End"
-                    dateStr={booking.booking_date}
+                    dateStr={editDate}
                     blocks={blocks}
                     bookings={editableBookings}
                     startTimeForRange={editStart || undefined}
                   />
                 </div>
               </div>
+
               {editStart && editEndTime && timeToMinutes(editEndTime) > timeToMinutes(editStart) && (
                 <p className="text-xs text-muted-foreground">
                   New duration: {((timeToMinutes(editEndTime) - timeToMinutes(editStart)) / 60).toFixed(1)}h
