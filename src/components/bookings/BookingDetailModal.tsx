@@ -287,7 +287,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
 
     },
     onSuccess: () => {
-      toast.success('Booking times updated');
+      toast.success('Booking updated');
       invalidateAll();
       setEditing(false);
       onOpenChange(false);
@@ -359,7 +359,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
           {editable && !editing && !cancelMode && (
             <div className="pt-2 border-t">
               <Button variant="outline" size="sm" className="w-full" onClick={startEdit} disabled={isPending}>
-                <Pencil className="h-3.5 w-3.5 mr-1" /> Edit Times
+                <Pencil className="h-3.5 w-3.5 mr-1" /> Edit Day &amp; Times
               </Button>
             </div>
           )}
@@ -432,7 +432,7 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
                 <Button variant="outline" size="sm" onClick={() => setEditing(false)} disabled={isPending}>Cancel</Button>
                 <Button size="sm" onClick={() => { setEditError(null); editTimesMutation.mutate(); }}
                   disabled={isPending || !editStart || !editEndTime || timeToMinutes(editEndTime) <= timeToMinutes(editStart)}>
-                  {editTimesMutation.isPending ? 'Saving…' : 'Save Times'}
+                  {editTimesMutation.isPending ? 'Saving…' : 'Save Changes'}
                 </Button>
               </div>
             </div>
