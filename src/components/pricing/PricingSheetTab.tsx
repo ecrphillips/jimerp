@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePricingAssumptions, usePackSpeedBands } from '@/hooks/usePricingAssumptions';
+import { useKgLbRate } from '@/hooks/useKgLbRate';
 import { usePackagingCosts } from '@/hooks/usePackagingCosts';
 import { PACKAGING_OPTIONS, type PackagingVariant } from '@/components/PackagingBadge';
 import { gramsForVariant } from '@/lib/packagingWeights';
@@ -39,7 +40,6 @@ import { GreenReferencePicker } from '@/components/pricing/GreenReferencePicker'
 import { toast } from 'sonner';
 import {
   perKgToPerLb,
-  perLbToPerKg,
   type PricingAssumptions,
   type PackSpeedBand,
 } from '@/lib/pricingAssumptions';
@@ -137,7 +137,7 @@ export function PricingSheetTab() {
   const { data: packagingCosts = {} } = usePackagingCosts();
 
   const [lines, setLines] = useState<SheetLine[]>([emptyLine(1)]);
-  const [marginPerKg, setMarginPerKg] = useState('');
+  const margin = useKgLbRate();
   const [cadence, setCadence] = useState<VolumeCadence>('MONTHLY');
   const [breaks, setBreaks] = useState<BreakRow[]>([]);
 
@@ -152,8 +152,7 @@ export function PricingSheetTab() {
 
   const assumptions: PricingAssumptions | null = assumptionsRow ?? null;
 
-  const marginKg = toNum(marginPerKg);
-  const marginLb = marginKg == null ? null : perKgToPerLb(marginKg);
+  const marginKg = margin.perKg;
 
   const patch = (id: string, next: Partial<SheetLine>) =>
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...next } : l)));
@@ -342,8 +341,8 @@ export function PricingSheetTab() {
                 type="number"
                 step="0.25"
                 placeholder="Not set"
-                value={marginPerKg}
-                onChange={(e) => setMarginPerKg(e.target.value)}
+                value={margin.kgText}
+                onChange={(e) => margin.setKg(e.target.value)}
               />
               <p className="mt-1 text-xs text-muted-foreground invisible">
                 Same dial, shown both ways. Edit either.
@@ -356,11 +355,8 @@ export function PricingSheetTab() {
                 type="number"
                 step="0.25"
                 placeholder="Not set"
-                value={marginLb == null ? '' : marginLb.toFixed(2)}
-                onChange={(e) => {
-                  const lb = toNum(e.target.value);
-                  setMarginPerKg(lb == null ? '' : String(perLbToPerKg(lb).toFixed(4)));
-                }}
+                value={margin.lbText}
+                onChange={(e) => margin.setLb(e.target.value)}
               />
               <p className="mt-1 text-xs text-muted-foreground">
                 Same dial, shown both ways. Edit either.
