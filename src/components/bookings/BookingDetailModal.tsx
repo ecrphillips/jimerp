@@ -45,7 +45,9 @@ export function BookingDetailModal({ open, onOpenChange, booking, members, allBo
   const [cancelMode, setCancelMode] = useState<CancelMode>(null);
   const [waiveReason, setWaiveReason] = useState('');
   const [editing, setEditing] = useState(false);
+  const [editDate, setEditDate] = useState('');
   const [editStart, setEditStart] = useState('');
+
   const [editEndTime, setEditEndTime] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
 
