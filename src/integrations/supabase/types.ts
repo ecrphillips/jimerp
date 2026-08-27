@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -4053,6 +4053,99 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      pricing_assumptions: {
+        Row: {
+          created_at: string
+          green_financing_apr_pct: number | null
+          green_financing_days: number | null
+          id: string
+          is_singleton: boolean
+          labour_hours_per_week: number | null
+          labour_oncost_pct: number | null
+          labour_salary_annual: number | null
+          labour_weeks_per_year: number | null
+          machine_running_cost_per_hr: number | null
+          notes: string | null
+          roast_throughput_green_kg_per_hr: number | null
+          standard_yield_loss_pct: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          green_financing_apr_pct?: number | null
+          green_financing_days?: number | null
+          id?: string
+          is_singleton?: boolean
+          labour_hours_per_week?: number | null
+          labour_oncost_pct?: number | null
+          labour_salary_annual?: number | null
+          labour_weeks_per_year?: number | null
+          machine_running_cost_per_hr?: number | null
+          notes?: string | null
+          roast_throughput_green_kg_per_hr?: number | null
+          standard_yield_loss_pct?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          green_financing_apr_pct?: number | null
+          green_financing_days?: number | null
+          id?: string
+          is_singleton?: boolean
+          labour_hours_per_week?: number | null
+          labour_oncost_pct?: number | null
+          labour_salary_annual?: number | null
+          labour_weeks_per_year?: number | null
+          machine_running_cost_per_hr?: number | null
+          notes?: string | null
+          roast_throughput_green_kg_per_hr?: number | null
+          standard_yield_loss_pct?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      pricing_pack_speed_bands: {
+        Row: {
+          created_at: string
+          display_order: number
+          id: string
+          label: string
+          max_g: number | null
+          min_g: number
+          notes: string | null
+          units_per_hour: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          display_order: number
+          id?: string
+          label: string
+          max_g?: number | null
+          min_g: number
+          notes?: string | null
+          units_per_hour?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          display_order?: number
+          id?: string
+          label?: string
+          max_g?: number | null
+          min_g?: number
+          notes?: string | null
+          units_per_hour?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
       }
       pricing_rule_profiles: {
         Row: {
