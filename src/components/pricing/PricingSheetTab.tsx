@@ -61,6 +61,7 @@ import {
   type VolumeCadence,
   type PriceBreak,
   type SaleBasis,
+  solveMarginForTargetPrice,
 } from '@/lib/pricingEngine';
 
 // ---------------------------------------------------------------------------
@@ -500,6 +501,9 @@ export function PricingSheetTab() {
           assumptions={assumptions}
           bands={bands}
           w={w}
+          onSolveMargin={(perGreenKg) =>
+            setMarginText(String(Number(w.rateToDisplay(perGreenKg).toFixed(4))))
+          }
           packagingCosts={packagingCosts}
           onPatch={(next) => patch(line.id, next)}
           onChooseVariant={(v) => chooseVariant(line, v)}
@@ -673,6 +677,7 @@ interface LineCardProps {
   assumptions: PricingAssumptions;
   bands: PackSpeedBand[];
   w: ReturnType<typeof useWeightUnit>;
+  onSolveMargin: (marginPerGreenKg: number) => void;
   packagingCosts: Record<string, { material_cost_per_unit: number }>;
   onPatch: (next: Partial<SheetLine>) => void;
   onChooseVariant: (v: PackagingVariant) => void;
@@ -688,6 +693,7 @@ function LineCard({
   assumptions,
   bands,
   w,
+  onSolveMargin,
   packagingCosts,
   onPatch,
   onChooseVariant,
@@ -1197,6 +1203,12 @@ function LineCard({
               )}
             </div>
 
+            <TargetPrice
+              result={result}
+              suffix={weightPriced ? soldSuffix : 'unit'}
+              onSolve={onSolveMargin}
+            />
+
             {f && f.marginPerPeriod != null && (
               <div className="rounded-md border p-3 space-y-1">
                 <Row
@@ -1234,6 +1246,69 @@ function LineCard({
         packagingMaterialPerUnit={toNum(line.packagingMaterial)}
       />
     </Card>
+  );
+}
+
+/**
+ * Work backwards from the number the client will actually be told.
+ *
+ * Applying is a separate action rather than solving as you type: it writes the
+ * sheet-wide dial, so it moves every other line too. That is usually the point
+ * — the headline product sets the rate — but it should be a decision.
+ */
+function TargetPrice({
+  result,
+  suffix,
+  onSolve,
+}: {
+  result: PricingLineResult | undefined;
+  suffix: string;
+  onSolve: (marginPerGreenKg: number) => void;
+}) {
+  const [target, setTarget] = useState('');
+
+  const parsed = toNum(target);
+  const solved = result ? solveMarginForTargetPrice(result, parsed) : null;
+  const solvable = solved != null;
+
+  return (
+    <div className="rounded-md border p-3 space-y-2 print:hidden">
+      <Label htmlFor={`target-${suffix}`} className="text-sm">
+        Work back from a price
+      </Label>
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+            $
+          </span>
+          <Input
+            id={`target-${suffix}`}
+            type="number"
+            step="0.25"
+            placeholder="e.g. 12.00"
+            className="pl-6"
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+          />
+        </div>
+        <Button
+          variant="outline"
+          disabled={!solvable}
+          onClick={() => solved != null && onSolve(solved)}
+        >
+          Set margin
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {parsed == null
+          ? `The price per ${suffix} you want to quote. The margin becomes whatever that leaves.`
+          : !solvable
+            ? 'Needs a cost floor first — a price with no known cost underneath it is a guess, not a margin.'
+            : solved < 0
+              ? `That is below the cost floor. It would price at a loss of $${Math.abs(solved).toFixed(4)} per green kg.`
+              : `Sets the margin for every line on the sheet, not just this one.`}
+      </p>
+    </div>
   );
 }
 
