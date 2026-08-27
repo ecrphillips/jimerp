@@ -1,5 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PricingSheetTab } from '@/components/pricing/PricingSheetTab';
+import { PricedProductsTab } from '@/components/pricing/PricedProductsTab';
 import { AssumptionsTab } from '@/components/pricing/AssumptionsTab';
 import { PackagingCostsTab } from '@/components/pricing/PackagingCostsTab';
 
@@ -16,12 +17,17 @@ export default function PricingAdmin() {
       <Tabs defaultValue="sheet" className="space-y-4">
         <TabsList>
           <TabsTrigger value="sheet">Sheet</TabsTrigger>
+          <TabsTrigger value="products">Priced Products</TabsTrigger>
           <TabsTrigger value="assumptions">Assumptions</TabsTrigger>
           <TabsTrigger value="packaging">Packaging Costs</TabsTrigger>
         </TabsList>
 
         <TabsContent value="sheet">
           <PricingSheetTab />
+        </TabsContent>
+
+        <TabsContent value="products">
+          <PricedProductsTab />
         </TabsContent>
 
         <TabsContent value="assumptions">

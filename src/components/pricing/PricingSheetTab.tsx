@@ -26,6 +26,7 @@ import {
   Info,
   FileSpreadsheet,
   Printer,
+  Save,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePricingAssumptions, usePackSpeedBands } from '@/hooks/usePricingAssumptions';
@@ -33,8 +34,14 @@ import { usePackagingCosts } from '@/hooks/usePackagingCosts';
 import { PACKAGING_OPTIONS, type PackagingVariant } from '@/components/PackagingBadge';
 import { gramsForVariant } from '@/lib/packagingWeights';
 import { downloadPricingWorkbook, type ExportLine } from '@/lib/pricingExport';
+import { SaveToProductDialog } from '@/components/pricing/SaveToProductDialog';
 import { toast } from 'sonner';
-import { perKgToPerLb, perLbToPerKg, type PricingAssumptions } from '@/lib/pricingAssumptions';
+import {
+  perKgToPerLb,
+  perLbToPerKg,
+  type PricingAssumptions,
+  type PackSpeedBand,
+} from '@/lib/pricingAssumptions';
 import {
   calculateLine,
   forecast,
@@ -365,6 +372,8 @@ export function PricingSheetTab() {
           index={i}
           result={results.get(line.id)}
           cadence={cadence}
+          assumptions={assumptions}
+          bands={bands}
           packagingCosts={packagingCosts}
           onPatch={(next) => patch(line.id, next)}
           onChooseVariant={(v) => chooseVariant(line, v)}
@@ -437,6 +446,8 @@ interface LineCardProps {
   index: number;
   result: PricingLineResult | undefined;
   cadence: VolumeCadence;
+  assumptions: PricingAssumptions;
+  bands: PackSpeedBand[];
   packagingCosts: Record<string, { material_cost_per_unit: number }>;
   onPatch: (next: Partial<SheetLine>) => void;
   onChooseVariant: (v: PackagingVariant) => void;
@@ -449,6 +460,8 @@ function LineCard({
   line,
   result,
   cadence,
+  assumptions,
+  bands,
   onPatch,
   onChooseVariant,
   onDuplicate,
@@ -456,6 +469,7 @@ function LineCard({
   canRemove,
 }: LineCardProps) {
   const [showLines, setShowLines] = useState(true);
+  const [saveOpen, setSaveOpen] = useState(false);
   const preset = TIER_PRESETS[line.tier];
   const config = result?.config;
   const basis = line.greenBasis ?? preset.defaultGreenBasis;
@@ -481,6 +495,15 @@ function LineCard({
             <CardDescription className="mt-1">{preset.description}</CardDescription>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSaveOpen(true)}
+              title="Save this price to a product"
+              className="print:hidden"
+            >
+              <Save className="h-4 w-4 mr-1" /> Save to product
+            </Button>
             <Button variant="ghost" size="sm" onClick={onDuplicate} title="Duplicate line">
               <Copy className="h-4 w-4" />
             </Button>
@@ -812,6 +835,18 @@ function LineCard({
           </div>
         </div>
       </CardContent>
+
+      <SaveToProductDialog
+        open={saveOpen}
+        onOpenChange={setSaveOpen}
+        lineLabel={line.label}
+        result={result}
+        assumptions={assumptions}
+        bands={bands}
+        benchmarkPerKg={benchmark}
+        gramsPerUnit={toNum(line.grams)}
+        packagingMaterialPerUnit={toNum(line.packagingMaterial)}
+      />
     </Card>
   );
 }
