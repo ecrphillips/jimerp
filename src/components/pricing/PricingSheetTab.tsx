@@ -35,6 +35,7 @@ import { PACKAGING_OPTIONS, type PackagingVariant } from '@/components/Packaging
 import { gramsForVariant } from '@/lib/packagingWeights';
 import { downloadPricingWorkbook, type ExportLine } from '@/lib/pricingExport';
 import { SaveToProductDialog } from '@/components/pricing/SaveToProductDialog';
+import { GreenReferencePicker } from '@/components/pricing/GreenReferencePicker';
 import { toast } from 'sonner';
 import {
   perKgToPerLb,
@@ -462,6 +463,7 @@ function LineCard({
   cadence,
   assumptions,
   bands,
+  packagingCosts,
   onPatch,
   onChooseVariant,
   onDuplicate,
@@ -474,6 +476,9 @@ function LineCard({
   const config = result?.config;
   const basis = line.greenBasis ?? preset.defaultGreenBasis;
   const benchmark = toNum(line.greenBenchmark);
+  const pkgReference = line.variant
+    ? (packagingCosts[line.variant]?.material_cost_per_unit ?? null)
+    : null;
   const market = result?.greenMarketValuePerKg ?? null;
   const headroom = benchmark != null && market != null ? benchmark - market : null;
   const units = toNum(line.units);
@@ -586,6 +591,13 @@ function LineCard({
                   </p>
                 </div>
 
+                <GreenReferencePicker
+                  onUseAsBenchmark={(v) => onPatch({ greenBenchmark: String(v.toFixed(2)) })}
+                  onUseAsMarket={(v) =>
+                    onPatch({ greenMode: 'FLAT', greenPrice: String(v.toFixed(2)) })
+                  }
+                />
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label htmlFor={`bench-${line.id}`} className="text-xs">
@@ -686,7 +698,9 @@ function LineCard({
 
             {config?.packagingMaterial && (
               <div>
-                <Label htmlFor={`pkg-${line.id}`}>Packaging material $/unit</Label>
+                <Label htmlFor={`pkg-${line.id}`}>
+                  Packaging material to bill back — $/unit
+                </Label>
                 <Input
                   id={`pkg-${line.id}`}
                   type="number"
@@ -696,8 +710,24 @@ function LineCard({
                   onChange={(e) => onPatch({ packagingMaterial: e.target.value })}
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Prefilled from the packaging costs table when you pick a variant. It changes every
-                  time, so set it here.
+                  What the bag, tin or can costs us, plus whatever markup recovers holding it.
+                  This is the material we bill back; pack labour is separate and comes from
+                  Assumptions.
+                  {pkgReference != null && (
+                    <>
+                      {' '}
+                      Prefilled from the packaging costs table at{' '}
+                      <button
+                        type="button"
+                        className="underline"
+                        onClick={() => onPatch({ packagingMaterial: String(pkgReference) })}
+                      >
+                        ${pkgReference.toFixed(4)}
+                      </button>
+                      {' '}— override it for this quote, since every order buys packaging at a
+                      different price.
+                    </>
+                  )}
                 </p>
               </div>
             )}
