@@ -16,15 +16,6 @@ import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
 import { RoastGroupPreview } from './RoastGroupPreview';
 import { PackagingVariantsSection, type PackagingVariantEntry } from './PackagingVariantsSection';
 import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
-import {
-  MixingConsole,
-  buildEmptyMixingConsoleValue,
-  stripRedundantOverrides,
-  hasMixingConsoleErrors,
-  type MixingConsoleValue,
-  type MixingConsoleVariant,
-  type PricingProfilePreset,
-} from '@/components/pricing/MixingConsole';
 import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
 
 const FALLBACK_PRESET: PricingProfilePreset = {
@@ -92,11 +83,8 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
   const [lifecycle, setLifecycle] = useState<LifecycleType | null>(initialLifecycle ?? null);
   const [lifecycleOverridden, setLifecycleOverridden] = useState(false);
 
-  // Step 7: Pricing overrides per variant (mixing console)
-  const [overrides, setOverrides] = useState<MixingConsoleValue>({});
 
   // Wizard page (1 = details, 2 = pricing)
-  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
 
   // Sync lifecycle when modal opens with a new initialLifecycle
   useEffect(() => {
@@ -221,40 +209,8 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
 
   // Mixing console variants
   const variantKey = (v: PackagingVariantEntry) => `${v.packagingTypeId}-${v.grams}`;
-  const consoleVariants: MixingConsoleVariant[] = useMemo(
-    () => validVariants.map(v => ({
-      key: variantKey(v),
-      label: `${v.packagingTypeName} ${v.grams}g`,
-      bagSizeG: v.grams,
-      packagingVariant: null,
-    })),
-    [validVariants]
-  );
   
 
-  // Roast group green value (only resolved for an existing roast group selection)
-  const greenValueQuery = useRoastGroupGreenValue(
-    roastGroupMode === 'existing' && selectedRoastGroup ? selectedRoastGroup : null,
-  );
-  const previewGreenValuePerKg =
-    greenValueQuery.data?.marketValuePerKg && greenValueQuery.data.marketValuePerKg > 0
-      ? greenValueQuery.data.marketValuePerKg
-      : 12;
-  const greenValueSource: 'lots' | 'placeholder' =
-    greenValueQuery.data?.source === 'lots' && greenValueQuery.data?.marketValuePerKg
-      ? 'lots'
-      : 'placeholder';
-  const selectedRoastGroupLabel = useMemo(() => {
-    if (roastGroupMode === 'existing') {
-      const rg = singleOriginRoastGroups.find(g => g.roast_group === selectedRoastGroup);
-      if (!rg) return null;
-      return `${rg.display_name?.trim() || rg.roast_group.replace(/_/g, ' ')} (${rg.roast_group_code})`;
-    }
-    if (roastGroupMode === 'new') {
-      return fullFinishedGoodName ? `${fullFinishedGoodName} (new)` : 'New roast group';
-    }
-    return null;
-  }, [roastGroupMode, selectedRoastGroup, singleOriginRoastGroups, fullFinishedGoodName]);
 
   
   const canSave = useMemo(() => {
@@ -285,13 +241,11 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
     setPriceInput('');
     setLifecycle(initialLifecycle ?? null);
     setLifecycleOverridden(false);
-    setOverrides({});
-    setWizardStep(1);
   };
   
   // Save mutation
   const saveMutation = useMutation({
-    mutationFn: async ({ pricingIncomplete }: { pricingIncomplete: boolean } = { pricingIncomplete: true }) => {
+    mutationFn: async () => {
       const displayName = fullFinishedGoodName;
       if (!displayName) throw new Error('Product name is required');
       if (!selectedClient) throw new Error('Client is required');
@@ -364,20 +318,11 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
       const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
       const hasPrice = !isNaN(priceValue);
 
-      const cleanedOverrides = pricingIncomplete
-        ? {}
-        : stripRedundantOverrides(overrides, consoleVariants, FALLBACK_PRESET, PKG_DEFAULTS);
 
       const overrideFor = (skuData: typeof resolvedSkus[number]) => {
         const ov = cleanedOverrides[`${skuData.packagingTypeId}-${skuData.grams}`];
         if (!ov) return {};
         return {
-          yield_loss_pct_override: ov.yield_loss_pct_override,
-          process_per_kg_green_override: ov.process_per_kg_green_override,
-          pkg_material_per_unit_override: ov.pkg_material_per_unit_override,
-          pkg_labour_per_unit_override: ov.pkg_labour_per_unit_override,
-          adjustment_per_unit: ov.adjustment_per_unit,
-          adjustment_note: ov.adjustment_note,
         };
       };
 
@@ -396,7 +341,7 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
           grind_options: ['WHOLE_BEAN'] as const,
           is_active: true,
           is_perennial: lifecycle === 'perennial',
-          pricing_incomplete: pricingIncomplete,
+          pricing_incomplete: true,
           ...overrideFor(skuData),
         };
         const { data: newProduct, error } = await supabase
@@ -463,19 +408,9 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
         count: createdProducts.length, 
         name: displayName, 
         adjustedCount,
-        pricingIncomplete,
       };
     },
     onSuccess: (result) => {
-      if (result.pricingIncomplete) {
-        toast.success('Product created. Pricing marked as incomplete.');
-      } else {
-        let message = `Created ${result.count} product${result.count > 1 ? 's' : ''}: ${result.name}`;
-        if (result.adjustedCount > 0) {
-          message += ` (${result.adjustedCount} SKU${result.adjustedCount > 1 ? 's' : ''} auto-adjusted for uniqueness)`;
-        }
-        toast.success(message);
-      }
       queryClient.invalidateQueries({ queryKey: ['all-products'] });
       queryClient.invalidateQueries({ queryKey: ['all-prices'] });
       queryClient.invalidateQueries({ queryKey: ['active-roast-groups-with-code'] });
@@ -490,17 +425,16 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
   });
   
   return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setWizardStep(1); }}>
-      <DialogContent className={wizardStep === 2 ? 'max-w-6xl max-h-[90vh] overflow-y-auto' : 'max-w-2xl max-h-[90vh] overflow-y-auto'}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isGeneric
-              ? (wizardStep === 1 ? 'New Generic Product — Details' : 'New Generic Product — Pricing')
-              : (wizardStep === 1 ? 'New Product — Details' : 'New Product — Pricing')}
+              ? 'New Generic Product'
+              : 'New Product'}
           </DialogTitle>
         </DialogHeader>
 
-        {wizardStep === 1 && (
         <div className="space-y-6">
           {/* Step 1: Client */}
           <div>
@@ -661,75 +595,25 @@ export function NewSingleOriginProductModal({ open, onOpenChange, initialLifecyc
             )}
           </div>
 
+          <div className="rounded-md border p-3">
+            <p className="text-sm font-medium">Pricing</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              These products are created without a price. Build one on the pricing sheet, where the
+              cost floor and every rate behind it are visible, then save it to the product.
+            </p>
+          </div>
+
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button variant="outline" onClick={() => { resetForm(); onOpenChange(false); }}>Cancel</Button>
-            <Button
-              variant="secondary"
-              onClick={() => saveMutation.mutate({ pricingIncomplete: true })}
-              disabled={!canSave || saveMutation.isPending}
-            >
-              Create without pricing
-            </Button>
-            <Button
-              onClick={() => {
-                setOverrides(buildEmptyMixingConsoleValue(consoleVariants));
-                setWizardStep(2);
-              }}
-              disabled={!canSave}
-            >
-              Advance to Pricing
+            <Button onClick={() => saveMutation.mutate()} disabled={!canSave || saveMutation.isPending}>
+              {saveMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating…</>
+              ) : (
+                `Create ${validVariants.length} Product${validVariants.length !== 1 ? 's' : ''}`
+              )}
             </Button>
           </div>
         </div>
-        )}
-
-        {wizardStep === 2 && (
-        <div className="space-y-6">
-          <div>
-            <Label>Pricing Overrides</Label>
-            <p className="text-xs text-muted-foreground mb-2">
-              Adjust per-variant cost levers. Leave at preset to inherit defaults.
-            </p>
-            {greenValueSource === 'placeholder' && (
-              <p className="text-xs text-amber-600 mb-2">
-                Pricing preview is using a placeholder green value (no confirmed-cost lot linked to this roast group yet).
-              </p>
-            )}
-            <MixingConsole
-              variants={consoleVariants}
-              value={overrides}
-              onChange={setOverrides}
-              greenMarketPerKg={previewGreenValuePerKg}
-              roastGroupLabel={selectedRoastGroupLabel}
-              preset={FALLBACK_PRESET}
-              pkgDefaults={PKG_DEFAULTS}
-            />
-          </div>
-
-          <div className="flex justify-between gap-2 pt-4 border-t">
-            <Button variant="outline" onClick={() => setWizardStep(1)}>Back</Button>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => saveMutation.mutate({ pricingIncomplete: true })}
-                disabled={!canSave || saveMutation.isPending}
-              >
-                Complete pricing later
-              </Button>
-              <Button
-                onClick={() => saveMutation.mutate({ pricingIncomplete: false })}
-                disabled={!canSave || saveMutation.isPending || hasMixingConsoleErrors(overrides)}
-              >
-                {saveMutation.isPending ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating…</>
-                ) : (
-                  `Create ${validVariants.length} Product${validVariants.length !== 1 ? 's' : ''}`
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-        )}
       </DialogContent>
     </Dialog>
   );

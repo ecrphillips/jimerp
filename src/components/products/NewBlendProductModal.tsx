@@ -15,15 +15,6 @@ import { AlertCircle, ExternalLink, Info, Loader2 } from 'lucide-react';
 import { RoastGroupPreview } from './RoastGroupPreview';
 import { PackagingVariantsSection, type PackagingVariantEntry } from './PackagingVariantsSection';
 import { GramBasedSkuPreview, getResolvedSkus } from './GramBasedSkuPreview';
-import {
-  MixingConsole,
-  buildEmptyMixingConsoleValue,
-  stripRedundantOverrides,
-  hasMixingConsoleErrors,
-  type MixingConsoleValue,
-  type MixingConsoleVariant,
-  type PricingProfilePreset,
-} from '@/components/pricing/MixingConsole';
 import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
 
 const FALLBACK_PRESET: PricingProfilePreset = {
@@ -81,11 +72,8 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   // Step 5: Lifecycle
   const [lifecycle, setLifecycle] = useState<LifecycleType | null>(null);
 
-  // Step 7: Pricing overrides per variant
-  const [overrides, setOverrides] = useState<MixingConsoleValue>({});
 
   // Wizard step
-  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
 
   // Queries
   const { data: clients } = useQuery({
@@ -154,31 +142,8 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     [packagingVariants]
   );
 
-  const consoleVariants: MixingConsoleVariant[] = useMemo(
-    () => validVariants.map(v => ({
-      key: `${v.packagingTypeId}-${v.grams}`,
-      label: `${v.packagingTypeName} ${v.grams}g`,
-      bagSizeG: v.grams,
-      packagingVariant: null,
-    })),
-    [validVariants]
-  );
-  
 
-  // Resolve real green value for the selected post-roast blend roast group
-  const greenValueQuery = useRoastGroupGreenValue(selectedBlendRoastGroup || null);
-  const previewGreenValuePerKg =
-    greenValueQuery.data?.marketValuePerKg && greenValueQuery.data.marketValuePerKg > 0
-      ? greenValueQuery.data.marketValuePerKg
-      : 12;
-  const greenValueSource: 'lots' | 'placeholder' =
-    greenValueQuery.data?.source === 'lots' && greenValueQuery.data?.marketValuePerKg
-      ? 'lots'
-      : 'placeholder';
   const selectedRgRecord = postRoastBlendRoastGroups.find(g => g.roast_group === selectedBlendRoastGroup);
-  const selectedRoastGroupLabel = selectedRgRecord
-    ? `${selectedRgRecord.display_name?.trim() || selectedRgRecord.roast_group.replace(/_/g, ' ')} (${selectedRgRecord.roast_group_code})`
-    : null;
 
   const canSave = useMemo(() => {
     if (!clientId) return false;
@@ -199,8 +164,6 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     setPackagingVariants([]);
     setPriceInput('');
     setLifecycle(null);
-    setOverrides({});
-    setWizardStep(1);
   };
   
   // Navigate to roast groups tab
@@ -211,7 +174,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
   
   // Save mutation
   const saveMutation = useMutation({
-    mutationFn: async ({ pricingIncomplete }: { pricingIncomplete: boolean } = { pricingIncomplete: true }) => {
+    mutationFn: async () => {
       const trimmedName = finishedGoodName.trim();
       if (!selectedClient) throw new Error('Client is required');
       
@@ -232,19 +195,10 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
       const priceValue = priceInput.trim() === '' ? 0 : parseFloat(priceInput);
       const hasPrice = !isNaN(priceValue);
 
-      const cleanedOverrides = pricingIncomplete
-        ? {}
-        : stripRedundantOverrides(overrides, consoleVariants, FALLBACK_PRESET, PKG_DEFAULTS);
       const overrideFor = (skuData: typeof resolvedSkus[number]) => {
         const ov = cleanedOverrides[`${skuData.packagingTypeId}-${skuData.grams}`];
         if (!ov) return {};
         return {
-          yield_loss_pct_override: ov.yield_loss_pct_override,
-          process_per_kg_green_override: ov.process_per_kg_green_override,
-          pkg_material_per_unit_override: ov.pkg_material_per_unit_override,
-          pkg_labour_per_unit_override: ov.pkg_labour_per_unit_override,
-          adjustment_per_unit: ov.adjustment_per_unit,
-          adjustment_note: ov.adjustment_note,
         };
       };
 
@@ -263,7 +217,7 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
           grind_options: ['WHOLE_BEAN'] as const,
           is_active: true,
           is_perennial: lifecycle === 'perennial',
-          pricing_incomplete: pricingIncomplete,
+          pricing_incomplete: true,
           ...overrideFor(skuData),
         };
         const { data: newProduct, error } = await supabase
@@ -329,19 +283,9 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
         count: createdProducts.length, 
         name: trimmedName, 
         adjustedCount,
-        pricingIncomplete,
       };
     },
     onSuccess: (result) => {
-      if (result.pricingIncomplete) {
-        toast.success('Product created. Pricing marked as incomplete.');
-      } else {
-        let message = `Created ${result.count} product${result.count > 1 ? 's' : ''} for ${result.name}`;
-        if (result.adjustedCount > 0) {
-          message += ` (${result.adjustedCount} SKU${result.adjustedCount > 1 ? 's' : ''} auto-adjusted for uniqueness)`;
-        }
-        toast.success(message);
-      }
       queryClient.invalidateQueries({ queryKey: ['all-products'] });
       queryClient.invalidateQueries({ queryKey: ['all-prices'] });
       queryClient.invalidateQueries({ queryKey: ['active-roast-groups-with-code'] });
@@ -359,13 +303,12 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
     rg.display_name?.trim() || rg.roast_group.replace(/_/g, ' ');
   
   return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setWizardStep(1); }}>
-      <DialogContent className={wizardStep === 2 ? 'max-w-6xl max-h-[90vh] overflow-y-auto' : 'max-w-2xl max-h-[90vh] overflow-y-auto'}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{wizardStep === 1 ? 'New Blend Product — Details' : 'New Blend Product — Pricing'}</DialogTitle>
+          <DialogTitle>New Blend Product</DialogTitle>
         </DialogHeader>
 
-        {wizardStep === 1 && (
         <div className="space-y-6">
           <Alert>
             <Info className="h-4 w-4" />
@@ -452,60 +395,21 @@ export function NewBlendProductModal({ open, onOpenChange }: NewBlendProductModa
             {!lifecycle && (<p className="text-xs text-destructive mt-1">Please select a lifecycle</p>)}
           </div>
 
+          <div className="rounded-md border p-3">
+            <p className="text-sm font-medium">Pricing</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              These products are created without a price. Build one on the pricing sheet, where the
+              cost floor and every rate behind it are visible, then save it to the product.
+            </p>
+          </div>
+
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button variant="outline" onClick={() => { resetForm(); onOpenChange(false); }}>Cancel</Button>
-            <Button
-              variant="secondary"
-              onClick={() => saveMutation.mutate({ pricingIncomplete: true })}
-              disabled={!canSave || saveMutation.isPending}
-            >
-              Create without pricing
-            </Button>
-            <Button
-              onClick={() => {
-                setOverrides(buildEmptyMixingConsoleValue(consoleVariants));
-                setWizardStep(2);
-              }}
-              disabled={!canSave}
-            >
-              Advance to Pricing
+            <Button onClick={() => saveMutation.mutate()} disabled={!canSave || saveMutation.isPending}>
+              {saveMutation.isPending ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating…</>) : (`Create ${validVariants.length} Product${validVariants.length !== 1 ? 's' : ''}`)}
             </Button>
           </div>
         </div>
-        )}
-
-        {wizardStep === 2 && (
-        <div className="space-y-6">
-          <div>
-            <Label>Pricing Overrides</Label>
-            <p className="text-xs text-muted-foreground mb-2">Adjust per-variant cost levers. Leave at preset to inherit defaults.</p>
-            {greenValueSource === 'placeholder' && (
-              <p className="text-xs text-amber-600 mb-2">Pricing preview is using a placeholder green value (no confirmed-cost lot linked to this roast group yet).</p>
-            )}
-            <MixingConsole
-              variants={consoleVariants}
-              value={overrides}
-              onChange={setOverrides}
-              greenMarketPerKg={previewGreenValuePerKg}
-              roastGroupLabel={selectedRoastGroupLabel}
-              preset={FALLBACK_PRESET}
-              pkgDefaults={PKG_DEFAULTS}
-            />
-          </div>
-
-          <div className="flex justify-between gap-2 pt-4 border-t">
-            <Button variant="outline" onClick={() => setWizardStep(1)}>Back</Button>
-            <div className="flex gap-2">
-              <Button variant="secondary" onClick={() => saveMutation.mutate({ pricingIncomplete: true })} disabled={!canSave || saveMutation.isPending}>
-                Complete pricing later
-              </Button>
-              <Button onClick={() => saveMutation.mutate({ pricingIncomplete: false })} disabled={!canSave || saveMutation.isPending || hasMixingConsoleErrors(overrides)}>
-                {saveMutation.isPending ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating…</>) : (`Create ${validVariants.length} Product${validVariants.length !== 1 ? 's' : ''}`)}
-              </Button>
-            </div>
-          </div>
-        </div>
-        )}
       </DialogContent>
     </Dialog>
   );

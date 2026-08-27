@@ -75,9 +75,20 @@ export function useSaveProductPricing() {
           { onConflict: 'product_id' },
         );
       if (error) throw error;
+
+      // The dashboard's "products needing pricing" count reads this flag, so a
+      // saved price has to clear it — otherwise the two disagree and the flag
+      // becomes the stale one.
+      const { error: flagError } = await supabase
+        .from('products')
+        .update({ pricing_incomplete: false })
+        .eq('id', input.product_id);
+      if (flagError) throw flagError;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: PRODUCT_PRICING_KEY });
+      qc.invalidateQueries({ queryKey: ['all-products'] });
+      qc.invalidateQueries({ queryKey: ['product-options-for-pricing'] });
     },
   });
 }
