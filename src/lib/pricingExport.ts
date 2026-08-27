@@ -17,7 +17,7 @@
  */
 import type { PricingAssumptions, PackSpeedBand } from './pricingAssumptions';
 import { KG_PER_LB } from './pricingAssumptions';
-import type { CostStackConfig, GreenBasis, VolumeCadence } from './pricingEngine';
+import type { CostStackConfig, GreenBasis, PriceBreak, VolumeCadence } from './pricingEngine';
 
 export interface ExportLine {
   label: string;
@@ -37,6 +37,8 @@ export interface ExportInput {
   bands: PackSpeedBand[];
   lines: ExportLine[];
   marginPerGreenKg: number | null;
+  /** Volume breaks, exported as a lookup so the workbook reprices at volume. */
+  priceBreaks?: PriceBreak[];
   cadence: VolumeCadence;
   /** Caller supplies this so the module stays free of ambient clock reads. */
   generatedAt: Date;
@@ -152,6 +154,39 @@ export async function buildPricingWorkbook(input: ExportInput) {
   bs.addRow(['Bands must tile the whole range without gaps for the lookup to hold.']);
   bs.getRow(lastBand + 2).font = { italic: true, color: { argb: 'FF666666' } };
 
+  // -------------------------------------------------------------------- Breaks
+  // Sorted ascending, so LOOKUP resolves to the highest trigger a volume
+  // reaches — the same rule the engine applies.
+  const usableBreaks = (input.priceBreaks ?? [])
+    .filter((b) => Number.isFinite(b.minUnitsPerPeriod) && b.marginPerGreenKg != null)
+    .sort((a, b) => a.minUnitsPerPeriod - b.minUnitsPerPeriod);
+
+  const brs = wb.addWorksheet('Breaks');
+  brs.columns = [{ width: 22 }, { width: 22 }];
+  brs.addRow([`From units per ${input.cadence === 'MONTHLY' ? 'month' : 'week'}`, 'Margin $/green kg']);
+  brs.getRow(1).font = { bold: true };
+  for (const b of usableBreaks) {
+    brs.addRow([b.minUnitsPerPeriod, b.marginPerGreenKg as number]);
+  }
+  brs.addRow([]);
+  brs.addRow([
+    usableBreaks.length === 0
+      ? 'No volume breaks. Every line uses the base margin from Assumptions.'
+      : 'A volume below the first trigger falls back to the base margin on Assumptions.',
+  ]);
+  brs.getRow(usableBreaks.length + 3).font = { italic: true, color: { argb: 'FF666666' } };
+
+  const lastBreak = usableBreaks.length + 1;
+  /**
+   * The margin a line earns at its volume. LOOKUP errors below the first
+   * trigger, and IFERROR turns that into the base dial — mirroring the engine,
+   * where no break applying means the base margin stands.
+   */
+  const marginFormula = (unitsRef: string) =>
+    usableBreaks.length === 0
+      ? 'MarginPerKg'
+      : `IFERROR(LOOKUP(${unitsRef},Breaks!$A$2:$A$${lastBreak},Breaks!$B$2:$B$${lastBreak}),MarginPerKg)`;
+
   // ------------------------------------------------------------------- Pricing
   const ps = wb.addWorksheet('Pricing');
 
@@ -178,6 +213,7 @@ export async function buildPricingWorkbook(input: ExportInput) {
     `Units per ${input.cadence === 'MONTHLY' ? 'month' : 'week'}`,
     'Revenue',
     'Margin total',
+    'Margin $/green kg applied',
   ];
   ps.addRow(headers);
   ps.getRow(1).font = { bold: true };
@@ -228,14 +264,15 @@ export async function buildPricingWorkbook(input: ExportInput) {
       formula: `N${r}+O${r}+P${r}+J${r}+L${r}+M${r}`,
       date1904: false,
     };
-    ps.getCell(`R${r}`).value = { formula: `MarginPerKg*I${r}` };
+    ps.getCell(`W${r}`).value = { formula: marginFormula(`T${r}`) };
+    ps.getCell(`R${r}`).value = { formula: `W${r}*I${r}` };
     ps.getCell(`S${r}`).value = { formula: `Q${r}+R${r}` };
 
     ps.getCell(`T${r}`).value = val(line.unitsPerPeriod);
     ps.getCell(`U${r}`).value = { formula: `S${r}*T${r}` };
     ps.getCell(`V${r}`).value = { formula: `R${r}*T${r}` };
 
-    for (const col of ['E', 'F', 'G', 'J', 'L', 'M', 'N', 'O', 'P', 'R']) {
+    for (const col of ['E', 'F', 'G', 'J', 'L', 'M', 'N', 'O', 'P', 'R', 'W']) {
       ps.getCell(`${col}${r}`).numFmt = MONEY_4;
     }
     for (const col of ['Q', 'S', 'U', 'V']) {
