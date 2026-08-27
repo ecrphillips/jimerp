@@ -14,13 +14,14 @@ import { cn } from '@/lib/utils';
 import { useGreenReferences, type GreenReference } from '@/hooks/useGreenReferences';
 
 interface Props {
-  /** Applies the reference's market value to the benchmark field. */
-  onUseAsBenchmark: (perKg: number) => void;
-  /** Applies it as the line's market value instead. */
-  onUseAsMarket: (perKg: number) => void;
+  /** Applies the reference's market value to the benchmark field, in display units. */
+  onUseAsBenchmark: (perDisplay: number) => void;
+  /** Applies it as the line's market value instead, in display units. */
+  onUseAsMarket: (perDisplay: number) => void;
+  /** Lot and roast group values are stored per kg; show them as the sheet reads. */
+  toDisplay: (perKg: number) => number;
+  suffix: string;
 }
-
-const perKg = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
 
 /**
  * Green price reference points, inline.
@@ -34,7 +35,13 @@ const perKg = (n: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
  * separate click, because a benchmark is usually a round number above the
  * reference rather than the reference itself.
  */
-export function GreenReferencePicker({ onUseAsBenchmark, onUseAsMarket }: Props) {
+export function GreenReferencePicker({
+  onUseAsBenchmark,
+  onUseAsMarket,
+  toDisplay,
+  suffix,
+}: Props) {
+  const rate = (n: number | null) => (n == null ? '—' : `$${toDisplay(n).toFixed(2)}`);
   const { data: references = [], isLoading } = useGreenReferences();
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -65,7 +72,7 @@ export function GreenReferencePicker({ onUseAsBenchmark, onUseAsMarket }: Props)
           <span className="block truncate">{r.label}</span>
           <span className="block truncate text-xs text-muted-foreground">{r.sublabel}</span>
         </span>
-        <span className="ml-2 shrink-0 font-mono text-sm">{perKg(r.marketPerKg)}</span>
+        <span className="ml-2 shrink-0 font-mono text-sm">{rate(r.marketPerKg)}</span>
       </CommandItem>
     );
   };
@@ -125,11 +132,11 @@ export function GreenReferencePicker({ onUseAsBenchmark, onUseAsMarket }: Props)
           <div className="grid grid-cols-2 gap-2 font-mono text-sm">
             <div>
               <span className="block text-xs text-muted-foreground">Market value</span>
-              <span className="font-semibold">{perKg(selected.marketPerKg)}/kg</span>
+              <span className="font-semibold">{rate(selected.marketPerKg)}/{suffix}</span>
             </div>
             <div>
               <span className="block text-xs text-muted-foreground">Landed book value</span>
-              <span className="text-muted-foreground">{perKg(selected.bookPerKg)}/kg</span>
+              <span className="text-muted-foreground">{rate(selected.bookPerKg)}/{suffix}</span>
             </div>
           </div>
 
@@ -139,7 +146,7 @@ export function GreenReferencePicker({ onUseAsBenchmark, onUseAsMarket }: Props)
               size="sm"
               className="h-7 text-xs"
               disabled={selected.marketPerKg == null}
-              onClick={() => onUseAsBenchmark(selected.marketPerKg as number)}
+              onClick={() => onUseAsBenchmark(toDisplay(selected.marketPerKg as number))}
             >
               Use as benchmark
             </Button>
@@ -148,7 +155,7 @@ export function GreenReferencePicker({ onUseAsBenchmark, onUseAsMarket }: Props)
               size="sm"
               className="h-7 text-xs"
               disabled={selected.marketPerKg == null}
-              onClick={() => onUseAsMarket(selected.marketPerKg as number)}
+              onClick={() => onUseAsMarket(toDisplay(selected.marketPerKg as number))}
             >
               Use as market value
             </Button>
