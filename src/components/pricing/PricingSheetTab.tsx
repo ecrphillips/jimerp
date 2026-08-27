@@ -40,6 +40,7 @@ import {
   type CostStackConfig,
   type CostLineKey,
   type GreenSource,
+  type GreenBasis,
   type BlendComponent,
   type PricingLineResult,
   type VolumeCadence,
@@ -62,6 +63,8 @@ interface SheetLine {
   tier: TierKey;
   overrides: Partial<CostStackConfig>;
   greenMode: 'FLAT' | 'BLEND';
+  /** Undefined follows the tier default. */
+  greenBasis?: GreenBasis;
   greenPrice: string;
   greenBenchmark: string;
   blend: BlendRow[];
@@ -180,6 +183,7 @@ export function PricingSheetTab() {
             configOverrides: line.overrides,
             green: buildGreen(line),
             greenBenchmarkPerKg: toNum(line.greenBenchmark),
+            greenBasis: line.greenBasis,
             gramsPerUnit: toNum(line.grams),
             packagingMaterialPerUnit: toNum(line.packagingMaterial),
             marginPerGreenKg: marginKg,
@@ -403,6 +407,10 @@ function LineCard({
   const [showLines, setShowLines] = useState(true);
   const preset = TIER_PRESETS[line.tier];
   const config = result?.config;
+  const basis = line.greenBasis ?? preset.defaultGreenBasis;
+  const benchmark = toNum(line.greenBenchmark);
+  const market = result?.greenMarketValuePerKg ?? null;
+  const headroom = benchmark != null && market != null ? benchmark - market : null;
   const units = toNum(line.units);
   const f = result && units ? forecast(result, { cadence, unitsPerPeriod: units }) : null;
 
@@ -446,7 +454,7 @@ function LineCard({
               <Label htmlFor={`tier-${line.id}`}>Configuration</Label>
               <Select
                 value={line.tier}
-                onValueChange={(v) => onPatch({ tier: v as TierKey, overrides: {} })}
+                onValueChange={(v) => onPatch({ tier: v as TierKey, overrides: {}, greenBasis: undefined })}
               >
                 <SelectTrigger id={`tier-${line.id}`}>
                   <SelectValue />
@@ -483,37 +491,83 @@ function LineCard({
                   </Select>
                 </div>
 
-                {line.greenMode === 'FLAT' ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor={`green-${line.id}`} className="text-xs">
-                        Market value $/kg
-                      </Label>
+                <div>
+                  <Label className="text-xs">Price this line on</Label>
+                  <Select
+                    value={basis}
+                    onValueChange={(v) => onPatch({ greenBasis: v as GreenBasis })}
+                  >
+                    <SelectTrigger className="h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="BENCHMARK">Benchmark ceiling</SelectItem>
+                      <SelectItem value="MARKET">Market value, passed through</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {basis === 'BENCHMARK'
+                      ? 'Priced on the ceiling, carried with headroom. Real coffee comes in under it.'
+                      : 'Priced on the real coffee, lot by lot. A cheap lot is quoted cheap.'}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor={`bench-${line.id}`} className="text-xs">
+                      Benchmark $/kg
+                      {basis === 'BENCHMARK' && (
+                        <span className="ml-1 text-emerald-600 dark:text-emerald-400">
+                          · prices this line
+                        </span>
+                      )}
+                    </Label>
+                    <Input
+                      id={`bench-${line.id}`}
+                      type="number"
+                      step="0.01"
+                      placeholder={basis === 'BENCHMARK' ? 'Not set' : 'Optional ceiling'}
+                      value={line.greenBenchmark}
+                      onChange={(e) => onPatch({ greenBenchmark: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`green-${line.id}`} className="text-xs">
+                      Market value $/kg
+                      {basis === 'MARKET' && (
+                        <span className="ml-1 text-emerald-600 dark:text-emerald-400">
+                          · prices this line
+                        </span>
+                      )}
+                    </Label>
+                    {line.greenMode === 'FLAT' ? (
                       <Input
                         id={`green-${line.id}`}
                         type="number"
                         step="0.01"
-                        placeholder="Not set"
+                        placeholder={basis === 'MARKET' ? 'Not set' : 'For comparison'}
                         value={line.greenPrice}
                         onChange={(e) => onPatch({ greenPrice: e.target.value })}
                       />
-                    </div>
-                    <div>
-                      <Label htmlFor={`bench-${line.id}`} className="text-xs">
-                        Benchmark ceiling $/kg
-                      </Label>
-                      <Input
-                        id={`bench-${line.id}`}
-                        type="number"
-                        step="0.01"
-                        placeholder="Optional"
-                        value={line.greenBenchmark}
-                        onChange={(e) => onPatch({ greenBenchmark: e.target.value })}
-                      />
-                    </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground pt-2">
+                        {result?.greenMarketValuePerKg == null
+                          ? 'From blend below'
+                          : `$${result.greenMarketValuePerKg.toFixed(4)} from blend`}
+                      </p>
+                    )}
                   </div>
-                ) : (
+                </div>
+
+                {line.greenMode === 'BLEND' && (
                   <BlendEditor rows={line.blend} onChange={setBlend} />
+                )}
+
+                {headroom != null && (
+                  <p className="text-xs font-mono text-muted-foreground">
+                    Headroom {headroom >= 0 ? '' : '−'}${Math.abs(headroom).toFixed(2)}/kg
+                    {headroom >= 0 ? ' under the benchmark' : ' over the benchmark'}
+                  </p>
                 )}
               </div>
             )}

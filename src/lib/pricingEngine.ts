@@ -42,6 +42,18 @@ import {
  */
 export type TierKey = 'T2_TOLL' | 'T3_TOLL_PLUS' | 'T4_PRIVATE_LABEL' | 'T5_CO_PACK' | 'T6_WHITE_GLOVE';
 
+/**
+ * Which green number the price is built on.
+ *
+ * BENCHMARK — a ceiling carried with headroom. Actual green lands under it, and
+ * the margin absorbs financing, carry and replacement drift without a separate
+ * markup line. This is how most products are priced.
+ *
+ * MARKET — the real market value of the coffee, passed straight through. Used
+ * for white glove, where quoting a ceiling would overcharge on a cheap lot.
+ */
+export type GreenBasis = 'BENCHMARK' | 'MARKET';
+
 export interface CostStackConfig {
   green: boolean;
   roasterRunning: boolean;
@@ -58,6 +70,15 @@ export interface TierPreset {
   ownsGreen: boolean;
   description: string;
   config: CostStackConfig;
+  /**
+   * Which green number prices the line by default.
+   *
+   * Benchmark tiers price on a ceiling carried with headroom: the actual coffee
+   * comes in under it, and the warning fires when a lot catches up. White glove
+   * passes the real market value through lot by lot instead — if the green is
+   * $7.99 we charge $7.99, so a ceiling would misprice it.
+   */
+  defaultGreenBasis: GreenBasis;
 }
 
 const stack = (
@@ -80,6 +101,7 @@ export const TIER_PRESETS: Record<TierKey, TierPreset> = {
     ownsGreen: false,
     description: 'Their green, our roaster and our hands. No packaging.',
     config: stack(false, false, false),
+    defaultGreenBasis: 'BENCHMARK',
   },
   T3_TOLL_PLUS: {
     key: 'T3_TOLL_PLUS',
@@ -87,6 +109,7 @@ export const TIER_PRESETS: Record<TierKey, TierPreset> = {
     ownsGreen: false,
     description: 'Toll roasting with downstream services. Packaging optional.',
     config: stack(false, false, true),
+    defaultGreenBasis: 'BENCHMARK',
   },
   T4_PRIVATE_LABEL: {
     key: 'T4_PRIVATE_LABEL',
@@ -94,6 +117,7 @@ export const TIER_PRESETS: Record<TierKey, TierPreset> = {
     ownsGreen: true,
     description: 'Finished product built from roasted coffee we already hold.',
     config: stack(true, true, false),
+    defaultGreenBasis: 'BENCHMARK',
   },
   T5_CO_PACK: {
     key: 'T5_CO_PACK',
@@ -101,6 +125,7 @@ export const TIER_PRESETS: Record<TierKey, TierPreset> = {
     ownsGreen: true,
     description: 'Same stack as private label, built from green components.',
     config: stack(true, true, false),
+    defaultGreenBasis: 'BENCHMARK',
   },
   T6_WHITE_GLOVE: {
     key: 'T6_WHITE_GLOVE',
@@ -108,6 +133,7 @@ export const TIER_PRESETS: Record<TierKey, TierPreset> = {
     ownsGreen: true,
     description: 'Full service. Green passed through at market value, lot by lot.',
     config: stack(true, true, true),
+    defaultGreenBasis: 'MARKET',
   },
 };
 
@@ -145,9 +171,21 @@ export interface PricingLineInput {
   /** Overrides applied on top of the tier preset. */
   configOverrides?: Partial<CostStackConfig>;
 
+  /**
+   * The market value of the actual coffee — a single price or a weighted blend.
+   * Prices the line when greenBasis is MARKET; otherwise it is the comparison
+   * the benchmark is checked against.
+   */
   green: GreenSource;
-  /** Ceiling to price against; a green price at or above it raises a warning. */
+
+  /**
+   * The benchmark ceiling this product is priced against. Prices the line when
+   * greenBasis is BENCHMARK.
+   */
   greenBenchmarkPerKg?: number | null;
+
+  /** Defaults to the tier's basis when omitted. */
+  greenBasis?: GreenBasis;
 
   /**
    * Finished roasted weight of one unit. Null prices the line per green kg
@@ -209,6 +247,15 @@ export interface PricingLineResult {
   tier: TierPreset;
   config: CostStackConfig;
   lines: CostLine[];
+
+  /** Which green number priced this line. */
+  greenBasis: GreenBasis;
+  /**
+   * Market value of the actual coffee. Equal to the green line's rate under a
+   * MARKET basis; under BENCHMARK it is the comparison, shown alongside so the
+   * headroom is visible rather than implied.
+   */
+  greenMarketValuePerKg: number | null;
 
   /** Green consumed by one finished unit; null when the line has no unit. */
   greenKgPerUnit: number | null;
@@ -286,7 +333,8 @@ export function blendSharesTotal(components: BlendComponent[]): number {
   return components.reduce((sum, c) => sum + (isNum(c.pctOfBlend) ? c.pctOfBlend : 0), 0);
 }
 
-function resolveGreen(green: GreenSource): {
+/** The market value of the coffee, however it is composed. */
+function resolveMarketValue(green: GreenSource): {
   rate: number | null;
   explanation: string;
   source: string;
@@ -303,12 +351,12 @@ function resolveGreen(green: GreenSource): {
         ? {
             rate: green.pricePerKg,
             explanation: `${money(green.pricePerKg)}/green kg`,
-            source: green.label ?? 'Entered green value',
+            source: green.label ?? 'Market value',
           }
         : {
             rate: null,
-            explanation: 'Green value not set.',
-            source: green.label ?? 'Entered green value',
+            explanation: 'Market value not set.',
+            source: green.label ?? 'Market value',
           };
     case 'BLEND': {
       const blended = blendedGreenPricePerKg(green.components);
@@ -316,11 +364,37 @@ function resolveGreen(green: GreenSource): {
         ? { rate: blended.value, explanation: blended.explanation, source: 'Weighted blend' }
         : {
             rate: null,
-            explanation: 'One or more blend components have no green value.',
+            explanation: 'One or more blend components have no market value.',
             source: 'Weighted blend',
           };
     }
   }
+}
+
+/**
+ * The green cost line. Which number prices it depends on the basis: a benchmark
+ * ceiling carried with headroom, or the real market value passed through.
+ */
+function resolveGreenCost(
+  basis: GreenBasis,
+  green: GreenSource,
+  benchmarkPerKg: number | null | undefined,
+): { rate: number | null; explanation: string; source: string } {
+  if (green.kind === 'NONE') return resolveMarketValue(green);
+
+  if (basis === 'MARKET') return resolveMarketValue(green);
+
+  return isNum(benchmarkPerKg)
+    ? {
+        rate: benchmarkPerKg,
+        explanation: `${money(benchmarkPerKg)}/green kg benchmark, carried with headroom`,
+        source: 'Benchmark',
+      }
+    : {
+        rate: null,
+        explanation: 'Benchmark not set — this configuration prices on the benchmark.',
+        source: 'Benchmark',
+      };
 }
 
 // ---------------------------------------------------------------------------
@@ -355,7 +429,15 @@ export function calculateLine(
     ? derivePackLabourPerUnit(assumptions, bands, input.gramsPerUnit)
     : null;
 
-  const greenResolved = resolveGreen(config.green ? input.green : { kind: 'NONE' });
+  const greenBasis: GreenBasis = input.greenBasis ?? tier.defaultGreenBasis;
+  const greenResolved = resolveGreenCost(
+    greenBasis,
+    config.green ? input.green : { kind: 'NONE' },
+    input.greenBenchmarkPerKg,
+  );
+  // Market value is tracked even when the benchmark prices the line, because
+  // the whole point of a benchmark is knowing when the real coffee catches it.
+  const marketValue = config.green ? resolveMarketValue(input.green) : { rate: null };
 
   if (input.green.kind === 'BLEND') {
     const total = blendSharesTotal(input.green.components);
@@ -369,15 +451,19 @@ export function calculateLine(
 
   if (
     config.green &&
-    isNum(greenResolved.rate) &&
+    isNum(marketValue.rate) &&
     isNum(input.greenBenchmarkPerKg) &&
-    greenResolved.rate >= input.greenBenchmarkPerKg
+    marketValue.rate >= input.greenBenchmarkPerKg
   ) {
     warnings.push({
       kind: 'GREEN_AT_OR_OVER_BENCHMARK',
       message:
-        `Green at ${money(greenResolved.rate, 2)}/kg has reached the ` +
-        `${money(input.greenBenchmarkPerKg, 2)}/kg benchmark this product was priced against.`,
+        greenBasis === 'BENCHMARK'
+          ? `Green at ${money(marketValue.rate, 2)}/kg has reached the ` +
+            `${money(input.greenBenchmarkPerKg, 2)}/kg benchmark this line is priced on. ` +
+            'The headroom is gone.'
+          : `Green at ${money(marketValue.rate, 2)}/kg is at or above the ` +
+            `${money(input.greenBenchmarkPerKg, 2)}/kg ceiling set for this line.`,
     });
   }
 
@@ -547,6 +633,8 @@ export function calculateLine(
     tier,
     config,
     lines,
+    greenBasis,
+    greenMarketValuePerKg: marketValue.rate,
     greenKgPerUnit,
     greenKgExplanation,
     costFloorPerUnit,
