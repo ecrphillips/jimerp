@@ -209,14 +209,17 @@ export default function MemberSchedule() {
   });
   const otherBusy = isProspect ? SAMPLE_PROSPECT_BUSY_SLOTS : realOtherBusy;
 
-  // Hours used this month
+  // Included hours are per calendar month: usage is always measured against the month
+  // of the booking being made, so a full current month never blocks a future month.
   const currentMonthStr = formatInTimeZone(new Date(), DEFAULT_TZ, 'yyyy-MM');
-  const hoursUsedThisMonth = useMemo(() => {
+  const hoursUsedInMonth = useCallback((monthStr: string) => {
     if (!memberId) return 0;
     return allBookings
-      .filter(b => b.account_id === memberId && b.booking_date.startsWith(currentMonthStr) && ['CONFIRMED', 'COMPLETED', 'NO_SHOW'].includes(b.status))
+      .filter(b => b.account_id === memberId && b.booking_date.startsWith(monthStr) && ['CONFIRMED', 'COMPLETED', 'NO_SHOW'].includes(b.status))
       .reduce((sum, b) => sum + (Number(b.duration_hours) || (timeToMinutes(b.end_time) - timeToMinutes(b.start_time)) / 60), 0);
-  }, [allBookings, memberId, currentMonthStr]);
+  }, [allBookings, memberId]);
+  const hoursUsedThisMonth = useMemo(() => hoursUsedInMonth(currentMonthStr), [hoursUsedInMonth, currentMonthStr]);
+
 
   // Build events
   const events = useMemo(() => {
@@ -331,8 +334,13 @@ export default function MemberSchedule() {
   // Booking form computed values
   const dateStr = formDate ? format(formDate, 'yyyy-MM-dd') : null;
   const durationHrs = formStartTime && formEndTime ? (timeToMinutes(formEndTime) - timeToMinutes(formStartTime)) / 60 : 0;
-  const remainingIncluded = Math.max(0, rates.includedHours - hoursUsedThisMonth);
+  // Allowance is scoped to the month of the selected date, not the current month.
+  const bookingMonthStr = formDate ? format(formDate, 'yyyy-MM') : currentMonthStr;
+  const bookingMonthLabel = formDate ? format(formDate, 'MMMM') : formatInTimeZone(new Date(), DEFAULT_TZ, 'MMMM');
+  const hoursUsedBookingMonth = hoursUsedInMonth(bookingMonthStr);
+  const remainingIncluded = Math.max(0, rates.includedHours - hoursUsedBookingMonth);
   const willBeOverage = durationHrs > remainingIncluded;
+
 
   // Booking horizon check
   const horizonError = useMemo(() => {
@@ -775,10 +783,11 @@ export default function MemberSchedule() {
                     {willBeOverage ? (
                       <>
                         <p className="font-medium">Overage hours will apply</p>
-                        <p>You have {remainingIncluded.toFixed(1)}h remaining of your {rates.includedHours}h included this month. The additional {(durationHrs - remainingIncluded).toFixed(1)}h will be billed at ${rates.overageRate}/hr.</p>
+                        <p>You have {remainingIncluded.toFixed(1)}h remaining of your {rates.includedHours}h included in {bookingMonthLabel}. The additional {(durationHrs - remainingIncluded).toFixed(1)}h will be billed at ${rates.overageRate}/hr.</p>
                       </>
                     ) : (
-                      <p>This will use {durationHrs.toFixed(1)}h of your {remainingIncluded.toFixed(1)}h remaining included hours this month.</p>
+                      <p>This will use {durationHrs.toFixed(1)}h of your {remainingIncluded.toFixed(1)}h remaining included hours in {bookingMonthLabel}.</p>
+
                     )}
                   </div>
                 </div>
