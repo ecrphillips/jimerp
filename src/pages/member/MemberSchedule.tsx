@@ -334,8 +334,13 @@ export default function MemberSchedule() {
   // Booking form computed values
   const dateStr = formDate ? format(formDate, 'yyyy-MM-dd') : null;
   const durationHrs = formStartTime && formEndTime ? (timeToMinutes(formEndTime) - timeToMinutes(formStartTime)) / 60 : 0;
-  const remainingIncluded = Math.max(0, rates.includedHours - hoursUsedThisMonth);
+  // Allowance is scoped to the month of the selected date, not the current month.
+  const bookingMonthStr = formDate ? format(formDate, 'yyyy-MM') : currentMonthStr;
+  const bookingMonthLabel = formDate ? format(formDate, 'MMMM') : formatInTimeZone(new Date(), DEFAULT_TZ, 'MMMM');
+  const hoursUsedBookingMonth = hoursUsedInMonth(bookingMonthStr);
+  const remainingIncluded = Math.max(0, rates.includedHours - hoursUsedBookingMonth);
   const willBeOverage = durationHrs > remainingIncluded;
+
 
   // Booking horizon check
   const horizonError = useMemo(() => {
