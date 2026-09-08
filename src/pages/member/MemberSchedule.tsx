@@ -783,10 +783,11 @@ export default function MemberSchedule() {
                     {willBeOverage ? (
                       <>
                         <p className="font-medium">Overage hours will apply</p>
-                        <p>You have {remainingIncluded.toFixed(1)}h remaining of your {rates.includedHours}h included this month. The additional {(durationHrs - remainingIncluded).toFixed(1)}h will be billed at ${rates.overageRate}/hr.</p>
+                        <p>You have {remainingIncluded.toFixed(1)}h remaining of your {rates.includedHours}h included in {bookingMonthLabel}. The additional {(durationHrs - remainingIncluded).toFixed(1)}h will be billed at ${rates.overageRate}/hr.</p>
                       </>
                     ) : (
-                      <p>This will use {durationHrs.toFixed(1)}h of your {remainingIncluded.toFixed(1)}h remaining included hours this month.</p>
+                      <p>This will use {durationHrs.toFixed(1)}h of your {remainingIncluded.toFixed(1)}h remaining included hours in {bookingMonthLabel}.</p>
+
                     )}
                   </div>
                 </div>
