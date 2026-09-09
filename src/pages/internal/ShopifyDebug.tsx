@@ -389,6 +389,9 @@ export default function ShopifyDebug() {
         </CardContent>
       </Card>
 
+      {/* 1b2. Mapped products */}
+      <ShopifyMappedProducts />
+
       {/* 1c. Re-derive open quarantined lines */}
       <Card>
         <CardHeader>
