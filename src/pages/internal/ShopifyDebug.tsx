@@ -11,6 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
+import { ShopifyMappedProducts } from '@/components/orders/ShopifyMappedProducts';
 import { toast } from 'sonner';
 
 const sb = supabase as any;
@@ -387,6 +388,9 @@ export default function ShopifyDebug() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 1b2. Mapped products */}
+      <ShopifyMappedProducts />
 
       {/* 1c. Re-derive open quarantined lines */}
       <Card>
