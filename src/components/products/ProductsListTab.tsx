@@ -709,11 +709,16 @@ export function ProductsListTab() {
 
       const { data: newProduct, error } = await supabase.from('products').insert({
         account_id: variantSource.account_id, product_name: variantNewName, roast_group: variantSource.roast_group,
-        packaging_variant: variantPackaging, bag_size_g: bagSizeG, format: variantSource.format as any,
+        packaging_type_id: variantTypeId,
+        grams_per_unit: variantGrams,
+        // Legacy enum kept in step where the combination has one, so existing
+        // badges keep rendering; new combinations simply have none.
+        packaging_variant: legacyVariantFor(variantTypeName, variantGrams),
+        bag_size_g: bagSizeG, format: variantSource.format as any,
         grind_options: variantSource.grind_options as any, is_perennial: variantSource.is_perennial, is_active: true,
         requires_production: variantSource.requires_production !== false,
         sku: derivedSku,
-      }).select('id').single();
+      } as any).select('id').single();
       if (error) throw error;
       const priceValue = parseFloat(variantPrice);
       if (!isNaN(priceValue) && variantPrice.trim() !== '') {
@@ -724,7 +729,9 @@ export function ProductsListTab() {
       toast.success('Variant added');
       queryClient.invalidateQueries({ queryKey: ['all-products'] });
       queryClient.invalidateQueries({ queryKey: ['all-prices'] });
-      setVariantDialogOpen(false); setVariantSource(null); setVariantPackaging(null); setVariantPrice('');
+      queryClient.invalidateQueries({ queryKey: ['packaging-variant-usage'] });
+      setVariantDialogOpen(false); setVariantSource(null); setVariantTypeId('');
+      setVariantSizeChoice(''); setVariantCustomGrams(''); setVariantPrice('');
     },
     onError: (err) => { console.error(err); toast.error('Failed to add variant'); },
   });
