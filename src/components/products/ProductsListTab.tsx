@@ -54,36 +54,35 @@ interface Product {
 const FORMATS: ProductFormat[] = ['WHOLE_BEAN', 'ESPRESSO', 'FILTER', 'OTHER'];
 const GRINDS: GrindOption[] = ['WHOLE_BEAN', 'ESPRESSO', 'FILTER'];
 
-const VARIANT_BAG_SIZES: Record<string, number> = {
-  RETAIL_250G: 250,
-  RETAIL_300G: 300,
-  RETAIL_340G: 340,
-  RETAIL_454G: 454,
-  CROWLER_200G: 200,
-  CROWLER_250G: 250,
-  CAN_125G: 125,
-  BULK_2LB: 907,
-  BULK_1KG: 1000,
-  BULK_5LB: 2268,
-  BULK_2KG: 2000,
-};
 
-// Suffixes used to build the new variant's product name. These MUST match
-// entries in PACKAGING_SUFFIXES below so the family grouper keeps the new
-// variant inside the same family as its source product.
-const VARIANT_NAME_SUFFIXES: Record<string, string> = {
-  RETAIL_250G: '250g Retail',
-  RETAIL_300G: '300g Retail',
-  RETAIL_340G: '340g Retail',
-  RETAIL_454G: '454g Retail',
-  CROWLER_200G: '200g Crowler',
-  CROWLER_250G: '250g Crowler',
-  CAN_125G: '125g Can',
-  BULK_2LB: '2lb Bulk',
-  BULK_1KG: '1kg Bulk',
-  BULK_5LB: '5lb Bulk',
-  BULK_2KG: '2kg Bulk',
-};
+/**
+ * Best-effort match from a packaging type name + size onto the legacy
+ * packaging_variant enum, so screens that still read the enum keep working.
+ * Returns null for combinations the enum can't express — that is fine, the
+ * packaging type and grams are the authoritative record.
+ */
+function legacyVariantFor(typeName: string, grams: number): PackagingVariant | null {
+  const n = typeName.toLowerCase();
+  const family = n.includes('crowler')
+    ? 'CROWLER'
+    : n.includes('can')
+      ? 'CAN'
+      : n.includes('bulk')
+        ? 'BULK'
+        : n.includes('retail')
+          ? 'RETAIL'
+          : null;
+  if (!family) return null;
+  const candidates: Record<string, string> = {
+    'RETAIL:250': 'RETAIL_250G', 'RETAIL:300': 'RETAIL_300G',
+    'RETAIL:340': 'RETAIL_340G', 'RETAIL:454': 'RETAIL_454G',
+    'CROWLER:200': 'CROWLER_200G', 'CROWLER:250': 'CROWLER_250G',
+    'CAN:125': 'CAN_125G',
+    'BULK:907': 'BULK_2LB', 'BULK:1000': 'BULK_1KG',
+    'BULK:2268': 'BULK_5LB', 'BULK:2000': 'BULK_2KG',
+  };
+  return (candidates[`${family}:${grams}`] as PackagingVariant) ?? null;
+}
 
 function getTodayVancouver(): string {
   const now = new Date();
@@ -102,12 +101,30 @@ const PACKAGING_SUFFIXES = [
   '2lb Bulk', '1kg Bulk', '5lb Bulk', '2kg Bulk',
 ];
 
+/** Compact size label used in product names: 340g, 1kg, 2lb. */
+export const formatSizeCompact = (grams: number): string => {
+  if (grams === 454) return '1lb';
+  if (grams === 907) return '2lb';
+  if (grams === 2268) return '5lb';
+  if (grams >= 1000 && grams % 1000 === 0) return `${grams / 1000}kg`;
+  return `${grams}g`;
+};
+
+/** Dropdown label: exact grams, with the friendly equivalent where one exists. */
+const formatSizeLabel = (grams: number): string => {
+  const compact = formatSizeCompact(grams);
+  return compact === `${grams}g` ? `${grams} g` : `${grams} g (${compact})`;
+};
+
 const stripPackagingSuffix = (name: string) => {
   let result = name;
   for (const suffix of PACKAGING_SUFFIXES) {
     const re = new RegExp(`[\\s\\-]+${suffix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
     result = result.replace(re, '');
   }
+  // Names built from the packaging-types list look like "Base 340g Retail Bag" —
+  // strip any trailing "<size> <words>" so variants stay in one family.
+  result = result.replace(/[\s\-]+\d+(?:\.\d+)?(?:g|kg|lb)(?:\s+[A-Za-z]+){0,3}$/i, '');
   return result.trim();
 };
 
@@ -184,7 +201,10 @@ export function ProductsListTab() {
   // Add Variant modal state
   const [variantDialogOpen, setVariantDialogOpen] = useState(false);
   const [variantSource, setVariantSource] = useState<Product | null>(null);
-  const [variantPackaging, setVariantPackaging] = useState<PackagingVariant | null>(null);
+  const [variantTypeId, setVariantTypeId] = useState<string>('');
+  // Size chosen from the existing list, or '__custom__' to type a brand new one.
+  const [variantSizeChoice, setVariantSizeChoice] = useState<string>('');
+  const [variantCustomGrams, setVariantCustomGrams] = useState<string>('');
   const [variantPrice, setVariantPrice] = useState('');
 
   // Form state (for editing only now)
@@ -305,32 +325,68 @@ export function ProductsListTab() {
     return products.filter((p) => !(p.id in currentPrices));
   }, [products, currentPrices]);
 
-  // Query sibling variants for the Add Variant dialog
-  const { data: siblingVariants } = useQuery({
-    queryKey: ['sibling-variants', variantSource?.roast_group, variantSource?.account_id],
+  // Packaging types are the master list (managed in Admin Tools → Packaging Types).
+  const { data: packagingTypes } = useQuery({
+    queryKey: ['packaging-types'],
     queryFn: async () => {
-      if (!variantSource) return [];
-      const query = supabase
-        .from('products')
-        .select('packaging_variant')
-        .not('packaging_variant', 'is', null);
-      if (variantSource.roast_group) {
-        query.eq('roast_group', variantSource.roast_group);
-      }
-      if (variantSource.account_id) {
-        query.eq('account_id', variantSource.account_id);
-      }
-      const { data, error } = await query;
+      const { data, error } = await supabase
+        .from('packaging_types')
+        .select('id, name, display_order, is_active')
+        .order('display_order');
       if (error) throw error;
-      return (data ?? []).map(d => d.packaging_variant).filter(Boolean) as string[];
+      return data ?? [];
     },
-    enabled: variantDialogOpen && !!variantSource,
   });
 
-  const availableVariants = useMemo(() => {
-    const used = new Set(siblingVariants ?? []);
-    return PACKAGING_OPTIONS.filter(opt => !used.has(opt.value));
-  }, [siblingVariants]);
+  const activePackagingTypes = useMemo(
+    () => (packagingTypes ?? []).filter((t) => t.is_active),
+    [packagingTypes],
+  );
+
+  // Every size already in use, per packaging type, plus a pooled list of all
+  // known sizes so a size that exists for one type can be reused on another.
+  const { data: variantUsage } = useQuery({
+    queryKey: ['packaging-variant-usage'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('packaging_type_id, grams_per_unit, bag_size_g, roast_group, account_id');
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: variantDialogOpen,
+  });
+
+  // Sizes offered for the chosen type: sizes already used with that type first,
+  // then any other size known anywhere in the catalogue.
+  const sizeOptions = useMemo(() => {
+    const rows = variantUsage ?? [];
+    const forType = new Set<number>();
+    const anywhere = new Set<number>();
+    for (const r of rows) {
+      const g = (r.grams_per_unit ?? r.bag_size_g) as number | null;
+      if (!g || g <= 0) continue;
+      anywhere.add(g);
+      if (variantTypeId && r.packaging_type_id === variantTypeId) forType.add(g);
+    }
+    const inType = [...forType].sort((a, b) => a - b);
+    const others = [...anywhere].filter((g) => !forType.has(g)).sort((a, b) => a - b);
+    return { inType, others };
+  }, [variantUsage, variantTypeId]);
+
+  // Sizes already taken inside this product family for the chosen type.
+  const takenSizes = useMemo(() => {
+    const taken = new Set<number>();
+    if (!variantSource || !variantTypeId) return taken;
+    for (const r of variantUsage ?? []) {
+      if (r.packaging_type_id !== variantTypeId) continue;
+      if (variantSource.roast_group && r.roast_group !== variantSource.roast_group) continue;
+      if (variantSource.account_id && r.account_id !== variantSource.account_id) continue;
+      const g = (r.grams_per_unit ?? r.bag_size_g) as number | null;
+      if (g && g > 0) taken.add(g);
+    }
+    return taken;
+  }, [variantUsage, variantTypeId, variantSource]);
 
   // ========== Derived filter options ==========
 
@@ -599,14 +655,27 @@ export function ProductsListTab() {
   });
 
   const variantBaseName = variantSource ? stripPackagingSuffix(variantSource.product_name) : '';
-  const variantLabel = variantPackaging ? PACKAGING_OPTIONS.find(o => o.value === variantPackaging)?.label ?? '' : '';
-  const variantNameSuffix = variantPackaging ? VARIANT_NAME_SUFFIXES[variantPackaging] ?? variantLabel : '';
-  const variantNewName = variantNameSuffix ? `${variantBaseName} ${variantNameSuffix}` : '';
+  const variantTypeName = activePackagingTypes.find((t) => t.id === variantTypeId)?.name ?? '';
+  const variantGrams = useMemo(() => {
+    if (variantSizeChoice === '__custom__') {
+      const parsed = parseInt(variantCustomGrams, 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    }
+    const parsed = parseInt(variantSizeChoice, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }, [variantSizeChoice, variantCustomGrams]);
+  const variantIsDuplicate = variantGrams > 0 && takenSizes.has(variantGrams);
+  const variantNewName =
+    variantTypeName && variantGrams > 0
+      ? `${variantBaseName} ${formatSizeCompact(variantGrams)} ${variantTypeName}`
+      : '';
 
   const addVariantMutation = useMutation({
     mutationFn: async () => {
-      if (!variantSource || !variantPackaging) throw new Error('Missing data');
-      const bagSizeG = VARIANT_BAG_SIZES[variantPackaging] ?? 0;
+      if (!variantSource || !variantTypeId || variantGrams <= 0) throw new Error('Missing data');
+      if (variantIsDuplicate) throw new Error('That packaging type and size already exists for this product.');
+      const bagSizeG = variantGrams;
+
 
       // Derive SKU from a sibling in the same family: clone source SKU and
       // swap its trailing 5-digit grams segment for the new packaging size.
@@ -639,11 +708,16 @@ export function ProductsListTab() {
 
       const { data: newProduct, error } = await supabase.from('products').insert({
         account_id: variantSource.account_id, product_name: variantNewName, roast_group: variantSource.roast_group,
-        packaging_variant: variantPackaging, bag_size_g: bagSizeG, format: variantSource.format as any,
+        packaging_type_id: variantTypeId,
+        grams_per_unit: variantGrams,
+        // Legacy enum kept in step where the combination has one, so existing
+        // badges keep rendering; new combinations simply have none.
+        packaging_variant: legacyVariantFor(variantTypeName, variantGrams),
+        bag_size_g: bagSizeG, format: variantSource.format as any,
         grind_options: variantSource.grind_options as any, is_perennial: variantSource.is_perennial, is_active: true,
         requires_production: variantSource.requires_production !== false,
         sku: derivedSku,
-      }).select('id').single();
+      } as any).select('id').single();
       if (error) throw error;
       const priceValue = parseFloat(variantPrice);
       if (!isNaN(priceValue) && variantPrice.trim() !== '') {
@@ -654,7 +728,9 @@ export function ProductsListTab() {
       toast.success('Variant added');
       queryClient.invalidateQueries({ queryKey: ['all-products'] });
       queryClient.invalidateQueries({ queryKey: ['all-prices'] });
-      setVariantDialogOpen(false); setVariantSource(null); setVariantPackaging(null); setVariantPrice('');
+      queryClient.invalidateQueries({ queryKey: ['packaging-variant-usage'] });
+      setVariantDialogOpen(false); setVariantSource(null); setVariantTypeId('');
+      setVariantSizeChoice(''); setVariantCustomGrams(''); setVariantPrice('');
     },
     onError: (err) => { console.error(err); toast.error('Failed to add variant'); },
   });
@@ -693,7 +769,8 @@ export function ProductsListTab() {
 
   const openAddVariant = (p: Product) => {
     setDialogOpen(false); setEditingProduct(null);
-    setVariantSource(p); setVariantPackaging(null); setVariantPrice('');
+    setVariantSource(p); setVariantTypeId(''); setVariantSizeChoice('');
+    setVariantCustomGrams(''); setVariantPrice('');
     setVariantDialogOpen(true);
   };
 
@@ -1120,15 +1197,74 @@ export function ProductsListTab() {
                 </div>
               )}
               <div>
-                <Label>Packaging Variant</Label>
-                <Select value={variantPackaging ?? ''} onValueChange={(v) => setVariantPackaging(v as PackagingVariant)}>
-                  <SelectTrigger><SelectValue placeholder="Select packaging variant" /></SelectTrigger>
+                <Label>Packaging type</Label>
+                <Select
+                  value={variantTypeId}
+                  onValueChange={(v) => { setVariantTypeId(v); setVariantSizeChoice(''); setVariantCustomGrams(''); }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select packaging type" /></SelectTrigger>
                   <SelectContent>
-                    {availableVariants.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
+                    {activePackagingTypes.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-                {availableVariants.length === 0 && (
-                  <p className="text-xs text-muted-foreground mt-1">All packaging variants are already in use.</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Types are managed in Admin Tools → Packaging Types.
+                </p>
+              </div>
+
+              <div>
+                <Label>Size</Label>
+                <Select
+                  value={variantSizeChoice}
+                  onValueChange={setVariantSizeChoice}
+                  disabled={!variantTypeId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={variantTypeId ? 'Select a size' : 'Choose a packaging type first'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sizeOptions.inType.map((g) => (
+                      <SelectItem key={`in-${g}`} value={String(g)} disabled={takenSizes.has(g)}>
+                        {formatSizeLabel(g)}{takenSizes.has(g) ? ' — already on this product' : ''}
+                      </SelectItem>
+                    ))}
+                    {sizeOptions.others.length > 0 && (
+                      <>
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                          Other sizes used elsewhere
+                        </div>
+                        {sizeOptions.others.map((g) => (
+                          <SelectItem key={`other-${g}`} value={String(g)} disabled={takenSizes.has(g)}>
+                            {formatSizeLabel(g)}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                    <SelectItem value="__custom__">New size…</SelectItem>
+                  </SelectContent>
+                </Select>
+                {variantSizeChoice === '__custom__' && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      placeholder="grams"
+                      className="w-28"
+                      value={variantCustomGrams}
+                      onChange={(e) => setVariantCustomGrams(e.target.value)}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      g{variantGrams > 0 ? ` — ${formatSizeCompact(variantGrams)}` : ''}
+                    </span>
+                  </div>
+                )}
+                {variantIsDuplicate && (
+                  <p className="text-xs text-destructive mt-1">
+                    This product already has a {variantTypeName} at {formatSizeCompact(variantGrams)}.
+                  </p>
                 )}
               </div>
               <div>
@@ -1137,7 +1273,10 @@ export function ProductsListTab() {
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={() => setVariantDialogOpen(false)}>Cancel</Button>
-                <Button onClick={() => addVariantMutation.mutate()} disabled={addVariantMutation.isPending || !variantPackaging}>
+                <Button
+                  onClick={() => addVariantMutation.mutate()}
+                  disabled={addVariantMutation.isPending || !variantTypeId || variantGrams <= 0 || variantIsDuplicate}
+                >
                   {addVariantMutation.isPending ? 'Saving…' : 'Save'}
                 </Button>
               </div>
