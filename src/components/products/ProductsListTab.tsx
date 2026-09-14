@@ -102,12 +102,30 @@ const PACKAGING_SUFFIXES = [
   '2lb Bulk', '1kg Bulk', '5lb Bulk', '2kg Bulk',
 ];
 
+/** Compact size label used in product names: 340g, 1kg, 2lb. */
+export const formatSizeCompact = (grams: number): string => {
+  if (grams === 454) return '1lb';
+  if (grams === 907) return '2lb';
+  if (grams === 2268) return '5lb';
+  if (grams >= 1000 && grams % 1000 === 0) return `${grams / 1000}kg`;
+  return `${grams}g`;
+};
+
+/** Dropdown label: exact grams, with the friendly equivalent where one exists. */
+const formatSizeLabel = (grams: number): string => {
+  const compact = formatSizeCompact(grams);
+  return compact === `${grams}g` ? `${grams} g` : `${grams} g (${compact})`;
+};
+
 const stripPackagingSuffix = (name: string) => {
   let result = name;
   for (const suffix of PACKAGING_SUFFIXES) {
     const re = new RegExp(`[\\s\\-]+${suffix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
     result = result.replace(re, '');
   }
+  // Names built from the packaging-types list look like "Base 340g Retail Bag" —
+  // strip any trailing "<size> <words>" so variants stay in one family.
+  result = result.replace(/[\s\-]+\d+(?:\.\d+)?(?:g|kg|lb)(?:\s+[A-Za-z]+){0,3}$/i, '');
   return result.trim();
 };
 
