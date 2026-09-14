@@ -54,36 +54,6 @@ interface Product {
 const FORMATS: ProductFormat[] = ['WHOLE_BEAN', 'ESPRESSO', 'FILTER', 'OTHER'];
 const GRINDS: GrindOption[] = ['WHOLE_BEAN', 'ESPRESSO', 'FILTER'];
 
-const VARIANT_BAG_SIZES: Record<string, number> = {
-  RETAIL_250G: 250,
-  RETAIL_300G: 300,
-  RETAIL_340G: 340,
-  RETAIL_454G: 454,
-  CROWLER_200G: 200,
-  CROWLER_250G: 250,
-  CAN_125G: 125,
-  BULK_2LB: 907,
-  BULK_1KG: 1000,
-  BULK_5LB: 2268,
-  BULK_2KG: 2000,
-};
-
-// Suffixes used to build the new variant's product name. These MUST match
-// entries in PACKAGING_SUFFIXES below so the family grouper keeps the new
-// variant inside the same family as its source product.
-const VARIANT_NAME_SUFFIXES: Record<string, string> = {
-  RETAIL_250G: '250g Retail',
-  RETAIL_300G: '300g Retail',
-  RETAIL_340G: '340g Retail',
-  RETAIL_454G: '454g Retail',
-  CROWLER_200G: '200g Crowler',
-  CROWLER_250G: '250g Crowler',
-  CAN_125G: '125g Can',
-  BULK_2LB: '2lb Bulk',
-  BULK_1KG: '1kg Bulk',
-  BULK_5LB: '5lb Bulk',
-  BULK_2KG: '2kg Bulk',
-};
 
 /**
  * Best-effort match from a packaging type name + size onto the legacy
