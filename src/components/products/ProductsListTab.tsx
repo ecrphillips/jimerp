@@ -1227,15 +1227,74 @@ export function ProductsListTab() {
                 </div>
               )}
               <div>
-                <Label>Packaging Variant</Label>
-                <Select value={variantPackaging ?? ''} onValueChange={(v) => setVariantPackaging(v as PackagingVariant)}>
-                  <SelectTrigger><SelectValue placeholder="Select packaging variant" /></SelectTrigger>
+                <Label>Packaging type</Label>
+                <Select
+                  value={variantTypeId}
+                  onValueChange={(v) => { setVariantTypeId(v); setVariantSizeChoice(''); setVariantCustomGrams(''); }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select packaging type" /></SelectTrigger>
                   <SelectContent>
-                    {availableVariants.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
+                    {activePackagingTypes.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-                {availableVariants.length === 0 && (
-                  <p className="text-xs text-muted-foreground mt-1">All packaging variants are already in use.</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Types are managed in Admin Tools → Packaging Types.
+                </p>
+              </div>
+
+              <div>
+                <Label>Size</Label>
+                <Select
+                  value={variantSizeChoice}
+                  onValueChange={setVariantSizeChoice}
+                  disabled={!variantTypeId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={variantTypeId ? 'Select a size' : 'Choose a packaging type first'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sizeOptions.inType.map((g) => (
+                      <SelectItem key={`in-${g}`} value={String(g)} disabled={takenSizes.has(g)}>
+                        {formatSizeLabel(g)}{takenSizes.has(g) ? ' — already on this product' : ''}
+                      </SelectItem>
+                    ))}
+                    {sizeOptions.others.length > 0 && (
+                      <>
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                          Other sizes used elsewhere
+                        </div>
+                        {sizeOptions.others.map((g) => (
+                          <SelectItem key={`other-${g}`} value={String(g)} disabled={takenSizes.has(g)}>
+                            {formatSizeLabel(g)}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                    <SelectItem value="__custom__">New size…</SelectItem>
+                  </SelectContent>
+                </Select>
+                {variantSizeChoice === '__custom__' && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      placeholder="grams"
+                      className="w-28"
+                      value={variantCustomGrams}
+                      onChange={(e) => setVariantCustomGrams(e.target.value)}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      g{variantGrams > 0 ? ` — ${formatSizeCompact(variantGrams)}` : ''}
+                    </span>
+                  </div>
+                )}
+                {variantIsDuplicate && (
+                  <p className="text-xs text-destructive mt-1">
+                    This product already has a {variantTypeName} at {formatSizeCompact(variantGrams)}.
+                  </p>
                 )}
               </div>
               <div>
@@ -1244,7 +1303,10 @@ export function ProductsListTab() {
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={() => setVariantDialogOpen(false)}>Cancel</Button>
-                <Button onClick={() => addVariantMutation.mutate()} disabled={addVariantMutation.isPending || !variantPackaging}>
+                <Button
+                  onClick={() => addVariantMutation.mutate()}
+                  disabled={addVariantMutation.isPending || !variantTypeId || variantGrams <= 0 || variantIsDuplicate}
+                >
                   {addVariantMutation.isPending ? 'Saving…' : 'Save'}
                 </Button>
               </div>
