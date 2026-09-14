@@ -308,32 +308,68 @@ export function ProductsListTab() {
     return products.filter((p) => !(p.id in currentPrices));
   }, [products, currentPrices]);
 
-  // Query sibling variants for the Add Variant dialog
-  const { data: siblingVariants } = useQuery({
-    queryKey: ['sibling-variants', variantSource?.roast_group, variantSource?.account_id],
+  // Packaging types are the master list (managed in Admin Tools → Packaging Types).
+  const { data: packagingTypes } = useQuery({
+    queryKey: ['packaging-types'],
     queryFn: async () => {
-      if (!variantSource) return [];
-      const query = supabase
-        .from('products')
-        .select('packaging_variant')
-        .not('packaging_variant', 'is', null);
-      if (variantSource.roast_group) {
-        query.eq('roast_group', variantSource.roast_group);
-      }
-      if (variantSource.account_id) {
-        query.eq('account_id', variantSource.account_id);
-      }
-      const { data, error } = await query;
+      const { data, error } = await supabase
+        .from('packaging_types')
+        .select('id, name, display_order, is_active')
+        .order('display_order');
       if (error) throw error;
-      return (data ?? []).map(d => d.packaging_variant).filter(Boolean) as string[];
+      return data ?? [];
     },
-    enabled: variantDialogOpen && !!variantSource,
   });
 
-  const availableVariants = useMemo(() => {
-    const used = new Set(siblingVariants ?? []);
-    return PACKAGING_OPTIONS.filter(opt => !used.has(opt.value));
-  }, [siblingVariants]);
+  const activePackagingTypes = useMemo(
+    () => (packagingTypes ?? []).filter((t) => t.is_active),
+    [packagingTypes],
+  );
+
+  // Every size already in use, per packaging type, plus a pooled list of all
+  // known sizes so a size that exists for one type can be reused on another.
+  const { data: variantUsage } = useQuery({
+    queryKey: ['packaging-variant-usage'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('packaging_type_id, grams_per_unit, bag_size_g, roast_group, account_id');
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: variantDialogOpen,
+  });
+
+  // Sizes offered for the chosen type: sizes already used with that type first,
+  // then any other size known anywhere in the catalogue.
+  const sizeOptions = useMemo(() => {
+    const rows = variantUsage ?? [];
+    const forType = new Set<number>();
+    const anywhere = new Set<number>();
+    for (const r of rows) {
+      const g = (r.grams_per_unit ?? r.bag_size_g) as number | null;
+      if (!g || g <= 0) continue;
+      anywhere.add(g);
+      if (variantTypeId && r.packaging_type_id === variantTypeId) forType.add(g);
+    }
+    const inType = [...forType].sort((a, b) => a - b);
+    const others = [...anywhere].filter((g) => !forType.has(g)).sort((a, b) => a - b);
+    return { inType, others };
+  }, [variantUsage, variantTypeId]);
+
+  // Sizes already taken inside this product family for the chosen type.
+  const takenSizes = useMemo(() => {
+    const taken = new Set<number>();
+    if (!variantSource || !variantTypeId) return taken;
+    for (const r of variantUsage ?? []) {
+      if (r.packaging_type_id !== variantTypeId) continue;
+      if (variantSource.roast_group && r.roast_group !== variantSource.roast_group) continue;
+      if (variantSource.account_id && r.account_id !== variantSource.account_id) continue;
+      const g = (r.grams_per_unit ?? r.bag_size_g) as number | null;
+      if (g && g > 0) taken.add(g);
+    }
+    return taken;
+  }, [variantUsage, variantTypeId, variantSource]);
 
   // ========== Derived filter options ==========
 
