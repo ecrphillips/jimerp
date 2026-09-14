@@ -799,7 +799,8 @@ export function ProductsListTab() {
 
   const openAddVariant = (p: Product) => {
     setDialogOpen(false); setEditingProduct(null);
-    setVariantSource(p); setVariantPackaging(null); setVariantPrice('');
+    setVariantSource(p); setVariantTypeId(''); setVariantSizeChoice('');
+    setVariantCustomGrams(''); setVariantPrice('');
     setVariantDialogOpen(true);
   };
 
