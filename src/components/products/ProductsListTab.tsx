@@ -184,7 +184,10 @@ export function ProductsListTab() {
   // Add Variant modal state
   const [variantDialogOpen, setVariantDialogOpen] = useState(false);
   const [variantSource, setVariantSource] = useState<Product | null>(null);
-  const [variantPackaging, setVariantPackaging] = useState<PackagingVariant | null>(null);
+  const [variantTypeId, setVariantTypeId] = useState<string>('');
+  // Size chosen from the existing list, or '__custom__' to type a brand new one.
+  const [variantSizeChoice, setVariantSizeChoice] = useState<string>('');
+  const [variantCustomGrams, setVariantCustomGrams] = useState<string>('');
   const [variantPrice, setVariantPrice] = useState('');
 
   // Form state (for editing only now)
