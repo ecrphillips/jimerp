@@ -656,14 +656,27 @@ export function ProductsListTab() {
   });
 
   const variantBaseName = variantSource ? stripPackagingSuffix(variantSource.product_name) : '';
-  const variantLabel = variantPackaging ? PACKAGING_OPTIONS.find(o => o.value === variantPackaging)?.label ?? '' : '';
-  const variantNameSuffix = variantPackaging ? VARIANT_NAME_SUFFIXES[variantPackaging] ?? variantLabel : '';
-  const variantNewName = variantNameSuffix ? `${variantBaseName} ${variantNameSuffix}` : '';
+  const variantTypeName = activePackagingTypes.find((t) => t.id === variantTypeId)?.name ?? '';
+  const variantGrams = useMemo(() => {
+    if (variantSizeChoice === '__custom__') {
+      const parsed = parseInt(variantCustomGrams, 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    }
+    const parsed = parseInt(variantSizeChoice, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }, [variantSizeChoice, variantCustomGrams]);
+  const variantIsDuplicate = variantGrams > 0 && takenSizes.has(variantGrams);
+  const variantNewName =
+    variantTypeName && variantGrams > 0
+      ? `${variantBaseName} ${formatSizeCompact(variantGrams)} ${variantTypeName}`
+      : '';
 
   const addVariantMutation = useMutation({
     mutationFn: async () => {
-      if (!variantSource || !variantPackaging) throw new Error('Missing data');
-      const bagSizeG = VARIANT_BAG_SIZES[variantPackaging] ?? 0;
+      if (!variantSource || !variantTypeId || variantGrams <= 0) throw new Error('Missing data');
+      if (variantIsDuplicate) throw new Error('That packaging type and size already exists for this product.');
+      const bagSizeG = variantGrams;
+
 
       // Derive SKU from a sibling in the same family: clone source SKU and
       // swap its trailing 5-digit grams segment for the new packaging size.
