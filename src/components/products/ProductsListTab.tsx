@@ -85,6 +85,35 @@ const VARIANT_NAME_SUFFIXES: Record<string, string> = {
   BULK_2KG: '2kg Bulk',
 };
 
+/**
+ * Best-effort match from a packaging type name + size onto the legacy
+ * packaging_variant enum, so screens that still read the enum keep working.
+ * Returns null for combinations the enum can't express — that is fine, the
+ * packaging type and grams are the authoritative record.
+ */
+function legacyVariantFor(typeName: string, grams: number): PackagingVariant | null {
+  const n = typeName.toLowerCase();
+  const family = n.includes('crowler')
+    ? 'CROWLER'
+    : n.includes('can')
+      ? 'CAN'
+      : n.includes('bulk')
+        ? 'BULK'
+        : n.includes('retail')
+          ? 'RETAIL'
+          : null;
+  if (!family) return null;
+  const candidates: Record<string, string> = {
+    'RETAIL:250': 'RETAIL_250G', 'RETAIL:300': 'RETAIL_300G',
+    'RETAIL:340': 'RETAIL_340G', 'RETAIL:454': 'RETAIL_454G',
+    'CROWLER:200': 'CROWLER_200G', 'CROWLER:250': 'CROWLER_250G',
+    'CAN:125': 'CAN_125G',
+    'BULK:907': 'BULK_2LB', 'BULK:1000': 'BULK_1KG',
+    'BULK:2268': 'BULK_5LB', 'BULK:2000': 'BULK_2KG',
+  };
+  return (candidates[`${family}:${grams}`] as PackagingVariant) ?? null;
+}
+
 function getTodayVancouver(): string {
   const now = new Date();
   const formatter = new Intl.DateTimeFormat('en-CA', {
