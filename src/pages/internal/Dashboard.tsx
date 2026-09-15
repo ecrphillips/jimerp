@@ -19,16 +19,28 @@ export default function Dashboard() {
 
   return (
     <div className="page-container">
-      <div className="page-header flex items-center justify-between gap-4">
+      <div className="page-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="page-title">Dashboard</h1>
-        <Button
-          onClick={() => navigate('/production')}
-          className="gap-2 shadow-sm"
-          size="lg"
-        >
-          <ClipboardList className="h-4 w-4" />
-          Today's Run Sheet
-        </Button>
+        <div className="flex flex-col gap-2 sm:items-end">
+          <Button
+            onClick={() => navigate('/production')}
+            className="gap-2 shadow-sm sm:w-auto"
+            size="lg"
+            style={{ backgroundColor: 'hsl(var(--hi-navy))', color: 'hsl(var(--hi-sand))' }}
+          >
+            <ClipboardList className="h-4 w-4" />
+            Today's Run Sheet
+          </Button>
+          <Button
+            onClick={() => navigate('/orders')}
+            className="gap-2 shadow-sm sm:w-auto"
+            size="lg"
+            style={{ backgroundColor: 'hsl(var(--hi-navy))', color: 'hsl(var(--hi-sand))' }}
+          >
+            <ShoppingCart className="h-4 w-4" />
+            Orders
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as DashboardTab)}>
