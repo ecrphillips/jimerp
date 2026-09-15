@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import type { ProductFormat, GrindOption } from '@/types/database';
 import { PackagingBadge, PACKAGING_OPTIONS, type PackagingVariant } from '@/components/PackagingBadge';
+import { GramPackagingBadge } from '@/components/GramPackagingBadge';
 import { ProductTypeChoiceModal } from './ProductTypeChoiceModal';
 import { NewSingleOriginProductModal } from './NewSingleOriginProductModal';
 import { NewBlendProductModal } from './NewBlendProductModal';
@@ -42,6 +43,8 @@ interface Product {
   client_id: string | null;
   account_id: string | null;
   packaging_variant: PackagingVariant | null;
+  grams_per_unit: number | null;
+  packaging_type: { name: string } | null;
   roast_group: string | null;
   requires_production: boolean;
   packaging_material_override: number | null;
@@ -242,7 +245,7 @@ export function ProductsListTab() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, grind_options, is_active, is_perennial, is_placeholder, client_id, account_id, packaging_variant, roast_group, requires_production, packaging_material_override, packaging_labour_override, client:clients(name), account:accounts(account_name)')
+        .select('id, product_name, sku, format, bag_size_g, grams_per_unit, grind_options, is_active, is_perennial, is_placeholder, client_id, account_id, packaging_variant, packaging_type:packaging_types(name), roast_group, requires_production, packaging_material_override, packaging_labour_override, client:clients(name), account:accounts(account_name)')
         .order('product_name');
 
       if (error) throw error;
@@ -962,7 +965,16 @@ export function ProductsListTab() {
                               return (
                                 <tr key={p.id} className={`border-b last:border-0 bg-muted/20 ${!p.is_active ? 'opacity-60' : ''}`}>
                                   <td className="py-1.5 pl-9 pr-2">
-                                    {p.packaging_variant ? <PackagingBadge variant={p.packaging_variant} /> : <span className="text-muted-foreground text-xs">{p.product_name}</span>}
+                                    {p.packaging_type?.name && (p.grams_per_unit ?? p.bag_size_g) ? (
+                                      <GramPackagingBadge
+                                        packagingTypeName={p.packaging_type.name}
+                                        gramsPerUnit={p.grams_per_unit ?? p.bag_size_g}
+                                      />
+                                    ) : p.packaging_variant ? (
+                                      <PackagingBadge variant={p.packaging_variant} />
+                                    ) : (
+                                      <span className="text-muted-foreground text-xs">{p.product_name}</span>
+                                    )}
                                   </td>
                                   <td className="py-1.5 px-2 font-mono text-xs">{p.sku || '—'}</td>
                                   <td className="py-1.5 px-2">
