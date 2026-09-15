@@ -925,6 +925,14 @@ export function ProductsListTab() {
             </div>
           ) : (
             <div className="space-y-1">
+              <div className="grid grid-cols-[1.25rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_6rem_9rem] items-center gap-3 border-b px-3 pb-1 text-xs font-medium text-muted-foreground">
+                <span />
+                <span>Product</span>
+                <span>Account</span>
+                <span className="hidden sm:inline">Roast Group</span>
+                <span>Variants</span>
+                <span className="text-right">Last order</span>
+              </div>
               {families.map((family) => {
                 const familyKey = `${family.baseName}|||${family.variants[0]?.account_id ?? family.variants[0]?.client_id ?? ''}`;
                 const isOpen = expandedFamilies.has(familyKey);
@@ -932,20 +940,21 @@ export function ProductsListTab() {
                 return (
                   <Collapsible key={familyKey} open={isOpen} onOpenChange={() => toggleFamily(familyKey)}>
                     <CollapsibleTrigger asChild>
-                      <div className="flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer hover:bg-accent/30 transition-colors">
+                      <div className="grid grid-cols-[1.25rem_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_6rem_9rem] items-center gap-3 px-3 py-2 rounded-md cursor-pointer hover:bg-accent/30 transition-colors">
                         {isOpen ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
                         <span className="font-semibold text-sm truncate">{family.baseName}</span>
                         <span className="text-xs text-muted-foreground truncate">{family.accountName}</span>
                         <span className="text-xs text-muted-foreground truncate hidden sm:inline">{family.roastGroupName}</span>
-                        <Badge variant="secondary" className="text-xs shrink-0">{family.variants.length} variant{family.variants.length !== 1 ? 's' : ''}</Badge>
-                        {family.activeCount < family.variants.length && (
-                          <span className="text-xs text-muted-foreground">{family.activeCount} active</span>
-                        )}
-                        <span className="text-xs text-muted-foreground ml-auto shrink-0">
-                          {family.lastOrderDate ? `Last order: ${format(family.lastOrderDate, 'MMM d')}` : 'Never ordered'}
+                        <span className="text-xs text-muted-foreground tabular-nums truncate">
+                          {family.variants.length} variant{family.variants.length !== 1 ? 's' : ''}
+                          {family.activeCount < family.variants.length && ` · ${family.activeCount} active`}
+                        </span>
+                        <span className="text-xs text-muted-foreground text-right truncate">
+                          {family.lastOrderDate ? format(family.lastOrderDate, 'MMM d, yyyy') : 'Never ordered'}
                         </span>
                       </div>
                     </CollapsibleTrigger>
+
                     <CollapsibleContent>
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
