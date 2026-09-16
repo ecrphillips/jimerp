@@ -1471,7 +1471,9 @@ function BatchRow({
     <>
       <div
         className={`flex flex-col gap-1 p-2 rounded border text-sm
-          ${isRoasted ? 'bg-muted/30 border-border/60 opacity-80' : 'bg-background'}`}
+          ${isRoasted
+            ? 'bg-muted/30 border-border/60 opacity-80'
+            : 'bg-success/10 border-success/40'}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Main row with inputs */}
@@ -1481,7 +1483,7 @@ function BatchRow({
             {isRoasted ? (
               <Check className="h-4 w-4 text-muted-foreground" />
             ) : (
-              <Flame className="h-4 w-4 text-muted-foreground" />
+              <Flame className="h-4 w-4 text-success" />
             )}
           </div>
 
