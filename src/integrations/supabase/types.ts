@@ -5135,6 +5135,7 @@ export type Database = {
           planned_for_blend_roast_group: string | null
           planned_output_kg: number | null
           roast_group: string
+          roasted_at: string | null
           status: Database["public"]["Enums"]["roasted_batch_status"]
           target_date: string
           updated_at: string
@@ -5153,6 +5154,7 @@ export type Database = {
           planned_for_blend_roast_group?: string | null
           planned_output_kg?: number | null
           roast_group: string
+          roasted_at?: string | null
           status?: Database["public"]["Enums"]["roasted_batch_status"]
           target_date: string
           updated_at?: string
@@ -5171,6 +5173,7 @@ export type Database = {
           planned_for_blend_roast_group?: string | null
           planned_output_kg?: number | null
           roast_group?: string
+          roasted_at?: string | null
           status?: Database["public"]["Enums"]["roasted_batch_status"]
           target_date?: string
           updated_at?: string
