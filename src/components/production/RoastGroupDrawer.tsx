@@ -395,6 +395,37 @@ export function RoastGroupDrawer({
     return sortBatches(batches);
   }, [frozenBatches, hasEditedSinceOpen, batches, sortBatches, isExpanded]);
 
+  // Completed batches are history: only keep the most recent ones that account
+  // for the coffee still on hand (WIP + FG), plus anything finished today.
+  // Everything older collapses behind a "show earlier" toggle.
+  const { visibleBatchIds, hiddenCompletedCount } = useMemo(() => {
+    const coverageKg = Math.max(0, wipKg + fgKg);
+    const todayStr = getVancouverDateString(0);
+    const completed = batches
+      .filter(b => b.status === 'ROASTED')
+      .sort((a, b) => batchCompletedAtIso(b).localeCompare(batchCompletedAtIso(a)));
+
+    const keep = new Set<string>();
+    let accumulated = 0;
+    for (const b of completed) {
+      const finishedToday = batchCompletedAtIso(b).slice(0, 10) === todayStr;
+      if (finishedToday || accumulated < coverageKg - 0.001) {
+        keep.add(b.id);
+      }
+      accumulated += b.actual_output_kg ?? 0;
+    }
+
+    return {
+      visibleBatchIds: keep,
+      hiddenCompletedCount: completed.length - keep.size,
+    };
+  }, [batches, wipKg, fgKg]);
+
+  const displayedBatches = useMemo(() => {
+    if (showAllCompleted) return sortedBatches;
+    return sortedBatches.filter(b => b.status !== 'ROASTED' || visibleBatchIds.has(b.id));
+  }, [sortedBatches, showAllCompleted, visibleBatchIds]);
+
   // Refresh frozen batches (called after Mark Roasted to reflect new positions)
   const refreshFrozenBatches = useCallback(() => {
     if (isExpanded) {
