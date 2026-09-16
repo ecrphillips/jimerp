@@ -1471,7 +1471,7 @@ function BatchRow({
     <>
       <div
         className={`flex flex-col gap-1 p-2 rounded border text-sm
-          ${isRoasted ? 'bg-green-50 border-green-200' : 'bg-background'}`}
+          ${isRoasted ? 'bg-muted/30 border-border/60 opacity-80' : 'bg-background'}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Main row with inputs */}
@@ -1479,11 +1479,19 @@ function BatchRow({
           {/* Status indicator */}
           <div className="flex items-center gap-1 min-w-[24px]">
             {isRoasted ? (
-              <Check className="h-4 w-4 text-green-600" />
+              <Check className="h-4 w-4 text-muted-foreground" />
             ) : (
               <Flame className="h-4 w-4 text-muted-foreground" />
             )}
           </div>
+
+          {/* Completion time stamp */}
+          {isRoasted && formatCompletedAt(batchCompletedAtIso(batch)) && (
+            <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+              {formatCompletedAt(batchCompletedAtIso(batch))}
+            </span>
+          )}
+
 
           {/* Inbound Green kg */}
           <div className="flex items-center gap-1">
