@@ -1483,7 +1483,7 @@ function BatchRow({
             {isRoasted ? (
               <Check className="h-4 w-4 text-muted-foreground" />
             ) : (
-              <Flame className="h-4 w-4 text-muted-foreground" />
+              <Flame className="h-4 w-4 text-success" />
             )}
           </div>
 
