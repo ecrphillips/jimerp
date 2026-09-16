@@ -44,6 +44,23 @@ import { evaluateMultiRoastGroupImpacts, type MultiRgImpact } from '@/hooks/useG
 import { type RoastGroupComponent, getComponentBreakdown, type ComponentDisplay } from '@/hooks/useRoastGroupComponents';
 import { useBlendReadiness } from '@/hooks/useBlendReadiness';
 import { computeRoastCoverage } from '@/lib/roastCoverage';
+import { getVancouverDateString } from '@/lib/productionScheduling';
+
+/** Best available completion time for a batch (true stamp, else last touch). */
+function batchCompletedAtIso(batch: { roasted_at?: string | null; updated_at?: string; created_at?: string }): string {
+  return batch.roasted_at ?? batch.updated_at ?? batch.created_at ?? '';
+}
+
+/** "2:14 PM" for today, "Sep 14, 2:14 PM" for older. */
+function formatCompletedAt(iso: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const isToday = d.toDateString() === new Date().toDateString();
+  if (isToday) return time;
+  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${time}`;
+}
 
 type RoasterMachine = 'SAMIAC' | 'LORING';
 type DefaultRoaster = 'SAMIAC' | 'LORING' | 'EITHER';
@@ -146,6 +163,7 @@ export function RoastGroupDrawer({
   
   // Frozen batches order - captured when drawer opens, only refreshed on collapse/reopen or Mark Roasted
   const [frozenBatches, setFrozenBatches] = useState<RoastBatch[] | null>(null);
+  const [showAllCompleted, setShowAllCompleted] = useState(false);
   
   // Track drawer open state to detect reopen
   const prevExpandedRef = React.useRef(isExpanded);
