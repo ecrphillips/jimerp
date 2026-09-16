@@ -1112,7 +1112,7 @@ export function RoastGroupDrawer({
                   <p className="text-sm text-muted-foreground py-2">No batches queued.</p>
                 ) : (
                   <div className="space-y-2">
-                    {sortedBatches.map((batch) => (
+                    {displayedBatches.map((batch) => (
                       <BatchRow
                         key={batch.id}
                         batch={batch}
@@ -1145,6 +1145,18 @@ export function RoastGroupDrawer({
                         onLotChange={(val) => setBatchLotSelections(prev => ({ ...prev, [batch.id]: val }))}
                       />
                     ))}
+                    {(hiddenCompletedCount > 0 || showAllCompleted) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-muted-foreground"
+                        onClick={(e) => { e.stopPropagation(); setShowAllCompleted(v => !v); }}
+                      >
+                        {showAllCompleted
+                          ? 'Hide earlier completed batches'
+                          : `Show ${hiddenCompletedCount} earlier completed batch${hiddenCompletedCount === 1 ? '' : 'es'}`}
+                      </Button>
+                    )}
                   </div>
                 )
               )}
