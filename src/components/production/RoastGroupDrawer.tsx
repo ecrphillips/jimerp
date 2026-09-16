@@ -60,6 +60,7 @@ interface RoastBatch {
   cropster_batch_id: string | null;
   created_at?: string;
   updated_at?: string;
+  roasted_at?: string | null;
 }
 
 interface RoastGroupConfig {
@@ -1215,6 +1216,7 @@ interface RoastBatch {
   cropster_batch_id: string | null;
   created_at?: string;
   updated_at?: string;
+  roasted_at?: string | null;
 }
 
 type YieldWarningChoice = 'edit_inbound' | 'edit_output' | 'record_loss';
