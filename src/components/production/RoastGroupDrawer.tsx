@@ -44,6 +44,23 @@ import { evaluateMultiRoastGroupImpacts, type MultiRgImpact } from '@/hooks/useG
 import { type RoastGroupComponent, getComponentBreakdown, type ComponentDisplay } from '@/hooks/useRoastGroupComponents';
 import { useBlendReadiness } from '@/hooks/useBlendReadiness';
 import { computeRoastCoverage } from '@/lib/roastCoverage';
+import { getVancouverDateString } from '@/lib/productionScheduling';
+
+/** Best available completion time for a batch (true stamp, else last touch). */
+function batchCompletedAtIso(batch: { roasted_at?: string | null; updated_at?: string; created_at?: string }): string {
+  return batch.roasted_at ?? batch.updated_at ?? batch.created_at ?? '';
+}
+
+/** "2:14 PM" for today, "Sep 14, 2:14 PM" for older. */
+function formatCompletedAt(iso: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const isToday = d.toDateString() === new Date().toDateString();
+  if (isToday) return time;
+  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${time}`;
+}
 
 type RoasterMachine = 'SAMIAC' | 'LORING';
 type DefaultRoaster = 'SAMIAC' | 'LORING' | 'EITHER';
@@ -60,6 +77,7 @@ interface RoastBatch {
   cropster_batch_id: string | null;
   created_at?: string;
   updated_at?: string;
+  roasted_at?: string | null;
 }
 
 interface RoastGroupConfig {
@@ -145,6 +163,7 @@ export function RoastGroupDrawer({
   
   // Frozen batches order - captured when drawer opens, only refreshed on collapse/reopen or Mark Roasted
   const [frozenBatches, setFrozenBatches] = useState<RoastBatch[] | null>(null);
+  const [showAllCompleted, setShowAllCompleted] = useState(false);
   
   // Track drawer open state to detect reopen
   const prevExpandedRef = React.useRef(isExpanded);
@@ -393,6 +412,37 @@ export function RoastGroupDrawer({
     
     return sortBatches(batches);
   }, [frozenBatches, hasEditedSinceOpen, batches, sortBatches, isExpanded]);
+
+  // Completed batches are history: only keep the most recent ones that account
+  // for the coffee still on hand (WIP + FG), plus anything finished today.
+  // Everything older collapses behind a "show earlier" toggle.
+  const { visibleBatchIds, hiddenCompletedCount } = useMemo(() => {
+    const coverageKg = Math.max(0, wipKg + fgKg);
+    const todayStr = getVancouverDateString(0);
+    const completed = batches
+      .filter(b => b.status === 'ROASTED')
+      .sort((a, b) => batchCompletedAtIso(b).localeCompare(batchCompletedAtIso(a)));
+
+    const keep = new Set<string>();
+    let accumulated = 0;
+    for (const b of completed) {
+      const finishedToday = batchCompletedAtIso(b).slice(0, 10) === todayStr;
+      if (finishedToday || accumulated < coverageKg - 0.001) {
+        keep.add(b.id);
+      }
+      accumulated += b.actual_output_kg ?? 0;
+    }
+
+    return {
+      visibleBatchIds: keep,
+      hiddenCompletedCount: completed.length - keep.size,
+    };
+  }, [batches, wipKg, fgKg]);
+
+  const displayedBatches = useMemo(() => {
+    if (showAllCompleted) return sortedBatches;
+    return sortedBatches.filter(b => b.status !== 'ROASTED' || visibleBatchIds.has(b.id));
+  }, [sortedBatches, showAllCompleted, visibleBatchIds]);
 
   // Refresh frozen batches (called after Mark Roasted to reflect new positions)
   const refreshFrozenBatches = useCallback(() => {
@@ -1062,7 +1112,7 @@ export function RoastGroupDrawer({
                   <p className="text-sm text-muted-foreground py-2">No batches queued.</p>
                 ) : (
                   <div className="space-y-2">
-                    {sortedBatches.map((batch) => (
+                    {displayedBatches.map((batch) => (
                       <BatchRow
                         key={batch.id}
                         batch={batch}
@@ -1095,6 +1145,18 @@ export function RoastGroupDrawer({
                         onLotChange={(val) => setBatchLotSelections(prev => ({ ...prev, [batch.id]: val }))}
                       />
                     ))}
+                    {(hiddenCompletedCount > 0 || showAllCompleted) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-muted-foreground"
+                        onClick={(e) => { e.stopPropagation(); setShowAllCompleted(v => !v); }}
+                      >
+                        {showAllCompleted
+                          ? 'Hide earlier completed batches'
+                          : `Show ${hiddenCompletedCount} earlier completed batch${hiddenCompletedCount === 1 ? '' : 'es'}`}
+                      </Button>
+                    )}
                   </div>
                 )
               )}
@@ -1215,6 +1277,7 @@ interface RoastBatch {
   cropster_batch_id: string | null;
   created_at?: string;
   updated_at?: string;
+  roasted_at?: string | null;
 }
 
 type YieldWarningChoice = 'edit_inbound' | 'edit_output' | 'record_loss';
@@ -1408,7 +1471,7 @@ function BatchRow({
     <>
       <div
         className={`flex flex-col gap-1 p-2 rounded border text-sm
-          ${isRoasted ? 'bg-green-50 border-green-200' : 'bg-background'}`}
+          ${isRoasted ? 'bg-muted/30 border-border/60 opacity-80' : 'bg-background'}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Main row with inputs */}
@@ -1416,11 +1479,19 @@ function BatchRow({
           {/* Status indicator */}
           <div className="flex items-center gap-1 min-w-[24px]">
             {isRoasted ? (
-              <Check className="h-4 w-4 text-green-600" />
+              <Check className="h-4 w-4 text-muted-foreground" />
             ) : (
               <Flame className="h-4 w-4 text-muted-foreground" />
             )}
           </div>
+
+          {/* Completion time stamp */}
+          {isRoasted && formatCompletedAt(batchCompletedAtIso(batch)) && (
+            <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+              {formatCompletedAt(batchCompletedAtIso(batch))}
+            </span>
+          )}
+
 
           {/* Inbound Green kg */}
           <div className="flex items-center gap-1">
