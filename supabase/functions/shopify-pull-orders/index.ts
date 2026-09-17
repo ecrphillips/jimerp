@@ -321,8 +321,17 @@ async function pullSource(
     // box variant mapped to a 250g product carries 4). Null/0/negative → 1.
     const byVariant = new Map<string, { productId: string; unitsPerShopifyUnit: number }>();
     const doNotProduce = new Set<string>();
+    // Per-mapping grind rule: FOLLOW_SHOPIFY (default) | NEVER | ALWAYS.
+    const grindRuleByVariant = new Map<string, { rule: string; label: string | null }>();
     for (const m of mappings ?? []) {
       if (!m.shopify_variant_id) continue;
+      const rule = String(m.grind_rule ?? 'FOLLOW_SHOPIFY');
+      if (rule === 'NEVER' || rule === 'ALWAYS') {
+        grindRuleByVariant.set(m.shopify_variant_id, {
+          rule,
+          label: (m.grind_override_label ?? '').trim() || null,
+        });
+      }
       if (m.do_not_produce) {
         doNotProduce.add(m.shopify_variant_id);
         continue;
