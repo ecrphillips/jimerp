@@ -340,8 +340,9 @@ export function ShopifyMappedProducts() {
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
           Every saved Shopify variant → JIM product mapping. Fix a wrong pick, correct units per
-          Shopify unit, toggle do-not-produce, or delete a mapping so the next pull derives it
-          again.
+          Shopify unit, toggle do-not-produce, set how grind is handled, or delete a mapping so the
+          next pull derives it again. Grind: “Follow Shopify” reads the variant title, “Never grind”
+          ignores grind text on this variant, “Always grind” stamps the label you enter.
         </p>
         <div className="flex items-center gap-2">
           <Input
