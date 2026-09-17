@@ -423,6 +423,32 @@ export function ShopifyMappedProducts() {
                   >
                     {d.dnp ? 'Do not produce: on' : 'Do not produce: off'}
                   </Button>
+                  <label className="text-xs text-muted-foreground">Grind</label>
+                  <Select
+                    value={d.grindRule}
+                    disabled={busy}
+                    onValueChange={(v) => setDraft(r, { grindRule: v as GrindRule })}
+                  >
+                    <SelectTrigger className="h-9 w-[170px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="FOLLOW_SHOPIFY">
+                        {GRIND_RULE_LABEL.FOLLOW_SHOPIFY}
+                      </SelectItem>
+                      <SelectItem value="NEVER">{GRIND_RULE_LABEL.NEVER}</SelectItem>
+                      <SelectItem value="ALWAYS">{GRIND_RULE_LABEL.ALWAYS}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {d.grindRule === 'ALWAYS' && (
+                    <Input
+                      placeholder="Grind label (e.g. French Press)"
+                      className="h-9 w-56"
+                      value={d.grindLabel}
+                      disabled={busy}
+                      onChange={(e) => setDraft(r, { grindLabel: e.target.value })}
+                    />
+                  )}
                   <Button size="sm" disabled={busy || !isDirty(r)} onClick={() => save(r)}>
                     <Check className="mr-1 h-4 w-4" />
                     Save
