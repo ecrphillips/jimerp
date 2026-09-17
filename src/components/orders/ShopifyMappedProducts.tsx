@@ -136,7 +136,16 @@ export function ShopifyMappedProducts() {
   const queryClient = useQueryClient();
   const [search, setSearch] = React.useState('');
   const [drafts, setDrafts] = React.useState<
-    Record<string, { jim_product_id: string | null; units: number; dnp: boolean }>
+    Record<
+      string,
+      {
+        jim_product_id: string | null;
+        units: number;
+        dnp: boolean;
+        grindRule: GrindRule;
+        grindLabel: string;
+      }
+    >
   >({});
   const [busyId, setBusyId] = React.useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = React.useState<MappingRow | null>(null);
@@ -147,7 +156,7 @@ export function ShopifyMappedProducts() {
       const { data, error } = await sb
         .from('shopify_product_mappings')
         .select(
-          'id, source_id, shopify_product_id, shopify_variant_id, shopify_product_title, shopify_sku, jim_product_id, do_not_produce, units_per_shopify_unit, last_seen_at, notes',
+          'id, source_id, shopify_product_id, shopify_variant_id, shopify_product_title, shopify_sku, jim_product_id, do_not_produce, units_per_shopify_unit, last_seen_at, notes, grind_rule, grind_override_label',
         )
         .order('shopify_product_title', { ascending: true });
       if (error) throw error;
@@ -156,6 +165,35 @@ export function ShopifyMappedProducts() {
   });
 
   const rows = mappingsQ.data ?? [];
+
+  // Read-only "grind seen" history: grind lives on the order line, derived at pull
+  // time from the Shopify variant title, so we summarise it per JIM product.
+  const grindSeenQ = useQuery({
+    queryKey: ['shopify-mappings', 'grind-seen'],
+    queryFn: async () => {
+      const { data, error } = await sb
+        .from('order_line_items')
+        .select('product_id, needs_grind, grind_label, created_at')
+        .eq('needs_grind', true)
+        .not('grind_label', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(2000);
+      if (error) throw error;
+      const map = new Map<string, { label: string; at: string; count: number }>();
+      for (const li of data ?? []) {
+        if (!li.product_id) continue;
+        const prev = map.get(li.product_id);
+        if (prev) prev.count += 1;
+        else
+          map.set(li.product_id, {
+            label: String(li.grind_label),
+            at: li.created_at,
+            count: 1,
+          });
+      }
+      return map;
+    },
+  });
 
   const sourcesQ = useQuery({
     queryKey: ['shopify-mappings', 'sources'],
