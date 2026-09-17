@@ -364,6 +364,8 @@ export function ShopifyMappedProducts() {
               : [];
             const d = draftFor(r);
             const busy = busyId === r.id;
+            const seen = r.jim_product_id ? grindSeenQ.data?.get(r.jim_product_id) : undefined;
+            const rule = (r.grind_rule ?? 'FOLLOW_SHOPIFY') as GrindRule;
             return (
               <div key={r.id} className="rounded-lg border border-border bg-card px-4 py-3">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
@@ -373,10 +375,22 @@ export function ShopifyMappedProducts() {
                     <span className="font-mono text-xs text-muted-foreground">{r.shopify_sku}</span>
                   )}
                   {r.do_not_produce && <Badge variant="outline">do not produce</Badge>}
+                  {rule !== 'FOLLOW_SHOPIFY' && (
+                    <Badge variant="outline">
+                      {rule === 'NEVER'
+                        ? 'never grind'
+                        : `always grind${r.grind_override_label ? `: ${r.grind_override_label}` : ''}`}
+                    </Badge>
+                  )}
                 </div>
                 <div className="mt-1 font-mono text-xs text-muted-foreground">
                   product {r.shopify_product_id}
                   {r.shopify_variant_id ? ` · variant ${r.shopify_variant_id}` : ''}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {seen
+                    ? `Last grind seen: “${seen.label}” · ${seen.count} order line${seen.count === 1 ? '' : 's'}`
+                    : 'No grind flags on this product'}
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <ProductPicker
