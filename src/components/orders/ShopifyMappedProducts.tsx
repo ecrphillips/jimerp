@@ -7,6 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Command,
   CommandEmpty,
   CommandGroup,
@@ -40,6 +47,8 @@ const errMsg = (e: unknown): string => {
   return String(e);
 };
 
+type GrindRule = 'FOLLOW_SHOPIFY' | 'NEVER' | 'ALWAYS';
+
 interface MappingRow {
   id: string;
   source_id: string;
@@ -52,7 +61,15 @@ interface MappingRow {
   units_per_shopify_unit: number;
   last_seen_at: string | null;
   notes: string | null;
+  grind_rule: GrindRule;
+  grind_override_label: string | null;
 }
+
+const GRIND_RULE_LABEL: Record<GrindRule, string> = {
+  FOLLOW_SHOPIFY: 'Follow Shopify',
+  NEVER: 'Never grind',
+  ALWAYS: 'Always grind',
+};
 
 interface ProductOption {
   id: string;
@@ -126,7 +143,16 @@ export function ShopifyMappedProducts() {
   const queryClient = useQueryClient();
   const [search, setSearch] = React.useState('');
   const [drafts, setDrafts] = React.useState<
-    Record<string, { jim_product_id: string | null; units: number; dnp: boolean }>
+    Record<
+      string,
+      {
+        jim_product_id: string | null;
+        units: number;
+        dnp: boolean;
+        grindRule: GrindRule;
+        grindLabel: string;
+      }
+    >
   >({});
   const [busyId, setBusyId] = React.useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = React.useState<MappingRow | null>(null);
@@ -137,7 +163,7 @@ export function ShopifyMappedProducts() {
       const { data, error } = await sb
         .from('shopify_product_mappings')
         .select(
-          'id, source_id, shopify_product_id, shopify_variant_id, shopify_product_title, shopify_sku, jim_product_id, do_not_produce, units_per_shopify_unit, last_seen_at, notes',
+          'id, source_id, shopify_product_id, shopify_variant_id, shopify_product_title, shopify_sku, jim_product_id, do_not_produce, units_per_shopify_unit, last_seen_at, notes, grind_rule, grind_override_label',
         )
         .order('shopify_product_title', { ascending: true });
       if (error) throw error;
@@ -146,6 +172,35 @@ export function ShopifyMappedProducts() {
   });
 
   const rows = mappingsQ.data ?? [];
+
+  // Read-only "grind seen" history: grind lives on the order line, derived at pull
+  // time from the Shopify variant title, so we summarise it per JIM product.
+  const grindSeenQ = useQuery({
+    queryKey: ['shopify-mappings', 'grind-seen'],
+    queryFn: async () => {
+      const { data, error } = await sb
+        .from('order_line_items')
+        .select('product_id, needs_grind, grind_label, created_at')
+        .eq('needs_grind', true)
+        .not('grind_label', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(2000);
+      if (error) throw error;
+      const map = new Map<string, { label: string; at: string; count: number }>();
+      for (const li of data ?? []) {
+        if (!li.product_id) continue;
+        const prev = map.get(li.product_id);
+        if (prev) prev.count += 1;
+        else
+          map.set(li.product_id, {
+            label: String(li.grind_label),
+            at: li.created_at,
+            count: 1,
+          });
+      }
+      return map;
+    },
+  });
 
   const sourcesQ = useQuery({
     queryKey: ['shopify-mappings', 'sources'],
@@ -199,6 +254,8 @@ export function ShopifyMappedProducts() {
       jim_product_id: r.jim_product_id,
       units: r.units_per_shopify_unit,
       dnp: r.do_not_produce,
+      grindRule: (r.grind_rule ?? 'FOLLOW_SHOPIFY') as GrindRule,
+      grindLabel: r.grind_override_label ?? '',
     };
 
   const isDirty = (r: MappingRow) => {
@@ -206,7 +263,9 @@ export function ShopifyMappedProducts() {
     return (
       d.jim_product_id !== r.jim_product_id ||
       d.units !== r.units_per_shopify_unit ||
-      d.dnp !== r.do_not_produce
+      d.dnp !== r.do_not_produce ||
+      d.grindRule !== (r.grind_rule ?? 'FOLLOW_SHOPIFY') ||
+      d.grindLabel.trim() !== (r.grind_override_label ?? '')
     );
   };
 
@@ -217,6 +276,10 @@ export function ShopifyMappedProducts() {
 
   const save = async (r: MappingRow) => {
     const d = draftFor(r);
+    if (d.grindRule === 'ALWAYS' && !d.grindLabel.trim()) {
+      toast.error('Enter the grind label to always apply');
+      return;
+    }
     setBusyId(r.id);
     try {
       const { error } = await sb
@@ -225,6 +288,8 @@ export function ShopifyMappedProducts() {
           jim_product_id: d.jim_product_id,
           units_per_shopify_unit: Math.max(1, Math.trunc(d.units || 1)),
           do_not_produce: d.dnp,
+          grind_rule: d.grindRule,
+          grind_override_label: d.grindRule === 'ALWAYS' ? d.grindLabel.trim() : null,
           mapped_at: new Date().toISOString(),
         })
         .eq('id', r.id);
@@ -275,8 +340,9 @@ export function ShopifyMappedProducts() {
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
           Every saved Shopify variant → JIM product mapping. Fix a wrong pick, correct units per
-          Shopify unit, toggle do-not-produce, or delete a mapping so the next pull derives it
-          again.
+          Shopify unit, toggle do-not-produce, set how grind is handled, or delete a mapping so the
+          next pull derives it again. Grind: “Follow Shopify” reads the variant title, “Never grind”
+          ignores grind text on this variant, “Always grind” stamps the label you enter.
         </p>
         <div className="flex items-center gap-2">
           <Input
@@ -306,6 +372,8 @@ export function ShopifyMappedProducts() {
               : [];
             const d = draftFor(r);
             const busy = busyId === r.id;
+            const seen = r.jim_product_id ? grindSeenQ.data?.get(r.jim_product_id) : undefined;
+            const rule = (r.grind_rule ?? 'FOLLOW_SHOPIFY') as GrindRule;
             return (
               <div key={r.id} className="rounded-lg border border-border bg-card px-4 py-3">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
@@ -315,10 +383,22 @@ export function ShopifyMappedProducts() {
                     <span className="font-mono text-xs text-muted-foreground">{r.shopify_sku}</span>
                   )}
                   {r.do_not_produce && <Badge variant="outline">do not produce</Badge>}
+                  {rule !== 'FOLLOW_SHOPIFY' && (
+                    <Badge variant="outline">
+                      {rule === 'NEVER'
+                        ? 'never grind'
+                        : `always grind${r.grind_override_label ? `: ${r.grind_override_label}` : ''}`}
+                    </Badge>
+                  )}
                 </div>
                 <div className="mt-1 font-mono text-xs text-muted-foreground">
                   product {r.shopify_product_id}
                   {r.shopify_variant_id ? ` · variant ${r.shopify_variant_id}` : ''}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {seen
+                    ? `Last grind seen: “${seen.label}” · ${seen.count} order line${seen.count === 1 ? '' : 's'}`
+                    : 'No grind flags on this product'}
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <ProductPicker
@@ -351,6 +431,32 @@ export function ShopifyMappedProducts() {
                   >
                     {d.dnp ? 'Do not produce: on' : 'Do not produce: off'}
                   </Button>
+                  <label className="text-xs text-muted-foreground">Grind</label>
+                  <Select
+                    value={d.grindRule}
+                    disabled={busy}
+                    onValueChange={(v) => setDraft(r, { grindRule: v as GrindRule })}
+                  >
+                    <SelectTrigger className="h-9 w-[170px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="FOLLOW_SHOPIFY">
+                        {GRIND_RULE_LABEL.FOLLOW_SHOPIFY}
+                      </SelectItem>
+                      <SelectItem value="NEVER">{GRIND_RULE_LABEL.NEVER}</SelectItem>
+                      <SelectItem value="ALWAYS">{GRIND_RULE_LABEL.ALWAYS}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {d.grindRule === 'ALWAYS' && (
+                    <Input
+                      placeholder="Grind label (e.g. French Press)"
+                      className="h-9 w-56"
+                      value={d.grindLabel}
+                      disabled={busy}
+                      onChange={(e) => setDraft(r, { grindLabel: e.target.value })}
+                    />
+                  )}
                   <Button size="sm" disabled={busy || !isDirty(r)} onClick={() => save(r)}>
                     <Check className="mr-1 h-4 w-4" />
                     Save

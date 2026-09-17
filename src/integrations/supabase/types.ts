@@ -5340,6 +5340,8 @@ export type Database = {
           created_at: string
           do_not_produce: boolean
           first_seen_at: string
+          grind_override_label: string | null
+          grind_rule: string
           id: string
           jim_product_id: string | null
           last_seen_at: string
@@ -5358,6 +5360,8 @@ export type Database = {
           created_at?: string
           do_not_produce?: boolean
           first_seen_at?: string
+          grind_override_label?: string | null
+          grind_rule?: string
           id?: string
           jim_product_id?: string | null
           last_seen_at?: string
@@ -5376,6 +5380,8 @@ export type Database = {
           created_at?: string
           do_not_produce?: boolean
           first_seen_at?: string
+          grind_override_label?: string | null
+          grind_rule?: string
           id?: string
           jim_product_id?: string | null
           last_seen_at?: string

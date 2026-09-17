@@ -312,15 +312,26 @@ async function pullSource(
     // derivation handles those deterministically.
     const { data: mappings, error: mapErr } = await admin
       .from('shopify_product_mappings')
-      .select('shopify_variant_id, jim_product_id, do_not_produce, units_per_shopify_unit')
+      .select(
+        'shopify_variant_id, jim_product_id, do_not_produce, units_per_shopify_unit, grind_rule, grind_override_label',
+      )
       .eq('source_id', source.id);
     if (mapErr) throw new Error(`mapping lookup failed: ${mapErr.message}`);
     // units_per_shopify_unit: one Shopify unit = N JIM units (e.g. a "4 x 250g"
     // box variant mapped to a 250g product carries 4). Null/0/negative → 1.
     const byVariant = new Map<string, { productId: string; unitsPerShopifyUnit: number }>();
     const doNotProduce = new Set<string>();
+    // Per-mapping grind rule: FOLLOW_SHOPIFY (default) | NEVER | ALWAYS.
+    const grindRuleByVariant = new Map<string, { rule: string; label: string | null }>();
     for (const m of mappings ?? []) {
       if (!m.shopify_variant_id) continue;
+      const rule = String(m.grind_rule ?? 'FOLLOW_SHOPIFY');
+      if (rule === 'NEVER' || rule === 'ALWAYS') {
+        grindRuleByVariant.set(m.shopify_variant_id, {
+          rule,
+          label: (m.grind_override_label ?? '').trim() || null,
+        });
+      }
       if (m.do_not_produce) {
         doNotProduce.add(m.shopify_variant_id);
         continue;
@@ -427,7 +438,20 @@ async function pullSource(
           // no grind for them. Joining the product title in with a " / " (as this once
           // did) manufactured a separator that made every wholesale size read as a
           // grind label — every "(Wholesale) / 2LB" falsely flagged GRIND "2LB".
-          const { needsGrind, grindLabel } = parseGrindSignal(li.variantTitle);
+          const parsed = parseGrindSignal(li.variantTitle);
+          // A per-mapping grind rule (set on the mapped-products screen) wins over the
+          // title parse: NEVER kills false positives, ALWAYS flags variants whose grind
+          // isn't in the title.
+          const gRule = li.variantId ? grindRuleByVariant.get(li.variantId) : undefined;
+          let needsGrind = parsed.needsGrind;
+          let grindLabel = parsed.grindLabel;
+          if (gRule?.rule === 'NEVER') {
+            needsGrind = false;
+            grindLabel = null;
+          } else if (gRule?.rule === 'ALWAYS') {
+            needsGrind = true;
+            grindLabel = gRule.label ?? parsed.grindLabel;
+          }
           // Key by grind_label so distinct grinds split into their own lines while
           // whole-bean lines (label null) aggregate together.
           const key = `${fate.productId}|${grindLabel ?? ''}`;
