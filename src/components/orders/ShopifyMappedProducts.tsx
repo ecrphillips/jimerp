@@ -247,6 +247,8 @@ export function ShopifyMappedProducts() {
       jim_product_id: r.jim_product_id,
       units: r.units_per_shopify_unit,
       dnp: r.do_not_produce,
+      grindRule: (r.grind_rule ?? 'FOLLOW_SHOPIFY') as GrindRule,
+      grindLabel: r.grind_override_label ?? '',
     };
 
   const isDirty = (r: MappingRow) => {
@@ -254,7 +256,9 @@ export function ShopifyMappedProducts() {
     return (
       d.jim_product_id !== r.jim_product_id ||
       d.units !== r.units_per_shopify_unit ||
-      d.dnp !== r.do_not_produce
+      d.dnp !== r.do_not_produce ||
+      d.grindRule !== (r.grind_rule ?? 'FOLLOW_SHOPIFY') ||
+      d.grindLabel.trim() !== (r.grind_override_label ?? '')
     );
   };
 
@@ -265,6 +269,10 @@ export function ShopifyMappedProducts() {
 
   const save = async (r: MappingRow) => {
     const d = draftFor(r);
+    if (d.grindRule === 'ALWAYS' && !d.grindLabel.trim()) {
+      toast.error('Enter the grind label to always apply');
+      return;
+    }
     setBusyId(r.id);
     try {
       const { error } = await sb
@@ -273,6 +281,8 @@ export function ShopifyMappedProducts() {
           jim_product_id: d.jim_product_id,
           units_per_shopify_unit: Math.max(1, Math.trunc(d.units || 1)),
           do_not_produce: d.dnp,
+          grind_rule: d.grindRule,
+          grind_override_label: d.grindRule === 'ALWAYS' ? d.grindLabel.trim() : null,
           mapped_at: new Date().toISOString(),
         })
         .eq('id', r.id);
