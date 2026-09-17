@@ -40,6 +40,8 @@ const errMsg = (e: unknown): string => {
   return String(e);
 };
 
+type GrindRule = 'FOLLOW_SHOPIFY' | 'NEVER' | 'ALWAYS';
+
 interface MappingRow {
   id: string;
   source_id: string;
@@ -52,7 +54,15 @@ interface MappingRow {
   units_per_shopify_unit: number;
   last_seen_at: string | null;
   notes: string | null;
+  grind_rule: GrindRule;
+  grind_override_label: string | null;
 }
+
+const GRIND_RULE_LABEL: Record<GrindRule, string> = {
+  FOLLOW_SHOPIFY: 'Follow Shopify',
+  NEVER: 'Never grind',
+  ALWAYS: 'Always grind',
+};
 
 interface ProductOption {
   id: string;
