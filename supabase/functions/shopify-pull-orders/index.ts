@@ -312,7 +312,9 @@ async function pullSource(
     // derivation handles those deterministically.
     const { data: mappings, error: mapErr } = await admin
       .from('shopify_product_mappings')
-      .select('shopify_variant_id, jim_product_id, do_not_produce, units_per_shopify_unit')
+      .select(
+        'shopify_variant_id, jim_product_id, do_not_produce, units_per_shopify_unit, grind_rule, grind_override_label',
+      )
       .eq('source_id', source.id);
     if (mapErr) throw new Error(`mapping lookup failed: ${mapErr.message}`);
     // units_per_shopify_unit: one Shopify unit = N JIM units (e.g. a "4 x 250g"
