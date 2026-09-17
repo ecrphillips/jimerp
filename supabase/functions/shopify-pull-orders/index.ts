@@ -438,7 +438,20 @@ async function pullSource(
           // no grind for them. Joining the product title in with a " / " (as this once
           // did) manufactured a separator that made every wholesale size read as a
           // grind label — every "(Wholesale) / 2LB" falsely flagged GRIND "2LB".
-          const { needsGrind, grindLabel } = parseGrindSignal(li.variantTitle);
+          const parsed = parseGrindSignal(li.variantTitle);
+          // A per-mapping grind rule (set on the mapped-products screen) wins over the
+          // title parse: NEVER kills false positives, ALWAYS flags variants whose grind
+          // isn't in the title.
+          const gRule = li.variantId ? grindRuleByVariant.get(li.variantId) : undefined;
+          let needsGrind = parsed.needsGrind;
+          let grindLabel = parsed.grindLabel;
+          if (gRule?.rule === 'NEVER') {
+            needsGrind = false;
+            grindLabel = null;
+          } else if (gRule?.rule === 'ALWAYS') {
+            needsGrind = true;
+            grindLabel = gRule.label ?? parsed.grindLabel;
+          }
           // Key by grind_label so distinct grinds split into their own lines while
           // whole-bean lines (label null) aggregate together.
           const key = `${fate.productId}|${grindLabel ?? ''}`;
