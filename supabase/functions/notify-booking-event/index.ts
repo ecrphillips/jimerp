@@ -11,7 +11,15 @@ const corsHeaders = {
 interface NotifyBookingRequest {
   booking_id: string;
   event_type: "BOOKING_CREATED" | "BOOKING_CANCELLED";
+  // Set for cupping lab / sample roaster bookings (coroast_facility_bookings).
+  // Omitted for Loring bookings (coroast_bookings).
+  resource?: "CUPPING_LAB" | "SAMPLE_ROASTER";
 }
+
+const FACILITY_LABELS: Record<string, string> = {
+  CUPPING_LAB: "cupping lab",
+  SAMPLE_ROASTER: "sample roaster",
+};
 
 const ALLOWED_EVENTS: NotificationEventType[] = ["BOOKING_CREATED", "BOOKING_CANCELLED"];
 
@@ -49,9 +57,16 @@ serve(async (req: Request) => {
       );
     }
 
+    if (body.resource && !FACILITY_LABELS[body.resource]) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Invalid resource" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // Fetch booking + account context
     const { data: booking, error: bookingError } = await adminClient
-      .from("coroast_bookings")
+      .from(body.resource ? "coroast_facility_bookings" : "coroast_bookings")
       .select(`
         id,
         booking_date,
@@ -102,6 +117,7 @@ serve(async (req: Request) => {
     // deno-lint-ignore no-explicit-any
     const accountName = (booking.account as any)?.account_name ?? "Unknown member";
     const action = body.event_type === "BOOKING_CREATED" ? "New" : "Cancelled";
+    const kind = body.resource ? FACILITY_LABELS[body.resource] : "co-roast";
 
     const fanOut = await fanOutNotification(adminClient, {
       eventType: body.event_type,
@@ -109,9 +125,9 @@ serve(async (req: Request) => {
         ? "booking_created_notification"
         : "booking_cancelled_notification",
       buildEmail: () => ({
-        subject: `${action} co-roast booking — ${accountName} — ${booking.booking_date}`,
+        subject: `${action} ${kind} booking — ${accountName} — ${booking.booking_date}`,
         text:
-          `${action} co-roast booking.\n\n` +
+          `${action} ${kind} booking.\n\n` +
           `Member: ${accountName}\n` +
           `Date: ${booking.booking_date}\n` +
           `Time: ${booking.start_time} – ${booking.end_time}\n` +

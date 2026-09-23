@@ -6222,6 +6222,10 @@ export type Database = {
         Args: { p_order_id: string }
         Returns: boolean
       }
+      cancel_member_facility_booking: {
+        Args: { p_booking_id: string }
+        Returns: undefined
+      }
       create_member_booking: {
         Args: {
           p_account_id: string

@@ -8,6 +8,7 @@ import {
 } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { LoringBlock, BLOCK_TYPE_LABELS, BLOCK_TYPE_COLORS, formatTime } from './types';
+import { LAYER_BY_KEY } from '@/components/bookings/scheduleLayers';
 
 interface BlockCalendarViewProps {
   blocks: LoringBlock[];
@@ -90,10 +91,10 @@ export function BlockCalendarView({ blocks, onEditBlock }: BlockCalendarViewProp
                       BLOCK_TYPE_COLORS[b.block_type],
                       'hover:opacity-80 transition-opacity cursor-pointer',
                     )}
-                    title={`${BLOCK_TYPE_LABELS[b.block_type]}: ${formatTime(b.start_time)} – ${formatTime(b.end_time)}${b.notes ? ' — ' + b.notes : ''}`}
+                    title={`${LAYER_BY_KEY[b.resource ?? 'LORING'].label} — ${BLOCK_TYPE_LABELS[b.block_type]}: ${formatTime(b.start_time)} – ${formatTime(b.end_time)}${b.notes ? ' — ' + b.notes : ''}`}
                   >
                     {b.recurring_series_id && <Repeat className="h-2.5 w-2.5 flex-shrink-0" />}
-                    <span className="truncate">{formatTime(b.start_time)}</span>
+                    <span className="truncate">{b.resource ? `${LAYER_BY_KEY[b.resource].short} ` : ''}{formatTime(b.start_time)}</span>
                   </button>
                 ))}
                 {dayBlocks.length > 3 && (

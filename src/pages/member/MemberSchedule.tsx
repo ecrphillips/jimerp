@@ -35,6 +35,11 @@ import { DAYS_OF_WEEK, DAY_LABELS, JS_DAY_TO_STRING } from '@/components/coroast
 import { useIsProspect } from '@/hooks/useIsProspect';
 import { MemberOnlyAction } from '@/components/prospect/MemberOnlyAction';
 import { SAMPLE_PROSPECT_BOOKINGS, SAMPLE_PROSPECT_BUSY_SLOTS } from '@/lib/prospectSampleData';
+import {
+  useScheduleLayers, LayerToggles, LaneHeader, laneStyle, layerAtX, isFacility,
+  SCHEDULE_LAYERS, LAYER_BY_KEY, FACILITY_RESOURCES, facilityAsBookingRows,
+  type ScheduleLayer, type FacilityBookingRow, type FacilityBlockRow, type FacilityBusySlot,
+} from '@/components/bookings/scheduleLayers';
 
 const JS_DOW_TO_STRING: Record<number, string> = {
   0: 'SUN', 1: 'MON', 2: 'TUE', 3: 'WED', 4: 'THU', 5: 'FRI', 6: 'SAT',
@@ -90,6 +95,8 @@ type CalendarEvent = {
   textColor: string;
   isBlock: boolean;
   isMine: boolean;
+  layer: ScheduleLayer;
+  facilityBookingId?: string;
 };
 
 export default function MemberSchedule() {
@@ -145,6 +152,12 @@ export default function MemberSchedule() {
 
   // Booking detail state
   const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
+  const [selectedFacilityBooking, setSelectedFacilityBooking] = useState<FacilityBookingRow | null>(null);
+
+  // Schedule layers (Loring / Cupping Lab / Sample Roaster) and the resource being booked
+  const { visible: visibleLayers, toggle: toggleLayer } = useScheduleLayers('jim.memberSchedule.layers');
+  const [formResource, setFormResource] = useState<ScheduleLayer>('LORING');
+  const bookingFacility = isFacility(formResource) ? formResource : null;
 
   // Confirm step
   const [showConfirm, setShowConfirm] = useState(false);
@@ -209,6 +222,63 @@ export default function MemberSchedule() {
   });
   const otherBusy = isProspect ? SAMPLE_PROSPECT_BUSY_SLOTS : realOtherBusy;
 
+  // Cupping lab / sample roaster: free, independent of the Loring and of each other.
+  const { data: facilityBlocks = [] } = useQuery({
+    queryKey: ['member-portal-facility-blocks'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('coroast_facility_blocks')
+        .select('id, resource, block_date, start_time, end_time, block_type, notes')
+        .order('block_date');
+      if (error) throw error;
+      return data as FacilityBlockRow[];
+    },
+    enabled: !isProspect,
+  });
+
+  const { data: myFacilityBookings = [] } = useQuery({
+    queryKey: ['member-portal-facility-bookings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('coroast_facility_bookings')
+        // RLS limits this to the caller's own account; notes_internal intentionally excluded
+        .select('id, account_id, resource, booking_date, start_time, end_time, status, notes_member')
+        .eq('status', 'CONFIRMED');
+      if (error) throw error;
+      return data as FacilityBookingRow[];
+    },
+    enabled: !isProspect,
+  });
+
+  const { data: facilityOtherBusy = [] } = useQuery({
+    queryKey: ['member-portal-facility-other-busy'],
+    queryFn: async () => {
+      const now = new Date();
+      const { data, error } = await supabase.rpc('get_coroast_facility_busy_slots', {
+        p_from: isoDateInTz(now),
+        p_to: isoDateInTz(addWeeks(now, 13)),
+      });
+      if (error) throw error;
+      return (data ?? []) as FacilityBusySlot[];
+    },
+    enabled: !!memberId && !isProspect,
+  });
+
+  // Conflict inputs for whichever resource the booking form is on.
+  const formBlocks: BlockRow[] = bookingFacility ? facilityBlocks.filter(b => b.resource === bookingFacility) : blocks;
+  const formBookings: BookingRow[] = bookingFacility
+    ? facilityAsBookingRows(myFacilityBookings.filter(b => b.resource === bookingFacility))
+    : allBookings as BookingRow[];
+  const formBusy: BusySlot[] = bookingFacility ? facilityOtherBusy.filter(b => b.resource === bookingFacility) : otherBusy;
+  // Facility time pickers also grey out other members' (redacted) slots. The Loring
+  // picker is left as-is; its conflicts surface via checkOverlap on submit.
+  const busyAsBookings: BookingRow[] = bookingFacility
+    ? facilityAsBookingRows(formBusy.map((b, i) => ({
+        id: `busy-${i}`, account_id: '', resource: bookingFacility, booking_date: b.booking_date,
+        start_time: b.start_time, end_time: b.end_time, status: 'CONFIRMED', notes_member: null,
+      })))
+    : [];
+
   // Included hours are per calendar month: usage is always measured against the month
   // of the booking being made, so a full current month never blocks a future month.
   const currentMonthStr = formatInTimeZone(new Date(), DEFAULT_TZ, 'yyyy-MM');
@@ -237,6 +307,7 @@ export default function MemberSchedule() {
         textColor: BLOCK_COLOR.text,
         isBlock: true,
         isMine: false,
+        layer: 'LORING',
       });
     }
 
@@ -256,6 +327,7 @@ export default function MemberSchedule() {
         textColor: isMine ? MEMBER_COLOR.text : OTHER_COLOR.text,
         isBlock: false,
         isMine,
+        layer: 'LORING',
       });
     }
 
@@ -272,11 +344,63 @@ export default function MemberSchedule() {
         textColor: OTHER_COLOR.text,
         isBlock: true,
         isMine: false,
+        layer: 'LORING',
       });
     });
 
-    return result;
-  }, [blocks, allBookings, otherBusy, memberId]);
+    for (const b of facilityBlocks) {
+      const name = LAYER_BY_KEY[b.resource].label;
+      result.push({
+        id: `fblk-${b.id}`,
+        dateStr: b.block_date,
+        startMin: timeToMinutes(b.start_time),
+        endMin: timeToMinutes(b.end_time),
+        label: 'Unavailable',
+        tooltip: `${name} unavailable: ${formatTime12(b.start_time)} – ${formatTime12(b.end_time)}`,
+        bgColor: BLOCK_COLOR.bg,
+        textColor: BLOCK_COLOR.text,
+        isBlock: true,
+        isMine: false,
+        layer: b.resource,
+      });
+    }
+
+    for (const bk of myFacilityBookings) {
+      const name = LAYER_BY_KEY[bk.resource].label;
+      result.push({
+        id: `fbk-${bk.id}`,
+        facilityBookingId: bk.id,
+        dateStr: bk.booking_date,
+        startMin: timeToMinutes(bk.start_time),
+        endMin: timeToMinutes(bk.end_time),
+        label: 'My Booking',
+        tooltip: `My ${name} booking: ${formatTime12(bk.start_time)} – ${formatTime12(bk.end_time)}`,
+        bgColor: LAYER_BY_KEY[bk.resource].color,
+        textColor: '#fff',
+        isBlock: false,
+        isMine: true,
+        layer: bk.resource,
+      });
+    }
+
+    facilityOtherBusy.forEach((s, idx) => {
+      result.push({
+        id: `fobs-${idx}`,
+        dateStr: s.booking_date,
+        startMin: timeToMinutes(s.start_time),
+        endMin: timeToMinutes(s.end_time),
+        label: 'Unavailable',
+        tooltip: `${LAYER_BY_KEY[s.resource].label} unavailable: ${formatTime12(s.start_time)} – ${formatTime12(s.end_time)}`,
+        bgColor: OTHER_COLOR.bg,
+        textColor: OTHER_COLOR.text,
+        isBlock: true,
+        isMine: false,
+        layer: s.resource,
+      });
+    });
+
+    return result.filter(e => visibleLayers.includes(e.layer));
+  }, [blocks, allBookings, otherBusy, memberId, facilityBlocks, myFacilityBookings, facilityOtherBusy, visibleLayers]);
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
@@ -294,7 +418,8 @@ export default function MemberSchedule() {
   }, []);
 
   // Open booking form from grid click
-  const handleSlotClick = useCallback((dateStr: string, time: string) => {
+  const handleSlotClick = useCallback((dateStr: string, time: string, layer: ScheduleLayer) => {
+    setFormResource(layer);
     setFormDate(new Date(dateStr + 'T00:00:00'));
     setFormStartTime(time);
     const startMin = timeToMinutes(time);
@@ -316,10 +441,15 @@ export default function MemberSchedule() {
   }, []);
 
   const handleEventClick = useCallback((ev: CalendarEvent) => {
+    if (ev.facilityBookingId) {
+      const fb = myFacilityBookings.find(b => b.id === ev.facilityBookingId);
+      if (fb) setSelectedFacilityBooking(fb);
+      return;
+    }
     if (!ev.isMine || ev.isBlock || !ev.bookingId) return;
     const bk = allBookings.find(b => b.id === ev.bookingId);
     if (bk) setSelectedBooking(bk);
-  }, [allBookings]);
+  }, [allBookings, myFacilityBookings]);
 
   const handleGridClick = (day: Date, e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -328,7 +458,8 @@ export default function MemberSchedule() {
     const snapped = Math.floor(totalMin / 30) * 30;
     const h = Math.floor(snapped / 60);
     const m = snapped % 60;
-    handleSlotClick(format(day, 'yyyy-MM-dd'), `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+    const layer = layerAtX(e.clientX - rect.left, rect.width, visibleLayers);
+    handleSlotClick(format(day, 'yyyy-MM-dd'), `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`, layer);
   };
 
   // Booking form computed values
@@ -344,13 +475,20 @@ export default function MemberSchedule() {
 
   // Booking horizon check
   const horizonError = useMemo(() => {
-    if (!formDate || isGrowth) return null;
+    if (!formDate) return null;
+    if (bookingFacility) {
+      // Matches create_member_facility_booking (13 weeks)
+      return isAfter(formDate, addWeeks(new Date(), 13))
+        ? 'The cupping lab and sample roaster can be booked up to 13 weeks ahead.'
+        : null;
+    }
+    if (isGrowth) return null;
     const maxDate = addWeeks(new Date(), 4);
     if (isAfter(formDate, maxDate)) {
       return 'Member tier members cannot book more than 4 weeks ahead.';
     }
     return null;
-  }, [formDate, isGrowth]);
+  }, [formDate, isGrowth, bookingFacility]);
 
   // Auto-set end time
   const handleStartTimeChange = (v: string) => {
@@ -377,7 +515,28 @@ export default function MemberSchedule() {
 
       const saveDateStr = format(formDate, 'yyyy-MM-dd');
 
-      if (isRecurring && isGrowth) {
+      if (bookingFacility) {
+        const overlap = checkOverlap(saveDateStr, formStartTime, formEndTime, formBlocks, formBookings, undefined, undefined, formBusy);
+        if (overlap) throw new Error(overlap);
+
+        const { data: newId, error } = await supabase.rpc('create_member_facility_booking', {
+          p_account_id: memberId,
+          p_resource: bookingFacility,
+          p_booking_date: saveDateStr,
+          p_start_time: formStartTime,
+          p_end_time: formEndTime,
+          p_notes: formNotes.trim() || null,
+        });
+        if (error) throw new Error(error.message);
+
+        if (newId) {
+          supabase.functions.invoke('notify-booking-event', {
+            body: { booking_id: newId, event_type: 'BOOKING_CREATED', resource: bookingFacility },
+          }).catch((err) => console.warn('[notify-booking-event] failed:', err));
+        }
+
+        toast.success(`${LAYER_BY_KEY[bookingFacility].label} booked!`);
+      } else if (isRecurring && isGrowth) {
         const dates = generateRecurringDates(formDate, recurringDay, recurringEndDate ?? null);
         if (dates.length === 0) throw new Error('No dates generated');
 
@@ -441,6 +600,8 @@ export default function MemberSchedule() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['member-portal-bookings'] });
       queryClient.invalidateQueries({ queryKey: ['member-portal-other-busy'] });
+      queryClient.invalidateQueries({ queryKey: ['member-portal-facility-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['member-portal-facility-other-busy'] });
       if (memberId) {
         const periodKey = formDate ? format(formDate, 'yyyy-MM') : new Date().toISOString().slice(0, 7);
         queryClient.invalidateQueries({ queryKey: ['coroast-hour-ledger', memberId] });
@@ -473,6 +634,24 @@ export default function MemberSchedule() {
         queryClient.invalidateQueries({ queryKey: ['coroast-hour-ledger', memberId] });
         queryClient.invalidateQueries({ queryKey: ['coroast-billing-period', memberId, periodKey] });
       }
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to cancel booking'),
+  });
+
+  const cancelFacilityMutation = useMutation({
+    mutationFn: async (bk: FacilityBookingRow) => {
+      const { error } = await supabase.rpc('cancel_member_facility_booking', { p_booking_id: bk.id });
+      if (error) throw new Error(error.message);
+
+      supabase.functions.invoke('notify-booking-event', {
+        body: { booking_id: bk.id, event_type: 'BOOKING_CANCELLED', resource: bk.resource },
+      }).catch((err) => console.warn('[notify-booking-event] failed:', err));
+    },
+    onSuccess: () => {
+      toast.success('Booking cancelled');
+      setSelectedFacilityBooking(null);
+      queryClient.invalidateQueries({ queryKey: ['member-portal-facility-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['member-portal-facility-other-busy'] });
     },
     onError: (err: Error) => toast.error(err.message || 'Failed to cancel booking'),
   });
@@ -527,6 +706,8 @@ export default function MemberSchedule() {
         </h3>
       </div>
 
+      <LayerToggles visible={visibleLayers} onToggle={toggleLayer} />
+
       <div className="border rounded-md overflow-hidden">
         {/* Sticky header */}
         <div className="grid bg-background" style={{ gridTemplateColumns: '56px repeat(7, 1fr)', minWidth: 700 }}>
@@ -537,6 +718,7 @@ export default function MemberSchedule() {
               <div key={day.toISOString()} className={cn('border-b text-center py-2 text-sm font-medium', isToday && 'bg-primary/10 text-primary font-bold')}>
                 <div>{format(day, 'EEE')}</div>
                 <div className="text-xs text-muted-foreground">{format(day, 'MMM d')}</div>
+                <LaneHeader visible={visibleLayers} />
               </div>
             );
           })}
@@ -596,10 +778,10 @@ export default function MemberSchedule() {
                       <div
                         key={ev.id}
                         className={cn(
-                          'absolute left-0.5 right-0.5 rounded px-1 text-[10px] leading-tight overflow-hidden z-20',
+                          'absolute rounded px-1 text-[10px] leading-tight overflow-hidden z-20',
                           ev.isBlock || !ev.isMine ? 'cursor-not-allowed opacity-80' : 'cursor-pointer hover:ring-2 hover:ring-primary/50',
                         )}
-                        style={{ top, height, backgroundColor: ev.bgColor, color: ev.textColor }}
+                        style={{ top, height, ...laneStyle(ev.layer, visibleLayers), backgroundColor: ev.bgColor, color: ev.textColor }}
                         title={ev.tooltip}
                         onClick={(e) => { e.stopPropagation(); handleEventClick(ev); }}
                       >
@@ -623,10 +805,12 @@ export default function MemberSchedule() {
 
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded" style={{ backgroundColor: MEMBER_COLOR.bg }} />
-          <span>My Bookings</span>
-        </div>
+        {SCHEDULE_LAYERS.filter(l => visibleLayers.includes(l.key)).map(l => (
+          <div key={l.key} className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded" style={{ backgroundColor: l.color }} />
+            <span>My {l.label} Bookings</span>
+          </div>
+        ))}
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded" style={{ backgroundColor: OTHER_COLOR.bg }} />
           <span>Unavailable</span>
@@ -646,6 +830,25 @@ export default function MemberSchedule() {
 
           {!showConfirm ? (
             <div className="space-y-4">
+              <div>
+                <Label>What are you booking? *</Label>
+                <Select
+                  value={formResource}
+                  onValueChange={(v) => {
+                    setFormResource(v as ScheduleLayer);
+                    if (isFacility(v as ScheduleLayer)) setIsRecurring(false);
+                    setValidationError(null);
+                  }}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {SCHEDULE_LAYERS.map(l => (
+                      <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div>
                 <Label>Date *</Label>
                 <Popover>
@@ -676,8 +879,8 @@ export default function MemberSchedule() {
                     onValueChange={handleStartTimeChange}
                     placeholder="Start"
                     dateStr={dateStr}
-                    blocks={blocks}
-                    bookings={allBookings as BookingRow[]}
+                    blocks={formBlocks}
+                    bookings={[...formBookings, ...busyAsBookings]}
                   />
                 </div>
                 <div>
@@ -687,8 +890,8 @@ export default function MemberSchedule() {
                     onValueChange={(v) => { setFormEndTime(v); setValidationError(null); }}
                     placeholder="End"
                     dateStr={dateStr}
-                    blocks={blocks}
-                    bookings={allBookings as BookingRow[]}
+                    blocks={formBlocks}
+                    bookings={[...formBookings, ...busyAsBookings]}
                     startTimeForRange={formStartTime || undefined}
                   />
                 </div>
@@ -699,7 +902,7 @@ export default function MemberSchedule() {
                 <Textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} rows={2} placeholder="Any context for your session…" />
               </div>
 
-              {isGrowth && (
+              {isGrowth && !bookingFacility && (
                 <div className="space-y-3">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <Checkbox checked={isRecurring} onCheckedChange={(c) => setIsRecurring(!!c)} />
@@ -764,7 +967,7 @@ export default function MemberSchedule() {
           ) : (
             <div className="space-y-4">
               <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                <p className="font-medium">Confirm your booking</p>
+                <p className="font-medium">Confirm your {LAYER_BY_KEY[formResource].label} booking</p>
                 <p className="text-sm">
                   <strong>{formDate && format(formDate, 'EEEE, MMMM d, yyyy')}</strong>
                 </p>
@@ -776,6 +979,12 @@ export default function MemberSchedule() {
                 )}
               </div>
 
+              {bookingFacility ? (
+                <div className="rounded-lg p-3 text-sm bg-muted/30 flex items-start gap-2">
+                  <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <p>No charge, and no included hours used. You can cancel any time before it starts.</p>
+                </div>
+              ) : (
               <div className={cn('rounded-lg p-3 text-sm', willBeOverage ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-muted/30')}>
                 <div className="flex items-start gap-2">
                   <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
@@ -792,6 +1001,7 @@ export default function MemberSchedule() {
                   </div>
                 </div>
               </div>
+              )}
 
               {validationError && <p className="text-xs text-destructive font-medium">{validationError}</p>}
 
@@ -867,6 +1077,43 @@ export default function MemberSchedule() {
                       To request a cancellation, please contact Home Island Coffee Partners directly.
                     </p>
                   </div>
+                )}
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Facility Booking Detail / Cancel Dialog */}
+      <Dialog open={!!selectedFacilityBooking} onOpenChange={(o) => { if (!o) setSelectedFacilityBooking(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{selectedFacilityBooking ? LAYER_BY_KEY[selectedFacilityBooking.resource].label : ''} Booking</DialogTitle>
+          </DialogHeader>
+          {selectedFacilityBooking && (() => {
+            const started = fromZonedTime(`${selectedFacilityBooking.booking_date}T${selectedFacilityBooking.start_time}`, DEFAULT_TZ) <= new Date();
+            return (
+              <div className="space-y-4">
+                <div className="space-y-2 text-sm">
+                  <p><strong>Date:</strong> {format(parseDateOnly(selectedFacilityBooking.booking_date)!, 'EEEE, MMMM d, yyyy')}</p>
+                  <p><strong>Time:</strong> {formatTime12(selectedFacilityBooking.start_time)} – {formatTime12(selectedFacilityBooking.end_time)}</p>
+                  {selectedFacilityBooking.notes_member && (
+                    <p><strong>Notes:</strong> {selectedFacilityBooking.notes_member}</p>
+                  )}
+                </div>
+                {started ? (
+                  <p className="text-xs text-muted-foreground">This booking has already started.</p>
+                ) : (
+                  <MemberOnlyAction actionLabel="cancel bookings" mode="replace">
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      onClick={() => cancelFacilityMutation.mutate(selectedFacilityBooking)}
+                      disabled={cancelFacilityMutation.isPending}
+                    >
+                      {cancelFacilityMutation.isPending ? 'Cancelling…' : 'Cancel Booking'}
+                    </Button>
+                  </MemberOnlyAction>
                 )}
               </div>
             );

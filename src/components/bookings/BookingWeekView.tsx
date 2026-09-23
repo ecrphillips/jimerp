@@ -11,15 +11,26 @@ import {
   type MemberRow, type BookingRow, type BlockRow, type AvailabilityWindow,
 } from './bookingUtils';
 import { useAccountsPricing } from '@/hooks/useAccountPricing';
+import {
+  LaneHeader, laneStyle, layerAtX, LAYER_BY_KEY,
+  type ScheduleLayer, type FacilityBookingRow, type FacilityBlockRow,
+} from './scheduleLayers';
 
 interface BookingWeekViewProps {
   blocks: BlockRow[];
   bookings: BookingRow[];
   members: MemberRow[];
   windows?: AvailabilityWindow[];
-  onSlotClick: (date: string, time: string) => void;
+  onSlotClick: (date: string, time: string, layer: ScheduleLayer) => void;
   onBookingClick?: (booking: BookingRow) => void;
+  /** Cupping lab / sample roaster layers. Omit to render the Loring only. */
+  facilityBookings?: FacilityBookingRow[];
+  facilityBlocks?: FacilityBlockRow[];
+  visibleLayers?: ScheduleLayer[];
+  onFacilityBookingClick?: (booking: FacilityBookingRow) => void;
 }
+
+const LORING_ONLY: ScheduleLayer[] = ['LORING'];
 
 const JS_DOW_TO_STRING: Record<number, string> = {
   0: 'SUN', 1: 'MON', 2: 'TUE', 3: 'WED', 4: 'THU', 5: 'FRI', 6: 'SAT',
@@ -65,9 +76,14 @@ type CalendarEvent = {
   urgency: UrgencyTier;
   isNoShow: boolean;
   isCompleted: boolean;
+  layer: ScheduleLayer;
+  facilityBookingId?: string;
 };
 
-export function BookingWeekView({ blocks, bookings, members, windows = [], onSlotClick, onBookingClick }: BookingWeekViewProps) {
+export function BookingWeekView({
+  blocks, bookings, members, windows = [], onSlotClick, onBookingClick,
+  facilityBookings = [], facilityBlocks = [], visibleLayers = LORING_ONLY, onFacilityBookingClick,
+}: BookingWeekViewProps) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const weekEnd = useMemo(() => endOfWeek(weekStart, { weekStartsOn: 1 }), [weekStart]);
   const weekDays = useMemo(() => eachDayOfInterval({ start: weekStart, end: weekEnd }), [weekStart, weekEnd]);
@@ -121,6 +137,7 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
         bgColor: 'hsl(25 45% 25%)',
         textColor: 'hsl(40 30% 96%)',
         isBlock: true, isOverage: false, recurring: false, urgency: 'none' as UrgencyTier, isNoShow: false, isCompleted: false,
+        layer: 'LORING',
       });
     }
 
@@ -151,11 +168,47 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
         textColor: color.text,
         isBlock: false, isOverage, recurring: !!bk.recurring_block_id,
         urgency: isCompleted || isNoShow ? 'none' : urgency, isNoShow, isCompleted,
+        layer: 'LORING',
       });
     }
 
-    return result;
-  }, [blocks, bookings, allMemberIds, bookingOverageSet]);
+    for (const b of facilityBlocks) {
+      const name = LAYER_BY_KEY[b.resource].label;
+      result.push({
+        id: `fblk-${b.id}`,
+        dateStr: b.block_date,
+        startMin: timeToMinutes(b.start_time),
+        endMin: timeToMinutes(b.end_time),
+        label: b.notes || 'Unavailable',
+        tooltip: `${name} unavailable: ${formatTime12(b.start_time)} – ${formatTime12(b.end_time)}${b.notes ? ' — ' + b.notes : ''}`,
+        bgColor: 'hsl(25 45% 25%)',
+        textColor: 'hsl(40 30% 96%)',
+        isBlock: true, isOverage: false, recurring: false, urgency: 'none' as UrgencyTier, isNoShow: false, isCompleted: false,
+        layer: b.resource,
+      });
+    }
+
+    for (const bk of facilityBookings) {
+      if (bk.status !== 'CONFIRMED') continue;
+      const color = getMemberColor(bk.account_id, allMemberIds);
+      const name = bk.accounts?.account_name ?? 'Member';
+      result.push({
+        id: `fbk-${bk.id}`,
+        facilityBookingId: bk.id,
+        dateStr: bk.booking_date,
+        startMin: timeToMinutes(bk.start_time),
+        endMin: timeToMinutes(bk.end_time),
+        label: name,
+        tooltip: `${LAYER_BY_KEY[bk.resource].label} — ${name}: ${formatTime12(bk.start_time)} – ${formatTime12(bk.end_time)}`,
+        bgColor: color.bg,
+        textColor: color.text,
+        isBlock: false, isOverage: false, recurring: false, urgency: 'none' as UrgencyTier, isNoShow: false, isCompleted: false,
+        layer: bk.resource,
+      });
+    }
+
+    return result.filter(e => visibleLayers.includes(e.layer));
+  }, [blocks, bookings, allMemberIds, bookingOverageSet, facilityBlocks, facilityBookings, visibleLayers]);
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
@@ -190,11 +243,16 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
     const h = Math.floor(snapped / 60);
     const m = snapped % 60;
     const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    onSlotClick(format(day, 'yyyy-MM-dd'), time);
+    onSlotClick(format(day, 'yyyy-MM-dd'), time, layerAtX(e.clientX - rect.left, rect.width, visibleLayers));
   };
 
   const handleEventClick = (ev: CalendarEvent, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (ev.facilityBookingId) {
+      const fb = facilityBookings.find(b => b.id === ev.facilityBookingId);
+      if (fb && onFacilityBookingClick) onFacilityBookingClick(fb);
+      return;
+    }
     if (ev.isBlock || !ev.bookingId || !onBookingClick) return;
     const bk = bookings.find(b => b.id === ev.bookingId);
     if (bk) onBookingClick(bk);
@@ -229,6 +287,7 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
               <div key={day.toISOString()} className={cn('border-b text-center py-2 text-sm font-medium', isToday && 'bg-primary/10 text-primary font-bold')}>
                 <div>{format(day, 'EEE')}</div>
                 <div className="text-xs text-muted-foreground">{format(day, 'MMM d')}</div>
+                <LaneHeader visible={visibleLayers} />
               </div>
             );
           })}
@@ -291,7 +350,7 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
                       <div
                         key={ev.id}
                         className={cn(
-                          'absolute left-0.5 right-0.5 rounded px-1 text-[10px] leading-tight overflow-hidden z-20',
+                          'absolute rounded px-1 text-[10px] leading-tight overflow-hidden z-20',
                           ev.isBlock ? 'cursor-not-allowed opacity-90' : 'cursor-pointer',
                           ev.isCompleted && 'opacity-60',
                           ev.isOverage && 'ring-1 ring-inset ring-white/40',
@@ -300,6 +359,7 @@ export function BookingWeekView({ blocks, bookings, members, windows = [], onSlo
                         )}
                         style={{
                           top, height,
+                          ...laneStyle(ev.layer, visibleLayers),
                           backgroundColor: ev.bgColor,
                           color: ev.textColor,
                           backgroundImage: ev.isOverage
