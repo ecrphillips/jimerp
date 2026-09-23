@@ -7,12 +7,16 @@ import {
 } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { LoringBlock, BookingWithMember, BLOCK_TYPE_LABELS, BLOCK_TYPE_COLORS, formatTime } from './types';
+import { LaneHeader, laneStyle, LAYER_BY_KEY, type ScheduleLayer } from '@/components/bookings/scheduleLayers';
 
 interface BlockWeekViewProps {
   blocks: LoringBlock[];
   bookings: BookingWithMember[];
   onEditBlock: (block: LoringBlock) => void;
+  visibleLayers?: ScheduleLayer[];
 }
+
+const LORING_ONLY: ScheduleLayer[] = ['LORING'];
 
 const HOUR_START = 5;
 const HOUR_END = 22; // 10 PM
@@ -40,9 +44,10 @@ type CalendarEvent = {
   isBooking: boolean;
   recurring: boolean;
   block?: LoringBlock;
+  layer: ScheduleLayer;
 };
 
-export function BlockWeekView({ blocks, bookings, onEditBlock }: BlockWeekViewProps) {
+export function BlockWeekView({ blocks, bookings, onEditBlock, visibleLayers = LORING_ONLY }: BlockWeekViewProps) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
 
   const weekEnd = useMemo(() => endOfWeek(weekStart, { weekStartsOn: 1 }), [weekStart]);
@@ -58,11 +63,12 @@ export function BlockWeekView({ blocks, bookings, onEditBlock }: BlockWeekViewPr
         startMin: timeToMinutes(b.start_time),
         endMin: timeToMinutes(b.end_time),
         label: BLOCK_TYPE_LABELS[b.block_type],
-        tooltip: `${BLOCK_TYPE_LABELS[b.block_type]}: ${formatTime(b.start_time)} – ${formatTime(b.end_time)}${b.notes ? ' — ' + b.notes : ''}`,
+        tooltip: `${LAYER_BY_KEY[b.resource ?? 'LORING'].label} — ${BLOCK_TYPE_LABELS[b.block_type]}: ${formatTime(b.start_time)} – ${formatTime(b.end_time)}${b.notes ? ' — ' + b.notes : ''}`,
         colorClass: BLOCK_TYPE_COLORS[b.block_type],
         isBooking: false,
         recurring: !!b.recurring_series_id,
         block: b,
+        layer: b.resource ?? 'LORING',
       });
     });
 
@@ -77,11 +83,12 @@ export function BlockWeekView({ blocks, bookings, onEditBlock }: BlockWeekViewPr
         colorClass: 'bg-sky-600/80 text-white',
         isBooking: true,
         recurring: false,
+        layer: 'LORING',
       });
     });
 
-    return result;
-  }, [blocks, bookings]);
+    return result.filter(e => visibleLayers.includes(e.layer));
+  }, [blocks, bookings, visibleLayers]);
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
@@ -130,6 +137,7 @@ export function BlockWeekView({ blocks, bookings, onEditBlock }: BlockWeekViewPr
               >
                 <div>{format(day, 'EEE')}</div>
                 <div className="text-xs text-muted-foreground">{format(day, 'MMM d')}</div>
+                <LaneHeader visible={visibleLayers} />
               </div>
             );
           })}
@@ -183,11 +191,11 @@ export function BlockWeekView({ blocks, bookings, onEditBlock }: BlockWeekViewPr
                         if (!ev.isBooking && ev.block) onEditBlock(ev.block);
                       }}
                       className={cn(
-                        'absolute left-0.5 right-0.5 rounded px-1 text-[10px] leading-tight overflow-hidden transition-opacity',
+                        'absolute rounded px-1 text-[10px] leading-tight overflow-hidden transition-opacity',
                         ev.colorClass,
                         ev.isBooking ? 'cursor-default' : 'hover:opacity-80 cursor-pointer',
                       )}
-                      style={{ top, height }}
+                      style={{ top, height, ...laneStyle(ev.layer, visibleLayers) }}
                       title={ev.tooltip}
                     >
                       <div className="flex items-center gap-0.5 truncate pt-0.5">

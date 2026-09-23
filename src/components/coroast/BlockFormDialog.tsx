@@ -18,8 +18,9 @@ import { TimeSelect } from './TimeSelect';
 import { timeToMinutes } from '@/components/bookings/bookingUtils';
 import {
   LoringBlock, LoringBlockType, BLOCK_TYPE_LABELS,
-  DAYS_OF_WEEK, DAY_LABELS, JS_DAY_TO_STRING,
+  DAYS_OF_WEEK, DAY_LABELS, JS_DAY_TO_STRING, blockTable,
 } from './types';
+import { SCHEDULE_LAYERS, LAYER_BY_KEY, isFacility, type ScheduleLayer } from '@/components/bookings/scheduleLayers';
 
 interface BlockFormDialogProps {
   open: boolean;
@@ -63,6 +64,8 @@ export function BlockFormDialog({ open, onOpenChange, editingBlock, onSuccess }:
   const [recurringDay, setRecurringDay] = useState('MON');
   const [recurringEndDate, setRecurringEndDate] = useState<Date | undefined>();
   const [editScope, setEditScope] = useState<'single' | 'future'>('single');
+  // Create mode: which resources this block applies to (one row per resource).
+  const [appliesTo, setAppliesTo] = useState<ScheduleLayer[]>(['LORING']);
 
   const isEditing = !!editingBlock;
   const hasSeries = !!editingBlock?.recurring_series_id;
@@ -87,6 +90,7 @@ export function BlockFormDialog({ open, onOpenChange, editingBlock, onSuccess }:
         setRecurringDay('MON');
         setRecurringEndDate(undefined);
         setEditScope('single');
+        setAppliesTo(['LORING']);
       }
     }
   }, [open, editingBlock]);
@@ -108,7 +112,7 @@ export function BlockFormDialog({ open, onOpenChange, editingBlock, onSuccess }:
       if (isEditing) {
         if (hasSeries && editScope === 'future') {
           const { error } = await (supabase
-            .from('coroast_loring_blocks') as any)
+            .from(blockTable(editingBlock!)) as any)
             .update({
               start_time: formStartTime,
               end_time: formEndTime,
@@ -130,43 +134,44 @@ export function BlockFormDialog({ open, onOpenChange, editingBlock, onSuccess }:
             updates.recurring_series_id = null;
           }
           const { error } = await (supabase
-            .from('coroast_loring_blocks') as any)
+            .from(blockTable(editingBlock!)) as any)
             .update(updates)
             .eq('id', editingBlock!.id);
           if (error) throw error;
         }
-      } else if (isRecurring) {
-        const dates = generateRecurringDates(formDate!, recurringDay, recurringEndDate ?? null);
-        if (dates.length === 0) throw new Error('No dates generated for the selected day');
-        const seriesId = crypto.randomUUID();
-        const rows = dates.map(d => ({
-          block_date: format(d, 'yyyy-MM-dd'),
-          start_time: formStartTime,
-          end_time: formEndTime,
-          block_type: formBlockType,
-          notes: formNotes.trim() || null,
-          recurring_series_id: seriesId,
-        }));
-        const { error } = await (supabase
-          .from('coroast_loring_blocks') as any)
-          .insert(rows);
-        if (error) throw error;
-        toast.success(`Created ${dates.length} recurring blocks`);
-        return;
       } else {
-        const { error } = await supabase.from('coroast_loring_blocks').insert({
-          block_date: format(formDate!, 'yyyy-MM-dd'),
-          start_time: formStartTime,
-          end_time: formEndTime,
-          block_type: formBlockType,
-          notes: formNotes.trim() || null,
-        });
-        if (error) throw error;
+        if (appliesTo.length === 0) throw new Error('Choose at least one resource');
+        const dates = isRecurring
+          ? generateRecurringDates(formDate!, recurringDay, recurringEndDate ?? null)
+          : [formDate!];
+        if (dates.length === 0) throw new Error('No dates generated for the selected day');
+        // One series per resource so "edit/delete future in series" stays within a resource.
+        for (const layer of appliesTo) {
+          const seriesId = isRecurring ? crypto.randomUUID() : null;
+          const rows = dates.map(d => ({
+            block_date: format(d, 'yyyy-MM-dd'),
+            start_time: formStartTime,
+            end_time: formEndTime,
+            block_type: formBlockType,
+            notes: formNotes.trim() || null,
+            ...(seriesId ? { recurring_series_id: seriesId } : {}),
+            ...(isFacility(layer) ? { resource: layer } : {}),
+          }));
+          const { error } = await (supabase
+            .from(isFacility(layer) ? 'coroast_facility_blocks' : 'coroast_loring_blocks') as any)
+            .insert(rows);
+          if (error) throw error;
+        }
+        if (isRecurring) {
+          toast.success(`Created ${dates.length * appliesTo.length} recurring blocks`);
+          return;
+        }
       }
     },
     onSuccess: () => {
       if (!isRecurring) toast.success(isEditing ? 'Block updated' : 'Block created');
       queryClient.invalidateQueries({ queryKey: ['coroast-loring-blocks'] });
+      queryClient.invalidateQueries({ queryKey: ['coroast-facility-blocks'] });
       onSuccess();
       onOpenChange(false);
     },
@@ -189,6 +194,10 @@ export function BlockFormDialog({ open, onOpenChange, editingBlock, onSuccess }:
       toast.error('End time must be after start time');
       return;
     }
+    if (!isEditing && appliesTo.length === 0) {
+      toast.error('Choose at least one resource');
+      return;
+    }
     mutation.mutate();
   };
 
@@ -199,6 +208,29 @@ export function BlockFormDialog({ open, onOpenChange, editingBlock, onSuccess }:
           <DialogTitle>{isEditing ? 'Edit Block' : 'Add Unavailability Block'}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {/* Resource(s) — chosen on create; fixed when editing */}
+          {isEditing ? (
+            <p className="text-sm text-muted-foreground">
+              Applies to: <span className="font-medium text-foreground">{LAYER_BY_KEY[editingBlock!.resource ?? 'LORING'].label}</span>
+            </p>
+          ) : (
+            <div>
+              <Label>Applies to *</Label>
+              <div className="flex flex-wrap gap-4 mt-1">
+                {SCHEDULE_LAYERS.map(l => (
+                  <label key={l.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={appliesTo.includes(l.key)}
+                      onCheckedChange={(c) => setAppliesTo(prev =>
+                        c ? SCHEDULE_LAYERS.map(x => x.key).filter(k => k === l.key || prev.includes(k)) : prev.filter(k => k !== l.key))}
+                    />
+                    {l.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Edit scope for series blocks */}
           {isEditing && hasSeries && (
             <div className="rounded-md border p-3 bg-muted/50">

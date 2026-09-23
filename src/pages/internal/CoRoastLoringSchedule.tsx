@@ -26,6 +26,7 @@ import { BlockDeleteDialog } from '@/components/coroast/BlockDeleteDialog';
 import { BlockCalendarView } from '@/components/coroast/BlockCalendarView';
 import { BlockWeekView } from '@/components/coroast/BlockWeekView';
 import type { AvailabilityWindow } from '@/components/bookings/bookingUtils';
+import { useScheduleLayers, LayerToggles, LAYER_BY_KEY, type FacilityBlockRow } from '@/components/bookings/scheduleLayers';
 
 // Time options for the window form (30-min increments, 5 AM – 10 PM)
 const TIME_OPTIONS: { value: string; label: string }[] = [];
@@ -63,7 +64,9 @@ export default function CoRoastLoringSchedule() {
   const [windowNotes, setWindowNotes] = useState('');
   const [editingWindowId, setEditingWindowId] = useState<string | null>(null);
 
-  const { data: blocks, isLoading: blocksLoading } = useQuery({
+  const { visible: visibleLayers, toggle: toggleLayer } = useScheduleLayers('jim.blockSchedule.layers');
+
+  const { data: loringBlocks, isLoading: blocksLoading } = useQuery({
     queryKey: ['coroast-loring-blocks'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -74,6 +77,26 @@ export default function CoRoastLoringSchedule() {
       return (data ?? []) as unknown as LoringBlock[];
     },
   });
+
+  const { data: facilityBlocks } = useQuery({
+    queryKey: ['coroast-facility-blocks'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('coroast_facility_blocks')
+        .select('*')
+        .order('block_date', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as unknown as (LoringBlock & FacilityBlockRow)[];
+    },
+  });
+
+  // Loring + facility blocks, filtered to the visible layers.
+  const blocks = useMemo(() => {
+    if (!loringBlocks) return undefined;
+    return [...loringBlocks, ...(facilityBlocks ?? [])]
+      .filter(b => visibleLayers.includes(b.resource ?? 'LORING'))
+      .sort((a, b) => a.block_date.localeCompare(b.block_date) || a.start_time.localeCompare(b.start_time));
+  }, [loringBlocks, facilityBlocks, visibleLayers]);
 
   const { data: bookings, isLoading: bookingsLoading } = useQuery({
     queryKey: ['coroast-bookings-schedule'],
@@ -238,6 +261,10 @@ export default function CoRoastLoringSchedule() {
         </div>
       </div>
 
+      <div className="mb-4">
+        <LayerToggles visible={visibleLayers} onToggle={toggleLayer} />
+      </div>
+
       {viewMode === 'week' ? (
         <Card>
           <CardContent className="pt-6">
@@ -246,8 +273,9 @@ export default function CoRoastLoringSchedule() {
             ) : (
               <BlockWeekView
                 blocks={blocks ?? []}
-                bookings={bookings ?? []}
+                bookings={visibleLayers.includes('LORING') ? bookings ?? [] : []}
                 onEditBlock={openEdit}
+                visibleLayers={visibleLayers}
               />
             )}
           </CardContent>
@@ -346,6 +374,13 @@ export default function CoRoastLoringSchedule() {
                     <li key={b.id} className={`border-b pb-3 last:border-0 ${b.block_date < today ? 'opacity-50' : ''}`}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
+                          <Badge
+                            variant="outline"
+                            className="text-xs whitespace-nowrap"
+                            style={{ borderColor: LAYER_BY_KEY[b.resource ?? 'LORING'].color, color: LAYER_BY_KEY[b.resource ?? 'LORING'].color }}
+                          >
+                            {LAYER_BY_KEY[b.resource ?? 'LORING'].short}
+                          </Badge>
                           <Badge variant={BLOCK_TYPE_BADGE_VARIANT[b.block_type]} className="text-xs whitespace-nowrap">
                             {BLOCK_TYPE_LABELS[b.block_type]}
                           </Badge>

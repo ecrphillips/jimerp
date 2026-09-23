@@ -6,7 +6,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { LoringBlock } from './types';
+import { blockTable, type LoringBlock } from './types';
 
 interface BlockDeleteDialogProps {
   block: LoringBlock | null;
@@ -25,14 +25,14 @@ export function BlockDeleteDialog({ block, open, onOpenChange, onSuccess }: Bloc
       if (!block) return;
       if (hasSeries && deleteScope === 'future') {
         const { error } = await (supabase
-          .from('coroast_loring_blocks') as any)
+          .from(blockTable(block)) as any)
           .delete()
           .eq('recurring_series_id', block.recurring_series_id!)
           .gte('block_date', block.block_date);
         if (error) throw error;
       } else {
         const { error } = await supabase
-          .from('coroast_loring_blocks')
+          .from(blockTable(block))
           .delete()
           .eq('id', block.id);
         if (error) throw error;
@@ -41,6 +41,7 @@ export function BlockDeleteDialog({ block, open, onOpenChange, onSuccess }: Bloc
     onSuccess: () => {
       toast.success('Block deleted');
       queryClient.invalidateQueries({ queryKey: ['coroast-loring-blocks'] });
+      queryClient.invalidateQueries({ queryKey: ['coroast-facility-blocks'] });
       onSuccess();
       onOpenChange(false);
     },

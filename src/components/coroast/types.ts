@@ -1,4 +1,5 @@
 import type { Database } from '@/integrations/supabase/types';
+import type { FacilityResource } from '@/components/bookings/scheduleLayers';
 
 export type LoringBlockType = Database['public']['Enums']['coroast_loring_block_type'];
 
@@ -11,6 +12,13 @@ export interface LoringBlock {
   notes: string | null;
   created_at: string;
   recurring_series_id: string | null;
+  /** Set for cupping lab / sample roaster blocks; absent for Loring blocks. */
+  resource?: FacilityResource;
+}
+
+/** Loring blocks and facility blocks live in separate tables. */
+export function blockTable(block: Pick<LoringBlock, 'resource'>) {
+  return block.resource ? 'coroast_facility_blocks' as const : 'coroast_loring_blocks' as const;
 }
 
 export interface BookingWithMember {
