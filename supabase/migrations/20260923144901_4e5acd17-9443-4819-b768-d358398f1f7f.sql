@@ -1,0 +1,1 @@
+UPDATE public.order_line_items SET needs_grind = false, grind_label = NULL WHERE grind_label = 'Whole Bean Coffee';

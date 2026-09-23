@@ -19,7 +19,9 @@ export interface GrindSignal {
   grindLabel: string | null;
 }
 
-const WHOLE_BEAN_RE = /^whole\s+beans?$/i;
+// Matches "Whole Bean", "Whole Beans", "Whole Bean Coffee", "Whole-Bean (1kg)" etc.
+// — any segment that STARTS with "whole bean" is whole bean, never a grind.
+const WHOLE_BEAN_RE = /^whole[\s-]*beans?\b/i;
 
 export function parseGrindSignal(lineItemName: string | null | undefined): GrindSignal {
   const none: GrindSignal = { needsGrind: false, grindLabel: null };
