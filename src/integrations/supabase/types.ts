@@ -888,6 +888,107 @@ export type Database = {
           },
         ]
       }
+      coroast_facility_blocks: {
+        Row: {
+          block_date: string
+          block_type: Database["public"]["Enums"]["coroast_loring_block_type"]
+          created_at: string
+          created_by: string | null
+          end_time: string
+          id: string
+          notes: string | null
+          recurring_series_id: string | null
+          resource: Database["public"]["Enums"]["coroast_facility_resource"]
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          block_date: string
+          block_type?: Database["public"]["Enums"]["coroast_loring_block_type"]
+          created_at?: string
+          created_by?: string | null
+          end_time: string
+          id?: string
+          notes?: string | null
+          recurring_series_id?: string | null
+          resource: Database["public"]["Enums"]["coroast_facility_resource"]
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          block_date?: string
+          block_type?: Database["public"]["Enums"]["coroast_loring_block_type"]
+          created_at?: string
+          created_by?: string | null
+          end_time?: string
+          id?: string
+          notes?: string | null
+          recurring_series_id?: string | null
+          resource?: Database["public"]["Enums"]["coroast_facility_resource"]
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      coroast_facility_bookings: {
+        Row: {
+          account_id: string
+          booking_date: string
+          cancelled_at: string | null
+          cancelled_by: string | null
+          created_at: string
+          created_by: string | null
+          end_time: string
+          id: string
+          notes_internal: string | null
+          notes_member: string | null
+          resource: Database["public"]["Enums"]["coroast_facility_resource"]
+          start_time: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          booking_date: string
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          end_time: string
+          id?: string
+          notes_internal?: string | null
+          notes_member?: string | null
+          resource: Database["public"]["Enums"]["coroast_facility_resource"]
+          start_time: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          booking_date?: string
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          end_time?: string
+          id?: string
+          notes_internal?: string | null
+          notes_member?: string | null
+          resource?: Database["public"]["Enums"]["coroast_facility_resource"]
+          start_time?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coroast_facility_bookings_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coroast_hour_ledger: {
         Row: {
           account_id: string | null
@@ -6108,6 +6209,10 @@ export type Database = {
         Args: { p_booking_id: string }
         Returns: undefined
       }
+      cancel_member_facility_booking: {
+        Args: { p_booking_id: string }
+        Returns: undefined
+      }
       cancel_order_with_picks: {
         Args: { p_mode: string; p_order_id: string }
         Returns: undefined
@@ -6124,6 +6229,17 @@ export type Database = {
           p_end_time: string
           p_notes?: string
           p_recurring_block_id?: string
+          p_start_time: string
+        }
+        Returns: string
+      }
+      create_member_facility_booking: {
+        Args: {
+          p_account_id: string
+          p_booking_date: string
+          p_end_time: string
+          p_notes?: string
+          p_resource: Database["public"]["Enums"]["coroast_facility_resource"]
           p_start_time: string
         }
         Returns: string
@@ -6187,6 +6303,15 @@ export type Database = {
         Returns: {
           booking_date: string
           end_time: string
+          start_time: string
+        }[]
+      }
+      get_coroast_facility_busy_slots: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          booking_date: string
+          end_time: string
+          resource: Database["public"]["Enums"]["coroast_facility_resource"]
           start_time: string
         }[]
       }
@@ -6458,6 +6583,7 @@ export type Database = {
         | "CANCELLED_FREE"
         | "COMPLETED"
         | "NO_SHOW"
+      coroast_facility_resource: "CUPPING_LAB" | "SAMPLE_ROASTER"
       coroast_ledger_entry_type:
         | "BOOKING_CONFIRMED"
         | "BOOKING_RETURNED"
@@ -6709,6 +6835,7 @@ export const Constants = {
         "COMPLETED",
         "NO_SHOW",
       ],
+      coroast_facility_resource: ["CUPPING_LAB", "SAMPLE_ROASTER"],
       coroast_ledger_entry_type: [
         "BOOKING_CONFIRMED",
         "BOOKING_RETURNED",
