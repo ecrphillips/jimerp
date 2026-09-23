@@ -466,9 +466,13 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       
       // A group is "completed" if it has no net demand, has some form of activity,
       // and has no PLANNED batches still queued (unroasted work must stay visible).
+      // Blend-earmarked component batches belong exclusively to their parent
+      // blend drawer and must not keep the component's top-level drawer active.
       const hasActivity = groupsWithActivity.has(roast_group);
       const hasPlanned = (batches ?? []).some(
-        b => b.roast_group === roast_group && b.status === 'PLANNED'
+        b => b.roast_group === roast_group
+          && b.status === 'PLANNED'
+          && !b.planned_for_blend_roast_group
       );
       const isCompleted = net_demand_kg === 0 && hasActivity && !hasPlanned;
       
@@ -563,7 +567,11 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   // Helper: does a completed group have any batch within the selected date range?
   const completedGroupMatchesDateFilter = useCallback((roastGroup: string): boolean => {
     if (!completedDateRange) return true; // 'all'
-    const groupBatches = (batches ?? []).filter(b => b.roast_group === roastGroup);
+    // Parent-owned component batches are history for the blend, not for the
+    // component's standalone drawer.
+    const groupBatches = (batches ?? []).filter(
+      b => b.roast_group === roastGroup && !b.planned_for_blend_roast_group
+    );
     // Pass-through: if no batch timestamps, behave as 'all'
     const stamped = groupBatches
       .map(b => b.updated_at ?? b.created_at ?? null)
