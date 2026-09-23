@@ -253,9 +253,6 @@ export function RoastGroupDrawer({
   const defaultRoaster = config?.default_roaster ?? 'EITHER';
   const yieldLossPct = config?.expected_yield_loss_pct ?? 16;
   
-  // Track if all batches are roasted (no PLANNED remaining)
-  const isFullyRoasted = plannedBatches.length === 0 && roastedBatches.length > 0;
-  
   // Calculate expected output for PLANNED batches (apply yield loss to inbound green kg)
   const plannedExpectedOutput = plannedBatches.reduce((sum, b) => {
     const inboundKg = b.planned_output_kg ?? 0;
@@ -320,8 +317,6 @@ export function RoastGroupDrawer({
   // against gross demand:
   //   coverage = net WIP + FG (kg) - demand
   // >= 0 means the blend is fully covered (net demand is 0); < 0 is the shortfall.
-  const blendCoverageDelta = wipKg + fgKg - demandKg;
-
   // Planned post-roast blend coverage is constrained by the least-covered
   // recipe component. Count both unconsumed roasted components and expected
   // output from planned component batches. The previous badge only considered
