@@ -1198,6 +1198,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                               setAddBatchRgKey(group.roast_group);
                               setShowAddBatchModal(true);
                             }}
+                            onPlanSuggestedBatches={() => handleCreateSuggestedBatches(group.roast_group, group.net_demand_kg)}
                             onBlendBatches={() => setBlendExecuteModal({
                               roastGroup: group.roast_group,
                               displayName: config?.display_name?.trim() || group.roast_group.replace(/_/g, ' '),

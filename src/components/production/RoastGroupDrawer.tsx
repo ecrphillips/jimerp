@@ -115,6 +115,7 @@ interface RoastGroupDrawerProps {
   isCompleted?: boolean; // true if no remaining demand but has activity (batches/WIP)
   onPlanBlendBatches?: () => void;
   onPlanDirectBatch?: () => void;
+  onPlanSuggestedBatches?: () => void;
   onBlendBatches?: () => void;
   components: RoastGroupComponent[];
   roastGroupsLookupMap: Map<string, { display_name: string | null; origin: string | null; expected_yield_loss_pct?: number | null; standard_batch_kg?: number | null }>;
@@ -144,6 +145,7 @@ export function RoastGroupDrawer({
   isCompleted = false,
   onPlanBlendBatches,
   onPlanDirectBatch,
+  onPlanSuggestedBatches,
   onBlendBatches,
   components,
   roastGroupsLookupMap,
@@ -207,7 +209,9 @@ export function RoastGroupDrawer({
       if (error) throw error;
       return (data ?? []) as RoastBatch[];
     },
-    enabled: isBlend && isExpanded,
+    // Keep this loaded while collapsed too: the drawer's status and emphasis
+    // depend on component batches already planned for a post-roast blend.
+    enabled: isBlend,
   });
   
   // Group component batches by component roast group
@@ -248,9 +252,6 @@ export function RoastGroupDrawer({
   const standardBatch = config?.standard_batch_kg ?? 20;
   const defaultRoaster = config?.default_roaster ?? 'EITHER';
   const yieldLossPct = config?.expected_yield_loss_pct ?? 16;
-  
-  // Track if all batches are roasted (no PLANNED remaining)
-  const isFullyRoasted = plannedBatches.length === 0 && roastedBatches.length > 0;
   
   // Calculate expected output for PLANNED batches (apply yield loss to inbound green kg)
   const plannedExpectedOutput = plannedBatches.reduce((sum, b) => {
@@ -316,8 +317,37 @@ export function RoastGroupDrawer({
   // against gross demand:
   //   coverage = net WIP + FG (kg) - demand
   // >= 0 means the blend is fully covered (net demand is 0); < 0 is the shortfall.
-  const blendCoverageDelta = wipKg + fgKg - demandKg;
-  const isBlendComplete = isPostRoastBlend && blendCoverageDelta >= 0;
+  // Planned post-roast blend coverage is constrained by the least-covered
+  // recipe component. Count both unconsumed roasted components and expected
+  // output from planned component batches. The previous badge only considered
+  // finished blend WIP/FG, so a fully planned Technicolour drawer still read
+  // as short until the blend itself had been executed.
+  const plannedBlendPossibleKg = useMemo(() => {
+    if (!isPostRoastBlend || blendComponentsWithNames.length === 0) return 0;
+
+    return Math.min(...blendComponentsWithNames.map((component) => {
+      const ratio = component.pct / 100;
+      if (ratio <= 0) return 0;
+      const availableComponentKg = (componentBatchesByGroup[component.roastGroup] ?? []).reduce((sum, batch) => {
+        if (batch.status === 'ROASTED') return sum + batch.actual_output_kg;
+        const componentYieldLoss = roastGroupsLookupMap.get(component.roastGroup)?.expected_yield_loss_pct ?? 16;
+        return sum + (batch.planned_output_kg ?? 0) * (1 - componentYieldLoss / 100);
+      }, 0);
+      return availableComponentKg / ratio;
+    }));
+  }, [isPostRoastBlend, blendComponentsWithNames, componentBatchesByGroup, roastGroupsLookupMap]);
+
+  const effectiveCoverageDelta = isPostRoastBlend
+    ? plannedBlendPossibleKg - netDemandKg
+    : coverageDelta;
+  const hasPlannedWork = isPostRoastBlend
+    ? (componentBatches ?? []).some(batch => batch.status === 'PLANNED')
+    : plannedBatches.length > 0;
+  const needsPlanning = netDemandKg > 0.001 && effectiveCoverageDelta < -0.001;
+  const hasFinishedProduction = isPostRoastBlend
+    ? wipKg + fgKg > 0.001
+    : roastedBatches.length > 0;
+  const isProductionComplete = netDemandKg <= 0.001 && !hasPlannedWork && hasFinishedProduction;
 
   // For post-roast blends: "expected" column shows staged-for-blend kg instead of
   // planned batches — reflects component inventory ready for blending. Pre-roast
@@ -748,10 +778,10 @@ export function RoastGroupDrawer({
       {/* Collapsed Row */}
       <tr
         className={`border-b cursor-pointer transition-colors
-          ${isFullyRoasted || isCompleted || isBlendComplete ? 'opacity-60' : ''}
-          ${hasTimeSensitive && !isFullyRoasted && !isCompleted && !isBlendComplete ? 'bg-destructive/5' : ''}
-          ${(isCompleted || isBlendComplete) && !isExpanded ? 'bg-muted/30' : ''}
-          ${isExpanded ? 'bg-muted/50 border-l-2 border-l-primary' : 'hover:bg-muted/50'}`}
+          ${isProductionComplete ? 'opacity-60' : ''}
+          ${needsPlanning ? `border-l-4 ${hasTimeSensitive ? 'border-l-destructive bg-destructive/5' : 'border-l-warning bg-warning/10'}` : ''}
+          ${isProductionComplete && !isExpanded ? 'bg-muted/30' : ''}
+          ${isExpanded && !needsPlanning ? 'bg-muted/50 border-l-2 border-l-primary' : !needsPlanning ? 'hover:bg-muted/50' : ''}`}
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <td className="py-3 w-8 px-2">
@@ -841,28 +871,32 @@ export function RoastGroupDrawer({
           {/* Post-roast blends: coverage is WIP + FG vs demand, not roasted weight
               (always 0). Pre-roast blends roast directly, so they use the normal
               planned+roasted coverageDelta path below (same as single-origin). */}
-          {isPostRoastBlend ? (
-            blendCoverageDelta >= 0 ? (
-              <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
-                Covered +{blendCoverageDelta.toFixed(1)} kg
-              </Badge>
-            ) : (
-              <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300">
-                Short {Math.abs(blendCoverageDelta).toFixed(1)} kg
-              </Badge>
-            )
-          ) : isCompleted ? (
+          {isProductionComplete || isCompleted && netDemandKg <= 0.001 ? (
             <Badge variant="secondary" className="bg-muted text-muted-foreground border-border">
               <Check className="h-3 w-3 mr-1" />
-              Completed
+              Today covered
             </Badge>
-          ) : coverageDelta >= 0 ? (
-            <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
-              Covered +{coverageDelta.toFixed(1)} kg
-            </Badge>
+          ) : needsPlanning ? (
+            <div className="flex items-center justify-end gap-2">
+              <Badge variant="secondary" className="bg-warning/15 text-foreground border-warning/40">
+                Short {Math.abs(effectiveCoverageDelta).toFixed(1)} kg
+              </Badge>
+              <Button
+                size="sm"
+                className="h-7 text-xs"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (isPostRoastBlend) onPlanBlendBatches?.();
+                  else onPlanSuggestedBatches?.();
+                }}
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Plan batches
+              </Button>
+            </div>
           ) : (
-            <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300">
-              Short {Math.abs(coverageDelta).toFixed(1)} kg
+            <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+              Planned coverage{effectiveCoverageDelta > 0.05 ? ` +${effectiveCoverageDelta.toFixed(1)} kg` : ''}
             </Badge>
           )}
         </td>
@@ -870,7 +904,7 @@ export function RoastGroupDrawer({
 
       {/* Expanded Drawer */}
       {isExpanded && (
-          <tr className="bg-muted/30 border-l-2 border-l-primary">
+          <tr className={needsPlanning ? 'bg-warning/10 border-l-4 border-l-warning' : 'bg-muted/30 border-l-2 border-l-primary'}>
           <td colSpan={7} className="py-3 px-4 pl-8">
             <div className="space-y-3">
               {/* Header with config and WIP/FG buttons */}
