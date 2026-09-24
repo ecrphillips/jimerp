@@ -273,7 +273,7 @@ function LeafRow({
               }
               onEditingChange={(editing) => onEditingChange(pid, editing)}
               isComplete={isComplete}
-              fillValue={globalDemand}
+              fillValue={Math.max(0, globalDemand - picked)}
             />
           </div>
           {picked > 0 && (
