@@ -13,14 +13,14 @@ export function printPackList(tree: PackL1Node[], mode: PackGroupMode) {
         .map((l2) => {
           const rows = l2.leaves
             .map((leaf) => {
-              const grind =
-                leaf.grindUnits > 0
-                  ? `<div class="grind">GRIND ${leaf.grindUnits}: ${Object.entries(leaf.grindByLabel)
+              const isGrind = leaf.grindUnits > 0;
+              const grind = isGrind
+                ? `<div class="grind"><span class="tag-inv">GRIND</span> ${leaf.grindUnits} to grind: ${Object.entries(leaf.grindByLabel)
                       .map(([l, q]) => `${q} × ${esc(l)}`)
                       .join(', ')}${leaf.wholeBeanUnits > 0 ? ` · ${leaf.wholeBeanUnits} whole bean` : ''}</div>`
                   : '';
               const stock = leaf.requiresProduction ? '' : '<span class="tag">PULL FROM STOCK</span>';
-              return `<tr>
+              return `<tr${isGrind ? ' class="needs-grind"' : ''}>
                 <td class="chk">☐</td>
                 <td><strong>${esc(leaf.productName)}</strong> ${stock}${grind}</td>
                 <td>${leaf.bagSizeG}g</td>
