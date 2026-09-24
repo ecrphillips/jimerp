@@ -24,7 +24,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { fetchAllRows } from '@/lib/fetchAllRows';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Package, Layers, GripVertical, RotateCcw, ChevronDown, ChevronRight, ChevronsUpDown } from 'lucide-react';
+import { Package, Layers, GripVertical, RotateCcw, ChevronDown, ChevronRight, ChevronsUpDown, Printer } from 'lucide-react';
+import { printPackList } from './printPackList';
 import { Link } from 'react-router-dom';
 import { type PackagingVariant } from '@/components/PackagingBadge';
 import { SortablePackRow } from './SortablePackRow';
@@ -1241,6 +1242,17 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
               >
                 <ChevronsUpDown className="h-4 w-4 mr-1" />
                 {allNestedExpanded ? 'Collapse all' : 'Expand all'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={packTree.length === 0}
+                onClick={() => {
+                  if (!printPackList(packTree, groupMode)) toast.error('Allow pop-ups to print the pack list');
+                }}
+              >
+                <Printer className="h-4 w-4 mr-1" />
+                Print pack list
               </Button>
               <Button variant="outline" size="sm" asChild>
                 <Link to="/inventory?tab=wip&from=pack">
