@@ -282,7 +282,7 @@ export function SortablePackRow({
               onCommit={onUpdatePackedUnits}
               onEditingChange={onEditingChange}
               isComplete={isComplete}
-              fillValue={demandedUnits}
+              fillValue={Math.max(0, demandedUnits - pickedUnits)}
             />
           ) : (
             // Bought-in item: nothing to pack, nothing to write to any ledger.
