@@ -13,14 +13,14 @@ export function printPackList(tree: PackL1Node[], mode: PackGroupMode) {
         .map((l2) => {
           const rows = l2.leaves
             .map((leaf) => {
-              const grind =
-                leaf.grindUnits > 0
-                  ? `<div class="grind">GRIND ${leaf.grindUnits}: ${Object.entries(leaf.grindByLabel)
+              const isGrind = leaf.grindUnits > 0;
+              const grind = isGrind
+                ? `<div class="grind"><span class="tag-inv">GRIND</span> ${leaf.grindUnits} to grind: ${Object.entries(leaf.grindByLabel)
                       .map(([l, q]) => `${q} × ${esc(l)}`)
                       .join(', ')}${leaf.wholeBeanUnits > 0 ? ` · ${leaf.wholeBeanUnits} whole bean` : ''}</div>`
                   : '';
               const stock = leaf.requiresProduction ? '' : '<span class="tag">PULL FROM STOCK</span>';
-              return `<tr>
+              return `<tr${isGrind ? ' class="needs-grind"' : ''}>
                 <td class="chk">☐</td>
                 <td><strong>${esc(leaf.productName)}</strong> ${stock}${grind}</td>
                 <td>${leaf.bagSizeG}g</td>
@@ -47,7 +47,11 @@ h2{font-size:15px;text-transform:uppercase;margin:0 0 6px}h3{font-size:13px;marg
 table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:4px 6px;text-align:left;vertical-align:top}
 th{font-size:10px;text-transform:uppercase;color:#555}.num{text-align:right;width:50px;font-weight:bold}
 .chk{width:18px;font-size:14px}.sku{font-family:monospace;font-size:10px}
-.grind{font-weight:bold;margin-top:2px}.tag{border:1px solid #111;padding:0 4px;font-size:9px;font-weight:bold}
+.grind{font-weight:bold;margin-top:2px}
+.tag{border:1px solid #111;padding:0 4px;font-size:9px;font-weight:bold}
+.tag-inv{background:#111;color:#fff;padding:1px 5px;font-size:9px;font-weight:bold;letter-spacing:.5px}
+tr.needs-grind td{background:#e8e8e8}
+tr.needs-grind td:first-child{box-shadow:inset 5px 0 0 #111}
 .l2{break-inside:avoid;margin-left:8px}
 @media print{body{margin:10mm}}
 </style></head><body>
