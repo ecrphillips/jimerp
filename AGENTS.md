@@ -4,3 +4,4 @@
 - Shopify's pull excludes orders the customer has already collected or the shop has started preparing for pickup (`supabase/functions/_shared/pickupReady.ts`), and that exclusion must stay fail-open: the pickup state needs a Shopify permission the store may not have granted, and skipping real work is worse than pulling noise.
 - Keep shipped orders awaiting invoice in a dedicated Production invoicing tab, because shipping work and invoice follow-up are separate workflows.
 - Store actual shipping-label cost on the order in CAD, because shop-floor staff capture it for later invoicing.
+- Keep accounts as non-collapsible side rails inside Roast → Account pack drawers, because floor staff need all product lines visible after one click.
