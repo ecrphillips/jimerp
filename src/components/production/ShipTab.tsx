@@ -243,44 +243,6 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     });
   }, [allOrdersForShipping, dateFilterConfig.mode]);
 
-  // Fetch shipped orders awaiting invoice
-  const { data: shippedAwaitingInvoice } = useQuery({
-    queryKey: ['shipped-awaiting-invoice'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          id,
-          order_number,
-          requested_ship_date,
-          work_deadline,
-          delivery_method,
-          client_notes,
-          internal_ops_notes,
-          roasted,
-          packed,
-          invoiced,
-          status,
-          ship_display_order,
-          manually_deprioritized,
-          client:clients(name),
-          account:accounts(account_name),
-          line_items:order_line_items(
-            id,
-            product_id,
-            quantity_units,
-            product:products(product_name, bag_size_g, packaging_variant, roast_group)
-          )
-        `)
-        .eq('status', 'SHIPPED')
-        .eq('invoiced', false)
-        .order('order_number', { ascending: true });
-      
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-
   // Aggregate demand by product (total units demanded per product across orders)
   const demandByProduct = useMemo(() => {
     const map: Record<string, number> = {};
@@ -604,26 +566,6 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     },
   });
 
-  // Mutation to mark order as invoiced
-  const markOrderInvoicedMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      const { error } = await supabase
-        .from('orders')
-        .update({ invoiced: true })
-        .eq('id', orderId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success('Order marked as invoiced');
-      queryClient.invalidateQueries({ queryKey: ['shipped-awaiting-invoice'] });
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-    },
-    onError: (err) => {
-      console.error(err);
-      toast.error('Failed to mark order as invoiced');
-    },
-  });
-
   // Mutation to update ship_display_order
   const updateDisplayOrderMutation = useMutation({
     mutationFn: async ({ orderId, newOrder }: { orderId: string; newOrder: number }) => {
@@ -772,11 +714,6 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
     markOrderShippedMutation.mutate(order.order_id);
   }, [markOrderShippedMutation]);
 
-  // Mark invoiced handler
-  const handleMarkInvoiced = useCallback((orderId: string) => {
-    markOrderInvoicedMutation.mutate(orderId);
-  }, [markOrderInvoicedMutation]);
-
   // Refresh handler — re-sort + drop SHIPPED orders without page reload.
   // Clears local reorder state so sync effect repopulates from fresh server data.
   const handleRefresh = useCallback(() => {
@@ -795,9 +732,6 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
   // Update counts based on display orders
   const displayShippableCount = displayOrders.filter(o => o.allLineItemsPacked).length;
   const displayPendingCount = displayOrders.filter(o => !o.allLineItemsPacked).length;
-
-  // Shipped Awaiting Invoice count
-  const shippedAwaitingInvoiceCount = shippedAwaitingInvoice?.length ?? 0;
 
   return (
     <div className="space-y-4">
@@ -876,51 +810,6 @@ export function ShipTab({ dateFilterConfig, today }: ShipTabProps) {
           )}
         </CardContent>
       </Card>
-
-      {/* Shipped, Awaiting Invoice */}
-      {shippedAwaitingInvoiceCount > 0 && (
-        <Card className="border-blue-300 bg-blue-50/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-blue-700">
-              <Truck className="h-5 w-5" />
-              Shipped, Awaiting Invoice
-              <Badge variant="outline" className="ml-2 border-blue-300 text-blue-700">
-                {shippedAwaitingInvoiceCount} order{shippedAwaitingInvoiceCount !== 1 ? 's' : ''}
-              </Badge>
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Orders that have been shipped but not yet invoiced.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {shippedAwaitingInvoice?.map((order) => (
-                <div 
-                  key={order.id} 
-                  className="flex items-center justify-between p-3 bg-background rounded border border-blue-200"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="font-semibold">{order.order_number}</span>
-                    <span className="text-muted-foreground">•</span>
-                    <span>{(order as any).account?.account_name ?? order.client?.name ?? 'Unknown'}</span>
-                    <span className="text-xs text-muted-foreground">
-                      ({(order.line_items ?? []).length} item{(order.line_items ?? []).length !== 1 ? 's' : ''})
-                    </span>
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={() => handleMarkInvoiced(order.id)}
-                    disabled={markOrderInvoicedMutation.isPending}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    Mark Invoiced
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Short List - at bottom (uses AUTHORITATIVE shortList from hooks) */}
       {authShortList && authShortList.length > 0 && (

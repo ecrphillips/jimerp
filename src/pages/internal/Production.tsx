@@ -2,11 +2,12 @@ import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Flame, Package, Truck, CalendarClock, ClipboardList } from 'lucide-react';
+import { Flame, Package, Truck, CalendarClock, ClipboardList, FileText } from 'lucide-react';
 import { PlanTab } from '@/components/production/PlanTab';
 import { RoastTab } from '@/components/production/RoastTab';
 import { PackTab } from '@/components/production/PackTab';
 import { ShipTab } from '@/components/production/ShipTab';
+import { InvoicingTab } from '@/components/production/InvoicingTab';
 import { PacificTimeTicker } from '@/components/production/PacificTimeTicker';
 import { 
   getVancouverDateString,
@@ -16,7 +17,7 @@ import type { DateFilterConfig } from '@/components/production/types';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { useProductionRealtime } from '@/hooks/useProductionRealtime';
 
-type StationView = 'plan' | 'roast' | 'pack' | 'ship';
+type StationView = 'plan' | 'roast' | 'pack' | 'ship' | 'invoicing';
 type DateFilterMode = 'today' | 'tomorrow' | 'all';
 
 export default function Production() {
@@ -54,7 +55,7 @@ export default function Production() {
   // Read initial tab from URL param, default to 'roast'
   const tabFromUrl = searchParams.get('tab') as StationView | null;
   const [stationView, setStationView] = useState<StationView>(
-    tabFromUrl && ['plan', 'roast', 'pack', 'ship'].includes(tabFromUrl) ? tabFromUrl : 'plan'
+    tabFromUrl && ['plan', 'roast', 'pack', 'ship', 'invoicing'].includes(tabFromUrl) ? tabFromUrl : 'plan'
   );
 
   // Update URL when tab changes
@@ -115,7 +116,7 @@ export default function Production() {
 
       {/* Station Tabs */}
       <Tabs value={stationView} onValueChange={(v) => handleTabChange(v as StationView)} className="mb-4">
-        <TabsList className="grid w-full grid-cols-4 max-w-xl">
+        <TabsList className="grid w-full grid-cols-5 max-w-3xl">
           <TabsTrigger value="plan" className="flex items-center gap-2">
             <ClipboardList className="h-4 w-4" />
             Plan
@@ -131,6 +132,10 @@ export default function Production() {
           <TabsTrigger value="ship" className="flex items-center gap-2">
             <Truck className="h-4 w-4" />
             Ship
+          </TabsTrigger>
+          <TabsTrigger value="invoicing" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Invoicing
           </TabsTrigger>
         </TabsList>
 
@@ -148,6 +153,10 @@ export default function Production() {
 
         <TabsContent value="ship" className="mt-4">
           <ShipTab dateFilterConfig={dateFilterConfig} today={today} />
+        </TabsContent>
+
+        <TabsContent value="invoicing" className="mt-4">
+          <InvoicingTab />
         </TabsContent>
       </Tabs>
     </div>
