@@ -1,6 +1,6 @@
 # Roadmap
 
-- [ ] Add the fifth Invoicing tab to Production.
-- [ ] Move shipped orders awaiting invoice out of Ship.
-- [ ] Add expandable order-content drawers while preserving Mark Invoiced.
-- [ ] Verify the new workflow in the preview.
+- [x] Add the fifth Invoicing tab to Production.
+- [x] Move shipped orders awaiting invoice out of Ship.
+- [x] Add expandable order-content drawers while preserving Mark Invoiced.
+- [x] Verify the new workflow in the preview.
