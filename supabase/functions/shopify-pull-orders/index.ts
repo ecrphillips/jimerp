@@ -570,7 +570,7 @@ async function pullSource(
           source_channel: 'shopify_auto',
           shopify_source_id: source.id,
           shopify_pull_log_id: pullLogId,
-          client_notes: notes.slice(0, 2000),
+          client_notes: notes,
           internal_ops_notes: opsNotes,
           created_by_admin: true,
         })
