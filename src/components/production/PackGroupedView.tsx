@@ -503,31 +503,33 @@ export function PackGroupedView(props: PackGroupedViewProps) {
                 ))}
               </div>
             )}
-            {!l1Collapsed && props.mode === 'account' &&
-              orderedChildren.map((l2) => {
-                const l2Collapsed = !expandedKeys.has(l2.key);
-                const l2Progress = progressForLeaves(l2.leaves, props);
-                return (
-                  <div
-                    key={l2.key}
-                    className={`ml-5 border-l-4 border-b-2 border-hi-navy/20 transition-opacity last:border-b-4 ${
-                      l2Collapsed && demotedKeys.has(l2.key) && l2Progress.complete ? 'opacity-50' : ''
-                    }`}
-                  >
-                    <GroupHeader
-                      label={l2.label}
-                      kind={l2.kind}
-                      totalUnits={l2.totalUnits}
-                      orderCount={l2.orderCount}
-                      wipKg={l2.wipKg}
-                      planned={l2.planned}
-                      collapsed={l2Collapsed}
-                      level={2}
-                      packedUnits={l2Progress.packed}
-                      complete={l2Progress.complete}
-                      deemphasized={l2Collapsed && demotedKeys.has(l2.key) && l2Progress.complete}
-                      onClick={() => toggleGroup(l2.key, l2Progress.complete)}
-                    />
+              {!l1Collapsed && props.mode === 'account' &&
+                orderedChildren.map((l2) => {
+                  const l2Collapsed = !expandedKeys.has(l2.key);
+                  const l2Progress = progressForLeaves(l2.leaves, props);
+                  const l2WipStatus = wipStatusForLeaves(l2.leaves, props);
+                  return (
+                    <div
+                      key={l2.key}
+                      className={`ml-5 border-l-4 border-b-2 border-hi-navy/20 transition-opacity last:border-b-4 ${
+                        l2Collapsed && demotedKeys.has(l2.key) && l2Progress.complete ? 'opacity-50' : ''
+                      }`}
+                    >
+                      <GroupHeader
+                        label={l2.label}
+                        kind={l2.kind}
+                        totalUnits={l2.totalUnits}
+                        orderCount={l2.orderCount}
+                        wipKg={l2.wipKg}
+                        planned={l2.planned}
+                        collapsed={l2Collapsed}
+                        level={2}
+                        packedUnits={l2Progress.packed}
+                        complete={l2Progress.complete}
+                        deemphasized={l2Collapsed && demotedKeys.has(l2.key) && l2Progress.complete}
+                        wipStatus={l2WipStatus}
+                        onClick={() => toggleGroup(l2.key, l2Progress.complete)}
+                      />
                     {!l2Collapsed && (
                       <div>
                         {l2.leaves.map((leaf) => (
