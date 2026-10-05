@@ -220,6 +220,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 <NavItem to="/products" icon={Package} label="Products" onClick={closeSidebar} />
                 <NavItem to="/roast-groups" icon={Coffee} label="Roast Groups" onClick={closeSidebar} />
                 <NavItem to="/product-map" icon={Network} label="Product Map" onClick={closeSidebar} />
+                <NavItem to="/manufacturing/settings" icon={Settings} label="Settings" onClick={closeSidebar} />
               </NavGroup>
 
               {/* Sourcing */}
