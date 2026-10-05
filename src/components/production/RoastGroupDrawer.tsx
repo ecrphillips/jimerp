@@ -195,8 +195,6 @@ export function RoastGroupDrawer({
         .filter(c => c.parent_roast_group === roastGroup)
         .map(c => c.component_roast_group);
       
-      if (componentRoastGroups.length === 0) return [];
-      
       // Fetch batches linked to this blend
       const { data, error } = await supabase
         .from('roasted_batches')
