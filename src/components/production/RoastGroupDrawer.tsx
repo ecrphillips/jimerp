@@ -241,8 +241,20 @@ export function RoastGroupDrawer({
           displayOrder: c.display_order,
         };
       })
-      .sort((a, b) => a.displayOrder - b.displayOrder);
-  }, [isBlend, components, roastGroup, roastGroupsLookupMap]);
+      .sort((a, b) => a.displayOrder - b.displayOrder)
+      .concat(
+        // Batches earmarked for this blend under a coffee no longer in its
+        // recipe would otherwise be invisible (and undeletable) here.
+        Object.keys(componentBatchesByGroup)
+          .filter(rg => !components.some(c => c.parent_roast_group === roastGroup && c.component_roast_group === rg))
+          .map(rg => ({
+            roastGroup: rg,
+            displayName: `${roastGroupsLookupMap.get(rg)?.display_name?.trim() || rg.replace(/_/g, ' ')} (not in recipe)`,
+            pct: 0,
+            displayOrder: 9999,
+          }))
+      );
+  }, [isBlend, components, roastGroup, roastGroupsLookupMap, componentBatchesByGroup]);
 
   // Calculate stats
   const plannedBatches = batches.filter(b => b.status === 'PLANNED');
