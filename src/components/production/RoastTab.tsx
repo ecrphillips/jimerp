@@ -469,10 +469,15 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       // Blend-earmarked component batches belong exclusively to their parent
       // blend drawer and must not keep the component's top-level drawer active.
       const hasActivity = groupsWithActivity.has(roast_group);
+      // Planned batches keep a drawer visible: a group's own batches, plus
+      // component batches earmarked for this blend (otherwise a blend whose
+      // demand is covered hides its unroasted earmarked batches as ghosts).
       const hasPlanned = (batches ?? []).some(
-        b => b.roast_group === roast_group
-          && b.status === 'PLANNED'
-          && !b.planned_for_blend_roast_group
+        b => b.status === 'PLANNED' && (
+          b.planned_for_blend_roast_group
+            ? b.planned_for_blend_roast_group === roast_group
+            : b.roast_group === roast_group
+        )
       );
       const isCompleted = net_demand_kg === 0 && hasActivity && !hasPlanned;
       
