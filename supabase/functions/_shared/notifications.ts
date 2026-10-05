@@ -172,7 +172,10 @@ export async function sendNotificationEmail(
         from: FROM_DISPLAY,
         sender_domain: SENDER_DOMAIN,
         subject: content.subject,
-        html: content.html ?? undefined,
+        // The managed API requires html; fall back to an escaped copy of the text.
+        html:
+          content.html ??
+          `<div style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap;">${escapeHtml(content.text)}</div>`,
         text: content.text,
         purpose: 'transactional',
         label,
