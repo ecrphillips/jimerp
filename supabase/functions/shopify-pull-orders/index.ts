@@ -39,7 +39,7 @@ import { isPickupPrepared, type PickupState } from '../_shared/pickupReady.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '3.7-units-multiplier';
+const FUNCTION_VERSION = '3.8-pickup-ready';
 
 interface ShopifyLineItem {
   sku: string | null;
