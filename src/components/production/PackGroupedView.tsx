@@ -197,7 +197,7 @@ function LeafRow({
   const timeSensitive = timeSensitiveByProduct[pid] ?? false;
 
   return (
-    <div className={`border-l-4 ${leafAccent(wipStatus, leaf.requiresProduction)}`}>
+    <div className={`border-l-4 ${isComplete && leaf.requiresProduction ? 'border-l-success' : leafAccent(wipStatus, leaf.requiresProduction)}`}>
       <div
         className={`flex items-center gap-3 px-3 py-2 pl-6 border-b last:border-0 transition-colors ${
           leaf.requiresProduction ? 'cursor-pointer hover:bg-muted/50' : ''
@@ -252,7 +252,7 @@ function LeafRow({
                 WIP partial
               </Badge>
             )}
-            {leaf.requiresProduction && wipStatus === 'none' && (
+            {leaf.requiresProduction && !isComplete && wipStatus === 'none' && (
               <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/30">
                 <AlertTriangle className="h-3 w-3 mr-1" />
                 No WIP
