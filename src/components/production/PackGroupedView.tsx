@@ -468,7 +468,9 @@ export function PackGroupedView(props: PackGroupedViewProps) {
     <div className="space-y-4">
       {orderedTree.map((l1) => {
         const l1Collapsed = !expandedKeys.has(l1.key);
-        const l1Progress = progressForLeaves(l1.children.flatMap((child) => child.leaves), props);
+        const l1Leaves = l1.children.flatMap((child) => child.leaves);
+        const l1Progress = progressForLeaves(l1Leaves, props);
+        const l1WipStatus = wipStatusForLeaves(l1Leaves, props);
         const orderedChildren = [...l1.children].sort(
           (a, b) => Number(demotedKeys.has(a.key)) - Number(demotedKeys.has(b.key)),
         );
@@ -491,6 +493,7 @@ export function PackGroupedView(props: PackGroupedViewProps) {
               packedUnits={l1Progress.packed}
               complete={l1Progress.complete}
               deemphasized={l1Collapsed && demotedKeys.has(l1.key) && l1Progress.complete}
+              wipStatus={l1WipStatus}
               onClick={() => toggleGroup(l1.key, l1Progress.complete)}
             />
             {!l1Collapsed && props.mode === 'roastgroup' && (
