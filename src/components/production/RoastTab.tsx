@@ -836,6 +836,17 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
 
   const handleCreateSuggestedBatches = (roastGroup: string, netDemandKg: number) => {
     const config = configByGroup[roastGroup];
+    // Post-roast blends are planned as earmarked component batches, never directly.
+    if (config?.is_blend && config.blend_type !== 'PRE_ROAST') {
+      const g = demandByRoastGroup.find(d => d.roast_group === roastGroup);
+      setBlendPlanModal({
+        roastGroup,
+        displayName: config.display_name?.trim() || roastGroup.replace(/_/g, ' '),
+        demandKg: g?.total_kg ?? netDemandKg,
+        netDemandKg,
+      });
+      return;
+    }
     const standardBatch = config?.standard_batch_kg ?? 20;
     const defaultRoaster = config?.default_roaster ?? 'EITHER';
     const yieldLossPct = config?.expected_yield_loss_pct ?? 16;
@@ -889,6 +900,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       status: 'PLANNED';
       assigned_roaster: RoasterMachine | null;
       created_by: string | undefined;
+      planned_for_blend_roast_group?: string;
     }>) => {
       const { error } = await supabase.from('roasted_batches').insert(rows);
       if (error) throw error;
@@ -904,6 +916,19 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     },
   });
 
+  // Post-roast blend recipes: blends are never roasted under their own name,
+  // so auto-planning must create earmarked component batches instead.
+  const { data: blendComponentRows } = useQuery({
+    queryKey: ['roast-group-components', 'all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('roast_group_components')
+        .select('parent_roast_group, component_roast_group, pct');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const autoPlanPreview = useMemo(() => {
     const rows: Array<{
       roast_group: string;
@@ -913,15 +938,59 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       status: 'PLANNED';
       assigned_roaster: RoasterMachine | null;
       created_by: string | undefined;
+      planned_for_blend_roast_group?: string;
     }> = [];
     const summary: Array<{ roastGroup: string; count: number; batchKg: number }> = [];
+
+    const pushRows = (rg: string, count: number, forBlend?: string) => {
+      const config = configByGroup[rg];
+      const standardBatch = config?.standard_batch_kg ?? 20;
+      const defaultRoaster = config?.default_roaster ?? 'EITHER';
+      let roaster: RoasterMachine | null = null;
+      if (defaultRoaster === 'SAMIAC') roaster = 'SAMIAC';
+      else if (defaultRoaster === 'LORING') roaster = 'LORING';
+      summary.push({ roastGroup: forBlend ? `${rg} → ${forBlend}` : rg, count, batchKg: standardBatch });
+      for (let i = 0; i < count; i++) {
+        rows.push({
+          roast_group: rg,
+          target_date: today,
+          planned_output_kg: standardBatch,
+          actual_output_kg: 0,
+          status: 'PLANNED',
+          assigned_roaster: roaster,
+          created_by: user?.id,
+          ...(forBlend ? { planned_for_blend_roast_group: forBlend } : {}),
+        });
+      }
+    };
 
     for (const g of sortedGroups) {
       const config = configByGroup[g.roast_group];
       if (!config) continue;
+
+      if (config.is_blend && config.blend_type !== 'PRE_ROAST') {
+        if (g.net_demand_kg <= 0) continue;
+        const comps = (blendComponentRows ?? []).filter(c => c.parent_roast_group === g.roast_group);
+        for (const c of comps) {
+          const compCfg = configByGroup[c.component_roast_group];
+          const yl = compCfg?.expected_yield_loss_pct ?? 16;
+          const std = compCfg?.standard_batch_kg ?? 20;
+          const need = g.net_demand_kg * (Number(c.pct) / 100);
+          const plannedExpected = (batches ?? [])
+            .filter(b => b.status === 'PLANNED'
+              && b.roast_group === c.component_roast_group
+              && b.planned_for_blend_roast_group === g.roast_group)
+            .reduce((s, b) => s + (b.planned_output_kg ?? 0) * (1 - yl / 100), 0);
+          const remaining = need - plannedExpected;
+          if (remaining <= 0.001) continue;
+          const count = Math.ceil(remaining / (std * (1 - yl / 100)));
+          if (count > 0) pushRows(c.component_roast_group, count, g.roast_group);
+        }
+        continue;
+      }
+
       const yieldLossPct = config.expected_yield_loss_pct ?? 16;
       const standardBatch = config.standard_batch_kg ?? 20;
-      const defaultRoaster = config.default_roaster ?? 'EITHER';
       const groupBatches = batchesByGroup[g.roast_group] ?? [];
       const plannedExpectedOutput = groupBatches
         .filter((b) => b.status === 'PLANNED')
@@ -934,26 +1003,10 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       const expectedOutputPerBatch = standardBatch * (1 - yieldLossPct / 100);
       const count = Math.ceil(remainingNeed / expectedOutputPerBatch);
       if (count <= 0) continue;
-
-      let roaster: RoasterMachine | null = null;
-      if (defaultRoaster === 'SAMIAC') roaster = 'SAMIAC';
-      else if (defaultRoaster === 'LORING') roaster = 'LORING';
-
-      summary.push({ roastGroup: g.roast_group, count, batchKg: standardBatch });
-      for (let i = 0; i < count; i++) {
-        rows.push({
-          roast_group: g.roast_group,
-          target_date: today,
-          planned_output_kg: standardBatch,
-          actual_output_kg: 0,
-          status: 'PLANNED',
-          assigned_roaster: roaster,
-          created_by: user?.id,
-        });
-      }
+      pushRows(g.roast_group, count);
     }
     return { rows, summary };
-  }, [sortedGroups, configByGroup, batchesByGroup, today, user?.id]);
+  }, [sortedGroups, configByGroup, batchesByGroup, batches, blendComponentRows, today, user?.id]);
 
   const [showAutoPlanConfirm, setShowAutoPlanConfirm] = useState(false);
 
