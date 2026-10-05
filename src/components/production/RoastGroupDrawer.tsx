@@ -674,21 +674,31 @@ export function RoastGroupDrawer({
 
   const deleteBatchMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('roasted_batches')
         .delete()
         .eq('id', id)
-        .eq('status', 'PLANNED');
+        .eq('status', 'PLANNED')
+        .select('id');
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Batch was not deleted — it may already be roasted or removed.');
+      }
     },
     onSuccess: () => {
       toast.success('Batch deleted');
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
+      queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
+      refreshFrozenBatches();
       setDeleteConfirmBatchId(null);
     },
     onError: (err) => {
       console.error(err);
-      toast.error('Failed to delete batch');
+      toast.error(err instanceof Error ? err.message : 'Failed to delete batch');
+      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+      refreshFrozenBatches();
     },
   });
 
