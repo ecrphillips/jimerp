@@ -774,10 +774,12 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     const keys: string[] = [];
     for (const l1 of packTree) {
       keys.push(l1.key);
-      for (const l2 of l1.children) keys.push(l2.key);
+      if (groupMode === 'account') {
+        for (const l2 of l1.children) keys.push(l2.key);
+      }
     }
     return keys;
-  }, [packTree]);
+  }, [packTree, groupMode]);
 
   const allNestedExpanded = allNestedKeys.length > 0 && allNestedKeys.every((k) => expandedKeys.has(k));
   const toggleExpandAllNested = useCallback(() => {
@@ -1199,11 +1201,11 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       <AuthoritativeSummaryPanel tab="pack" />
       
       {/* Packing Progress */}
-      <Card>
-        <CardHeader>
+      <Card className="overflow-hidden border-2 shadow-sm">
+        <CardHeader className="border-b bg-card pb-5">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-2xl font-black">
                 <Package className="h-5 w-5" />
                 Pack SKUs
               </CardTitle>
@@ -1215,23 +1217,21 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               {/* Grouping toggle — swaps the two nested layouts */}
-              <div className="flex items-center rounded-md border p-0.5">
+              <div className="flex items-center rounded-md border bg-muted/50 p-0.5">
                 {([
                   { value: 'account', label: 'Account → Roast' },
                   { value: 'roastgroup', label: 'Roast → Account' },
                 ] as { value: PackGroupMode; label: string }[]).map((opt) => (
-                  <button
+                  <Button
                     key={opt.value}
                     type="button"
+                    variant={groupMode === opt.value ? 'default' : 'ghost'}
+                    size="sm"
                     onClick={() => setGroupModePersisted(opt.value)}
-                    className={`px-2 py-1 text-xs rounded ${
-                      groupMode === opt.value
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:bg-muted'
-                    }`}
+                    className="h-7 px-2 text-xs"
                   >
                     {opt.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
               <Button
@@ -1264,7 +1264,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
           </div>
 
         </CardHeader>
-        <CardContent>
+        <CardContent className="bg-muted/20 p-5">
           {packTree.length === 0 ? (
             <div className="py-8 text-center">
               <div className="text-4xl mb-3">📦</div>

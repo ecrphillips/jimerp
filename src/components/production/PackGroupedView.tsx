@@ -165,9 +165,11 @@ function progressForLeaves(leaves: PackLeafNode[], props: PackGroupedViewProps) 
 function LeafRow({
   leaf,
   props,
+  compact = false,
 }: {
   leaf: PackLeafNode;
   props: PackGroupedViewProps;
+  compact?: boolean;
 }) {
   const {
     expandedLeafKey,
@@ -199,19 +201,19 @@ function LeafRow({
   return (
     <div className={`border-l-4 ${isComplete && leaf.requiresProduction ? 'border-l-success' : leafAccent(wipStatus, leaf.requiresProduction)}`}>
       <div
-        className={`flex items-center gap-3 px-3 py-2 pl-6 border-b last:border-0 transition-colors ${
+        className={`flex items-center gap-3 border-b px-3 py-3 transition-colors ${compact ? 'pl-4' : 'pl-6'} ${
           leaf.requiresProduction ? 'cursor-pointer hover:bg-muted/50' : ''
         } ${
           isComplete
-            ? 'bg-success/10'
+            ? 'bg-success/15'
             : isStarted
-              ? 'bg-warning/10'
+              ? 'bg-warning/20'
               : wipStatus === 'full'
-                ? 'bg-success/5'
+                ? 'bg-success/15'
                 : wipStatus === 'partial'
-                  ? 'bg-warning/5'
-                  : 'bg-destructive/5'
-        } ${isExpanded ? 'ring-1 ring-inset ring-primary/30' : ''}`}
+                  ? 'bg-warning/20'
+                  : 'bg-destructive/15'
+        } ${isExpanded ? 'ring-2 ring-inset ring-hi-steel-blue/40' : ''}`}
         onClick={leaf.requiresProduction ? () => onToggleLeaf(leaf.key) : undefined}
       >
         <div className="w-4 shrink-0">
@@ -226,8 +228,7 @@ function LeafRow({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium">{leaf.productName}</span>
-            <PackagingBadge variant={leaf.packagingVariant} />
+            <span className="font-bold text-sm text-foreground">{leaf.productName}</span>
             {!leaf.requiresProduction && (
               <Badge className="text-xs font-bold uppercase tracking-wide bg-amber-500 text-white border-amber-600 hover:bg-amber-500">
                 <AlertTriangle className="h-3.5 w-3.5 mr-1" />
@@ -264,14 +265,14 @@ function LeafRow({
             wholeBeanUnits={leaf.wholeBeanUnits}
             grindByLabel={leaf.grindByLabel}
           />
-          <div className="text-xs text-muted-foreground mt-0.5">
-            {leaf.bagSizeG}g • {leaf.sku || 'No SKU'}
-          </div>
         </div>
 
-        <div className="shrink-0 text-right">
-          <span className="font-semibold">{leaf.units}</span>
-          <span className="text-muted-foreground text-xs ml-1">units</span>
+        <div className="shrink-0 flex items-center justify-end gap-2 text-right">
+          <PackagingBadge variant={leaf.packagingVariant} className="bg-card/70" />
+          <div className="min-w-14">
+            <span className="text-lg font-black tabular-nums">{leaf.units}</span>
+            <span className="block text-[10px] font-bold uppercase text-muted-foreground">units</span>
+          </div>
         </div>
 
         <div className="w-24 shrink-0 flex justify-end">
@@ -296,13 +297,10 @@ function LeafRow({
       </div>
 
       {isExpanded && (
-        <div className="px-3 py-3 pl-10 bg-muted/20 border-b">
-          <div className="mb-2 text-xs text-muted-foreground">
-            SKU-wide progress (all accounts) — packing is recorded once per SKU.
-          </div>
+        <div className="border-b border-hi-steel-blue/30 bg-card px-4 py-3 shadow-inner">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="text-sm">
-              <span className="font-medium">{effectivePacked}</span>
+              <span className="font-bold">{effectivePacked}</span>
               <span className="text-muted-foreground"> / {globalDemand} packed</span>
               {leaf.roastGroupLabel && (
                 <span className="text-muted-foreground">
@@ -362,10 +360,10 @@ function GroupHeader({
 }) {
   return (
     <div
-      className={`flex items-center justify-between gap-3 cursor-pointer transition-all ${
+      className={`relative flex items-center justify-between gap-4 cursor-pointer overflow-hidden transition-all ${
         level === 1
-          ? 'bg-muted/70 hover:bg-muted px-3 py-2.5'
-          : 'bg-muted/30 hover:bg-muted/50 px-3 py-2 pl-5'
+          ? 'bg-card hover:bg-muted/40 px-4 py-4'
+          : 'bg-muted/40 hover:bg-muted/60 px-4 py-3 pl-7'
       } ${complete ? 'border-l-4 border-l-success' : 'border-l-4 border-l-transparent'} ${
         deemphasized ? 'opacity-45 hover:opacity-75' : ''
       }`}
@@ -380,7 +378,7 @@ function GroupHeader({
         <span
           className={`truncate ${
             level === 1
-              ? 'text-sm font-bold uppercase tracking-wide text-foreground'
+              ? 'text-lg font-black uppercase text-foreground'
               : 'text-sm font-semibold text-foreground'
           }`}
         >
@@ -392,10 +390,7 @@ function GroupHeader({
           </Badge>
         )}
       </div>
-      <div className="flex items-center gap-3 shrink-0 text-xs text-muted-foreground">
-        <Badge variant={complete ? 'default' : packedUnits > 0 ? 'secondary' : 'outline'}>
-          {complete ? 'Complete ' : ''}{packedUnits}/{totalUnits}
-        </Badge>
+      <div className="flex items-center gap-4 shrink-0 text-xs text-muted-foreground">
         {kind === 'roastgroup' && wipKg != null && (
           <span className="font-medium">
             {wipKg.toFixed(1)} kg WIP
@@ -404,9 +399,47 @@ function GroupHeader({
             )}
           </span>
         )}
-        <span>
-          <span className="font-medium text-foreground">{totalUnits}</span> units
-        </span>
+        <div className="min-w-20 text-right">
+          <div className="text-xl font-black leading-none tabular-nums text-foreground">
+            {packedUnits}<span className="mx-1 font-normal text-muted-foreground">/</span>{totalUnits}
+          </div>
+          <div className="mt-1 text-[10px] font-bold uppercase text-muted-foreground">
+            {complete ? 'Complete' : 'units packed'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccountRail({
+  child,
+  props,
+}: {
+  child: PackL2Node;
+  props: PackGroupedViewProps;
+}) {
+  const progress = progressForLeaves(child.leaves, props);
+
+  return (
+    <div className="grid grid-cols-[9rem_minmax(0,1fr)] border-t-2 border-border first:border-t-0">
+      <div className="flex flex-col justify-between border-r-2 border-hi-navy/20 bg-muted/60 px-3 py-4">
+        <div>
+          <div className="text-xs font-black uppercase text-hi-navy">{child.label}</div>
+          {child.orderCount !== undefined && (
+            <div className="mt-1 text-[11px] font-medium text-muted-foreground">
+              {child.orderCount} order{child.orderCount !== 1 ? 's' : ''}
+            </div>
+          )}
+        </div>
+        <div className="mt-4 text-xs font-bold tabular-nums text-foreground">
+          {progress.complete ? 'Complete ' : ''}{progress.packed}/{progress.needed}
+        </div>
+      </div>
+      <div className="min-w-0">
+        {child.leaves.map((leaf) => (
+          <LeafRow key={leaf.key} leaf={leaf} props={props} compact />
+        ))}
       </div>
     </div>
   );
@@ -437,7 +470,7 @@ export function PackGroupedView(props: PackGroupedViewProps) {
   );
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
       {orderedTree.map((l1) => {
         const l1Collapsed = !expandedKeys.has(l1.key);
         const l1Progress = progressForLeaves(l1.children.flatMap((child) => child.leaves), props);
@@ -447,7 +480,7 @@ export function PackGroupedView(props: PackGroupedViewProps) {
         return (
           <div
             key={l1.key}
-            className={`rounded-md border overflow-hidden transition-opacity ${
+            className={`rounded-md border-2 bg-card overflow-hidden shadow-sm transition-opacity ${
               l1Collapsed && demotedKeys.has(l1.key) && l1Progress.complete ? 'opacity-50' : ''
             }`}
           >
@@ -465,14 +498,21 @@ export function PackGroupedView(props: PackGroupedViewProps) {
               deemphasized={l1Collapsed && demotedKeys.has(l1.key) && l1Progress.complete}
               onClick={() => toggleGroup(l1.key, l1Progress.complete)}
             />
-            {!l1Collapsed &&
+            {!l1Collapsed && props.mode === 'roastgroup' && (
+              <div className="ml-5 border-l-4 border-b-4 border-hi-navy/20">
+                {orderedChildren.map((child) => (
+                  <AccountRail key={child.key} child={child} props={props} />
+                ))}
+              </div>
+            )}
+            {!l1Collapsed && props.mode === 'account' &&
               orderedChildren.map((l2) => {
                 const l2Collapsed = !expandedKeys.has(l2.key);
                 const l2Progress = progressForLeaves(l2.leaves, props);
                 return (
                   <div
                     key={l2.key}
-                    className={`border-t transition-opacity ${
+                    className={`ml-5 border-l-4 border-b-2 border-hi-navy/20 transition-opacity last:border-b-4 ${
                       l2Collapsed && demotedKeys.has(l2.key) && l2Progress.complete ? 'opacity-50' : ''
                     }`}
                   >
