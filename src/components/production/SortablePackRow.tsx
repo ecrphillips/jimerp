@@ -121,7 +121,7 @@ export function SortablePackRow({
   // Determine row styling based on wipStatus
   // - 'full': GREEN - enough WIP to complete entire row
   // - 'partial': AMBER - some WIP available but not enough
-  // - 'none': NO COLOR - no WIP at all
+  // - 'none': RED - no WIP at all
   const getRowClasses = () => {
     const baseClasses = 'border-b last:border-0 cursor-pointer transition-colors';
 
@@ -139,7 +139,7 @@ export function SortablePackRow({
       if (wipStatus === 'partial') {
         return `${baseClasses} bg-destructive/5 border-l-2 border-l-warning`;
       }
-      return `${baseClasses} bg-destructive/5`;
+      return `${baseClasses} bg-destructive/10 border-l-2 border-l-destructive`;
     }
     
     if (wipStatus === 'full') {
@@ -150,8 +150,7 @@ export function SortablePackRow({
       return `${baseClasses} ${isExpanded ? 'bg-warning/15' : 'bg-warning/10'} border-l-2 border-l-warning`;
     }
     
-    // None - no color
-    return `${baseClasses} ${isExpanded ? 'bg-muted/40 border-l-2 border-l-border' : 'hover:bg-muted/50'}`;
+    return `${baseClasses} ${isExpanded ? 'bg-destructive/15' : 'bg-destructive/5 hover:bg-destructive/10'} border-l-2 border-l-destructive`;
   };
 
   return (
@@ -229,6 +228,12 @@ export function SortablePackRow({
                 WIP partial
               </Badge>
             )}
+            {requiresProduction && wipStatus === 'none' && (
+              <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/30">
+                <AlertTriangle className="h-3 w-3 mr-1" />
+                No WIP
+              </Badge>
+            )}
             {requiresProduction && wipStatus !== 'full' && plannedCount > 0 && (
               <Badge variant="outline" className="text-xs">
                 <Layers className="h-3 w-3 mr-1" />
@@ -301,16 +306,11 @@ export function SortablePackRow({
           ) : isComplete ? (
             <Badge variant="default" className="bg-primary text-primary-foreground">
               <Check className="h-3 w-3 mr-1" />
-              Complete
-            </Badge>
-          ) : effectivePacked > 0 ? (
-            <Badge variant="secondary">
-              {Math.round((effectivePacked / demandedUnits) * 100)}%
+              Complete {effectivePacked}/{demandedUnits}
             </Badge>
           ) : (
-            <Badge variant="outline">
-              <AlertTriangle className="h-3 w-3 mr-1" />
-              Pending
+            <Badge variant={effectivePacked > 0 ? 'secondary' : 'outline'}>
+              {effectivePacked > 0 ? 'Complete ' : ''}{effectivePacked}/{demandedUnits}
             </Badge>
           )}
         </td>

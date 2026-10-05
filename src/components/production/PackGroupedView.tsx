@@ -131,7 +131,35 @@ function leafAccent(wipStatus: WipStatus, requiresProduction: boolean): string {
   if (!requiresProduction) return 'border-l-amber-500';
   if (wipStatus === 'full') return 'border-l-success';
   if (wipStatus === 'partial') return 'border-l-warning';
-  return 'border-l-transparent';
+  return 'border-l-destructive';
+}
+
+function progressForLeaf(leaf: PackLeafNode, props: PackGroupedViewProps) {
+  if (!leaf.requiresProduction) return { packed: leaf.units, needed: leaf.units, complete: true };
+  const globalDemand = props.globalDemandByProduct[leaf.productId] ?? 0;
+  const available = props.availableByProduct[leaf.productId] ?? 0;
+  const picked = props.pickedByProduct[leaf.productId] ?? 0;
+  const effectivePacked = Math.min(globalDemand, available + picked);
+  const complete = globalDemand > 0 && effectivePacked >= globalDemand;
+  return {
+    packed: complete ? leaf.units : Math.min(leaf.units, effectivePacked),
+    needed: leaf.units,
+    complete,
+  };
+}
+
+function progressForLeaves(leaves: PackLeafNode[], props: PackGroupedViewProps) {
+  return leaves.reduce(
+    (total, leaf) => {
+      const progress = progressForLeaf(leaf, props);
+      return {
+        packed: total.packed + progress.packed,
+        needed: total.needed + progress.needed,
+        complete: total.complete && progress.complete,
+      };
+    },
+    { packed: 0, needed: 0, complete: leaves.length > 0 },
+  );
 }
 
 function LeafRow({
@@ -164,15 +192,26 @@ function LeafRow({
   const isComplete = leaf.requiresProduction
     ? globalDemand > 0 && effectivePacked >= globalDemand
     : true;
+  const isStarted = effectivePacked > 0;
   const isExpanded = expandedLeafKey === leaf.key && leaf.requiresProduction;
   const timeSensitive = timeSensitiveByProduct[pid] ?? false;
 
   return (
-    <div className={`border-l-2 ${leafAccent(wipStatus, leaf.requiresProduction)}`}>
+    <div className={`border-l-4 ${leafAccent(wipStatus, leaf.requiresProduction)}`}>
       <div
         className={`flex items-center gap-3 px-3 py-2 pl-6 border-b last:border-0 transition-colors ${
           leaf.requiresProduction ? 'cursor-pointer hover:bg-muted/50' : ''
-        } ${isExpanded ? 'bg-muted/40' : ''}`}
+        } ${
+          isComplete
+            ? 'bg-success/10'
+            : isStarted
+              ? 'bg-warning/10'
+              : wipStatus === 'full'
+                ? 'bg-success/5'
+                : wipStatus === 'partial'
+                  ? 'bg-warning/5'
+                  : 'bg-destructive/5'
+        } ${isExpanded ? 'ring-1 ring-inset ring-primary/30' : ''}`}
         onClick={leaf.requiresProduction ? () => onToggleLeaf(leaf.key) : undefined}
       >
         <div className="w-4 shrink-0">
@@ -213,6 +252,12 @@ function LeafRow({
                 WIP partial
               </Badge>
             )}
+            {leaf.requiresProduction && wipStatus === 'none' && (
+              <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/30">
+                <AlertTriangle className="h-3 w-3 mr-1" />
+                No WIP
+              </Badge>
+            )}
           </div>
           <GrindBadges
             grindUnits={leaf.grindUnits}
@@ -240,12 +285,12 @@ function LeafRow({
           ) : isComplete ? (
             <Badge variant="default" className="bg-primary text-primary-foreground">
               <Check className="h-3 w-3 mr-1" />
-              Complete
+              Complete {effectivePacked}/{globalDemand}
             </Badge>
-          ) : effectivePacked > 0 ? (
-            <Badge variant="secondary">{Math.round((effectivePacked / globalDemand) * 100)}%</Badge>
           ) : (
-            <Badge variant="outline">Pending</Badge>
+            <Badge variant={isStarted ? 'secondary' : 'outline'}>
+              {isStarted ? 'Complete ' : ''}{effectivePacked}/{globalDemand}
+            </Badge>
           )}
         </div>
       </div>
@@ -297,6 +342,9 @@ function GroupHeader({
   planned,
   collapsed,
   level,
+  packedUnits,
+  complete,
+  deemphasized,
   onClick,
 }: {
   label: string;
@@ -307,14 +355,19 @@ function GroupHeader({
   planned?: { planned_kg: number; count: number } | null;
   collapsed: boolean;
   level: 1 | 2;
+  packedUnits: number;
+  complete: boolean;
+  deemphasized: boolean;
   onClick: () => void;
 }) {
   return (
     <div
-      className={`flex items-center justify-between gap-3 cursor-pointer transition-colors ${
+      className={`flex items-center justify-between gap-3 cursor-pointer transition-all ${
         level === 1
           ? 'bg-muted/70 hover:bg-muted px-3 py-2.5'
           : 'bg-muted/30 hover:bg-muted/50 px-3 py-2 pl-5'
+      } ${complete ? 'border-l-4 border-l-success' : 'border-l-4 border-l-transparent'} ${
+        deemphasized ? 'opacity-45 hover:opacity-75' : ''
       }`}
       onClick={onClick}
     >
@@ -340,6 +393,9 @@ function GroupHeader({
         )}
       </div>
       <div className="flex items-center gap-3 shrink-0 text-xs text-muted-foreground">
+        <Badge variant={complete ? 'default' : packedUnits > 0 ? 'secondary' : 'outline'}>
+          {complete ? 'Complete ' : ''}{packedUnits}/{totalUnits}
+        </Badge>
         {kind === 'roastgroup' && wipKg != null && (
           <span className="font-medium">
             {wipKg.toFixed(1)} kg WIP
@@ -358,13 +414,43 @@ function GroupHeader({
 
 export function PackGroupedView(props: PackGroupedViewProps) {
   const { tree, expandedKeys, onToggle } = props;
+  const [demotedKeys, setDemotedKeys] = React.useState<Set<string>>(new Set());
+
+  const toggleGroup = React.useCallback((key: string, complete: boolean) => {
+    const isClosing = expandedKeys.has(key);
+    if (isClosing && complete) {
+      setDemotedKeys((current) => new Set(current).add(key));
+    } else if (!complete) {
+      setDemotedKeys((current) => {
+        if (!current.has(key)) return current;
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
+    }
+    onToggle(key);
+  }, [expandedKeys, onToggle]);
+
+  const orderedTree = React.useMemo(
+    () => [...tree].sort((a, b) => Number(demotedKeys.has(a.key)) - Number(demotedKeys.has(b.key))),
+    [tree, demotedKeys],
+  );
 
   return (
     <div className="space-y-2">
-      {tree.map((l1) => {
+      {orderedTree.map((l1) => {
         const l1Collapsed = !expandedKeys.has(l1.key);
+        const l1Progress = progressForLeaves(l1.children.flatMap((child) => child.leaves), props);
+        const orderedChildren = [...l1.children].sort(
+          (a, b) => Number(demotedKeys.has(a.key)) - Number(demotedKeys.has(b.key)),
+        );
         return (
-          <div key={l1.key} className="rounded-md border overflow-hidden">
+          <div
+            key={l1.key}
+            className={`rounded-md border overflow-hidden transition-opacity ${
+              l1Collapsed && demotedKeys.has(l1.key) && l1Progress.complete ? 'opacity-50' : ''
+            }`}
+          >
             <GroupHeader
               label={l1.label}
               kind={l1.kind}
@@ -374,13 +460,22 @@ export function PackGroupedView(props: PackGroupedViewProps) {
               planned={l1.planned}
               collapsed={l1Collapsed}
               level={1}
-              onClick={() => onToggle(l1.key)}
+              packedUnits={l1Progress.packed}
+              complete={l1Progress.complete}
+              deemphasized={l1Collapsed && demotedKeys.has(l1.key) && l1Progress.complete}
+              onClick={() => toggleGroup(l1.key, l1Progress.complete)}
             />
             {!l1Collapsed &&
-              l1.children.map((l2) => {
+              orderedChildren.map((l2) => {
                 const l2Collapsed = !expandedKeys.has(l2.key);
+                const l2Progress = progressForLeaves(l2.leaves, props);
                 return (
-                  <div key={l2.key} className="border-t">
+                  <div
+                    key={l2.key}
+                    className={`border-t transition-opacity ${
+                      l2Collapsed && demotedKeys.has(l2.key) && l2Progress.complete ? 'opacity-50' : ''
+                    }`}
+                  >
                     <GroupHeader
                       label={l2.label}
                       kind={l2.kind}
@@ -390,7 +485,10 @@ export function PackGroupedView(props: PackGroupedViewProps) {
                       planned={l2.planned}
                       collapsed={l2Collapsed}
                       level={2}
-                      onClick={() => onToggle(l2.key)}
+                      packedUnits={l2Progress.packed}
+                      complete={l2Progress.complete}
+                      deemphasized={l2Collapsed && demotedKeys.has(l2.key) && l2Progress.complete}
+                      onClick={() => toggleGroup(l2.key, l2Progress.complete)}
                     />
                     {!l2Collapsed && (
                       <div>
