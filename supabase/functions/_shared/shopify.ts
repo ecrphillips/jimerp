@@ -12,7 +12,15 @@ import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-
 import { encryptSecret } from "./crypto.ts";
 
 // Scopes our app requires. Offline token; do not request per-user (online).
-export const SHOPIFY_REQUIRED_SCOPES = ["read_orders", "read_products", "read_customers"];
+// read_merchant_managed_fulfillment_orders is what makes the "Ready for pickup"
+// state readable (Order.fulfillmentOrders) — the pull excludes those orders, and
+// fails open (nothing excluded) on stores that haven't granted it yet.
+export const SHOPIFY_REQUIRED_SCOPES = [
+  "read_orders",
+  "read_products",
+  "read_customers",
+  "read_merchant_managed_fulfillment_orders",
+];
 export const SHOPIFY_SCOPE = SHOPIFY_REQUIRED_SCOPES.join(",");
 
 const SHOP_RE = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
