@@ -5,3 +5,4 @@
 - Keep shipped orders awaiting invoice in a dedicated Production invoicing tab, because shipping work and invoice follow-up are separate workflows.
 - Store actual shipping-label cost on the order in CAD, because shop-floor staff capture it for later invoicing.
 - Keep accounts as non-collapsible side rails inside Roast → Account pack drawers, because floor staff need all product lines visible after one click.
+- Keep packing controls directly on product rows without expandable product drawers, because each row must be fully actionable at a glance on the production floor.

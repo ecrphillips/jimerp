@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   Check,
   Clock,
-  Layers,
   CheckCircle,
   AlertCircle,
 } from 'lucide-react';
@@ -172,14 +171,10 @@ function LeafRow({
   compact?: boolean;
 }) {
   const {
-    expandedLeafKey,
-    onToggleLeaf,
     globalDemandByProduct,
     availableByProduct,
     pickedByProduct,
     wipStatusByProduct,
-    wipAvailableKgByProduct,
-    requiredKgByProduct,
     timeSensitiveByProduct,
     onUpdatePackedUnits,
     onEditingChange,
@@ -195,15 +190,12 @@ function LeafRow({
     ? globalDemand > 0 && effectivePacked >= globalDemand
     : true;
   const isStarted = effectivePacked > 0;
-  const isExpanded = expandedLeafKey === leaf.key && leaf.requiresProduction;
   const timeSensitive = timeSensitiveByProduct[pid] ?? false;
 
   return (
     <div className={`border-l-4 ${isComplete && leaf.requiresProduction ? 'border-l-success' : leafAccent(wipStatus, leaf.requiresProduction)}`}>
       <div
         className={`flex items-center gap-3 border-b px-3 py-3 transition-colors ${compact ? 'pl-4' : 'pl-6'} ${
-          leaf.requiresProduction ? 'cursor-pointer hover:bg-muted/50' : ''
-        } ${
           isComplete
             ? 'bg-success/15'
             : isStarted
@@ -213,19 +205,8 @@ function LeafRow({
                 : wipStatus === 'partial'
                   ? 'bg-warning/20'
                   : 'bg-destructive/15'
-        } ${isExpanded ? 'ring-2 ring-inset ring-hi-steel-blue/40' : ''}`}
-        onClick={leaf.requiresProduction ? () => onToggleLeaf(leaf.key) : undefined}
+        }`}
       >
-        <div className="w-4 shrink-0">
-          {leaf.requiresProduction ? (
-            isExpanded ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            )
-          ) : null}
-        </div>
-
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-sm text-foreground">{leaf.productName}</span>
@@ -275,7 +256,7 @@ function LeafRow({
           </div>
         </div>
 
-        <div className="w-24 shrink-0 flex justify-end">
+        <div className="min-w-24 shrink-0 flex justify-end">
           {!leaf.requiresProduction ? (
             <Badge
               variant="outline"
@@ -283,32 +264,18 @@ function LeafRow({
             >
               Pull stock
             </Badge>
-          ) : isComplete ? (
-            <Badge variant="default" className="bg-primary text-primary-foreground">
-              <Check className="h-3 w-3 mr-1" />
-              Complete {effectivePacked}/{globalDemand}
-            </Badge>
           ) : (
-            <Badge variant={isStarted ? 'secondary' : 'outline'}>
-              {isStarted ? 'Complete ' : ''}{effectivePacked}/{globalDemand}
-            </Badge>
+            <div className="text-right">
+              <div className="flex items-center justify-end gap-1 text-sm font-black tabular-nums text-foreground">
+                {isComplete && <Check className="h-3.5 w-3.5 text-success" />}
+                {effectivePacked}/{globalDemand}
+              </div>
+              <div className="text-[10px] font-bold uppercase text-muted-foreground">packed</div>
+            </div>
           )}
         </div>
-      </div>
-
-      {isExpanded && (
-        <div className="border-b border-hi-steel-blue/30 bg-card px-4 py-3 shadow-inner">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="text-sm">
-              <span className="font-bold">{effectivePacked}</span>
-              <span className="text-muted-foreground"> / {globalDemand} packed</span>
-              {leaf.roastGroupLabel && (
-                <span className="text-muted-foreground">
-                  {'  ·  '}WIP {(wipAvailableKgByProduct[pid] ?? 0).toFixed(1)} kg avail /{' '}
-                  {(requiredKgByProduct[pid] ?? 0).toFixed(1)} kg needed
-                </span>
-              )}
-            </div>
+        {leaf.requiresProduction && (
+          <div className="shrink-0">
             <InlinePackingControl
               value={available}
               onCommit={(v) =>
@@ -319,14 +286,8 @@ function LeafRow({
               fillValue={Math.max(0, globalDemand - picked)}
             />
           </div>
-          {picked > 0 && (
-            <div className="mt-2 text-xs text-muted-foreground">
-              <Layers className="h-3 w-3 inline mr-1" />
-              {picked} unit{picked !== 1 ? 's' : ''} already picked by shipper (counts toward packed).
-            </div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
