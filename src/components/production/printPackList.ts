@@ -40,7 +40,7 @@ export function printPackList(tree: PackL1Node[], mode: PackGroupMode) {
 <style>
 body{font-family:system-ui,sans-serif;color:#000;margin:24px;font-size:14px;line-height:1.35}
 h1{font-size:22px;margin:0;letter-spacing:.3px}.meta{color:#444;margin:6px 0 18px;font-size:13px}
-section{break-inside:avoid-page;margin-bottom:22px;border-top:3px solid #000;padding-top:8px}
+section{margin-bottom:22px;border-top:3px solid #000;padding-top:8px}
 h2{font-size:17px;text-transform:uppercase;margin:0 0 8px;letter-spacing:.4px}
 h3{font-size:14px;margin:14px 0 6px;padding-bottom:3px;border-bottom:1px solid #000}
 .muted{color:#555;font-weight:normal;font-size:12px;text-transform:none}
@@ -54,9 +54,10 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#333;border
 .grind{font-weight:700;margin-top:5px;font-size:14px}
 .tag{border:1.5px solid #000;padding:1px 6px;font-size:11px;font-weight:700;margin-left:6px;white-space:nowrap}
 .tag-inv{background:#000;color:#fff;padding:2px 7px;font-size:11px;font-weight:700;letter-spacing:.6px;margin-right:4px}
+tr{break-inside:avoid}h2,h3{break-after:avoid}
 tr.needs-grind td{background:#e6e6e6}
 tr.needs-grind td:first-child{box-shadow:inset 7px 0 0 #000}
-.l2{break-inside:avoid;margin-left:10px}
+.l2{margin-left:10px}
 .foot{margin-top:18px;border-top:2px solid #000;padding-top:6px;font-weight:700;font-size:14px}
 @media print{body{margin:10mm}}
 </style></head><body>
