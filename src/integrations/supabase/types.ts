@@ -3904,6 +3904,7 @@ export type Database = {
           roasted: boolean
           ship_display_order: number | null
           shipped_or_ready: boolean
+          shipping_cost_cad: number | null
           shopify_pull_log_id: string | null
           shopify_source_id: string | null
           source_channel: string
@@ -3935,6 +3936,7 @@ export type Database = {
           roasted?: boolean
           ship_display_order?: number | null
           shipped_or_ready?: boolean
+          shipping_cost_cad?: number | null
           shopify_pull_log_id?: string | null
           shopify_source_id?: string | null
           source_channel?: string
@@ -3966,6 +3968,7 @@ export type Database = {
           roasted?: boolean
           ship_display_order?: number | null
           shipped_or_ready?: boolean
+          shipping_cost_cad?: number | null
           shopify_pull_log_id?: string | null
           shopify_source_id?: string | null
           source_channel?: string
@@ -6544,6 +6547,7 @@ export type Database = {
           roasted: boolean
           ship_display_order: number | null
           shipped_or_ready: boolean
+          shipping_cost_cad: number | null
           shopify_pull_log_id: string | null
           shopify_source_id: string | null
           source_channel: string
