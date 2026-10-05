@@ -131,6 +131,11 @@ export function SortablePackRow({
       return `${baseClasses} opacity-50 hover:opacity-100 hover:bg-muted/40`;
     }
 
+    // Fully packed: no WIP is needed, so never show the red "no WIP" treatment.
+    if (requiresProduction && isComplete) {
+      return `${baseClasses} ${isExpanded ? 'bg-success/15' : 'bg-success/10'} border-l-2 border-l-success`;
+    }
+
     if (hasTimeSensitive) {
       // Urgent items keep their destructive background but can have WIP indicator
       if (wipStatus === 'full') {
@@ -228,7 +233,7 @@ export function SortablePackRow({
                 WIP partial
               </Badge>
             )}
-            {requiresProduction && wipStatus === 'none' && (
+            {requiresProduction && !isComplete && wipStatus === 'none' && (
               <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/30">
                 <AlertTriangle className="h-3 w-3 mr-1" />
                 No WIP
