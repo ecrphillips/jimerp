@@ -54,6 +54,27 @@ interface Client {
   account_name: string;
 }
 
+const LEGACY_PACKAGING_SUFFIXES = [
+  '250g Retail', '300g Retail', '340g Retail', '454g Retail',
+  '200g Crowler', '250g Crowler', '125g Can',
+  '2lb Bulk', '1kg Bulk', '5lb Bulk', '2kg Bulk',
+];
+
+/**
+ * Older products stored the package size/type in product_name, while newer
+ * variants share one base name. Normalize only for display grouping so both
+ * generations use the same product-header/variant-row presentation.
+ */
+function getProductGroupName(productName: string): string {
+  let result = productName;
+  for (const suffix of LEGACY_PACKAGING_SUFFIXES) {
+    const escapedSuffix = suffix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    result = result.replace(new RegExp(`[\\s\\-]+${escapedSuffix}$`, 'i'), '');
+  }
+  result = result.replace(/[\s\-]+\d+(?:\.\d+)?(?:g|kg|lb)(?:\s+[A-Za-z]+){0,3}$/i, '');
+  return result.trim() || productName;
+}
+
 // Helper to build display name with packaging info
 function buildDisplayName(productName: string, packagingTypeName: string | null, gramsPerUnit: number | null): string {
   if (!packagingTypeName || !gramsPerUnit) {
@@ -582,10 +603,11 @@ export default function CreateOrderForClient() {
   const renderProductsGrouped = (productsList: Product[]) => {
     const grouped: Map<string, Product[]> = new Map();
     for (const p of productsList) {
-      if (!grouped.has(p.product_name)) {
-        grouped.set(p.product_name, []);
+      const groupName = getProductGroupName(p.product_name);
+      if (!grouped.has(groupName)) {
+        grouped.set(groupName, []);
       }
-      grouped.get(p.product_name)!.push(p);
+      grouped.get(groupName)?.push(p);
     }
 
     const sortedGroups = Array.from(grouped.entries()).sort((a, b) => a[0].localeCompare(b[0]));
