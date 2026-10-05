@@ -137,6 +137,8 @@ export default function OrderDetail() {
           product_id,
           quantity_units,
           grind,
+          needs_grind,
+          grind_label,
           unit_price_locked,
           line_notes,
           shipment_id,
@@ -195,8 +197,14 @@ export default function OrderDetail() {
   // false) are never packed — they count as automatically satisfied so they
   // can't block order progress.
   const lineItemsWithPackedStatus = useMemo(() => {
+    // Packing is tracked per product, but one product can be split across
+    // several lines (e.g. whole bean + ground). Hand out the product's packed
+    // units line by line so the same bags are never credited to two lines.
+    const remaining: Record<string, number> = { ...packingByProduct };
     return (lineItems ?? []).map((li) => {
-      const packedUnits = packingByProduct[li.product_id] ?? 0;
+      const pool = remaining[li.product_id] ?? 0;
+      const packedUnits = Math.min(pool, li.quantity_units);
+      remaining[li.product_id] = pool - packedUnits;
       const isPackedComplete =
         li.product?.requires_production === false || packedUnits >= li.quantity_units;
       return {
@@ -1075,6 +1083,11 @@ export default function OrderDetail() {
                               <span className="text-xs text-muted-foreground">{formatGramsLabel(grams)}</span>
                             ) : null;
                           })()}
+                          {(li as { needs_grind?: boolean | null }).needs_grind ? (
+                            <Badge className="w-fit text-xs font-bold uppercase bg-orange-500 text-white hover:bg-orange-500">
+                              Grind: {(li as { grind_label?: string | null }).grind_label || 'Grind'}
+                            </Badge>
+                          ) : null}
                         </div>
                       </td>
                       <td className="py-2">{li.quantity_units}</td>
