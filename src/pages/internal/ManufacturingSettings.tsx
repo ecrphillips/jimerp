@@ -59,11 +59,11 @@ export default function ManufacturingSettings() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('accounts')
-        .select('id, account_name, production_weekdays, programs, status')
+        .select('id, account_name, production_weekdays, programs, is_active')
         .contains('programs', ['MANUFACTURING'])
         .order('account_name');
       if (error) throw error;
-      return (data ?? []).filter((a: any) => a.status !== 'CHURNED') as unknown as Acct[];
+      return (data ?? []).filter((a: any) => a.is_active !== false) as unknown as Acct[];
     },
   });
 
