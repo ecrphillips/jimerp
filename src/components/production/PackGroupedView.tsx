@@ -328,6 +328,7 @@ function GroupHeader({
   packedUnits,
   complete,
   deemphasized,
+  wipStatus,
   onClick,
 }: {
   label: string;
@@ -341,15 +342,24 @@ function GroupHeader({
   packedUnits: number;
   complete: boolean;
   deemphasized: boolean;
+  /** Aggregated WIP readiness for the drawer — shown as a left bar when collapsed. */
+  wipStatus: WipStatus | null;
   onClick: () => void;
 }) {
+  // Complete keeps its green bar; collapsed drawers show the aggregate WIP cue;
+  // expanded-but-incomplete stays neutral so the row bands do the talking.
+  const barClass = complete
+    ? 'border-l-success'
+    : collapsed
+      ? wipBarClass(wipStatus)
+      : 'border-l-transparent';
   return (
     <div
       className={`relative flex items-center justify-between gap-4 cursor-pointer overflow-hidden transition-all ${
         level === 1
           ? 'bg-card hover:bg-muted/40 px-4 py-4'
           : 'bg-muted/40 hover:bg-muted/60 px-4 py-3 pl-7'
-      } ${complete ? 'border-l-4 border-l-success' : 'border-l-4 border-l-transparent'} ${
+      } border-l-4 ${barClass} ${
         deemphasized ? 'opacity-45 hover:opacity-75' : ''
       }`}
       onClick={onClick}
