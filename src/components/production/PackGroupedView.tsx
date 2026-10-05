@@ -133,6 +133,30 @@ function leafAccent(wipStatus: WipStatus, requiresProduction: boolean): string {
   return 'border-l-destructive';
 }
 
+/**
+ * Aggregate WIP readiness across a drawer's leaves (incomplete, production lines only).
+ * null → nothing waiting on WIP (complete or pull-from-stock).
+ * 'none' only when every waiting line has no WIP; any mix reads as 'partial'.
+ */
+function wipStatusForLeaves(leaves: PackLeafNode[], props: PackGroupedViewProps): WipStatus | null {
+  const statuses = new Set<WipStatus>();
+  for (const leaf of leaves) {
+    if (!leaf.requiresProduction) continue;
+    if (progressForLeaf(leaf, props).complete) continue;
+    statuses.add(props.wipStatusByProduct[leaf.productId] ?? 'none');
+  }
+  if (statuses.size === 0) return null;
+  if (statuses.has('none')) return statuses.size === 1 ? 'none' : 'partial';
+  return statuses.has('partial') ? 'partial' : 'full';
+}
+
+function wipBarClass(wipStatus: WipStatus | null): string {
+  if (wipStatus === 'full') return 'border-l-success';
+  if (wipStatus === 'partial') return 'border-l-warning';
+  if (wipStatus === 'none') return 'border-l-destructive';
+  return 'border-l-transparent';
+}
+
 function progressForLeaf(leaf: PackLeafNode, props: PackGroupedViewProps) {
   if (!leaf.requiresProduction) return { packed: leaf.units, needed: leaf.units, complete: true };
   const globalDemand = props.globalDemandByProduct[leaf.productId] ?? 0;
