@@ -35,10 +35,11 @@ import {
   mergeGrindSummary,
   parseGrindSignal,
 } from '../_shared/grind.ts';
+import { isPickupPrepared, type PickupState } from '../_shared/pickupReady.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '3.7-units-multiplier';
+const FUNCTION_VERSION = '3.8-pickup-ready';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -204,6 +205,87 @@ async function fetchUnfulfilledOrders(
   return orders;
 }
 
+// Read the "already collected / ready for pickup" state for candidate orders.
+//
+// Split into two calls on purpose: `fulfillments` needs only read_orders, while
+// `fulfillmentOrders` needs read_merchant_managed_fulfillment_orders, which a
+// store may not have granted yet. Both halves fail open — an unreadable pickup
+// state must never block a pull; it just means nothing gets excluded on pickup
+// grounds and the pull log records why.
+async function fetchPickupStates(
+  storeUrl: string,
+  accessToken: string,
+  orders: ShopifyOrder[],
+): Promise<{ states: Map<string, PickupState>; note: string | null }> {
+  const endpoint = `https://${shopHost(storeUrl)}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const states = new Map<string, PickupState>();
+  const notes: string[] = [];
+  if (orders.length === 0) return { states, note: null };
+
+  const ensure = (id: string): PickupState => {
+    let s = states.get(id);
+    if (!s) {
+      s = { fulfillments: [], fulfillmentOrders: [] };
+      states.set(id, s);
+    }
+    return s;
+  };
+
+  const run = async (label: string, selection: string) => {
+    for (let i = 0; i < orders.length; i += 50) {
+      const ids = orders.slice(i, i + 50).map((o) => `gid://shopify/Order/${o.id}`);
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Access-Token': accessToken,
+          },
+          body: JSON.stringify({
+            query: `query PickupState($ids: [ID!]!) { nodes(ids: $ids) { ... on Order { id ${selection} } } }`,
+            variables: { ids },
+          }),
+        });
+        if (!res.ok) throw new Error(`Shopify API ${res.status}`);
+        const payload = await res.json();
+        if (payload.errors?.length) throw new Error(JSON.stringify(payload.errors).slice(0, 200));
+        for (const node of payload.data?.nodes ?? []) {
+          const id = legacyId(node?.id as string | undefined);
+          if (!id) continue;
+          const s = ensure(id);
+          if (label === 'fulfillments') {
+            s.fulfillments = (node.fulfillments ?? []).map((f: Record<string, unknown>) => ({
+              status: (f.status as string) ?? null,
+              displayStatus: (f.displayStatus as string) ?? null,
+            }));
+          } else {
+            const conn = node.fulfillmentOrders as { nodes?: unknown[] } | null;
+            s.fulfillmentOrders = (conn?.nodes ?? []).map((raw) => {
+              const fo = raw as Record<string, unknown>;
+              const dm = fo.deliveryMethod as Record<string, unknown> | null;
+              return {
+                status: (fo.status as string) ?? null,
+                deliveryMethod: { methodType: (dm?.methodType as string) ?? null },
+              };
+            });
+          }
+        }
+      } catch (e) {
+        notes.push(`${label} not read: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
+    }
+  };
+
+  await run('fulfillments', 'fulfillments { status displayStatus }');
+  await run(
+    'fulfillmentOrders',
+    'fulfillmentOrders(first: 10) { nodes { status deliveryMethod { methodType } } }',
+  );
+
+  return { states, note: notes.length ? notes.join(' | ').slice(0, 500) : null };
+}
+
 // parseGrams / skuFamily / normProductName / deriveProduct live in
 // ../_shared/shopifyDerive.ts so the pull and the re-derive action share one matcher.
 
@@ -226,6 +308,7 @@ interface PullResult {
   orders_retrieved: number;
   orders_included: number;
   orders_quarantined: number;
+  orders_skipped?: number;
   lines_quarantined?: number;
   order_id?: string;
   order_number?: string;
@@ -280,6 +363,7 @@ async function pullSource(
         orders_retrieved: out.orders_retrieved,
         orders_included: out.orders_included,
         orders_quarantined: out.orders_quarantined,
+        orders_skipped: out.orders_skipped ?? 0,
         error_message: out.error ?? null,
         generated_order_id: out.order_id ?? null,
         completed_at: new Date().toISOString(),
@@ -301,11 +385,23 @@ async function pullSource(
       .eq('source_id', source.id);
     if (existErr) throw new Error(`bundle lookup failed: ${existErr.message}`);
     const seen = new Set((existing ?? []).map((r) => r.shopify_order_id));
-    const newOrders = shopifyOrders.filter((o) => !seen.has(o.id));
+    const candidates = shopifyOrders.filter((o) => !seen.has(o.id));
 
-    if (newOrders.length === 0) {
+    if (candidates.length === 0) {
       return await finalize({ orders_retrieved: shopifyOrders.length });
     }
+
+    // Orders the bar has already prepared for collection are not new work. A
+    // local-pickup order marked "Ready for pickup" is still open + unfulfilled
+    // in Shopify, so the search above cannot tell it apart — see
+    // ../_shared/pickupReady.ts for the states that do.
+    const pickup = await fetchPickupStates(source.store_url, accessToken, candidates);
+    const pickupReadyNames: string[] = [];
+    const newOrders = candidates.filter((o) => {
+      if (!isPickupPrepared(pickup.states.get(o.id))) return true;
+      pickupReadyNames.push(o.name);
+      return false;
+    });
 
     // Variant-keyed overrides: jim_product_id maps a line; do_not_produce drops it.
     // Product-level (variant-null) and SKU matching are intentionally NOT used —
@@ -712,6 +808,7 @@ async function pullSource(
         orders_retrieved: shopifyOrders.length,
         orders_included: includedOrders.length,
         orders_quarantined: ordersQuarantined,
+        orders_skipped: pickupReadyNames.length,
         lines_quarantined: linesQuarantined,
         result: quarantineError ? 'error' : ordersQuarantined > 0 ? 'partial' : 'success',
         order_id: bundleOrderId ?? undefined,
@@ -727,6 +824,8 @@ async function pullSource(
         derived_mappings_written: mappingError ? 0 : derivedMappings.length,
         mapping_error: mappingError,
         derivation_failures: derivationFailures,
+        pickup_ready_skipped: pickupReadyNames,
+        pickup_state_note: pickup.note,
       },
     );
   } catch (e) {
