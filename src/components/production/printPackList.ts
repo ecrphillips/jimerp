@@ -54,6 +54,7 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#333;border
 .grind{font-weight:700;margin-top:5px;font-size:14px}
 .tag{border:1.5px solid #000;padding:1px 6px;font-size:11px;font-weight:700;margin-left:6px;white-space:nowrap}
 .tag-inv{background:#000;color:#fff;padding:2px 7px;font-size:11px;font-weight:700;letter-spacing:.6px;margin-right:4px}
+tr{break-inside:avoid}h2,h3{break-after:avoid}
 tr.needs-grind td{background:#e6e6e6}
 tr.needs-grind td:first-child{box-shadow:inset 7px 0 0 #000}
 .l2{margin-left:10px}
