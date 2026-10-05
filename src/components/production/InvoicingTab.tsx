@@ -4,14 +4,17 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Input } from '@/components/ui/input';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle2, ChevronDown, ChevronRight, FileText } from 'lucide-react';
+import { formatMoney } from '@/lib/formatMoney';
+import { CheckCircle2, ChevronDown, ChevronRight, FileText, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface InvoiceLineItem {
   id: string;
   quantity_units: number;
+  unit_price_locked: number;
   grind_label: string | null;
   product: {
     product_name: string;
@@ -25,17 +28,27 @@ interface AwaitingInvoiceOrder {
   order_number: string;
   client: { name: string } | null;
   account: { account_name: string } | null;
+  shipping_cost_cad: number | null;
   line_items: InvoiceLineItem[] | null;
 }
 
-function InvoiceOrderRow({ order, onMarkInvoiced, isUpdating }: {
+function InvoiceOrderRow({ order, onMarkInvoiced, onSaveShipping, isUpdating, isSavingShipping }: {
   order: AwaitingInvoiceOrder;
   onMarkInvoiced: (orderId: string) => void;
+  onSaveShipping: (orderId: string, shippingCost: number | null) => void;
   isUpdating: boolean;
+  isSavingShipping: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [shippingCost, setShippingCost] = useState(
+    order.shipping_cost_cad == null ? '' : order.shipping_cost_cad.toFixed(2),
+  );
   const lineItems = order.line_items ?? [];
   const totalUnits = lineItems.reduce((sum, line) => sum + line.quantity_units, 0);
+  const parsedShippingCost = shippingCost.trim() === '' ? null : Number(shippingCost);
+  const shippingCostIsValid = parsedShippingCost == null || (Number.isFinite(parsedShippingCost) && parsedShippingCost >= 0);
+  const savedShippingCost = order.shipping_cost_cad == null ? null : Number(order.shipping_cost_cad);
+  const shippingCostChanged = shippingCostIsValid && parsedShippingCost !== savedShippingCost;
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="rounded-md border bg-background">
@@ -60,12 +73,13 @@ function InvoiceOrderRow({ order, onMarkInvoiced, isUpdating }: {
 
       <CollapsibleContent className="border-t bg-muted/20 px-4 py-3">
         <div className="overflow-hidden rounded-md border bg-background">
-          <div className="grid grid-cols-[minmax(0,1fr)_5rem] gap-4 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+          <div className="grid grid-cols-[minmax(0,1fr)_5rem_7rem] gap-4 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
             <span>Product</span>
             <span className="text-right">Quantity</span>
+            <span className="text-right">Price / unit</span>
           </div>
           {lineItems.map((line) => (
-            <div key={line.id} className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-4 border-b px-3 py-2.5 last:border-b-0">
+            <div key={line.id} className="grid grid-cols-[minmax(0,1fr)_5rem_7rem] items-center gap-4 border-b px-3 py-2.5 last:border-b-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="font-medium">{line.product?.product_name ?? 'Unknown product'}</span>
                 <PackagingBadge variant={line.product?.packaging_variant ?? null} />
@@ -77,8 +91,41 @@ function InvoiceOrderRow({ order, onMarkInvoiced, isUpdating }: {
                 )}
               </div>
               <span className="text-right font-semibold">{line.quantity_units}</span>
+              <span className="text-right tabular-nums">{formatMoney(Number(line.unit_price_locked))}</span>
             </div>
           ))}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-end justify-end gap-2 border-t pt-3">
+          <div className="w-full max-w-56 space-y-1.5">
+            <label htmlFor={`shipping-cost-${order.id}`} className="text-xs font-medium text-muted-foreground">
+              Shipping cost (CAD)
+            </label>
+            <div className="relative">
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">$</span>
+              <Input
+                id={`shipping-cost-${order.id}`}
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                value={shippingCost}
+                onChange={(event) => setShippingCost(event.target.value)}
+                className="pl-7 tabular-nums"
+                placeholder="0.00"
+                aria-invalid={!shippingCostIsValid}
+              />
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onSaveShipping(order.id, parsedShippingCost)}
+            disabled={!shippingCostChanged || isSavingShipping}
+          >
+            <Save className="mr-2 h-4 w-4" />
+            {isSavingShipping ? 'Saving…' : 'Save shipping'}
+          </Button>
         </div>
       </CollapsibleContent>
     </Collapsible>
@@ -95,11 +142,13 @@ export function InvoicingTab() {
         .select(`
           id,
           order_number,
+          shipping_cost_cad,
           client:clients(name),
           account:accounts(account_name),
           line_items:order_line_items(
             id,
             quantity_units,
+            unit_price_locked,
             grind_label,
             product:products(product_name, bag_size_g, packaging_variant)
           )
@@ -126,6 +175,25 @@ export function InvoicingTab() {
     onError: (err) => {
       console.error(err);
       toast.error('Failed to mark order as invoiced');
+    },
+  });
+
+  const saveShippingCostMutation = useMutation({
+    mutationFn: async ({ orderId, shippingCost }: { orderId: string; shippingCost: number | null }) => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ shipping_cost_cad: shippingCost })
+        .eq('id', orderId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Shipping cost saved');
+      queryClient.invalidateQueries({ queryKey: ['shipped-awaiting-invoice'] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      toast.error('Failed to save shipping cost');
     },
   });
 
@@ -157,7 +225,9 @@ export function InvoicingTab() {
                 key={order.id}
                 order={order}
                 onMarkInvoiced={(orderId) => markOrderInvoicedMutation.mutate(orderId)}
+                onSaveShipping={(orderId, shippingCost) => saveShippingCostMutation.mutate({ orderId, shippingCost })}
                 isUpdating={markOrderInvoicedMutation.isPending}
+                isSavingShipping={saveShippingCostMutation.isPending && saveShippingCostMutation.variables?.orderId === order.id}
               />
             ))}
           </div>
