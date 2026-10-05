@@ -133,6 +133,30 @@ function leafAccent(wipStatus: WipStatus, requiresProduction: boolean): string {
   return 'border-l-destructive';
 }
 
+/**
+ * Aggregate WIP readiness across a drawer's leaves (incomplete, production lines only).
+ * null → nothing waiting on WIP (complete or pull-from-stock).
+ * 'none' only when every waiting line has no WIP; any mix reads as 'partial'.
+ */
+function wipStatusForLeaves(leaves: PackLeafNode[], props: PackGroupedViewProps): WipStatus | null {
+  const statuses = new Set<WipStatus>();
+  for (const leaf of leaves) {
+    if (!leaf.requiresProduction) continue;
+    if (progressForLeaf(leaf, props).complete) continue;
+    statuses.add(props.wipStatusByProduct[leaf.productId] ?? 'none');
+  }
+  if (statuses.size === 0) return null;
+  if (statuses.has('none')) return statuses.size === 1 ? 'none' : 'partial';
+  return statuses.has('partial') ? 'partial' : 'full';
+}
+
+function wipBarClass(wipStatus: WipStatus | null): string {
+  if (wipStatus === 'full') return 'border-l-success';
+  if (wipStatus === 'partial') return 'border-l-warning';
+  if (wipStatus === 'none') return 'border-l-destructive';
+  return 'border-l-transparent';
+}
+
 function progressForLeaf(leaf: PackLeafNode, props: PackGroupedViewProps) {
   if (!leaf.requiresProduction) return { packed: leaf.units, needed: leaf.units, complete: true };
   const globalDemand = props.globalDemandByProduct[leaf.productId] ?? 0;
@@ -304,6 +328,7 @@ function GroupHeader({
   packedUnits,
   complete,
   deemphasized,
+  wipStatus,
   onClick,
 }: {
   label: string;
@@ -317,15 +342,24 @@ function GroupHeader({
   packedUnits: number;
   complete: boolean;
   deemphasized: boolean;
+  /** Aggregated WIP readiness for the drawer — shown as a left bar when collapsed. */
+  wipStatus: WipStatus | null;
   onClick: () => void;
 }) {
+  // Complete keeps its green bar; collapsed drawers show the aggregate WIP cue;
+  // expanded-but-incomplete stays neutral so the row bands do the talking.
+  const barClass = complete
+    ? 'border-l-success'
+    : collapsed
+      ? wipBarClass(wipStatus)
+      : 'border-l-transparent';
   return (
     <div
       className={`relative flex items-center justify-between gap-4 cursor-pointer overflow-hidden transition-all ${
         level === 1
           ? 'bg-card hover:bg-muted/40 px-4 py-4'
           : 'bg-muted/40 hover:bg-muted/60 px-4 py-3 pl-7'
-      } ${complete ? 'border-l-4 border-l-success' : 'border-l-4 border-l-transparent'} ${
+      } border-l-4 ${barClass} ${
         deemphasized ? 'opacity-45 hover:opacity-75' : ''
       }`}
       onClick={onClick}
@@ -434,7 +468,9 @@ export function PackGroupedView(props: PackGroupedViewProps) {
     <div className="space-y-4">
       {orderedTree.map((l1) => {
         const l1Collapsed = !expandedKeys.has(l1.key);
-        const l1Progress = progressForLeaves(l1.children.flatMap((child) => child.leaves), props);
+        const l1Leaves = l1.children.flatMap((child) => child.leaves);
+        const l1Progress = progressForLeaves(l1Leaves, props);
+        const l1WipStatus = wipStatusForLeaves(l1Leaves, props);
         const orderedChildren = [...l1.children].sort(
           (a, b) => Number(demotedKeys.has(a.key)) - Number(demotedKeys.has(b.key)),
         );
@@ -457,6 +493,7 @@ export function PackGroupedView(props: PackGroupedViewProps) {
               packedUnits={l1Progress.packed}
               complete={l1Progress.complete}
               deemphasized={l1Collapsed && demotedKeys.has(l1.key) && l1Progress.complete}
+              wipStatus={l1WipStatus}
               onClick={() => toggleGroup(l1.key, l1Progress.complete)}
             />
             {!l1Collapsed && props.mode === 'roastgroup' && (
@@ -466,31 +503,33 @@ export function PackGroupedView(props: PackGroupedViewProps) {
                 ))}
               </div>
             )}
-            {!l1Collapsed && props.mode === 'account' &&
-              orderedChildren.map((l2) => {
-                const l2Collapsed = !expandedKeys.has(l2.key);
-                const l2Progress = progressForLeaves(l2.leaves, props);
-                return (
-                  <div
-                    key={l2.key}
-                    className={`ml-5 border-l-4 border-b-2 border-hi-navy/20 transition-opacity last:border-b-4 ${
-                      l2Collapsed && demotedKeys.has(l2.key) && l2Progress.complete ? 'opacity-50' : ''
-                    }`}
-                  >
-                    <GroupHeader
-                      label={l2.label}
-                      kind={l2.kind}
-                      totalUnits={l2.totalUnits}
-                      orderCount={l2.orderCount}
-                      wipKg={l2.wipKg}
-                      planned={l2.planned}
-                      collapsed={l2Collapsed}
-                      level={2}
-                      packedUnits={l2Progress.packed}
-                      complete={l2Progress.complete}
-                      deemphasized={l2Collapsed && demotedKeys.has(l2.key) && l2Progress.complete}
-                      onClick={() => toggleGroup(l2.key, l2Progress.complete)}
-                    />
+              {!l1Collapsed && props.mode === 'account' &&
+                orderedChildren.map((l2) => {
+                  const l2Collapsed = !expandedKeys.has(l2.key);
+                  const l2Progress = progressForLeaves(l2.leaves, props);
+                  const l2WipStatus = wipStatusForLeaves(l2.leaves, props);
+                  return (
+                    <div
+                      key={l2.key}
+                      className={`ml-5 border-l-4 border-b-2 border-hi-navy/20 transition-opacity last:border-b-4 ${
+                        l2Collapsed && demotedKeys.has(l2.key) && l2Progress.complete ? 'opacity-50' : ''
+                      }`}
+                    >
+                      <GroupHeader
+                        label={l2.label}
+                        kind={l2.kind}
+                        totalUnits={l2.totalUnits}
+                        orderCount={l2.orderCount}
+                        wipKg={l2.wipKg}
+                        planned={l2.planned}
+                        collapsed={l2Collapsed}
+                        level={2}
+                        packedUnits={l2Progress.packed}
+                        complete={l2Progress.complete}
+                        deemphasized={l2Collapsed && demotedKeys.has(l2.key) && l2Progress.complete}
+                        wipStatus={l2WipStatus}
+                        onClick={() => toggleGroup(l2.key, l2Progress.complete)}
+                      />
                     {!l2Collapsed && (
                       <div>
                         {l2.leaves.map((leaf) => (
