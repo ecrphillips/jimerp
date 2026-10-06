@@ -17,6 +17,25 @@
 export type PackSortMode = 'wip' | 'newest' | 'oldest' | 'alpha';
 export type WipTier = 'full' | 'partial' | 'none';
 
+/** Retain every line and its rail, placing completed work last within a drawer. */
+export function partitionPackDrawerLines<T, G extends { key: string; leaves: T[] }>(
+  groups: G[],
+  isComplete: (line: T) => boolean,
+): G[] {
+  const pending: G[] = [];
+  const completed: G[] = [];
+  for (const group of groups) {
+    const pendingLeaves: T[] = [];
+    const completedLeaves: T[] = [];
+    for (const line of group.leaves) {
+      (isComplete(line) ? completedLeaves : pendingLeaves).push(line);
+    }
+    if (pendingLeaves.length) pending.push({ ...group, key: `${group.key}:pending`, leaves: pendingLeaves });
+    if (completedLeaves.length) completed.push({ ...group, key: `${group.key}:completed`, leaves: completedLeaves });
+  }
+  return [...pending, ...completed];
+}
+
 export interface PackGroupMeta {
   /** roast_group key; use '' for the Unassigned bucket. */
   roastGroup: string;

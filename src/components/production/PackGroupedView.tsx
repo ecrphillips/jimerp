@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { InlinePackingControl } from './InlinePackingControl';
+import { partitionPackDrawerLines } from '@/lib/packGroupSort';
 
 export type PackGroupMode = 'account' | 'roastgroup';
 export type WipStatus = 'full' | 'partial' | 'none';
@@ -217,7 +218,7 @@ function LeafRow({
   const timeSensitive = timeSensitiveByProduct[pid] ?? false;
 
   return (
-    <div className={`border-l-4 ${isComplete && leaf.requiresProduction ? 'border-l-success' : leafAccent(wipStatus, leaf.requiresProduction)}`}>
+    <div className={`border-l-4 transition-opacity ${isComplete && leaf.requiresProduction ? 'border-l-success opacity-50 focus-within:opacity-100 hover:opacity-100' : leafAccent(wipStatus, leaf.requiresProduction)}`}>
       <div
         className={`flex items-center gap-3 border-b px-3 py-3 transition-colors ${compact ? 'pl-4' : 'pl-6'} ${
           isComplete
@@ -496,8 +497,9 @@ export function PackGroupedView(props: PackGroupedViewProps) {
         const l1Leaves = l1.children.flatMap((child) => child.leaves);
         const l1Progress = progressForLeaves(l1Leaves, props);
         const l1WipStatus = wipStatusForLeaves(l1Leaves, props);
-        const orderedChildren = [...l1.children].sort(
-          (a, b) => Number(demotedKeys.has(a.key)) - Number(demotedKeys.has(b.key)),
+        const orderedChildren = partitionPackDrawerLines<PackLeafNode, PackL2Node>(
+          l1.children,
+          (leaf) => leaf.requiresProduction && progressForLeaf(leaf, props).complete,
         );
         return (
           <div
