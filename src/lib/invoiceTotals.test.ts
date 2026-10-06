@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { formatInvoiceWeight, invoiceOrderWeightKg } from './invoiceTotals';
-import { perKgToPerLb, KG_PER_LB } from './pricingAssumptions';
+import { KG_PER_LB } from './pricingAssumptions';
+
+/** Mirrors useWeightUnit().weightToDisplay: one kilogram is more than one pound. */
+const kgToLb = (kg: number) => kg / KG_PER_LB;
 
 const line = (quantity_units: number, bag_size_g: number | null) => ({
   quantity_units,
@@ -37,7 +40,7 @@ describe('formatInvoiceWeight', () => {
   });
 
   it('shows pounds when the reader works in lb', () => {
-    expect(formatInvoiceWeight(1.75, perKgToPerLb, 'lb')).toBe('3.86 lb');
+    expect(formatInvoiceWeight(1.75, kgToLb, 'lb')).toBe('3.86 lb');
   });
 
   it('omits the figure when nothing could be weighed', () => {
@@ -45,6 +48,6 @@ describe('formatInvoiceWeight', () => {
   });
 
   it('converts with the canonical pound', () => {
-    expect(formatInvoiceWeight(1, perKgToPerLb, 'lb')).toBe(`${(1 / KG_PER_LB).toFixed(2)} lb`);
+    expect(formatInvoiceWeight(1, kgToLb, 'lb')).toBe(`${(1 / KG_PER_LB).toFixed(2)} lb`);
   });
 });
