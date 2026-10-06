@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Flame, Package, Truck, CalendarClock, ClipboardList, FileText } from 'lucide-react';
 import { PlanTab } from '@/components/production/PlanTab';
@@ -14,6 +13,7 @@ import {
   getVancouverNow,
 } from '@/lib/productionScheduling';
 import type { DateFilterConfig } from '@/components/production/types';
+import { DateFilterRail } from '@/components/production/DateFilterRail';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
 import { useProductionRealtime } from '@/hooks/useProductionRealtime';
 
@@ -28,7 +28,9 @@ export default function Production() {
   useProductionRealtime();
   
   // Date filter: 'today', 'tomorrow', or 'all'
-  const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('all');
+  // Date filter: 'today', 'tomorrow', or 'all'. Today is the standard view — the
+  // floor works the run sheet that is due now, and can step out to the others.
+  const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('today');
   
   // Filter configuration is now simpler - actual filtering happens client-side
   // based on computed work_start_at
@@ -76,30 +78,6 @@ export default function Production() {
           <PacificTimeTicker className="mt-1" />
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex gap-2">
-            <Button
-              variant={dateFilterMode === 'today' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setDateFilterMode('today')}
-            >
-              Today
-            </Button>
-            <Button
-              variant={dateFilterMode === 'tomorrow' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setDateFilterMode('tomorrow')}
-            >
-              Tomorrow
-            </Button>
-            <Button
-              variant={dateFilterMode === 'all' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setDateFilterMode('all')}
-            >
-              All
-            </Button>
-      </div>
-
       {dateFilterMode === 'tomorrow' && (
         <div
           role="alert"
@@ -115,7 +93,13 @@ export default function Production() {
       </div>
 
       {/* Station Tabs */}
-      <Tabs value={stationView} onValueChange={(v) => handleTabChange(v as StationView)} className="mb-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-5">
+        {/* The run-sheet date filter is a left rail so the applied filter is obvious;
+            Invoicing is date-independent, so it has no rail. */}
+        {stationView !== 'invoicing' && (
+          <DateFilterRail mode={dateFilterMode} onChange={setDateFilterMode} />
+        )}
+        <Tabs value={stationView} onValueChange={(v) => handleTabChange(v as StationView)} className="mb-4 min-w-0 flex-1">
         <TabsList className="grid w-full grid-cols-5 max-w-3xl">
           <TabsTrigger value="plan" className="flex items-center gap-2">
             <ClipboardList className="h-4 w-4" />
@@ -158,7 +142,8 @@ export default function Production() {
         <TabsContent value="invoicing" className="mt-4">
           <InvoicingTab />
         </TabsContent>
-      </Tabs>
+        </Tabs>
+      </div>
     </div>
   );
 }
