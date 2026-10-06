@@ -49,7 +49,11 @@ function InvoiceOrderRow({ order, onMarkInvoiced, onSaveShipping, isUpdating, is
   const w = useWeightUnit();
   const lineItems = order.line_items ?? [];
   const totalUnits = lineItems.reduce((sum, line) => sum + line.quantity_units, 0);
-  const weightLabel = formatInvoiceWeight(invoiceOrderWeightKg(lineItems), w.weightToDisplay, w.suffix);
+  const totalKg = invoiceOrderWeightKg(lineItems);
+  const kgLabel = formatInvoiceWeight(totalKg, (v) => v, 'kg');
+  const lbLabel = formatInvoiceWeight(totalKg, (v) => v * 2.20462, 'lb');
+  const weightLabel = kgLabel && lbLabel ? `${kgLabel} (${lbLabel})` : null;
+  void w;
   const parsedShippingCost = shippingCost.trim() === '' ? null : Number(shippingCost);
   const shippingCostIsValid = parsedShippingCost == null || (Number.isFinite(parsedShippingCost) && parsedShippingCost >= 0);
   const savedShippingCost = order.shipping_cost_cad == null ? null : Number(order.shipping_cost_cad);
