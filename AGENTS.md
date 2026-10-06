@@ -7,3 +7,4 @@
 - Keep accounts as non-collapsible side rails inside Roast → Account pack drawers, because floor staff need all product lines visible after one click.
 - Keep packing controls directly on product rows without expandable product drawers, because each row must be fully actionable at a glance on the production floor.
 - Partition completed packing lines after unfinished lines inside both drawer views while retaining their side rails, because finished work must stay visible for reference.
+- Render weight totals through the shared kg/lb weight-unit setting rather than a hardcoded unit, because the reader's unit choice must carry across the app.
