@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { supabase } from '@/integrations/supabase/client';
 import { formatMoney } from '@/lib/formatMoney';
+import { formatInvoiceWeight, invoiceOrderWeightKg } from '@/lib/invoiceTotals';
+import { useWeightUnit } from '@/hooks/useWeightUnit';
 import { CheckCircle2, ChevronDown, ChevronRight, FileText, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -43,8 +45,10 @@ function InvoiceOrderRow({ order, onMarkInvoiced, onSaveShipping, isUpdating, is
   const [shippingCost, setShippingCost] = useState(
     order.shipping_cost_cad == null ? '' : order.shipping_cost_cad.toFixed(2),
   );
+  const w = useWeightUnit();
   const lineItems = order.line_items ?? [];
   const totalUnits = lineItems.reduce((sum, line) => sum + line.quantity_units, 0);
+  const weightLabel = formatInvoiceWeight(invoiceOrderWeightKg(lineItems), w.weightToDisplay, w.suffix);
   const parsedShippingCost = shippingCost.trim() === '' ? null : Number(shippingCost);
   const shippingCostIsValid = parsedShippingCost == null || (Number.isFinite(parsedShippingCost) && parsedShippingCost >= 0);
   const savedShippingCost = order.shipping_cost_cad == null ? null : Number(order.shipping_cost_cad);
@@ -62,8 +66,9 @@ function InvoiceOrderRow({ order, onMarkInvoiced, onSaveShipping, isUpdating, is
           <span className="font-semibold">{order.order_number}</span>
           <span className="text-muted-foreground">•</span>
           <span className="truncate">{order.account?.account_name ?? order.client?.name ?? 'Unknown'}</span>
-          <span className="text-xs text-muted-foreground">
+          <span className="whitespace-nowrap text-xs text-muted-foreground">
             {lineItems.length} item{lineItems.length !== 1 ? 's' : ''} · {totalUnits} unit{totalUnits !== 1 ? 's' : ''}
+            {weightLabel ? ` · ${weightLabel}` : ''}
           </span>
         </CollapsibleTrigger>
         <Button size="sm" onClick={() => onMarkInvoiced(order.id)} disabled={isUpdating}>
