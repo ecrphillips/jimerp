@@ -78,7 +78,6 @@ export default function Production() {
           <PacificTimeTicker className="mt-1" />
         </div>
         <div className="flex items-center gap-4">
-
       {dateFilterMode === 'tomorrow' && (
         <div
           role="alert"
@@ -143,7 +142,8 @@ export default function Production() {
         <TabsContent value="invoicing" className="mt-4">
           <InvoicingTab />
         </TabsContent>
-      </Tabs>
+        </Tabs>
+      </div>
     </div>
   );
 }
