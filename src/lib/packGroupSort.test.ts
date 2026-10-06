@@ -1,10 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import {
   rollUpGroupTier,
+  partitionPackDrawerLines,
   orderPackGroups,
   type PackGroupMeta,
   type WipTier,
 } from './packGroupSort';
+
+describe('partitionPackDrawerLines', () => {
+  it.each(['account', 'roastgroup'])('keeps completed lines visible at the drawer bottom in %s view', () => {
+    const groups = [
+      { key: 'A', leaves: [{ id: 'done-A', complete: true }, { id: 'pending-A', complete: false }] },
+      { key: 'B', leaves: [{ id: 'pending-B', complete: false }, { id: 'done-B', complete: true }] },
+    ];
+    const result = partitionPackDrawerLines(groups, (line) => line.complete);
+    expect(result.flatMap((group) => group.leaves.map((line) => line.id)))
+      .toEqual(['pending-A', 'pending-B', 'done-A', 'done-B']);
+    expect(groups[0].leaves.map((line) => line.id)).toEqual(['done-A', 'pending-A']);
+  });
+});
 
 describe('rollUpGroupTier', () => {
   const p = (wipStatus: WipTier, remainingUnits = 10) => ({ wipStatus, remainingUnits });

@@ -1,5 +1,7 @@
 # Roadmap
 
+- [x] Keep completed packing lines visible, faded, and below unfinished lines inside both drawer views.
+
 - [x] Make Today the standard run-sheet filter and show it as a visible left rail (a strip above the tabs on narrower screens).
 - [x] Nudge the run-sheet rail down so its first card is justified to the top of the Pack SKUs section.
 
