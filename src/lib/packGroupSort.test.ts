@@ -13,7 +13,7 @@ describe('partitionPackDrawerLines', () => {
       { key: 'A', leaves: [{ id: 'done-A', complete: true }, { id: 'pending-A', complete: false }] },
       { key: 'B', leaves: [{ id: 'pending-B', complete: false }, { id: 'done-B', complete: true }] },
     ];
-    const result = partitionPackDrawerLines(groups, (line) => line.complete);
+    const result = partitionPackDrawerLines(groups, (line: { id: string; complete: boolean }) => line.complete);
     expect(result.flatMap((group) => group.leaves.map((line) => line.id)))
       .toEqual(['pending-A', 'pending-B', 'done-A', 'done-B']);
     expect(groups[0].leaves.map((line) => line.id)).toEqual(['done-A', 'pending-A']);
