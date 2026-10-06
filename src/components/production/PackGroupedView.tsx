@@ -459,8 +459,33 @@ export function PackGroupedView(props: PackGroupedViewProps) {
     onToggle(key);
   }, [expandedKeys, onToggle]);
 
+  // Also demote when a completed drawer is closed by other means (e.g. Collapse all),
+  // so both views follow the same rule.
+  const prevExpandedRef = React.useRef<Set<string>>(expandedKeys);
+  React.useEffect(() => {
+    const prev = prevExpandedRef.current;
+    prevExpandedRef.current = expandedKeys;
+    const closed = tree.filter((l1) => prev.has(l1.key) && !expandedKeys.has(l1.key));
+    if (closed.length === 0) return;
+    const done = closed.filter(
+      (l1) => progressForLeaves(l1.children.flatMap((c) => c.leaves), props).complete,
+    );
+    if (done.length === 0) return;
+    setDemotedKeys((current) => {
+      const next = new Set(current);
+      done.forEach((l1) => next.add(l1.key));
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedKeys]);
+
   const orderedTree = React.useMemo(
-    () => [...tree].sort((a, b) => Number(demotedKeys.has(a.key)) - Number(demotedKeys.has(b.key))),
+    () => [...tree].sort((a, b) => {
+      const ad = demotedKeys.has(a.key) && progressForLeaves(a.children.flatMap((c) => c.leaves), props).complete;
+      const bd = demotedKeys.has(b.key) && progressForLeaves(b.children.flatMap((c) => c.leaves), props).complete;
+      return Number(ad) - Number(bd);
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [tree, demotedKeys],
   );
 
@@ -496,50 +521,13 @@ export function PackGroupedView(props: PackGroupedViewProps) {
               wipStatus={l1WipStatus}
               onClick={() => toggleGroup(l1.key, l1Progress.complete)}
             />
-            {!l1Collapsed && props.mode === 'roastgroup' && (
+            {!l1Collapsed && (
               <div className="ml-5 border-l-4 border-b-4 border-hi-navy/20">
                 {orderedChildren.map((child) => (
                   <AccountRail key={child.key} child={child} props={props} />
                 ))}
               </div>
             )}
-              {!l1Collapsed && props.mode === 'account' &&
-                orderedChildren.map((l2) => {
-                  const l2Collapsed = !expandedKeys.has(l2.key);
-                  const l2Progress = progressForLeaves(l2.leaves, props);
-                  const l2WipStatus = wipStatusForLeaves(l2.leaves, props);
-                  return (
-                    <div
-                      key={l2.key}
-                      className={`ml-5 border-l-4 border-b-2 border-hi-navy/20 transition-opacity last:border-b-4 ${
-                        l2Collapsed && demotedKeys.has(l2.key) && l2Progress.complete ? 'opacity-50' : ''
-                      }`}
-                    >
-                      <GroupHeader
-                        label={l2.label}
-                        kind={l2.kind}
-                        totalUnits={l2.totalUnits}
-                        orderCount={l2.orderCount}
-                        wipKg={l2.wipKg}
-                        planned={l2.planned}
-                        collapsed={l2Collapsed}
-                        level={2}
-                        packedUnits={l2Progress.packed}
-                        complete={l2Progress.complete}
-                        deemphasized={l2Collapsed && demotedKeys.has(l2.key) && l2Progress.complete}
-                        wipStatus={l2WipStatus}
-                        onClick={() => toggleGroup(l2.key, l2Progress.complete)}
-                      />
-                    {!l2Collapsed && (
-                      <div>
-                        {l2.leaves.map((leaf) => (
-                          <LeafRow key={leaf.key} leaf={leaf} props={props} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
           </div>
         );
       })}
