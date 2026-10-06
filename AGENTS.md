@@ -8,3 +8,4 @@
 - Keep packing controls directly on product rows without expandable product drawers, because each row must be fully actionable at a glance on the production floor.
 - Partition completed packing lines after unfinished lines inside both drawer views while retaining their side rails, because finished work must stay visible for reference.
 - Render weight totals through the shared kg/lb weight-unit setting rather than a hardcoded unit, because the reader's unit choice must carry across the app.
+- Resolve an order's location from `orders.location_id`, never `account_location_id`, because the legacy column is no longer written and reading only it silently misfiles every order under the account's first location.

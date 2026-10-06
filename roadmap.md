@@ -13,3 +13,4 @@
 - [x] Add a saved shipping-cost field to every invoicing drawer.
 - [x] Verify pricing and shipping entry in the preview.
 - [x] Add a total weight (kg or lb, following the reader's unit) to each invoicing drawer header.
+- [x] Show each order's location beside the account name in the invoicing drawer header.
