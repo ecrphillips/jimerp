@@ -27,9 +27,9 @@ export function DateFilterRail({ mode, onChange }: DateFilterRailProps) {
     <div
       role="group"
       aria-label="Run sheet date filter"
-      className="flex shrink-0 flex-col gap-2 sm:sticky sm:top-32 sm:w-36 lg:top-4"
+      className="flex w-full shrink-0 flex-row gap-2 lg:w-36 lg:flex-col"
     >
-      <span className="hidden text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground sm:block">
+      <span className="hidden text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground lg:block">
         Run sheet
       </span>
       {OPTIONS.map(({ value, label, hint, icon: Icon }) => {
@@ -41,7 +41,7 @@ export function DateFilterRail({ mode, onChange }: DateFilterRailProps) {
             aria-pressed={active}
             onClick={() => onChange(value)}
             className={[
-              'flex flex-1 flex-col items-start rounded-lg border border-l-4 px-3 py-2 text-left transition-all sm:flex-none',
+              'flex flex-1 flex-col items-start rounded-lg border border-l-4 px-3 py-2 text-left transition-all lg:flex-none',
               active
                 ? 'border-[hsl(var(--hi-navy))] border-l-[hsl(var(--hi-sand))] bg-[hsl(var(--hi-navy))] text-[hsl(var(--hi-sand))] shadow-sm'
                 : 'border-border border-l-transparent bg-card text-muted-foreground hover:border-[hsl(var(--hi-steel-blue)/0.45)] hover:text-foreground',

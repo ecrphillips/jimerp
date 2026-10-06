@@ -93,7 +93,7 @@ export default function Production() {
       </div>
 
       {/* Station Tabs */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-5">
         {/* The run-sheet date filter is a left rail so the applied filter is obvious;
             Invoicing is date-independent, so it has no rail. */}
         {stationView !== 'invoicing' && (
