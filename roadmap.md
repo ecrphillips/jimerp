@@ -1,6 +1,7 @@
 # Roadmap
 
 - [x] Make Today the standard run-sheet filter and show it as a visible left rail (a strip above the tabs on narrower screens).
+- [x] Nudge the run-sheet rail down so its first card is justified to the top of the Pack SKUs section.
 
 - [x] Add the fifth Invoicing tab to Production.
 - [x] Move shipped orders awaiting invoice out of Ship.
