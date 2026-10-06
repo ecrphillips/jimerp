@@ -159,7 +159,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
           .from('orders')
           .select(
             `id, order_number, status, created_at, work_deadline_at, work_deadline,
-             account_id, account_location_id, client_id,
+             account_id, account_location_id, location_id, client_id,
              accounts!orders_account_id_fkey(account_name),
              account_locations!orders_account_location_id_fkey(location_name),
              clients(name),
@@ -205,7 +205,9 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
           order_number: o.order_number,
           status: o.status,
           account_id: o.account_id ?? null,
-          account_location_id: o.account_location_id ?? null,
+          // Order forms save the store in location_id; account_location_id is an
+          // older column nothing writes anymore. Read both.
+          account_location_id: o.location_id ?? o.account_location_id ?? null,
           accountName:
             (o.accounts as { account_name?: string } | null)?.account_name ??
             (o.clients as { name?: string } | null)?.name ??
