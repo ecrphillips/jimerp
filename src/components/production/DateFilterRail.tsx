@@ -27,7 +27,7 @@ export function DateFilterRail({ mode, onChange }: DateFilterRailProps) {
     <div
       role="group"
       aria-label="Run sheet date filter"
-      className="flex shrink-0 flex-col gap-2 sm:sticky sm:top-4 sm:w-36"
+      className="flex shrink-0 flex-col gap-2 sm:sticky sm:top-20 sm:w-36 lg:top-4"
     >
       <span className="hidden text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground sm:block">
         Run sheet
