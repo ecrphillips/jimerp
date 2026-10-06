@@ -333,6 +333,13 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
           if (days.includes(jsDay)) {
             const locOrders = acctOrdersToday.filter((o) => {
               if (o.account_location_id) return o.account_location_id === loc.id;
+              // No saved location: infer from the order number's location code
+              // (e.g. OLHLGY-000199 → LGY) before falling back to primary.
+              const prefix = (o.order_number ?? '').split('-')[0] ?? '';
+              const byCode = acct.locations.find(
+                (l) => l.location_code && prefix.length > l.location_code.length && prefix.endsWith(l.location_code),
+              );
+              if (byCode) return byCode.id === loc.id;
               return primary?.id === loc.id;
             });
             scheduledLocs.push({
