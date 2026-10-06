@@ -30,6 +30,7 @@ interface AwaitingInvoiceOrder {
   order_number: string;
   client: { name: string } | null;
   account: { account_name: string } | null;
+  location: { location_name: string } | null;
   shipping_cost_cad: number | null;
   line_items: InvoiceLineItem[] | null;
 }
@@ -66,6 +67,11 @@ function InvoiceOrderRow({ order, onMarkInvoiced, onSaveShipping, isUpdating, is
           <span className="font-semibold">{order.order_number}</span>
           <span className="text-muted-foreground">•</span>
           <span className="truncate">{order.account?.account_name ?? order.client?.name ?? 'Unknown'}</span>
+          {order.location?.location_name && (
+            <span className="shrink-0 rounded border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+              {order.location.location_name}
+            </span>
+          )}
           <span className="whitespace-nowrap text-xs text-muted-foreground">
             {lineItems.length} item{lineItems.length !== 1 ? 's' : ''} · {totalUnits} unit{totalUnits !== 1 ? 's' : ''}
             {weightLabel ? ` · ${weightLabel}` : ''}
@@ -150,6 +156,7 @@ export function InvoicingTab() {
           shipping_cost_cad,
           client:clients(name),
           account:accounts(account_name),
+          location:account_locations!orders_location_id_fkey(location_name),
           line_items:order_line_items(
             id,
             quantity_units,
