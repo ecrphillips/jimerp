@@ -1,5 +1,7 @@
 # Roadmap
 
+- [x] Make Today the standard run-sheet filter and show it as a visible left rail.
+
 - [x] Add the fifth Invoicing tab to Production.
 - [x] Move shipped orders awaiting invoice out of Ship.
 - [x] Add expandable order-content drawers while preserving Mark Invoiced.
