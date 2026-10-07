@@ -111,7 +111,8 @@ type AccountRow = {
   locations: Array<AccountLocationRow>;
 };
 
-export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabProps) {
+export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
+  const filterMode = dateFilterConfig.mode;
   const queryClient = useQueryClient();
   const [dismissed, setDismissed] = useState<Set<string>>(() => readDismissed());
 
