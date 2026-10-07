@@ -15,6 +15,13 @@
       "when": 1791411734687,
       "tag": "0001_normalize_product_packaging",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791412315614,
+      "tag": "0002_block_batches_on_post_roast_blends",
+      "breakpoints": true
     }
   ]
 }
