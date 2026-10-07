@@ -818,7 +818,7 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
 
       {/* BUCKET 2 — Other today */}
       <BucketShell
-        title="Other orders due today"
+        title={buckets?.isTomorrowMode ? 'Other orders due tomorrow' : 'Other orders due today'}
         right={
           buckets ? (
             <span className="text-xs text-muted-foreground">
@@ -842,7 +842,7 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
 
       {/* BUCKET 3 — Work ahead (tomorrow) */}
       <BucketShell
-        title="Work ahead — tomorrow"
+        title={buckets?.isTomorrowMode ? 'Work ahead — rest of week' : 'Work ahead — tomorrow'}
         right={
           buckets ? (
             <span className="text-xs text-muted-foreground">
