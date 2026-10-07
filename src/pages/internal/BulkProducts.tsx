@@ -41,6 +41,7 @@ const PACKAGING_OPTIONS: { value: PackagingVariant; label: string }[] = [
 ];
 
 const BAG_SIZE_MAP: Record<PackagingVariant, number> = {
+  RETAIL_200G: 200,
   RETAIL_250G: 250,
   RETAIL_300G: 300,
   RETAIL_340G: 340,

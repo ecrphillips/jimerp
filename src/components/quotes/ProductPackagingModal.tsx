@@ -40,6 +40,7 @@ interface ProductPackagingModalProps {
 
 const variantToGrams = (v: PackagingVariant): number => {
   const map: Record<PackagingVariant, number> = {
+    RETAIL_200G: 200,
     RETAIL_250G: 250,
     RETAIL_300G: 300,
     RETAIL_340G: 340,
