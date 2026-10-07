@@ -809,6 +809,7 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
                 key={row.account.id}
                 row={row}
                 lastFunkImport={isFunk(row.account.account_name) ? lastFunkImport : null}
+                dayLabel={buckets.isTomorrowMode ? 'tomorrow' : 'today'}
               />
             ))}
           </div>
@@ -1024,6 +1025,7 @@ function BucketShell({
 function PriorityAccountCard({
   row,
   lastFunkImport,
+  dayLabel = 'today',
 }: {
   row: {
     account: AccountRow;
@@ -1043,6 +1045,7 @@ function PriorityAccountCard({
     orders_new: number;
     orders_skipped: number;
   } | null;
+  dayLabel?: string;
 }) {
   const [open, setOpen] = useState(!row.allCovered);
   const missingCount = row.locations.filter((l) => l.orders.length === 0).length;
@@ -1187,7 +1190,7 @@ function PriorityAccountCard({
                   ) : (
                     <div className="flex flex-wrap items-center gap-2 px-3 py-2">
                       <span className="text-destructive">
-                        No order entered for {subjectLabel} today.
+                        No order entered for {subjectLabel} {dayLabel}.
                       </span>
                       {lastFunkImport !== null || /funk/i.test(row.account.account_name) ? (
                         <Button asChild size="sm" variant="outline" className="h-6 text-[11px]">
