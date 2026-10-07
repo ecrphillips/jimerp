@@ -185,7 +185,7 @@ export function SortablePackRow({
         <td className="py-3">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium">{productName}</span>
-            <PackagingBadge variant={packagingVariant} />
+            <PackagingBadge variant={packagingVariant} bagSizeG={bagSizeG} />
             {/* Bought-in item: attention-only cue, styled like the grind alarm */}
             {!requiresProduction && (
               <Badge className="text-xs font-bold uppercase tracking-wide bg-amber-500 text-white border-amber-600 hover:bg-amber-500">

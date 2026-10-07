@@ -274,7 +274,7 @@ function LeafRow({
         </div>
 
         <div className="shrink-0 flex items-center justify-end gap-2 text-right">
-          <PackagingBadge variant={leaf.packagingVariant} className="bg-card/70" />
+          <PackagingBadge variant={leaf.packagingVariant} bagSizeG={leaf.bagSizeG} className="bg-card/70" />
           <div className="min-w-14">
             <span className="text-lg font-black tabular-nums">{leaf.units}</span>
             <span className="block text-[10px] font-bold uppercase text-muted-foreground">units</span>
