@@ -760,11 +760,11 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold">
-                Today’s demand — {buckets.weekdayName}
+                {buckets.isTomorrowMode ? 'Tomorrow’s demand' : 'Today’s demand'} — {buckets.weekdayName}
               </p>
               <p className="text-xs text-muted-foreground">
                 {buckets.summary.orderCount} order
-                {buckets.summary.orderCount === 1 ? '' : 's'} with today’s work deadline
+                {buckets.summary.orderCount === 1 ? '' : 's'} with {buckets.isTomorrowMode ? 'tomorrow’s' : 'today’s'} work deadline
               </p>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
@@ -785,7 +785,7 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
       {/* BUCKET 1 — Priority accounts (today is a set production day) */}
       <BucketShell
         icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
-        title={`Priority accounts — ${buckets?.weekdayName ?? ''}`}
+        title={`Priority accounts — ${buckets?.weekdayName ?? ''}${buckets?.isTomorrowMode ? ' (tomorrow)' : ''}`}
         right={
           buckets ? (
             <span className="text-xs text-muted-foreground">
