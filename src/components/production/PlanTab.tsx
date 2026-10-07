@@ -111,7 +111,8 @@ type AccountRow = {
   locations: Array<AccountLocationRow>;
 };
 
-export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabProps) {
+export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
+  const filterMode = dateFilterConfig.mode;
   const queryClient = useQueryClient();
   const [dismissed, setDismissed] = useState<Set<string>>(() => readDismissed());
 
@@ -266,10 +267,28 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
     );
     const jsTomorrow = (jsDay + 1) % 7;
 
-    const todayOrders = planData.orders.filter((o) => o.workDeadlineDate === today);
-    const tomorrowOrders = planData.orders.filter(
-      (o) => o.workDeadlineDate === tomorrowStr && o.status !== 'SHIPPED'
+    // Focus day: 'tomorrow' refocuses the whole tab on tomorrow; 'today' and
+    // 'all' both start from today.
+    const isTomorrowMode = filterMode === 'tomorrow';
+    const focusDateStr = isTomorrowMode ? tomorrowStr : today;
+    const jsFocus = isTomorrowMode ? jsTomorrow : jsDay;
+    // End of the current week (Saturday) — the ceiling for "work ahead" in
+    // tomorrow mode.
+    const saturdayStr = formatInTimeZone(
+      new Date(Date.now() + (6 - jsDay) * 24 * 60 * 60 * 1000),
+      TIMEZONE,
+      'yyyy-MM-dd'
     );
+
+    const todayOrders = planData.orders.filter((o) => o.workDeadlineDate === focusDateStr);
+    const tomorrowOrders = planData.orders.filter((o) => {
+      if (o.status === 'SHIPPED' || !o.workDeadlineDate) return false;
+      if (isTomorrowMode) {
+        // Work ahead = anything else due later this week.
+        return o.workDeadlineDate > focusDateStr && o.workDeadlineDate <= saturdayStr;
+      }
+      return o.workDeadlineDate === tomorrowStr;
+    });
 
     // Compute effective production weekdays for a location (override → account default).
     const effectiveDaysFor = (
@@ -320,7 +339,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
 
       if (acct.locations.length === 0) {
         const days = acct.production_weekdays ?? [];
-        if (days.includes(jsDay)) {
+        if (days.includes(jsFocus)) {
           scheduledLocs.push({
             location: null,
             orders: acctOrdersToday,
@@ -332,7 +351,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
         for (const loc of acct.locations) {
           if (!loc.is_active) continue;
           const days = effectiveDaysFor(acct, loc);
-          if (days.includes(jsDay)) {
+          if (days.includes(jsFocus)) {
             const locOrders = acctOrdersToday.filter((o) => {
               if (o.account_location_id) return o.account_location_id === loc.id;
               // No saved location: infer from the order number's location code
@@ -452,9 +471,13 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
         fgCover: totalFgCover,
         netDemand,
       },
-      weekdayName: format(vNow, 'EEEE'),
+      weekdayName: format(
+        isTomorrowMode ? new Date(vNow.getTime() + 24 * 60 * 60 * 1000) : vNow,
+        'EEEE'
+      ),
+      isTomorrowMode,
     };
-  }, [planData, today, wipByGroup, fgByProduct]);
+  }, [planData, today, wipByGroup, fgByProduct, filterMode]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Anomalies + orphans (unchanged from prior version)
@@ -737,11 +760,11 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold">
-                Today’s demand — {buckets.weekdayName}
+                {buckets.isTomorrowMode ? 'Tomorrow’s demand' : 'Today’s demand'} — {buckets.weekdayName}
               </p>
               <p className="text-xs text-muted-foreground">
                 {buckets.summary.orderCount} order
-                {buckets.summary.orderCount === 1 ? '' : 's'} with today’s work deadline
+                {buckets.summary.orderCount === 1 ? '' : 's'} with {buckets.isTomorrowMode ? 'tomorrow’s' : 'today’s'} work deadline
               </p>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
@@ -762,7 +785,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
       {/* BUCKET 1 — Priority accounts (today is a set production day) */}
       <BucketShell
         icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
-        title={`Priority accounts — ${buckets?.weekdayName ?? ''}`}
+        title={`Priority accounts — ${buckets?.weekdayName ?? ''}${buckets?.isTomorrowMode ? ' (tomorrow)' : ''}`}
         right={
           buckets ? (
             <span className="text-xs text-muted-foreground">
@@ -786,6 +809,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
                 key={row.account.id}
                 row={row}
                 lastFunkImport={isFunk(row.account.account_name) ? lastFunkImport : null}
+                dayLabel={buckets.isTomorrowMode ? 'tomorrow' : 'today'}
               />
             ))}
           </div>
@@ -795,7 +819,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
 
       {/* BUCKET 2 — Other today */}
       <BucketShell
-        title="Other orders due today"
+        title={buckets?.isTomorrowMode ? 'Other orders due tomorrow' : 'Other orders due today'}
         right={
           buckets ? (
             <span className="text-xs text-muted-foreground">
@@ -810,7 +834,9 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
           </div>
         ) : buckets.bucket2.length === 0 ? (
           <div className="px-4 py-3 text-xs text-muted-foreground">
-            None — every today-deadline order belongs to a priority account.
+            {buckets.isTomorrowMode
+              ? 'None — every tomorrow-deadline order belongs to a priority account.'
+              : 'None — every today-deadline order belongs to a priority account.'}
           </div>
         ) : (
           <OrderList orders={buckets.bucket2} />
@@ -819,7 +845,7 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
 
       {/* BUCKET 3 — Work ahead (tomorrow) */}
       <BucketShell
-        title="Work ahead — tomorrow"
+        title={buckets?.isTomorrowMode ? 'Work ahead — rest of week' : 'Work ahead — tomorrow'}
         right={
           buckets ? (
             <span className="text-xs text-muted-foreground">
@@ -833,11 +859,13 @@ export function PlanTab({ dateFilterConfig: _dateFilterConfig, today }: PlanTabP
             <Skeleton className="h-12 w-full" />
           </div>
         ) : buckets.bucket3.length === 0 ? (
-          <div className="px-4 py-3 text-xs text-muted-foreground">No orders for tomorrow yet.</div>
+          <div className="px-4 py-3 text-xs text-muted-foreground">
+            {buckets.isTomorrowMode ? 'No more orders due this week.' : 'No orders for tomorrow yet.'}
+          </div>
         ) : (
           <OrderList
             orders={buckets.bucket3}
-            highlightAccountIds={buckets.tomorrowPriorityIds}
+            highlightAccountIds={buckets.isTomorrowMode ? undefined : buckets.tomorrowPriorityIds}
           />
         )}
       </BucketShell>
@@ -997,6 +1025,7 @@ function BucketShell({
 function PriorityAccountCard({
   row,
   lastFunkImport,
+  dayLabel = 'today',
 }: {
   row: {
     account: AccountRow;
@@ -1016,6 +1045,7 @@ function PriorityAccountCard({
     orders_new: number;
     orders_skipped: number;
   } | null;
+  dayLabel?: string;
 }) {
   const [open, setOpen] = useState(!row.allCovered);
   const missingCount = row.locations.filter((l) => l.orders.length === 0).length;
@@ -1160,7 +1190,7 @@ function PriorityAccountCard({
                   ) : (
                     <div className="flex flex-wrap items-center gap-2 px-3 py-2">
                       <span className="text-destructive">
-                        No order entered for {subjectLabel} today.
+                        No order entered for {subjectLabel} {dayLabel}.
                       </span>
                       {lastFunkImport !== null || /funk/i.test(row.account.account_name) ? (
                         <Button asChild size="sm" variant="outline" className="h-6 text-[11px]">
