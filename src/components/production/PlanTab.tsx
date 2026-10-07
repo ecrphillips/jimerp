@@ -267,10 +267,28 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
     );
     const jsTomorrow = (jsDay + 1) % 7;
 
-    const todayOrders = planData.orders.filter((o) => o.workDeadlineDate === today);
-    const tomorrowOrders = planData.orders.filter(
-      (o) => o.workDeadlineDate === tomorrowStr && o.status !== 'SHIPPED'
+    // Focus day: 'tomorrow' refocuses the whole tab on tomorrow; 'today' and
+    // 'all' both start from today.
+    const isTomorrowMode = filterMode === 'tomorrow';
+    const focusDateStr = isTomorrowMode ? tomorrowStr : today;
+    const jsFocus = isTomorrowMode ? jsTomorrow : jsDay;
+    // End of the current week (Saturday) — the ceiling for "work ahead" in
+    // tomorrow mode.
+    const saturdayStr = formatInTimeZone(
+      new Date(Date.now() + (6 - jsDay) * 24 * 60 * 60 * 1000),
+      TIMEZONE,
+      'yyyy-MM-dd'
     );
+
+    const todayOrders = planData.orders.filter((o) => o.workDeadlineDate === focusDateStr);
+    const tomorrowOrders = planData.orders.filter((o) => {
+      if (o.status === 'SHIPPED' || !o.workDeadlineDate) return false;
+      if (isTomorrowMode) {
+        // Work ahead = anything else due later this week.
+        return o.workDeadlineDate > focusDateStr && o.workDeadlineDate <= saturdayStr;
+      }
+      return o.workDeadlineDate === tomorrowStr;
+    });
 
     // Compute effective production weekdays for a location (override → account default).
     const effectiveDaysFor = (
