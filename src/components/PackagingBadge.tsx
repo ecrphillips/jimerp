@@ -58,11 +58,19 @@ const IconComponent: React.FC<{ icon: 'package' | 'can' | 'bulk'; className?: st
   }
 };
 
-export const PackagingBadge: React.FC<PackagingBadgeProps> = ({ variant, className = '' }) => {
-  if (!variant) return null;
-
-  const config = PACKAGING_CONFIG[variant];
-  if (!config) return null;
+export const PackagingBadge: React.FC<PackagingBadgeProps & { bagSizeG?: number | null }> = ({ variant, bagSizeG, className = '' }) => {
+  const config = variant ? PACKAGING_CONFIG[variant] : undefined;
+  if (!config) {
+    // Fallback for products saved without a packaging variant: show grams.
+    if (!bagSizeG || bagSizeG <= 0) return null;
+    const weight = bagSizeG >= 1000 ? `${+(bagSizeG / 1000).toFixed(2)}kg` : `${bagSizeG}g`;
+    return (
+      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-medium border rounded bg-muted text-foreground print:bg-transparent print:border-foreground ${className}`}>
+        <Package className="w-3 h-3" />
+        <span>{weight}</span>
+      </span>
+    );
+  }
 
   return (
     <span
