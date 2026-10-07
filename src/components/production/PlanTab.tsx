@@ -471,9 +471,13 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
         fgCover: totalFgCover,
         netDemand,
       },
-      weekdayName: format(vNow, 'EEEE'),
+      weekdayName: format(
+        isTomorrowMode ? new Date(vNow.getTime() + 24 * 60 * 60 * 1000) : vNow,
+        'EEEE'
+      ),
+      isTomorrowMode,
     };
-  }, [planData, today, wipByGroup, fgByProduct]);
+  }, [planData, today, wipByGroup, fgByProduct, filterMode]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Anomalies + orphans (unchanged from prior version)
