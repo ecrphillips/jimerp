@@ -12,6 +12,7 @@ import type { PackagingVariant } from '@/components/PackagingBadge';
 const lb = (pounds: number): number => Math.round(pounds * KG_PER_LB * G_PER_KG);
 
 export const PACKAGING_GRAMS: Record<PackagingVariant, number> = {
+  RETAIL_200G: 200,
   RETAIL_250G: 250,
   RETAIL_300G: 300,
   RETAIL_340G: 340,

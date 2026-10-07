@@ -2,6 +2,7 @@ import React from 'react';
 import { Package, Coffee, Archive } from 'lucide-react';
 
 export type PackagingVariant =
+  | 'RETAIL_200G'
   | 'RETAIL_250G'
   | 'RETAIL_300G'
   | 'RETAIL_340G'
@@ -20,6 +21,7 @@ interface PackagingBadgeProps {
 }
 
 const PACKAGING_CONFIG: Record<PackagingVariant, { type: string; weight: string; icon: 'package' | 'can' | 'bulk' }> = {
+  RETAIL_200G: { type: 'RETAIL', weight: '200g', icon: 'package' },
   RETAIL_250G: { type: 'RETAIL', weight: '250g', icon: 'package' },
   RETAIL_300G: { type: 'RETAIL', weight: '300g', icon: 'package' },
   RETAIL_340G: { type: 'RETAIL', weight: '340g', icon: 'package' },
@@ -34,6 +36,7 @@ const PACKAGING_CONFIG: Record<PackagingVariant, { type: string; weight: string;
 };
 
 export const PACKAGING_OPTIONS: { value: PackagingVariant; label: string }[] = [
+  { value: 'RETAIL_200G', label: 'Retail bag – 200g' },
   { value: 'RETAIL_250G', label: 'Retail bag – 250g' },
   { value: 'RETAIL_300G', label: 'Retail bag – 300g' },
   { value: 'RETAIL_340G', label: 'Retail bag – 340g' },

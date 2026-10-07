@@ -6665,6 +6665,7 @@ export type Database = {
         | "BULK_1KG"
         | "BULK_5LB"
         | "BULK_2KG"
+        | "RETAIL_200G"
       product_format: "WHOLE_BEAN" | "ESPRESSO" | "FILTER" | "OTHER"
       production_status:
         | "PLANNED"
@@ -6918,6 +6919,7 @@ export const Constants = {
         "BULK_1KG",
         "BULK_5LB",
         "BULK_2KG",
+        "RETAIL_200G",
       ],
       product_format: ["WHOLE_BEAN", "ESPRESSO", "FILTER", "OTHER"],
       production_status: ["PLANNED", "ROASTED", "PACKED", "STAGED", "COMPLETE"],

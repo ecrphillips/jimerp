@@ -208,6 +208,7 @@ export interface ParsedBagSize {
 }
 
 const GRAMS_BY_VARIANT: Record<PackagingVariant, number> = {
+  RETAIL_200G: 200,
   RETAIL_250G: 250,
   RETAIL_300G: 300,
   RETAIL_340G: 340,
