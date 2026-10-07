@@ -1711,7 +1711,11 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                     <SelectValue placeholder="Select roast group…" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(roastGroupsConfig ?? []).map((rg) => (
+                    {(roastGroupsConfig ?? [])
+                      // Post-roast blends are never roasted directly — their
+                      // component coffees are planned via "Plan batches".
+                      .filter((rg) => !(rg.is_blend && rg.blend_type !== 'PRE_ROAST'))
+                      .map((rg) => (
                       <SelectItem key={rg.roast_group} value={rg.roast_group}>
                         {rg.display_name ?? rg.roast_group}
                       </SelectItem>
