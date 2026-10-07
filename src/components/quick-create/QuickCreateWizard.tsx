@@ -245,7 +245,8 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
 
         const { data: product, error } = await supabase.from('products').insert({
           account_id: pClientId,
-          product_name: `${pProductName.trim()} ${pkgOpt.label}`,
+          product_name: pProductName.trim(),
+          grams_per_unit: pkgOpt.grams,
           roast_group: roastGroupKey,
           packaging_variant: v.variant as any,
           bag_size_g: pkgOpt.grams,

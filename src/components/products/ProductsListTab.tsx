@@ -81,8 +81,8 @@ function legacyVariantFor(typeName: string, grams: number): PackagingVariant | n
     'RETAIL:340': 'RETAIL_340G', 'RETAIL:454': 'RETAIL_454G',
     'CROWLER:200': 'CROWLER_200G', 'CROWLER:250': 'CROWLER_250G',
     'CAN:125': 'CAN_125G',
-    'BULK:907': 'BULK_2LB', 'BULK:1000': 'BULK_1KG',
-    'BULK:2268': 'BULK_5LB', 'BULK:2000': 'BULK_2KG',
+    'BULK:907': 'BULK_2LB', 'BULK:908': 'BULK_2LB', 'BULK:1000': 'BULK_1KG',
+    'BULK:2268': 'BULK_5LB', 'BULK:2270': 'BULK_5LB', 'BULK:2000': 'BULK_2KG',
   };
   return (candidates[`${family}:${grams}`] as PackagingVariant) ?? null;
 }
@@ -668,10 +668,9 @@ export function ProductsListTab() {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   }, [variantSizeChoice, variantCustomGrams]);
   const variantIsDuplicate = variantGrams > 0 && takenSizes.has(variantGrams);
-  const variantNewName =
-    variantTypeName && variantGrams > 0
-      ? `${variantBaseName} ${formatSizeCompact(variantGrams)} ${variantTypeName}`
-      : '';
+  // Product names hold only the coffee name; size/type live in the packaging
+  // fields (and the size badge), same as every other creation screen.
+  const variantNewName = variantTypeName && variantGrams > 0 ? variantBaseName : '';
 
   const addVariantMutation = useMutation({
     mutationFn: async () => {
@@ -1213,8 +1212,9 @@ export function ProductsListTab() {
               </div>
               {variantNewName && (
                 <div className="rounded-md border border-dashed p-2 bg-muted/30 text-sm">
-                  <span className="text-muted-foreground">New product name:</span>{' '}
+                  <span className="text-muted-foreground">New product:</span>{' '}
                   <span className="font-medium">{variantNewName}</span>
+                  <span className="text-muted-foreground"> — {formatSizeCompact(variantGrams)} {variantTypeName}</span>
                 </div>
               )}
               <div>
