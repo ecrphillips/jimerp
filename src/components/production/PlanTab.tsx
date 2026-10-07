@@ -856,11 +856,13 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
             <Skeleton className="h-12 w-full" />
           </div>
         ) : buckets.bucket3.length === 0 ? (
-          <div className="px-4 py-3 text-xs text-muted-foreground">No orders for tomorrow yet.</div>
+          <div className="px-4 py-3 text-xs text-muted-foreground">
+            {buckets.isTomorrowMode ? 'No more orders due this week.' : 'No orders for tomorrow yet.'}
+          </div>
         ) : (
           <OrderList
             orders={buckets.bucket3}
-            highlightAccountIds={buckets.tomorrowPriorityIds}
+            highlightAccountIds={buckets.isTomorrowMode ? undefined : buckets.tomorrowPriorityIds}
           />
         )}
       </BucketShell>
