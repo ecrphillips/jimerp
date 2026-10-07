@@ -500,6 +500,8 @@ export function PackGroupedView(props: PackGroupedViewProps) {
         const orderedChildren = partitionPackDrawerLines<PackLeafNode, PackL2Node>(
           l1.children,
           (leaf) => leaf.requiresProduction && progressForLeaf(leaf, props).complete,
+          // Smallest to largest bag size so every drawer reads in the same order.
+          (a, b) => a.bagSizeG - b.bagSizeG || a.productName.localeCompare(b.productName),
         );
         return (
           <div

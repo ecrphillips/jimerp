@@ -18,6 +18,27 @@ describe('partitionPackDrawerLines', () => {
       .toEqual(['pending-A', 'pending-B', 'done-A', 'done-B']);
     expect(groups[0].leaves.map((line) => line.id)).toEqual(['done-A', 'pending-A']);
   });
+
+  it('sorts lines smallest to largest within each partition when a comparator is given', () => {
+    const groups = [
+      {
+        key: 'A',
+        leaves: [
+          { id: 'big-pending', size: 2268, complete: false },
+          { id: 'small-done', size: 250, complete: true },
+          { id: 'small-pending', size: 250, complete: false },
+          { id: 'mid-done', size: 907, complete: true },
+        ],
+      },
+    ];
+    const result = partitionPackDrawerLines(
+      groups,
+      (line: { id: string; size: number; complete: boolean }) => line.complete,
+      (a: { size: number }, b: { size: number }) => a.size - b.size,
+    );
+    expect(result.flatMap((group) => group.leaves.map((line) => line.id)))
+      .toEqual(['small-pending', 'big-pending', 'small-done', 'mid-done']);
+  });
 });
 
 describe('rollUpGroupTier', () => {
