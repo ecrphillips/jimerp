@@ -619,86 +619,6 @@ export default function NewOrder() {
     }
   };
 
-  // Render a single product SKU row
-  const renderProductRow = (p: Product) => {
-    const lineItem = getLineItem(p.id);
-    const hasPrice = prices && p.id in prices;
-    const price = prices?.[p.id];
-    const isCaseOnly = constraints.caseOnly && constraints.caseSize;
-    const packagingTypeName = p.packaging_types?.name ?? null;
-    const gramsPerUnit = p.grams_per_unit;
-
-    const handleQuantityChange = (qty: number) => {
-      if (qty <= 0) {
-        removeLine(p.id);
-        return;
-      }
-      const existing = getLineItem(p.id);
-      if (!existing) {
-        setLineItems([...lineItems, createLineItem(p, qty)]);
-      } else {
-        updateQuantity(p.id, qty);
-      }
-    };
-
-    return (
-      <li key={p.id} className="flex items-center justify-between py-2 border-b last:border-0">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <span className="font-medium truncate">{p.product_name}</span>
-          <span className="text-sm font-medium">
-            {gramsPerUnit ? formatGramsLabel(gramsPerUnit) : `${p.bag_size_g}g`}
-          </span>
-          {packagingTypeName && (
-            <span className="text-xs text-muted-foreground">{packagingTypeName}</span>
-          )}
-          {hidePricing ? null : hasPrice ? (
-            <span className="text-sm text-muted-foreground">${price!.toFixed(2)}</span>
-          ) : (
-            <span className="text-xs text-destructive">No price</span>
-          )}
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {isCaseOnly ? (
-            <CaseQuantityInput
-              value={lineItem?.quantity ?? 0}
-              onChange={handleQuantityChange}
-              caseSize={constraints.caseSize!}
-            />
-          ) : (
-            <>
-              <Button
-                size="icon"
-                variant="outline"
-                className="h-7 w-7"
-                onClick={() => updateQuantity(p.id, (lineItem?.quantity ?? 0) - 1)}
-                disabled={!lineItem}
-              >
-                <Minus className="h-3 w-3" />
-              </Button>
-              <Input
-                type="text"
-                inputMode="numeric"
-                className="w-14 h-7 text-center text-sm px-1"
-                value={lineItem?.quantity ?? ''}
-                placeholder="0"
-                onChange={(e) => handleQuantityInputChange(p.id, e.target.value)}
-                onKeyDown={blockNonIntegerKeys}
-              />
-              <Button
-                size="icon"
-                variant="outline"
-                className="h-7 w-7"
-                onClick={() => addOrIncrementProduct(p.id)}
-              >
-                <Plus className="h-3 w-3" />
-              </Button>
-            </>
-          )}
-        </div>
-      </li>
-    );
-  };
-
   // Render product group (base product name as header, variants underneath)
   const renderProductGroup = (baseName: string, variants: Product[]) => {
     // Sort variants by grams per unit (smallest to largest)
@@ -707,11 +627,6 @@ export default function NewOrder() {
       const gramsB = b.grams_per_unit ?? b.bag_size_g ?? 0;
       return gramsA - gramsB;
     });
-
-    if (sortedVariants.length === 1) {
-      // Single variant - no grouping needed
-      return renderProductRow(sortedVariants[0]);
-    }
 
     // Multiple variants - show as grouped section
     return (
