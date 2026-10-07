@@ -339,7 +339,7 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
 
       if (acct.locations.length === 0) {
         const days = acct.production_weekdays ?? [];
-        if (days.includes(jsDay)) {
+        if (days.includes(jsFocus)) {
           scheduledLocs.push({
             location: null,
             orders: acctOrdersToday,
@@ -351,7 +351,7 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
         for (const loc of acct.locations) {
           if (!loc.is_active) continue;
           const days = effectiveDaysFor(acct, loc);
-          if (days.includes(jsDay)) {
+          if (days.includes(jsFocus)) {
             const locOrders = acctOrdersToday.filter((o) => {
               if (o.account_location_id) return o.account_location_id === loc.id;
               // No saved location: infer from the order number's location code
