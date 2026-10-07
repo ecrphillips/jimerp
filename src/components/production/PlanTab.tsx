@@ -833,7 +833,9 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
           </div>
         ) : buckets.bucket2.length === 0 ? (
           <div className="px-4 py-3 text-xs text-muted-foreground">
-            None — every today-deadline order belongs to a priority account.
+            {buckets.isTomorrowMode
+              ? 'None — every tomorrow-deadline order belongs to a priority account.'
+              : 'None — every today-deadline order belongs to a priority account.'}
           </div>
         ) : (
           <OrderList orders={buckets.bucket2} />
