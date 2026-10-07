@@ -17,10 +17,13 @@
 export type PackSortMode = 'wip' | 'newest' | 'oldest' | 'alpha';
 export type WipTier = 'full' | 'partial' | 'none';
 
-/** Retain every line and its rail, placing completed work last within a drawer. */
+/** Retain every line and its rail, placing completed work last within a drawer.
+ *  When `compare` is given, lines are sorted with it within each partition, so
+ *  every drawer lists its products in the same predictable order. */
 export function partitionPackDrawerLines<T, G extends { key: string; leaves: T[] }>(
   groups: G[],
   isComplete: (line: T) => boolean,
+  compare?: (a: T, b: T) => number,
 ): G[] {
   const pending: G[] = [];
   const completed: G[] = [];
@@ -29,6 +32,10 @@ export function partitionPackDrawerLines<T, G extends { key: string; leaves: T[]
     const completedLeaves: T[] = [];
     for (const line of group.leaves) {
       (isComplete(line) ? completedLeaves : pendingLeaves).push(line);
+    }
+    if (compare) {
+      pendingLeaves.sort(compare);
+      completedLeaves.sort(compare);
     }
     if (pendingLeaves.length) pending.push({ ...group, key: `${group.key}:pending`, leaves: pendingLeaves });
     if (completedLeaves.length) completed.push({ ...group, key: `${group.key}:completed`, leaves: completedLeaves });
