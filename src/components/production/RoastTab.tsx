@@ -1865,7 +1865,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                     const { error } = await supabase.from('roasted_batches').insert({
                       roast_group: roastGroupKey,
                       target_date: today,
-                      planned_output_kg: plannedKg,
+                      planned_output_kg: inputKg,
                       actual_output_kg: 0,
                       status: 'PLANNED' as const,
                       assigned_roaster: addBatchRoaster || null,
@@ -1898,7 +1898,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                   // Skip depletion check for brand-new groups (no links yet)
                   if (!isNewlyCreated) {
                     const { impacts, pctByLinkId } = await evaluateMultiRoastGroupImpacts([
-                      { roastGroup: roastGroupKey, newPlannedOutputKg: plannedKg },
+                      { roastGroup: roastGroupKey, newPlannedOutputKg: inputKg },
                     ]);
                     if (impacts.length > 0) {
                       const rgDisplay = configByGroup[roastGroupKey]?.display_name ?? roastGroupKey;
