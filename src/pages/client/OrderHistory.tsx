@@ -7,11 +7,19 @@ import { usePreview } from '@/contexts/PreviewContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { parseDateOnly } from '@/lib/dateOnly';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Clock, PenSquare, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { LocationCodeDisplay } from '@/components/orders/LocationSelect';
 import { usePricingVisibility } from '@/hooks/usePricingVisibility';
 import { formatGramsLabel } from '@/components/GramPackagingBadge';
+import {
+  CHANGE_REQUEST_STATUSES,
+  DIRECT_EDIT_STATUSES,
+  clientDeliveryLabel,
+  plannedShipDate,
+  stripSoonestPrefix,
+} from '@/lib/clientOrderDisplay';
+import { ClientOrderEditDialog, type OrderChangePayload } from '@/components/client/ClientOrderEditDialog';
 
 interface Order {
   id: string;
@@ -24,7 +32,21 @@ interface Order {
   client_notes: string | null;
   created_at: string;
   location_id: string | null;
+  account_id: string | null;
+  shipped_at: string | null;
 }
+
+interface ChangeRequest {
+  id: string;
+  order_id: string;
+  status: 'PENDING' | 'APPROVED' | 'DECLINED' | 'WITHDRAWN' | 'AUTO_APPLIED';
+  proposed: OrderChangePayload;
+  requested_at: string;
+  resolved_at: string | null;
+  resolution_note: string | null;
+}
+
+const fmtDateOnly = (d: string | null) => (d ? format(parseDateOnly(d)!, 'MMM d, yyyy') : null);
 
 interface LineItemSummary {
   order_id: string;
@@ -38,6 +60,7 @@ export default function OrderHistory() {
   const { authUser, isInternal } = useAuth();
   const { hidePricing } = usePricingVisibility();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   // Effective account scope: preview mode (admin) wins, otherwise the signed-in user's account.
   const effectiveAccountId = previewAccountId ?? authUser?.accountId ?? null;
@@ -72,7 +95,7 @@ export default function OrderHistory() {
     queryFn: async () => {
       let q = supabase
         .from('orders')
-        .select('id, order_number, status, requested_ship_date, work_deadline_at, delivery_method, client_po, client_notes, created_at, location_id');
+        .select('id, order_number, status, requested_ship_date, work_deadline_at, delivery_method, client_po, client_notes, created_at, location_id, account_id, shipped_at');
       if (effectiveAccountId) q = q.eq('account_id', effectiveAccountId);
       const { data, error } = await q.order('created_at', { ascending: false });
 
@@ -118,14 +141,62 @@ export default function OrderHistory() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('order_line_items')
-        .select('id, quantity_units, unit_price_locked, product:products(product_name, packaging_variant, grams_per_unit, bag_size_g, packaging_type:packaging_types(name))')
+        .select('id, product_id, quantity_units, unit_price_locked, product:products(product_name, packaging_variant, grams_per_unit, bag_size_g, packaging_type:packaging_types(name))')
         .eq('order_id', selectedOrderId!)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      return (data ?? []) as { id: string; quantity_units: number; unit_price_locked: number; product: { product_name: string; packaging_variant: string | null; grams_per_unit: number | null; bag_size_g: number | null; packaging_type: { name: string } | null } | null }[];
+      return (data ?? []) as { id: string; product_id: string; quantity_units: number; unit_price_locked: number; product: { product_name: string; packaging_variant: string | null; grams_per_unit: number | null; bag_size_g: number | null; packaging_type: { name: string } | null } | null }[];
     },
     enabled: !!selectedOrderId,
+  });
+
+  // Orders with a change request awaiting Home Island review (list badges).
+  const { data: pendingOrderIds } = useQuery({
+    queryKey: ['client-order-change-requests', 'pending', orderIdsKey],
+    enabled: (orders ?? []).length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('order_change_requests')
+        .select('order_id')
+        .eq('status', 'PENDING')
+        .in('order_id', (orders ?? []).map((o) => o.id));
+      if (error) throw error;
+      return new Set((data ?? []).map((r) => r.order_id));
+    },
+  });
+
+  // Reviewable change requests on the open order (auto-applied edits are audit-only).
+  const { data: changeRequests } = useQuery({
+    queryKey: ['client-order-change-requests', selectedOrderId],
+    enabled: !!selectedOrderId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('order_change_requests')
+        .select('id, order_id, status, proposed, requested_at, resolved_at, resolution_note')
+        .eq('order_id', selectedOrderId!)
+        .neq('status', 'AUTO_APPLIED')
+        .order('requested_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as unknown as ChangeRequest[];
+    },
+  });
+  const pendingRequest = changeRequests?.find((r) => r.status === 'PENDING') ?? null;
+  const latestResolved = changeRequests?.find((r) => r.status === 'APPROVED' || r.status === 'DECLINED') ?? null;
+
+  const withdrawMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      const { data, error } = await supabase.rpc('client_withdraw_order_change_request', {
+        p_request_id: requestId,
+      });
+      if (error) throw new Error(error.message);
+      if (!data) throw new Error('That request was already reviewed — refresh to see the result.');
+    },
+    onSuccess: () => {
+      toast.success('Change request withdrawn');
+      queryClient.invalidateQueries({ queryKey: ['client-order-change-requests'], exact: false });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to withdraw request'),
   });
 
   const cancelMutation = useMutation({
@@ -187,7 +258,7 @@ export default function OrderHistory() {
             <CardHeader><CardTitle>Order Info</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div><strong>Status:</strong> {selectedOrder.status}</div>
-              <div><strong>Delivery:</strong> {selectedOrder.delivery_method}</div>
+              <div><strong>Delivery:</strong> {clientDeliveryLabel(selectedOrder.delivery_method)}</div>
               <div><strong>Client PO:</strong> {selectedOrder.client_po || '—'}</div>
               <div>
                 <strong>Planned Roast Day:</strong>{' '}
@@ -197,38 +268,103 @@ export default function OrderHistory() {
               </div>
               <div>
                 <strong>Requested Ship Date:</strong>{' '}
-                {selectedOrder.requested_ship_date
-                  ? format(parseDateOnly(selectedOrder.requested_ship_date)!, 'MMM d, yyyy')
-                  : '—'}
+                {fmtDateOnly(selectedOrder.requested_ship_date) ?? 'Soonest'}
               </div>
+              {selectedOrder.shipped_at ? (
+                <div>
+                  <strong>Shipped:</strong>{' '}
+                  {format(new Date(selectedOrder.shipped_at), 'MMM d, yyyy')}
+                </div>
+              ) : (
+                plannedShipDate(selectedOrder.work_deadline_at) && (
+                  <div>
+                    <strong>Planned Ship Date:</strong>{' '}
+                    {fmtDateOnly(plannedShipDate(selectedOrder.work_deadline_at))}
+                  </div>
+                )
+              )}
               <div><strong>Created:</strong> {format(new Date(selectedOrder.created_at), 'MMM d, yyyy h:mm a')}</div>
-              {selectedOrder.client_notes && (
-                <div><strong>Notes:</strong> {selectedOrder.client_notes}</div>
+              {stripSoonestPrefix(selectedOrder.client_notes) && (
+                <div><strong>Notes:</strong> {stripSoonestPrefix(selectedOrder.client_notes)}</div>
               )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
-            <CardContent>
-              {selectedOrder.status === 'SUBMITTED' ? (
-                <div>
-                  <p className="mb-4 text-sm text-muted-foreground">
-                    You can cancel this order while it's still being reviewed.
+            <CardContent className="space-y-4">
+              {pendingRequest && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  <div className="flex items-center gap-2 font-medium">
+                    <Clock className="h-4 w-4" />
+                    Change requested {format(new Date(pendingRequest.requested_at), 'MMM d, h:mm a')}
+                  </div>
+                  <p className="mt-1">
+                    Waiting for Home Island to review. Your order goes ahead as shown until we re-confirm it.
                   </p>
                   <Button
-                    variant="destructive"
-                    onClick={() => cancelMutation.mutate(selectedOrder.id)}
-                    disabled={cancelMutation.isPending}
+                    size="sm"
+                    variant="ghost"
+                    className="mt-2 h-7 px-2 text-amber-900"
+                    onClick={() => withdrawMutation.mutate(pendingRequest.id)}
+                    disabled={withdrawMutation.isPending}
                   >
-                    {cancelMutation.isPending ? 'Cancelling…' : 'Cancel Order'}
+                    Withdraw request
                   </Button>
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No actions available. Order status: {selectedOrder.status}
-                </p>
               )}
+              {!pendingRequest && latestResolved?.status === 'DECLINED' && (
+                <div className="rounded-md border p-3 text-sm">
+                  <div className="flex items-center gap-2 font-medium">
+                    <XCircle className="h-4 w-4 text-destructive" />
+                    Your last change request wasn't applied
+                  </div>
+                  {latestResolved.resolution_note && (
+                    <p className="mt-1 text-muted-foreground">{latestResolved.resolution_note}</p>
+                  )}
+                </div>
+              )}
+
+              {DIRECT_EDIT_STATUSES.includes(selectedOrder.status) && (
+                <div>
+                  <p className="mb-3 text-sm text-muted-foreground">
+                    We haven't confirmed this order yet — you can still edit or cancel it.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" onClick={() => setEditOpen(true)} disabled={!lineItems}>
+                      <PenSquare className="mr-2 h-4 w-4" /> Edit Order
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => cancelMutation.mutate(selectedOrder.id)}
+                      disabled={cancelMutation.isPending}
+                    >
+                      {cancelMutation.isPending ? 'Cancelling…' : 'Cancel Order'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {CHANGE_REQUEST_STATUSES.includes(selectedOrder.status) && (
+                <div>
+                  <p className="mb-3 text-sm text-muted-foreground">
+                    {selectedOrder.status === 'CONFIRMED'
+                      ? 'This order is confirmed. Spotted a mistake? Request a change and we\'ll re-confirm it.'
+                      : 'We\'re already working on this order. You can still request a change, but we may not be able to make it — added items may ship as a separate order.'}
+                  </p>
+                  <Button variant="outline" onClick={() => setEditOpen(true)} disabled={!lineItems}>
+                    <PenSquare className="mr-2 h-4 w-4" />
+                    {pendingRequest ? 'Update Change Request' : 'Request Change'}
+                  </Button>
+                </div>
+              )}
+
+              {!DIRECT_EDIT_STATUSES.includes(selectedOrder.status) &&
+                !CHANGE_REQUEST_STATUSES.includes(selectedOrder.status) && (
+                  <p className="text-sm text-muted-foreground">
+                    No actions available. Order status: {selectedOrder.status}
+                  </p>
+                )}
             </CardContent>
           </Card>
         </div>
@@ -275,6 +411,21 @@ export default function OrderHistory() {
             )}
           </CardContent>
         </Card>
+
+        {lineItems && (
+          <ClientOrderEditDialog
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            order={selectedOrder}
+            lineItems={lineItems.map((li) => ({
+              id: li.id,
+              product_id: li.product_id,
+              quantity_units: li.quantity_units,
+              product_name: li.product?.product_name ?? 'Unknown product',
+            }))}
+            pendingProposal={pendingRequest?.proposed ?? null}
+          />
+        )}
       </div>
     );
   }
@@ -333,6 +484,11 @@ export default function OrderHistory() {
                         }`}>
                           {o.status}
                         </span>
+                        {pendingOrderIds?.has(o.id) && (
+                          <span className="ml-2 rounded bg-amber-50 px-2 py-0.5 text-xs text-amber-800 ring-1 ring-amber-300">
+                            Change requested
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 pr-4 text-muted-foreground">
                         {o.work_deadline_at
@@ -340,9 +496,9 @@ export default function OrderHistory() {
                           : '—'}
                       </td>
                       <td className="py-3 pr-4 text-muted-foreground">
-                        {o.requested_ship_date
-                          ? format(parseDateOnly(o.requested_ship_date)!, 'MMM d, yyyy')
-                          : '—'}
+                        {o.shipped_at
+                          ? <span className="text-foreground">Shipped {format(new Date(o.shipped_at), 'MMM d, yyyy')}</span>
+                          : fmtDateOnly(o.requested_ship_date) ?? 'Soonest'}
                       </td>
                       <td className="py-3">
                         {displaySummaries.length === 0 ? (

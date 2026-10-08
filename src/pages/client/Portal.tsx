@@ -20,6 +20,7 @@ interface Order {
   created_at: string;
   location_id: string | null;
   shipped_or_ready: boolean;
+  shipped_at: string | null;
   invoiced: boolean;
 }
 
@@ -37,7 +38,7 @@ export default function Portal() {
     queryFn: async () => {
       let q = supabase
         .from('orders')
-        .select('id, order_number, status, requested_ship_date, delivery_method, created_at, location_id, shipped_or_ready, invoiced');
+        .select('id, order_number, status, requested_ship_date, delivery_method, created_at, location_id, shipped_or_ready, shipped_at, invoiced');
       if (previewAccountId) q = q.eq('account_id', previewAccountId);
       const { data, error } = await q.order('created_at', { ascending: false });
 
@@ -219,7 +220,9 @@ export default function Portal() {
                       </div>
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {format(new Date(order.created_at), 'MMM d, yyyy')}
+                      {order.shipped_at
+                        ? `Shipped ${format(new Date(order.shipped_at), 'MMM d, yyyy')}`
+                        : format(new Date(order.created_at), 'MMM d, yyyy')}
                     </div>
                   </div>
                 ))}

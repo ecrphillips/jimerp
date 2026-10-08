@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AccountProductNotesPanel } from '@/components/client/AccountProductNotesPanel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -1905,6 +1906,7 @@ export default function AccountDetail() {
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
           {hasManufacturing && <TabsTrigger value="locations">Locations</TabsTrigger>}
+          {hasManufacturing && <TabsTrigger value="product-notes">Product Notes</TabsTrigger>}
           <TabsTrigger value="users">Users</TabsTrigger>
           {hasCoroasting && <TabsTrigger value="coroasting">Co-Roasting</TabsTrigger>}
           {(authUser?.role === 'ADMIN' || authUser?.role === 'OPS') && (
@@ -1923,6 +1925,11 @@ export default function AccountDetail() {
           {hasManufacturing && (
             <TabsContent value="locations">
               <LocationsTab accountId={account.id} />
+            </TabsContent>
+          )}
+          {hasManufacturing && (
+            <TabsContent value="product-notes">
+              <AccountProductNotesPanel accountId={account.id} />
             </TabsContent>
           )}
           <TabsContent value="users">
