@@ -1865,7 +1865,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                     const { error } = await supabase.from('roasted_batches').insert({
                       roast_group: roastGroupKey,
                       target_date: today,
-                      planned_output_kg: plannedKg,
+                      planned_output_kg: inputKg,
                       actual_output_kg: 0,
                       status: 'PLANNED' as const,
                       assigned_roaster: addBatchRoaster || null,
