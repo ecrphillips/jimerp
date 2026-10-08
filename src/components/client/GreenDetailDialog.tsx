@@ -18,6 +18,8 @@ interface GreenLot {
   lot_number: string;
   coffee_name: string | null;
   status: string;
+  /** Arrived at our warehouse (may still be in costing). */
+  received: boolean;
   is_placeholder: boolean;
   origin_country: string | null;
   origin: string | null;
@@ -57,7 +59,7 @@ interface Props {
 const fmtDate = (d: string | null) => (d ? format(parseDateOnly(d)!, 'MMM d, yyyy') : null);
 
 function LotStatus({ lot, isNext }: { lot: GreenLot; isNext: boolean }) {
-  if (lot.status === 'RECEIVED') {
+  if (lot.received) {
     if (isNext) return <span className="text-xs text-muted-foreground">In our warehouse</span>;
     if (lot.depleted) return <span className="text-xs font-medium text-amber-700">Finishing up</span>;
     if (lot.running_low) return <span className="text-xs font-medium text-amber-700">Running low</span>;
@@ -72,7 +74,7 @@ function LotStatus({ lot, isNext }: { lot: GreenLot; isNext: boolean }) {
 }
 
 function LotCard({ lot, isNext }: { lot: GreenLot; isNext: boolean }) {
-  const origin = [lot.region, lot.origin_country ?? lot.origin].filter(Boolean).join(', ');
+  const origin = [lot.region, lot.origin ?? lot.origin_country].filter(Boolean).join(', ');
   const facts: [string, string | null][] = [
     ['Origin', origin || null],
     ['Producer', lot.producer],
