@@ -25,6 +25,7 @@ import { usePricingVisibility } from '@/hooks/usePricingVisibility';
 import { blockNonIntegerKeys } from '@/lib/numericInput';
 import { DatePicker } from '@/components/ui/date-picker';
 import { computeDefaultWorkDeadline } from '@/lib/productionScheduling';
+import { withSoonestPrefix } from '@/lib/clientOrderDisplay';
 import type { DeliveryMethod } from '@/types/database';
 
 interface LineItem {
@@ -62,7 +63,8 @@ function makeShipmentLocalId(): string {
 function newAdditionalShipment(): AdditionalShipment {
   return {
     localId: makeShipmentLocalId(),
-    delivery_method: 'COURIER',
+    // Clients pick Pickup or Delivered; we decide van vs courier internally.
+    delivery_method: 'DELIVERY',
     ship_to_name: '',
     ship_to_address_line1: '',
     ship_to_address_line2: '',
@@ -484,7 +486,7 @@ export default function NewOrder() {
           delivery_method: deliveryMethod,
           client_po: clientPo || null,
           client_notes: shipPreference === 'SOONEST'
-            ? `[Requested: Soonest possible]${clientNotes ? ` ${clientNotes}` : ''}`
+            ? withSoonestPrefix(clientNotes)
             : clientNotes || null,
           created_by_user_id: authUser.id,
         })
@@ -988,10 +990,12 @@ export default function NewOrder() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="PICKUP">Pickup</SelectItem>
-                    <SelectItem value="DELIVERY">Delivery</SelectItem>
-                    <SelectItem value="COURIER">Courier</SelectItem>
+                    <SelectItem value="DELIVERY">Delivered</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  For deliveries, we'll choose our own van or a courier.
+                </p>
               </div>
               <div className="space-y-2 border-t pt-3">
                 <div className="flex items-center justify-between">
@@ -1116,8 +1120,7 @@ export default function NewOrder() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="PICKUP">Pickup</SelectItem>
-                        <SelectItem value="DELIVERY">Delivery</SelectItem>
-                        <SelectItem value="COURIER">Courier</SelectItem>
+                        <SelectItem value="DELIVERY">Delivered</SelectItem>
                       </SelectContent>
                     </Select>
                     <Input

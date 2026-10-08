@@ -1,22 +1,50 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePreview } from '@/contexts/PreviewContext';
 import { usePricingVisibility } from '@/hooks/usePricingVisibility';
-import { Package } from 'lucide-react';
+import { useClientOrderableProducts, type ClientOrderableProduct } from '@/hooks/useClientOrderableProducts';
+import { formatGramsLabel } from '@/components/GramPackagingBadge';
+import { GreenDetailDialog } from '@/components/client/GreenDetailDialog';
+import { ProductNotes } from '@/components/client/ProductNotes';
+import { useAccountProductNotes } from '@/hooks/useAccountProductNotes';
+import { ChevronRight, Leaf, MessageSquare, Package } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-interface AllowedProduct {
-  product_id: string;
-  products: {
-    id: string;
-    product_name: string;
-    sku: string | null;
-    bag_size_g: number;
-    format: string | null;
-    packaging_variant: string | null;
-  } | null;
+interface ProductGroup {
+  key: string;
+  roastGroup: string | null;
+  name: string;
+  variants: ClientOrderableProduct[];
+}
+
+const titleCase = (v: string | null) =>
+  v ? v.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : '—';
+
+/**
+ * One header per coffee (roast group); packaging variants live in the drawer.
+ * Products without a roast group (allied items) stand alone.
+ */
+function groupProducts(products: ClientOrderableProduct[]): ProductGroup[] {
+  const groups = new Map<string, ProductGroup>();
+  for (const p of products) {
+    const key = p.roast_group ? `rg:${p.roast_group}` : `p:${p.id}`;
+    const g = groups.get(key);
+    if (g) g.variants.push(p);
+    else groups.set(key, { key, roastGroup: p.roast_group, name: p.product_name, variants: [p] });
+  }
+  for (const g of groups.values()) {
+    g.variants.sort((a, b) => (a.grams_per_unit ?? a.bag_size_g) - (b.grams_per_unit ?? b.bag_size_g));
+    // Variants of one coffee usually share a name; if not, use the most common.
+    const counts = new Map<string, number>();
+    for (const v of g.variants) counts.set(v.product_name, (counts.get(v.product_name) ?? 0) + 1);
+    g.name = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  }
+  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export default function Products() {
@@ -25,50 +53,14 @@ export default function Products() {
   const { hidePricing } = usePricingVisibility();
   const effectiveAccountId = previewAccountId ?? authUser?.accountId;
 
-  // Allowed-products list for this account. If no rows exist, the account is
-  // unrestricted and can order all active products (same convention as
-  // useClientOrderingConstraints).
-  const { data: allowedProducts, isLoading: productsLoading } = useQuery({
-    queryKey: ['client-allowed-products-list', effectiveAccountId],
-    queryFn: async () => {
-      const { data: allowed, error: allowedErr } = await supabase
-        .from('client_allowed_products')
-        .select('product_id, products(id, product_name, sku, bag_size_g, format, packaging_variant)')
-        .eq('account_id', effectiveAccountId!);
-      if (allowedErr) throw allowedErr;
+  const { data: products = [], isLoading } = useClientOrderableProducts(effectiveAccountId);
+  const { data: notes = [] } = useAccountProductNotes(effectiveAccountId);
+  const groups = useMemo(() => groupProducts(products), [products]);
 
-      if (allowed && allowed.length > 0) {
-        return (allowed as AllowedProduct[]);
-      }
+  const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
+  const [greenFor, setGreenFor] = useState<ProductGroup | null>(null);
 
-      // Fallback: unrestricted — show all active products for this account.
-      const { data: all, error: allErr } = await supabase
-        .from('products')
-        .select('id, product_name, sku, bag_size_g, format, packaging_variant')
-        .eq('account_id', effectiveAccountId!)
-        .eq('is_active', true)
-        .order('product_name', { ascending: true });
-      if (allErr) throw allErr;
-      return ((all ?? []) as NonNullable<AllowedProduct['products']>[]).map(p => ({
-        product_id: p.id,
-        products: p,
-      })) as AllowedProduct[];
-    },
-    enabled: !!effectiveAccountId,
-  });
-
-  // TODO: Wire price lookup. Fetches latest price per product from price_list.
-  // Query pattern:
-  //   supabase
-  //     .from('price_list')
-  //     .select('product_id, unit_price, effective_date')
-  //     .in('product_id', productIds)
-  //     .order('effective_date', { ascending: false })
-  // Then deduplicate: first occurrence per product_id = current price.
-  const productIds = (allowedProducts ?? [])
-    .map(ap => ap.product_id)
-    .filter(Boolean);
-
+  const productIds = products.map((p) => p.id);
   const { data: priceData } = useQuery({
     queryKey: ['client-product-prices', productIds],
     queryFn: async () => {
@@ -78,36 +70,33 @@ export default function Products() {
         .in('product_id', productIds)
         .order('effective_date', { ascending: false });
       if (error) throw error;
-      // Deduplicate: first entry per product_id is most recent
+      // First entry per product_id is the most recent.
       const priceMap: Record<string, number> = {};
       for (const row of data ?? []) {
-        if (!(row.product_id in priceMap)) {
-          priceMap[row.product_id] = row.unit_price;
-        }
+        if (!(row.product_id in priceMap)) priceMap[row.product_id] = row.unit_price;
       }
       return priceMap;
     },
     enabled: productIds.length > 0,
   });
 
-  const formatBagSize = (grams: number) => {
-    if (grams >= 1000) return `${(grams / 1000).toFixed(grams % 1000 === 0 ? 0 : 1)} kg`;
-    return `${grams} g`;
-  };
+  const notesByRoastGroup = useMemo(() => {
+    const map = new Map<string, typeof notes>();
+    for (const n of notes) {
+      const list = map.get(n.roast_group) ?? [];
+      list.push(n);
+      map.set(n.roast_group, list);
+    }
+    return map;
+  }, [notes]);
 
-  const formatVariant = (variant: string | null) => {
-    if (!variant) return '—';
-    return variant.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  };
-
-  const formatFormat = (fmt: string | null) => {
-    if (!fmt) return '—';
-    return fmt.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  };
-
-  const products = (allowedProducts ?? [])
-    .map(ap => ap.products)
-    .filter((p): p is NonNullable<AllowedProduct['products']> => !!p);
+  const setOpen = (key: string, open: boolean) =>
+    setOpenKeys((prev) => {
+      const next = new Set(prev);
+      if (open) next.add(key);
+      else next.delete(key);
+      return next;
+    });
 
   return (
     <div className="page-container">
@@ -124,52 +113,123 @@ export default function Products() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {productsLoading ? (
+          {isLoading ? (
             <p className="text-muted-foreground">Loading products…</p>
-          ) : products.length === 0 ? (
+          ) : groups.length === 0 ? (
             <div className="py-8 text-center">
               <Package className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
               <p className="text-muted-foreground">No products linked to your account yet.</p>
               <p className="mt-1 text-sm text-muted-foreground">Contact your Home Island rep to get products added.</p>
             </div>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left">
-                  <th className="pb-2 pr-4">Product</th>
-                  <th className="pb-2 pr-4">SKU</th>
-                  <th className="pb-2 pr-4">Bag Size</th>
-                  <th className="pb-2 pr-4">Format</th>
-                  <th className="pb-2 pr-4">Packaging</th>
-                  {!hidePricing && <th className="pb-2 text-right">Current Price</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((p) => {
-                  const price = priceData?.[p.id];
-                  return (
-                    <tr key={p.id} className="border-b last:border-0">
-                      <td className="py-3 pr-4 font-medium">{p.product_name}</td>
-                      <td className="py-3 pr-4 font-mono text-xs text-muted-foreground">{p.sku ?? '—'}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{formatBagSize(p.bag_size_g)}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{formatFormat(p.format)}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{formatVariant(p.packaging_variant)}</td>
-                      {!hidePricing && (
-                        <td className="py-3 text-right">
-                          {price != null
-                            ? `$${price.toFixed(2)}`
-                            : <span className="text-muted-foreground">—</span>
-                          }
-                        </td>
+            <div className="divide-y rounded-md border">
+              {groups.map((g) => {
+                const isOpen = openKeys.has(g.key);
+                const groupNotes = g.roastGroup ? notesByRoastGroup.get(g.roastGroup) ?? [] : [];
+                return (
+                  <Collapsible key={g.key} open={isOpen} onOpenChange={(o) => setOpen(g.key, o)}>
+                    <div className="flex items-center gap-2 px-3 py-2">
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className="flex flex-1 items-center gap-2 py-1 text-left"
+                          aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${g.name}`}
+                        >
+                          <ChevronRight
+                            className={cn('h-4 w-4 shrink-0 transition-transform', isOpen && 'rotate-90')}
+                          />
+                          <span className="font-medium">{g.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {g.variants.length} {g.variants.length === 1 ? 'size' : 'sizes'}
+                          </span>
+                          {groupNotes.length > 0 && (
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <MessageSquare className="h-3 w-3" />
+                              {groupNotes.length}
+                            </span>
+                          )}
+                        </button>
+                      </CollapsibleTrigger>
+                      {g.roastGroup && effectiveAccountId && (
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="h-auto gap-1 px-1 text-green-700 hover:text-green-800"
+                          onClick={() => setGreenFor(g)}
+                        >
+                          <Leaf className="h-3.5 w-3.5" />
+                          Green detail
+                        </Button>
                       )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    </div>
+
+                    <CollapsibleContent>
+                      <div className="space-y-4 px-3 pb-4 pl-9">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b text-left text-xs text-muted-foreground">
+                              <th className="pb-1 pr-4 font-medium">Size</th>
+                              <th className="pb-1 pr-4 font-medium">Packaging</th>
+                              <th className="pb-1 pr-4 font-medium">Format</th>
+                              <th className="pb-1 pr-4 font-medium">SKU</th>
+                              {!hidePricing && <th className="pb-1 text-right font-medium">Current Price</th>}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.variants.map((p) => {
+                              const price = priceData?.[p.id];
+                              const grams = p.grams_per_unit ?? p.bag_size_g;
+                              return (
+                                <tr key={p.id} className="border-b last:border-0">
+                                  <td className="py-2 pr-4">{grams ? formatGramsLabel(grams) : '—'}</td>
+                                  <td className="py-2 pr-4 text-muted-foreground">
+                                    {p.packaging_types?.name ?? titleCase(p.packaging_variant)}
+                                  </td>
+                                  <td className="py-2 pr-4 text-muted-foreground">{titleCase(p.format)}</td>
+                                  <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{p.sku ?? '—'}</td>
+                                  {!hidePricing && (
+                                    <td className="py-2 text-right">
+                                      {price != null ? `$${price.toFixed(2)}` : <span className="text-muted-foreground">—</span>}
+                                    </td>
+                                  )}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+
+                        {g.roastGroup && effectiveAccountId && (
+                          <div>
+                            <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              Notes
+                            </h4>
+                            <ProductNotes
+                              accountId={effectiveAccountId}
+                              roastGroup={g.roastGroup}
+                              notes={groupNotes}
+                              hint="Visible to your team and to Home Island."
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
+
+      {greenFor?.roastGroup && effectiveAccountId && (
+        <GreenDetailDialog
+          open={!!greenFor}
+          onOpenChange={(o) => !o && setGreenFor(null)}
+          accountId={effectiveAccountId}
+          roastGroup={greenFor.roastGroup}
+          productName={greenFor.name}
+        />
+      )}
     </div>
   );
 }
