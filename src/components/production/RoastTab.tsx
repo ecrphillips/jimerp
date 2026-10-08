@@ -1898,7 +1898,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                   // Skip depletion check for brand-new groups (no links yet)
                   if (!isNewlyCreated) {
                     const { impacts, pctByLinkId } = await evaluateMultiRoastGroupImpacts([
-                      { roastGroup: roastGroupKey, newPlannedOutputKg: plannedKg },
+                      { roastGroup: roastGroupKey, newPlannedOutputKg: inputKg },
                     ]);
                     if (impacts.length > 0) {
                       const rgDisplay = configByGroup[roastGroupKey]?.display_name ?? roastGroupKey;
