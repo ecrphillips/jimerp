@@ -28,6 +28,8 @@ import { WorkDeadlinePicker } from '@/components/orders/WorkDeadlinePicker';
 import { OrderDeleteModal } from '@/components/internal/OrderDeleteModal';
 import { ALLOWED_ORDER_TRANSITIONS } from '@/lib/orderTransitions';
 import { useAuth } from '@/contexts/AuthContext';
+import { TAX_CODES, computeTaxBreakdown, resolveTaxCode, type TaxCode } from '@/lib/salesTax';
+import { useOrderTaxSuggestion } from '@/components/orders/TaxRateSelect';
 import { AddExtraLineForm, useDeleteExtraLine, useOrderExtraLines } from '@/components/orders/OrderExtraLines';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -143,7 +145,8 @@ export default function OrderDetail() {
           unit_price_locked,
           line_notes,
           shipment_id,
-          product:products(id, product_name, roast_group, bag_size_g, grams_per_unit, packaging_variant, requires_production, packaging_type:packaging_types(name))
+          tax_code,
+          product:products(id, tax_code, product_name, roast_group, bag_size_g, grams_per_unit, packaging_variant, requires_production, packaging_type:packaging_types(name))
         `)
         .eq('order_id', id!)
         .order('created_at', { ascending: true });
@@ -156,15 +159,20 @@ export default function OrderDetail() {
 
   const { data: extraLines = [] } = useOrderExtraLines(id);
   const deleteExtra = useDeleteExtraLine(id ?? '');
-  const { data: shippingCostCad = null } = useQuery({
+  const { data: shippingInfo } = useQuery({
     queryKey: ['order-shipping-cost', id],
     enabled: !!id,
     queryFn: async () => {
-      const { data, error } = await supabase.from('orders').select('shipping_cost_cad').eq('id', id!).maybeSingle();
+      const { data, error } = await supabase.from('orders').select('shipping_cost_cad, shipping_tax_code').eq('id', id!).maybeSingle();
       if (error) throw error;
-      return data?.shipping_cost_cad == null ? null : Number(data.shipping_cost_cad);
+      return {
+        cost: data?.shipping_cost_cad == null ? null : Number(data.shipping_cost_cad),
+        taxCode: (data?.shipping_tax_code ?? null) as TaxCode | null,
+      };
     },
   });
+  const shippingCostCad = shippingInfo?.cost ?? null;
+  const { data: taxSuggestion } = useOrderTaxSuggestion(id);
 
   // Fetch packing runs for the order's requested_ship_date
   const { data: packingRuns } = useQuery({
@@ -646,7 +654,16 @@ export default function OrderDetail() {
 
   const productLineTotal = lineItemsWithPackedStatus.reduce((sum, li) => sum + li.quantity_units * li.unit_price_locked, 0);
   const extrasTotal = extraLines.reduce((sum, x) => sum + x.quantity * x.unit_price, 0);
-  const lineTotal = productLineTotal + extrasTotal + (shippingCostCad ?? 0);
+  const taxFallback = taxSuggestion ?? { code: 'GST5' as TaxCode, province: null, international: false, message: '' };
+  const lineTaxCode = (li: any): TaxCode => resolveTaxCode(li.tax_code ?? li.product?.tax_code, taxFallback);
+  const shippingTaxCode: TaxCode = resolveTaxCode(shippingInfo?.taxCode ?? taxFallback.code, taxFallback);
+  const taxBreakdown = computeTaxBreakdown([
+    ...lineItemsWithPackedStatus.map((li) => ({ amount: li.quantity_units * li.unit_price_locked, taxCode: lineTaxCode(li) })),
+    ...extraLines.map((x) => ({ amount: x.quantity * x.unit_price, taxCode: x.tax_code })),
+    ...(shippingCostCad != null ? [{ amount: shippingCostCad, taxCode: shippingTaxCode }] : []),
+  ]);
+  const lineTotal = taxBreakdown.total;
+  void productLineTotal; void extrasTotal;
 
   // Advancement is always a deliberate click. SHIPPED keeps its pack-complete gate;
   // READY soft-warns when not packed but still allows an override.
@@ -1138,6 +1155,7 @@ export default function OrderDetail() {
                       <td className="py-2">
                         <div className="flex items-center gap-2">
                           <span>{x.label}</span>
+                          {x.tax_code !== 'NONE' && <Badge variant="outline" className="text-xs">{TAX_CODES[x.tax_code].label}</Badge>}
                           <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Remove line" onClick={() => deleteExtra.mutate(x.id)}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
@@ -1152,7 +1170,10 @@ export default function OrderDetail() {
                   ))}
                   {shippingCostCad != null && (
                     <tr className="border-b last:border-0">
-                      <td className="py-2">Shipping</td>
+                      <td className="py-2">
+                        Shipping
+                        {shippingTaxCode !== 'NONE' && <Badge variant="outline" className="ml-2 text-xs">{TAX_CODES[shippingTaxCode].label}{shippingInfo?.taxCode ? '' : ' (suggested)'}</Badge>}
+                      </td>
                       <td className="py-2">—</td>
                       <td className="py-2">—</td>
                       <td className="py-2">—</td>
@@ -1162,6 +1183,18 @@ export default function OrderDetail() {
                   )}
                 </tbody>
                 <tfoot>
+                  {taxBreakdown.taxes.length > 0 && (
+                    <tr>
+                      <td colSpan={5} className="pt-4 text-right text-muted-foreground">Subtotal:</td>
+                      <td className="pt-4 text-right">${taxBreakdown.subtotal.toFixed(2)}</td>
+                    </tr>
+                  )}
+                  {taxBreakdown.taxes.map((t) => (
+                    <tr key={t.code}>
+                      <td colSpan={5} className="pt-1 text-right text-muted-foreground">{t.label}:</td>
+                      <td className="pt-1 text-right">${t.amount.toFixed(2)}</td>
+                    </tr>
+                  ))}
                   <tr>
                     <td colSpan={5} className="pt-4 text-right font-medium">Total:</td>
                     <td className="pt-4 text-right font-medium">${lineTotal.toFixed(2)}</td>
