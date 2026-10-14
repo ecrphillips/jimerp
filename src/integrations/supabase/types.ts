@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -481,6 +481,57 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_product_notes: {
+        Row: {
+          account_id: string
+          author_is_staff: boolean
+          author_name: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          note_text: string
+          roast_group: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          author_is_staff?: boolean
+          author_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note_text: string
+          roast_group: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          author_is_staff?: boolean
+          author_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note_text?: string
+          roast_group?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_product_notes_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_product_notes_roast_group_fkey"
+            columns: ["roast_group"]
+            isOneToOne: false
+            referencedRelation: "roast_groups"
+            referencedColumns: ["roast_group"]
           },
         ]
       }
@@ -3564,6 +3615,76 @@ export type Database = {
           },
         ]
       }
+      order_change_requests: {
+        Row: {
+          account_id: string
+          client_message: string | null
+          id: string
+          order_id: string
+          order_status_at_request: Database["public"]["Enums"]["order_status"]
+          proposed: Json
+          requested_at: string
+          requested_by: string | null
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          snapshot: Json
+          status: string
+        }
+        Insert: {
+          account_id: string
+          client_message?: string | null
+          id?: string
+          order_id: string
+          order_status_at_request: Database["public"]["Enums"]["order_status"]
+          proposed: Json
+          requested_at?: string
+          requested_by?: string | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          snapshot: Json
+          status?: string
+        }
+        Update: {
+          account_id?: string
+          client_message?: string | null
+          id?: string
+          order_id?: string
+          order_status_at_request?: Database["public"]["Enums"]["order_status"]
+          proposed?: Json
+          requested_at?: string
+          requested_by?: string | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          snapshot?: Json
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_change_requests_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_change_requests_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_change_requests_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_all"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_date_audit_log: {
         Row: {
           changed_at: string
@@ -3903,6 +4024,7 @@ export type Database = {
           requested_ship_date: string | null
           roasted: boolean
           ship_display_order: number | null
+          shipped_at: string | null
           shipped_or_ready: boolean
           shipping_cost_cad: number | null
           shopify_pull_log_id: string | null
@@ -3935,6 +4057,7 @@ export type Database = {
           requested_ship_date?: string | null
           roasted?: boolean
           ship_display_order?: number | null
+          shipped_at?: string | null
           shipped_or_ready?: boolean
           shipping_cost_cad?: number | null
           shopify_pull_log_id?: string | null
@@ -3967,6 +4090,7 @@ export type Database = {
           requested_ship_date?: string | null
           roasted?: boolean
           ship_display_order?: number | null
+          shipped_at?: string | null
           shipped_or_ready?: boolean
           shipping_cost_cad?: number | null
           shopify_pull_log_id?: string | null
@@ -6037,7 +6161,9 @@ export type Database = {
           requested_ship_date: string | null
           roasted: boolean | null
           ship_display_order: number | null
+          shipped_at: string | null
           shipped_or_ready: boolean | null
+          shipping_cost_cad: number | null
           shopify_pull_log_id: string | null
           shopify_source_id: string | null
           source_channel: string | null
@@ -6070,7 +6196,9 @@ export type Database = {
           requested_ship_date?: string | null
           roasted?: boolean | null
           ship_display_order?: number | null
+          shipped_at?: string | null
           shipped_or_ready?: boolean | null
+          shipping_cost_cad?: number | null
           shopify_pull_log_id?: string | null
           shopify_source_id?: string | null
           source_channel?: string | null
@@ -6103,7 +6231,9 @@ export type Database = {
           requested_ship_date?: string | null
           roasted?: boolean | null
           ship_display_order?: number | null
+          shipped_at?: string | null
           shipped_or_ready?: boolean | null
+          shipping_cost_cad?: number | null
           shopify_pull_log_id?: string | null
           shopify_source_id?: string | null
           source_channel?: string | null
@@ -6159,6 +6289,10 @@ export type Database = {
       }
     }
     Functions: {
+      _apply_order_changes: {
+        Args: { p_changes: Json; p_order_id: string }
+        Returns: undefined
+      }
       _assert_account_owner: {
         Args: { _account_id: string }
         Returns: undefined
@@ -6168,6 +6302,7 @@ export type Database = {
         Returns: undefined
       }
       _assert_internal_staff: { Args: never; Returns: undefined }
+      _client_green_lot_json: { Args: { p_lot_id: string }; Returns: Json }
       _coroast_effective_booking_rules: {
         Args: { p_account_id: string }
         Returns: {
@@ -6192,6 +6327,7 @@ export type Database = {
         Returns: string
       }
       _is_account_owner: { Args: { _account_id: string }; Returns: boolean }
+      _order_change_snapshot: { Args: { p_order_id: string }; Returns: Json }
       account_id_for_account_user: {
         Args: { _account_user_id: string }
         Returns: string
@@ -6223,6 +6359,14 @@ export type Database = {
       cancel_shipped_order: { Args: { p_order_id: string }; Returns: undefined }
       client_cancel_own_order: {
         Args: { p_order_id: string }
+        Returns: boolean
+      }
+      client_edit_order: {
+        Args: { p_changes: Json; p_message?: string; p_order_id: string }
+        Returns: Json
+      }
+      client_withdraw_order_change_request: {
+        Args: { p_request_id: string }
         Returns: boolean
       }
       create_member_booking: {
@@ -6299,6 +6443,10 @@ export type Database = {
       }
       get_client_delete_preflight: {
         Args: { p_client_id: string }
+        Returns: Json
+      }
+      get_client_green_detail: {
+        Args: { p_account_id: string; p_roast_group: string }
         Returns: Json
       }
       get_coroast_busy_slots: {
@@ -6455,6 +6603,30 @@ export type Database = {
         Args: { _run_id: string }
         Returns: undefined
       }
+      resolve_order_change_request: {
+        Args: { p_approve: boolean; p_note?: string; p_request_id: string }
+        Returns: {
+          account_id: string
+          client_message: string | null
+          id: string
+          order_id: string
+          order_status_at_request: Database["public"]["Enums"]["order_status"]
+          proposed: Json
+          requested_at: string
+          requested_by: string | null
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          snapshot: Json
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "order_change_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       resolve_shopify_quarantined_line: {
         Args: {
           p_grind_label?: string
@@ -6546,6 +6718,7 @@ export type Database = {
           requested_ship_date: string | null
           roasted: boolean
           ship_display_order: number | null
+          shipped_at: string | null
           shipped_or_ready: boolean
           shipping_cost_cad: number | null
           shopify_pull_log_id: string | null
@@ -6645,6 +6818,7 @@ export type Database = {
         | "ORDER_SHIPPED"
         | "ORDER_CANCELLED"
         | "ORDER_CLIENT_EDITED"
+        | "ORDER_CHANGE_DECLINED"
       order_status:
         | "DRAFT"
         | "SUBMITTED"
@@ -6897,6 +7071,7 @@ export const Constants = {
         "ORDER_SHIPPED",
         "ORDER_CANCELLED",
         "ORDER_CLIENT_EDITED",
+        "ORDER_CHANGE_DECLINED",
       ],
       order_status: [
         "DRAFT",
