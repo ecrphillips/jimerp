@@ -769,7 +769,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     });
 
     return nodes;
-  }, [rawLeaves, groupMode, accountNameById, roastGroupInfo, roastedInventory, plannedWip]);
+  }, [rawLeaves, groupMode, accountNameById, roastGroupInfo, roastedInventory, authWip, plannedWip]);
 
   // Every expandable key, for the collapse-all / expand-all control.
   const allNestedKeys = useMemo(() => {
