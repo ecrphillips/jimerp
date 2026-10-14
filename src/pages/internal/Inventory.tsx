@@ -23,6 +23,8 @@ import { WipAdjustmentModal } from '@/components/inventory/WipAdjustmentModal';
 import { WipFloorCountModal, type WipFloorRow } from '@/components/inventory/WipFloorCountModal';
 import { computeAuthoritativeWip, useAuthoritativeFg } from '@/hooks/useAuthoritativeInventory';
 import { fetchAllRows } from '@/lib/fetchAllRows';
+import { useBlendHolds, heldKgByGroup } from '@/hooks/useBlendHolds';
+import { BlendHoldsPanel } from '@/components/production/BlendHoldsPanel';
 import { useOrderCreator } from '@/hooks/useOrderCreator';
 
 interface LastCount {
@@ -197,6 +199,8 @@ export default function Inventory() {
   // Blend movement (BLEND rows) is tracked in its own column; manual adjustments
   // (floor counts, recounts, opening balances) are ADJUSTMENT rows in
   // inventory_transactions now — the separate wip_adjustments table is retired.
+  const { data: blendHolds } = useBlendHolds();
+  const heldByGroup = useMemo(() => heldKgByGroup(blendHolds), [blendHolds]);
   const wipByRoastGroup = useMemo((): WipByRoastGroup[] => {
     const computed = computeAuthoritativeWip(
       (inventoryTransactions ?? []).map((tx) => ({
@@ -497,6 +501,7 @@ export default function Inventory() {
               </div>
             </CardHeader>
             <CardContent>
+              <div className="mb-4"><BlendHoldsPanel /></div>
               {wipDisplayRows.length === 0 ? (
                 <div className="py-6">
                   <p className="text-muted-foreground">
@@ -515,6 +520,8 @@ export default function Inventory() {
                       <th className="pb-2 text-right">Consumed</th>
                       <th className="pb-2 text-right">Adjustments</th>
                       <th className="pb-2 text-right">Net WIP</th>
+                      <th className="pb-2 text-right">Held for blend</th>
+                      <th className="pb-2 text-right">Available</th>
                       <th className="pb-2 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -547,6 +554,12 @@ export default function Inventory() {
                           <span className={`font-semibold ${row.net_wip_kg < 0 ? 'text-destructive' : ''}`}>
                             {row.net_wip_kg.toFixed(1)} kg
                           </span>
+                        </td>
+                        <td className="py-3 text-right text-muted-foreground">
+                          {(heldByGroup[row.roast_group] ?? 0) > 0 ? `${heldByGroup[row.roast_group].toFixed(1)} kg` : ''}
+                        </td>
+                        <td className="py-3 text-right font-semibold">
+                          {Math.max(0, row.net_wip_kg - (heldByGroup[row.roast_group] ?? 0)).toFixed(1)} kg
                         </td>
                         <td className="py-3 text-right">
                           <div className="flex items-center justify-end gap-2">

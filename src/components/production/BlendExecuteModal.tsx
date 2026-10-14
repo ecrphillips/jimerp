@@ -417,6 +417,7 @@ export function BlendExecuteModal({
       queryClient.invalidateQueries({ queryKey: ['authoritative-roast-demand'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-roast-groups-info'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
+      queryClient.invalidateQueries({ queryKey: ['blend-holds'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-component-batches-for-blending'] });
       queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });

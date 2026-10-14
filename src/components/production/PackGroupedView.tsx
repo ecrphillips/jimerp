@@ -53,6 +53,8 @@ export interface PackL2Node {
   totalUnits: number;
   orderCount?: number;
   wipKg?: number | null;
+  /** kg of wipKg held for a post-roast blend (not packable by other products). */
+  heldKg?: number;
   planned?: { planned_kg: number; count: number } | null;
   leaves: PackLeafNode[];
 }
@@ -65,6 +67,8 @@ export interface PackL1Node {
   totalUnits: number;
   orderCount?: number;
   wipKg?: number | null;
+  /** kg of wipKg held for a post-roast blend (not packable by other products). */
+  heldKg?: number;
   planned?: { planned_kg: number; count: number } | null;
   children: PackL2Node[];
 }
@@ -323,6 +327,7 @@ function GroupHeader({
   totalUnits,
   orderCount,
   wipKg,
+  heldKg,
   planned,
   collapsed,
   level,
@@ -337,6 +342,8 @@ function GroupHeader({
   totalUnits: number;
   orderCount?: number;
   wipKg?: number | null;
+  /** kg of wipKg held for a post-roast blend (not packable by other products). */
+  heldKg?: number;
   planned?: { planned_kg: number; count: number } | null;
   collapsed: boolean;
   level: 1 | 2;
@@ -389,7 +396,10 @@ function GroupHeader({
       <div className="flex items-center gap-4 shrink-0 text-xs text-muted-foreground">
         {kind === 'roastgroup' && wipKg != null && (
           <span className="font-medium">
-            {wipKg.toFixed(1)} kg WIP
+            {wipKg.toFixed(1)} kg {heldKg && heldKg > 0.01 ? 'on hand' : 'WIP'}
+            {heldKg != null && heldKg > 0.01 && (
+              <> · <span className="text-warning font-semibold">{heldKg.toFixed(1)} kg held for blend</span></>
+            )}
             {planned && planned.count > 0 && (
               <> · {planned.count} planned (~{planned.planned_kg.toFixed(1)} kg)</>
             )}
@@ -516,6 +526,7 @@ export function PackGroupedView(props: PackGroupedViewProps) {
               totalUnits={l1.totalUnits}
               orderCount={l1.orderCount}
               wipKg={l1.wipKg}
+              heldKg={l1.heldKg}
               planned={l1.planned}
               collapsed={l1Collapsed}
               level={1}

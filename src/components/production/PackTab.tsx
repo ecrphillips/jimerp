@@ -720,7 +720,8 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
           kind: isRoastLevel,
           totalUnits: leaves.reduce((s, l) => s + l.units, 0),
           orderCount: isRoastLevel === 'account' ? orderIds.size : undefined,
-          wipKg: isRoastLevel === 'roastgroup' ? (roastedInventory[roastKey] ?? null) : undefined,
+          wipKg: isRoastLevel === 'roastgroup' ? (authWip?.[roastKey]?.wip_net_kg ?? null) : undefined,
+          heldKg: isRoastLevel === 'roastgroup' ? (authWip?.[roastKey]?.reserved_for_blend_kg ?? 0) : undefined,
           planned:
             isRoastLevel === 'roastgroup' ? (plannedWip?.[roastKey] ?? null) : undefined,
           leaves: sorted.map((l) => toLeafNode(l, l1Key, l2Key)),
@@ -749,7 +750,8 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
         kind: l1IsRoast,
         totalUnits: l2Nodes.reduce((s, n) => s + n.totalUnits, 0),
         orderCount: l1IsRoast === 'account' ? l1OrderIds.size : undefined,
-        wipKg: l1IsRoast === 'roastgroup' ? (roastedInventory[l1Key] ?? null) : undefined,
+        wipKg: l1IsRoast === 'roastgroup' ? (authWip?.[l1Key]?.wip_net_kg ?? null) : undefined,
+        heldKg: l1IsRoast === 'roastgroup' ? (authWip?.[l1Key]?.reserved_for_blend_kg ?? 0) : undefined,
         planned: l1IsRoast === 'roastgroup' ? (plannedWip?.[l1Key] ?? null) : undefined,
         children: l2Nodes,
       });
