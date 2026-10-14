@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -4024,8 +4024,8 @@ export type Database = {
           requested_ship_date: string | null
           roasted: boolean
           ship_display_order: number | null
-          shipped_or_ready: boolean
           shipped_at: string | null
+          shipped_or_ready: boolean
           shipping_cost_cad: number | null
           shopify_pull_log_id: string | null
           shopify_source_id: string | null
@@ -4057,8 +4057,8 @@ export type Database = {
           requested_ship_date?: string | null
           roasted?: boolean
           ship_display_order?: number | null
-          shipped_or_ready?: boolean
           shipped_at?: string | null
+          shipped_or_ready?: boolean
           shipping_cost_cad?: number | null
           shopify_pull_log_id?: string | null
           shopify_source_id?: string | null
@@ -4090,8 +4090,8 @@ export type Database = {
           requested_ship_date?: string | null
           roasted?: boolean
           ship_display_order?: number | null
-          shipped_or_ready?: boolean
           shipped_at?: string | null
+          shipped_or_ready?: boolean
           shipping_cost_cad?: number | null
           shopify_pull_log_id?: string | null
           shopify_source_id?: string | null
@@ -6161,8 +6161,9 @@ export type Database = {
           requested_ship_date: string | null
           roasted: boolean | null
           ship_display_order: number | null
-          shipped_or_ready: boolean | null
           shipped_at: string | null
+          shipped_or_ready: boolean | null
+          shipping_cost_cad: number | null
           shopify_pull_log_id: string | null
           shopify_source_id: string | null
           source_channel: string | null
@@ -6195,8 +6196,9 @@ export type Database = {
           requested_ship_date?: string | null
           roasted?: boolean | null
           ship_display_order?: number | null
-          shipped_or_ready?: boolean | null
           shipped_at?: string | null
+          shipped_or_ready?: boolean | null
+          shipping_cost_cad?: number | null
           shopify_pull_log_id?: string | null
           shopify_source_id?: string | null
           source_channel?: string | null
@@ -6229,8 +6231,9 @@ export type Database = {
           requested_ship_date?: string | null
           roasted?: boolean | null
           ship_display_order?: number | null
-          shipped_or_ready?: boolean | null
           shipped_at?: string | null
+          shipped_or_ready?: boolean | null
+          shipping_cost_cad?: number | null
           shopify_pull_log_id?: string | null
           shopify_source_id?: string | null
           source_channel?: string | null
@@ -6286,6 +6289,10 @@ export type Database = {
       }
     }
     Functions: {
+      _apply_order_changes: {
+        Args: { p_changes: Json; p_order_id: string }
+        Returns: undefined
+      }
       _assert_account_owner: {
         Args: { _account_id: string }
         Returns: undefined
@@ -6295,6 +6302,7 @@ export type Database = {
         Returns: undefined
       }
       _assert_internal_staff: { Args: never; Returns: undefined }
+      _client_green_lot_json: { Args: { p_lot_id: string }; Returns: Json }
       _coroast_effective_booking_rules: {
         Args: { p_account_id: string }
         Returns: {
@@ -6319,6 +6327,7 @@ export type Database = {
         Returns: string
       }
       _is_account_owner: { Args: { _account_id: string }; Returns: boolean }
+      _order_change_snapshot: { Args: { p_order_id: string }; Returns: Json }
       account_id_for_account_user: {
         Args: { _account_user_id: string }
         Returns: string
@@ -6348,16 +6357,16 @@ export type Database = {
         Returns: undefined
       }
       cancel_shipped_order: { Args: { p_order_id: string }; Returns: undefined }
+      client_cancel_own_order: {
+        Args: { p_order_id: string }
+        Returns: boolean
+      }
       client_edit_order: {
         Args: { p_changes: Json; p_message?: string; p_order_id: string }
         Returns: Json
       }
       client_withdraw_order_change_request: {
         Args: { p_request_id: string }
-        Returns: boolean
-      }
-      client_cancel_own_order: {
-        Args: { p_order_id: string }
         Returns: boolean
       }
       create_member_booking: {
@@ -6432,12 +6441,12 @@ export type Database = {
         }
         Returns: number
       }
-      get_client_green_detail: {
-        Args: { p_account_id: string; p_roast_group: string }
-        Returns: Json
-      }
       get_client_delete_preflight: {
         Args: { p_client_id: string }
+        Returns: Json
+      }
+      get_client_green_detail: {
+        Args: { p_account_id: string; p_roast_group: string }
         Returns: Json
       }
       get_coroast_busy_slots: {
@@ -6709,8 +6718,8 @@ export type Database = {
           requested_ship_date: string | null
           roasted: boolean
           ship_display_order: number | null
-          shipped_or_ready: boolean
           shipped_at: string | null
+          shipped_or_ready: boolean
           shipping_cost_cad: number | null
           shopify_pull_log_id: string | null
           shopify_source_id: string | null
