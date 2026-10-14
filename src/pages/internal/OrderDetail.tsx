@@ -16,6 +16,7 @@ import { ArrowLeft, Truck, Check, AlertTriangle, ExternalLink, Flame, Package, P
 import { printPackingSlips } from '@/components/orders/printPackingSlips';
 import { LocationBadge } from '@/components/orders/LocationSelect';
 import { OrderShipmentsCard } from '@/components/orders/OrderShipmentsCard';
+import { OrderChangeRequestCard } from '@/components/orders/OrderChangeRequestCard';
 import { CreatedByBadge } from '@/components/orders/CreatedByBadge';
 import { formatGramsLabel } from '@/components/GramPackagingBadge';
 import { toast } from 'sonner';
@@ -99,6 +100,7 @@ export default function OrderDetail() {
           account_id,
           location_id,
           updated_at,
+          shipped_at,
            client:clients(name),
            account:accounts(account_name)
         `)
@@ -861,6 +863,11 @@ export default function OrderDetail() {
                 : '—'}
               <span className="text-xs text-muted-foreground ml-1">(client intent)</span>
             </div>
+            {order.shipped_at && (
+              <div>
+                <strong>Shipped:</strong> {format(new Date(order.shipped_at), 'MMM d, yyyy h:mm a')}
+              </div>
+            )}
             
             {/* Work Deadline - editable by Ops (date + time picker) */}
             <div className="border-t pt-3 mt-3">
@@ -1051,6 +1058,8 @@ export default function OrderDetail() {
           </CardContent>
         </Card>
       </div>
+
+      <OrderChangeRequestCard orderId={order.id} orderStatus={order.status} />
 
       <Card className="mt-6">
         <CardHeader><CardTitle>Line Items</CardTitle></CardHeader>

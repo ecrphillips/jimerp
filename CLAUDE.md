@@ -139,6 +139,18 @@ As of `supabase/migrations/20260707130000_*.sql`, a **RESTRICTIVE** RLS SELECT p
 - **Consequences**: direct PostgREST UPDATE/DELETE against an already-cancelled order match zero rows (silently). Cancelled orders are read-only in the UI; anything that must touch them goes through SECURITY DEFINER RPCs. Client self-cancel uses the `client_cancel_own_order` RPC (a direct update's RETURNING comes back empty under the policy and reads as failure).
 - **Cancelling from OrderDetail**: non-shipped orders use `cancel_order_with_picks` in `'return'` mode (picked FG returns to stock). Shipped orders are wired to a `cancel_shipped_order` RPC that does **not exist yet** — a follow-up migration must add it (mark CANCELLED + audit row, no inventory writes) and allow `SHIPPED → CANCELLED` in the DB `is_allowed_order_transition`; the frontend cancel flow already bypasses the transition ladder.
 
+## Client Portal: Order Edits & Change Requests
+
+As of `supabase/migrations/20261008120000_*.sql`, clients edit orders only through the `client_edit_order` RPC (direct client UPDATE on `orders` is not allowed by RLS):
+- `DRAFT`/`SUBMITTED` → changes apply immediately (logged as an `AUTO_APPLIED` row in `order_change_requests`).
+- `CONFIRMED`/`IN_PRODUCTION`/`READY` → stored as a `PENDING` `order_change_requests` row (one per order); nothing changes until staff call `resolve_order_change_request` (approve applies it and re-sends the confirmation email with `revision`; decline fires `ORDER_CHANGE_DECLINED`). Review UI: `OrderChangeRequestCard` on internal OrderDetail.
+- `SHIPPED`/`CANCELLED` → no edits.
+- Both paths share `_apply_order_changes` (not API-callable). Status lists live in `src/lib/clientOrderDisplay.ts` — keep them in step with the RPC.
+- Clients choose only **Pickup** or **Delivered** (`PICKUP`/`DELIVERY`); `COURIER` is an internal choice and a client "Delivered" never overwrites it. Client-facing labels go through `clientDeliveryLabel`.
+- `orders.shipped_at` is maintained by trigger `trg_set_order_shipped_at` — don't set it by hand.
+- Planned ship date = work-deadline day for AM/Noon, next business day for PM: `plannedShipDate` in `src/lib/clientOrderDisplay.ts`, mirrored in `supabase/functions/_shared/plannedShipDate.ts`.
+- Client green-lot info comes only from `get_client_green_detail` (descriptive fields; no cost/inventory). Client product notes: `client_product_notes`, keyed (account, roast group), visible to staff on Account Detail → Product Notes.
+
 ## Migration Discipline
 
 - Filenames: `YYYYMMDDHHMMSS_<uuid>.sql` in `supabase/migrations/`

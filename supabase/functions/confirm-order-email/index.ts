@@ -19,6 +19,7 @@ import {
   renderOrderItemsText,
   sendNotificationEmail,
 } from "../_shared/notifications.ts";
+import { plannedShipDate } from "../_shared/plannedShipDate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,6 +30,10 @@ const corsHeaders = {
 
 interface ConfirmRequest {
   order_id: string;
+  // Set when re-confirming after an approved client change request (the
+  // request id). Switches the copy to "updated" and makes the send idempotent
+  // per revision instead of once per order.
+  revision?: string;
 }
 
 interface LineItem {
@@ -48,10 +53,19 @@ interface ShipTo {
   ship_to_country: string | null;
 }
 
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "TBD";
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+// Postgres DATE ("YYYY-MM-DD") — render the calendar day as-is.
+function formatDateOnly(dateStr: string | null): string | null {
+  if (!dateStr) return null;
+  const d = new Date(`${dateStr.slice(0, 10)}T00:00:00Z`);
+  return d.toLocaleDateString("en-US", { timeZone: "UTC", year: "numeric", month: "long", day: "numeric" });
+}
+
+// Timestamp — render the Vancouver calendar day.
+function formatInstantDay(ts: string | null): string | null {
+  if (!ts) return null;
+  return new Date(ts).toLocaleDateString("en-US", {
+    timeZone: "America/Vancouver", year: "numeric", month: "long", day: "numeric",
+  });
 }
 
 function escapeHtml(s: string): string {
@@ -65,7 +79,8 @@ function escapeHtml(s: string): string {
 
 function formatShipTo(ship: ShipTo | null): { text: string; html: string } {
   if (!ship) return { text: "TBD", html: "TBD" };
-  const method = ship.delivery_method ? `${ship.delivery_method}` : "Delivery";
+  // Clients choose Pickup or Delivered; courier vs our own delivery is internal.
+  const method = ship.delivery_method === "PICKUP" ? "Pickup" : "Delivered";
   const addrParts = [
     ship.ship_to_name,
     ship.ship_to_address_line1,
@@ -121,7 +136,8 @@ serve(async (req: Request) => {
       );
     }
 
-    const { order_id }: ConfirmRequest = await req.json();
+    const { order_id, revision }: ConfirmRequest = await req.json();
+    const isUpdate = typeof revision === "string" && revision.length > 0;
     if (!order_id) {
       return new Response(
         JSON.stringify({ ok: false, error: "order_id is required" }),
@@ -145,8 +161,11 @@ serve(async (req: Request) => {
       );
     }
 
-    if (order.status !== "CONFIRMED") {
-      console.warn(`[confirm-order-email] Order ${order_id} status is ${order.status}, not CONFIRMED — skipping`);
+    // Re-confirmations after an approved change request may land on an order
+    // that is already in production.
+    const sendableStatuses = isUpdate ? ["CONFIRMED", "IN_PRODUCTION", "READY"] : ["CONFIRMED"];
+    if (!sendableStatuses.includes(order.status)) {
+      console.warn(`[confirm-order-email] Order ${order_id} status is ${order.status} — not sendable, skipping`);
       return new Response(
         JSON.stringify({ ok: false, error: "Order is not in CONFIRMED status" }),
         { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -243,23 +262,33 @@ serve(async (req: Request) => {
 
     const accountName = account.account_name;
     const orderNumber = order.order_number;
-    const roastDay = formatDate(order.work_deadline_at ?? order.work_deadline ?? null);
-    const shipDate = formatDate(order.requested_ship_date);
+    const roastDay = order.work_deadline_at
+      ? formatInstantDay(order.work_deadline_at)!
+      : formatDateOnly(order.work_deadline ?? null) ?? "TBD";
+    // No requested date means the client asked for "Soonest possible".
+    const shipDate = formatDateOnly(order.requested_ship_date) ?? "Soonest";
+    const plannedShip = formatDateOnly(plannedShipDate(order.work_deadline_at)) ?? "TBD";
     const shipFmt = formatShipTo(ship);
 
     const itemsText = renderOrderItemsText(lineItems);
     const itemRowsHtml = renderOrderItemsHtml(lineItems);
 
-    const subject = `Order Confirmed — ${orderNumber} — ${accountName}`;
+    const subject = isUpdate
+      ? `Updated Order Confirmed — ${orderNumber} — ${accountName}`
+      : `Order Confirmed — ${orderNumber} — ${accountName}`;
+    const intro = isUpdate
+      ? "Your requested changes have been applied and your updated order is confirmed."
+      : "Your order has been confirmed.";
 
     const emailText = `Hi ${accountName},
 
-Your order has been confirmed. Here are the details:
+${intro} Here are the details:
 
 Order number: ${orderNumber}
 Account: ${accountName}
 Planned roast day: ${roastDay}
 Requested ship date: ${shipDate}
+Planned ship date: ${plannedShip}
 
 Items:
 ${itemsText}
@@ -267,7 +296,7 @@ ${itemsText}
 Delivery:
 ${shipFmt.text}
 
-If you need to make changes, contact us at orders@homeislandcoffee.com.
+Need to change something? Use Edit Order in the client portal, or contact us at orders@homeislandcoffee.com.
 
 Thank you,
 Home Island Manufacturing`;
@@ -275,18 +304,19 @@ Home Island Manufacturing`;
     const emailHtml = `<!doctype html>
 <html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#222;max-width:600px;margin:0 auto;padding:24px;">
   <h2 style="color:#333;margin:0 0 16px 0;">${escapeHtml(subject)}</h2>
-  <p style="margin:0 0 16px 0;">Hi ${escapeHtml(accountName)}, your order has been confirmed.</p>
+  <p style="margin:0 0 16px 0;">Hi ${escapeHtml(accountName)}, ${escapeHtml(intro.charAt(0).toLowerCase() + intro.slice(1))}</p>
   <table style="border-collapse:collapse;margin:0 0 16px 0;">
     <tr><td style="padding:2px 12px 2px 0;color:#666;">Order number</td><td style="padding:2px 0;"><strong>${escapeHtml(orderNumber)}</strong></td></tr>
     <tr><td style="padding:2px 12px 2px 0;color:#666;">Account</td><td style="padding:2px 0;">${escapeHtml(accountName)}</td></tr>
     <tr><td style="padding:2px 12px 2px 0;color:#666;">Planned roast day</td><td style="padding:2px 0;">${escapeHtml(roastDay)}</td></tr>
     <tr><td style="padding:2px 12px 2px 0;color:#666;">Requested ship date</td><td style="padding:2px 0;">${escapeHtml(shipDate)}</td></tr>
+    <tr><td style="padding:2px 12px 2px 0;color:#666;">Planned ship date</td><td style="padding:2px 0;"><strong>${escapeHtml(plannedShip)}</strong></td></tr>
   </table>
   <h3 style="margin:16px 0 8px 0;font-size:14px;">Items</h3>
   <table style="border-collapse:collapse;width:100%;margin:0 0 16px 0;border-top:1px solid #eee;border-bottom:1px solid #eee;">${itemRowsHtml}</table>
   <h3 style="margin:16px 0 8px 0;font-size:14px;">Delivery</h3>
   <p style="margin:0 0 16px 0;">${shipFmt.html}</p>
-  <p style="margin:16px 0 8px 0;color:#666;font-size:13px;">If you need to make changes, contact us at <a href="mailto:orders@homeislandcoffee.com">orders@homeislandcoffee.com</a>.</p>
+  <p style="margin:16px 0 8px 0;color:#666;font-size:13px;">Need to change something? Use Edit Order in the client portal, or contact us at <a href="mailto:orders@homeislandcoffee.com">orders@homeislandcoffee.com</a>.</p>
   <p style="margin:0;color:#666;font-size:13px;">Thank you,<br/>Home Island Manufacturing</p>
 </body></html>`;
 
@@ -296,7 +326,9 @@ Home Island Manufacturing`;
         recipient,
         "order_confirmation",
         { subject, text: emailText, html: emailHtml },
-        `order-confirmation-${order.id}-${recipient}`,
+        isUpdate
+          ? `order-confirmation-${order.id}-${revision}-${recipient}`
+          : `order-confirmation-${order.id}-${recipient}`,
       );
       if (suppressed) {
         console.log("[confirm-order-email] recipient suppressed — skipped");
