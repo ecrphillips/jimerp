@@ -97,6 +97,7 @@ export function CreateAlliedProductModal({ open, onOpenChange }: CreateAlliedPro
     setName('');
     setSourceKey('');
     setAlliedType('');
+    setTaxCode('NONE');
   };
 
   const canSubmit = name.trim().length > 0 && !!selectedSource && !!alliedType && !isSaving;
