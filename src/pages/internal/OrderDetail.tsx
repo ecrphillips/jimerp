@@ -882,7 +882,7 @@ export default function OrderDetail() {
         <Card>
           <CardHeader><CardTitle>Order Info</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <div><strong>Client:</strong> {(order as any).account?.account_name ?? order.client?.name ?? 'Unknown'}</div>
+            <div><strong>Client:</strong> {(order as any).account_id ? <Link to={`/accounts/${(order as any).account_id}`} className="text-primary underline underline-offset-2 hover:no-underline">{(order as any).account?.account_name ?? order.client?.name ?? 'Unknown'}</Link> : ((order as any).account?.account_name ?? order.client?.name ?? 'Unknown')}</div>
             <div><strong>Status:</strong> {order.status}</div>
             <div><strong>Delivery:</strong> {order.delivery_method}</div>
             <div><strong>Client PO:</strong> {order.client_po || '—'}</div>
