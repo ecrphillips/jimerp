@@ -10,7 +10,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatMoney } from '@/lib/formatMoney';
 import { formatInvoiceWeight, invoiceOrderWeightKg } from '@/lib/invoiceTotals';
 import { useWeightUnit } from '@/hooks/useWeightUnit';
-import { CheckCircle2, ChevronDown, ChevronRight, FileText, Save } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronRight, FileText, Save, Trash2 } from 'lucide-react';
+import { AddExtraLineForm, useDeleteExtraLine, useOrderExtraLines } from '@/components/orders/OrderExtraLines';
 import { toast } from 'sonner';
 
 interface InvoiceLineItem {
@@ -48,6 +49,8 @@ function InvoiceOrderRow({ order, onMarkInvoiced, onSaveShipping, isUpdating, is
   );
   const w = useWeightUnit();
   const lineItems = order.line_items ?? [];
+  const { data: extraLines = [] } = useOrderExtraLines(isOpen ? order.id : undefined);
+  const deleteExtra = useDeleteExtraLine(order.id);
   const totalUnits = lineItems.reduce((sum, line) => sum + line.quantity_units, 0);
   const totalKg = invoiceOrderWeightKg(lineItems);
   const kgLabel = formatInvoiceWeight(totalKg, (v) => v, 'kg');
@@ -109,6 +112,22 @@ function InvoiceOrderRow({ order, onMarkInvoiced, onSaveShipping, isUpdating, is
               <span className="text-right tabular-nums">{formatMoney(Number(line.unit_price_locked))}</span>
             </div>
           ))}
+          {extraLines.map((x) => (
+            <div key={x.id} className="grid grid-cols-[minmax(0,1fr)_5rem_7rem] items-center gap-4 border-b px-3 py-2.5 last:border-b-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="font-medium">{x.label}</span>
+                <span className="text-xs text-muted-foreground">subtotal {formatMoney(x.quantity * x.unit_price)}</span>
+                <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Remove line" onClick={() => deleteExtra.mutate(x.id)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <span className="text-right font-semibold">{x.quantity}</span>
+              <span className="text-right tabular-nums">{formatMoney(x.unit_price)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3">
+          <AddExtraLineForm orderId={order.id} />
         </div>
 
         <div className="mt-3 flex flex-wrap items-end justify-end gap-2 border-t pt-3">
@@ -205,6 +224,7 @@ export function InvoicingTab() {
     onSuccess: () => {
       toast.success('Shipping cost saved');
       queryClient.invalidateQueries({ queryKey: ['shipped-awaiting-invoice'] });
+      queryClient.invalidateQueries({ queryKey: ['order-shipping-cost'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
     },
     onError: (err) => {

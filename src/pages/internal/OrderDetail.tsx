@@ -28,6 +28,7 @@ import { WorkDeadlinePicker } from '@/components/orders/WorkDeadlinePicker';
 import { OrderDeleteModal } from '@/components/internal/OrderDeleteModal';
 import { ALLOWED_ORDER_TRANSITIONS } from '@/lib/orderTransitions';
 import { useAuth } from '@/contexts/AuthContext';
+import { AddExtraLineForm, useDeleteExtraLine, useOrderExtraLines } from '@/components/orders/OrderExtraLines';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -151,6 +152,18 @@ export default function OrderDetail() {
       return data ?? [];
     },
     enabled: !!id,
+  });
+
+  const { data: extraLines = [] } = useOrderExtraLines(id);
+  const deleteExtra = useDeleteExtraLine(id ?? '');
+  const { data: shippingCostCad = null } = useQuery({
+    queryKey: ['order-shipping-cost', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('orders').select('shipping_cost_cad').eq('id', id!).maybeSingle();
+      if (error) throw error;
+      return data?.shipping_cost_cad == null ? null : Number(data.shipping_cost_cad);
+    },
   });
 
   // Fetch packing runs for the order's requested_ship_date
@@ -631,7 +644,9 @@ export default function OrderDetail() {
     );
   }
 
-  const lineTotal = lineItemsWithPackedStatus.reduce((sum, li) => sum + li.quantity_units * li.unit_price_locked, 0);
+  const productLineTotal = lineItemsWithPackedStatus.reduce((sum, li) => sum + li.quantity_units * li.unit_price_locked, 0);
+  const extrasTotal = extraLines.reduce((sum, x) => sum + x.quantity * x.unit_price, 0);
+  const lineTotal = productLineTotal + extrasTotal + (shippingCostCad ?? 0);
 
   // Advancement is always a deliberate click. SHIPPED keeps its pack-complete gate;
   // READY soft-warns when not packed but still allows an override.
@@ -1118,6 +1133,33 @@ export default function OrderDetail() {
                       <td className="py-2 text-right">${(li.quantity_units * li.unit_price_locked).toFixed(2)}</td>
                     </tr>
                   ))}
+                  {extraLines.map((x) => (
+                    <tr key={x.id} className="border-b last:border-0">
+                      <td className="py-2">
+                        <div className="flex items-center gap-2">
+                          <span>{x.label}</span>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Remove line" onClick={() => deleteExtra.mutate(x.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                      <td className="py-2">{x.quantity}</td>
+                      <td className="py-2">—</td>
+                      <td className="py-2">—</td>
+                      <td className="py-2">${x.unit_price.toFixed(2)}</td>
+                      <td className="py-2 text-right">${(x.quantity * x.unit_price).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                  {shippingCostCad != null && (
+                    <tr className="border-b last:border-0">
+                      <td className="py-2">Shipping</td>
+                      <td className="py-2">—</td>
+                      <td className="py-2">—</td>
+                      <td className="py-2">—</td>
+                      <td className="py-2">—</td>
+                      <td className="py-2 text-right">${shippingCostCad.toFixed(2)}</td>
+                    </tr>
+                  )}
                 </tbody>
                 <tfoot>
                   <tr>
@@ -1126,6 +1168,7 @@ export default function OrderDetail() {
                   </tr>
                 </tfoot>
               </table>
+              {id && <div className="mt-4 border-t pt-4"><AddExtraLineForm orderId={id} /></div>}
             </>
           )}
         </CardContent>
