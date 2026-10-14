@@ -1151,6 +1151,13 @@ export default function OrderDetail() {
                     </tr>
                   ))}
                   {id && extraLines.map((x) => <EditableExtraLineRow key={x.id} line={x} orderId={id} />)}
+                  {id && (
+                    <tr>
+                      <td colSpan={6} className="py-2">
+                        <AddExtraLineForm orderId={id} />
+                      </td>
+                    </tr>
+                  )}
                   {id && <EditableShippingRow orderId={id} cost={shippingCostCad} taxCode={shippingInfo?.taxCode ?? null} suggestion={taxSuggestion} />}
                 </tbody>
                 <tfoot>
@@ -1172,7 +1179,6 @@ export default function OrderDetail() {
                   </tr>
                 </tfoot>
               </table>
-              {id && <div className="mt-4 border-t pt-4"><AddExtraLineForm orderId={id} /></div>}
             </>
           )}
         </CardContent>
