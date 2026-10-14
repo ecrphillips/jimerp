@@ -3741,6 +3741,7 @@ export type Database = {
           label: string
           order_id: string
           quantity: number
+          tax_code: string
           unit_price: number
         }
         Insert: {
@@ -3750,6 +3751,7 @@ export type Database = {
           label: string
           order_id: string
           quantity?: number
+          tax_code?: string
           unit_price?: number
         }
         Update: {
@@ -3759,6 +3761,7 @@ export type Database = {
           label?: string
           order_id?: string
           quantity?: number
+          tax_code?: string
           unit_price?: number
         }
         Relationships: [
@@ -3794,6 +3797,7 @@ export type Database = {
           short_ship_reason: string | null
           short_ship_recorded_at: string | null
           short_ship_recorded_by: string | null
+          tax_code: string | null
           unit_price_locked: number
         }
         Insert: {
@@ -3811,6 +3815,7 @@ export type Database = {
           short_ship_reason?: string | null
           short_ship_recorded_at?: string | null
           short_ship_recorded_by?: string | null
+          tax_code?: string | null
           unit_price_locked: number
         }
         Update: {
@@ -3828,6 +3833,7 @@ export type Database = {
           short_ship_reason?: string | null
           short_ship_recorded_at?: string | null
           short_ship_recorded_by?: string | null
+          tax_code?: string | null
           unit_price_locked?: number
         }
         Relationships: [
@@ -4072,6 +4078,7 @@ export type Database = {
           shipped_at: string | null
           shipped_or_ready: boolean
           shipping_cost_cad: number | null
+          shipping_tax_code: string | null
           shopify_pull_log_id: string | null
           shopify_source_id: string | null
           source_channel: string
@@ -4105,6 +4112,7 @@ export type Database = {
           shipped_at?: string | null
           shipped_or_ready?: boolean
           shipping_cost_cad?: number | null
+          shipping_tax_code?: string | null
           shopify_pull_log_id?: string | null
           shopify_source_id?: string | null
           source_channel?: string
@@ -4138,6 +4146,7 @@ export type Database = {
           shipped_at?: string | null
           shipped_or_ready?: boolean
           shipping_cost_cad?: number | null
+          shipping_tax_code?: string | null
           shopify_pull_log_id?: string | null
           shopify_source_id?: string | null
           source_channel?: string
@@ -4703,6 +4712,7 @@ export type Database = {
           requires_production: boolean
           roast_group: string | null
           sku: string | null
+          tax_code: string
           updated_at: string
           yield_loss_pct_override: number | null
         }
@@ -4739,6 +4749,7 @@ export type Database = {
           requires_production?: boolean
           roast_group?: string | null
           sku?: string | null
+          tax_code?: string
           updated_at?: string
           yield_loss_pct_override?: number | null
         }
@@ -4775,6 +4786,7 @@ export type Database = {
           requires_production?: boolean
           roast_group?: string | null
           sku?: string | null
+          tax_code?: string
           updated_at?: string
           yield_loss_pct_override?: number | null
         }
@@ -6766,6 +6778,7 @@ export type Database = {
           shipped_at: string | null
           shipped_or_ready: boolean
           shipping_cost_cad: number | null
+          shipping_tax_code: string | null
           shopify_pull_log_id: string | null
           shopify_source_id: string | null
           source_channel: string
