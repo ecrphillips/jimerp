@@ -26,6 +26,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Package, Layers, GripVertical, RotateCcw, ChevronDown, ChevronRight, ChevronsUpDown, Printer } from 'lucide-react';
 import { printPackList } from './printPackList';
+import { BlendHoldsPanel } from './BlendHoldsPanel';
 import { Link } from 'react-router-dom';
 import { type PackagingVariant } from '@/components/PackagingBadge';
 import { SortablePackRow } from './SortablePackRow';
@@ -1201,6 +1202,12 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     <div className="space-y-4">
       {/* Authoritative Totals Summary */}
       <AuthoritativeSummaryPanel tab="pack" />
+
+      {/* Coffee ring-fenced for post-roast blends, with release to stock */}
+      <BlendHoldsPanel
+        title="Roasted coffee held for blends"
+        description="This coffee is counted in inventory but can't be packed for other products until the blend uses it. Release it if it won't be blended."
+      />
       
       {/* Packing Progress */}
       <Card className="overflow-hidden border-2 shadow-sm">
