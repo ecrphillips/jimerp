@@ -20,6 +20,8 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { TAX_CODES, TAX_CODE_OPTIONS, type ProductTaxCode } from '@/lib/salesTax';
+import { TaxGuidance } from '@/components/orders/TaxRateSelect';
 
 type AlliedType = 'MERCH' | 'EQUIPMENT' | 'INSTANT' | 'OTHER';
 
@@ -44,6 +46,7 @@ export function CreateAlliedProductModal({ open, onOpenChange }: CreateAlliedPro
   const [sourceKey, setSourceKey] = useState<string>('');
   const [alliedType, setAlliedType] = useState<AlliedType | ''>('');
   const [isSaving, setIsSaving] = useState(false);
+  const [taxCode, setTaxCode] = useState<ProductTaxCode>('NONE');
 
   // Order-pull sources are not a single table: Shopify stores (e.g. No Smoke) live in
   // shopify_sources with a linked_account_id; Funk is a plain account (CSV import).
@@ -113,6 +116,7 @@ export function CreateAlliedProductModal({ open, onOpenChange }: CreateAlliedPro
         bag_size_g: 0, // placeholder; allied items are not weighed coffee
         is_active: true,
         requires_production: false,
+        tax_code: taxCode,
       };
 
       const { error } = await supabase.from('products').insert(payload as never);
@@ -196,6 +200,20 @@ export function CreateAlliedProductModal({ open, onOpenChange }: CreateAlliedPro
                     {t.label}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-1">
+              <Label htmlFor="allied-tax">Sales tax</Label>
+              <TaxGuidance />
+            </div>
+            <Select value={taxCode} onValueChange={(v) => setTaxCode(v as ProductTaxCode)} disabled={isSaving}>
+              <SelectTrigger id="allied-tax"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {TAX_CODE_OPTIONS.map((c) => <SelectItem key={c} value={c}>{TAX_CODES[c].label}</SelectItem>)}
+                <SelectItem value="BY_PROVINCE">Based on ship-to province</SelectItem>
               </SelectContent>
             </Select>
           </div>

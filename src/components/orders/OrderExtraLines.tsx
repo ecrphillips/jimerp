@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
+import { TAX_CODES, type TaxCode } from '@/lib/salesTax';
+import { TaxRateSelect } from '@/components/orders/TaxRateSelect';
 
 export interface OrderExtraLine {
   id: string;
@@ -12,6 +14,7 @@ export interface OrderExtraLine {
   label: string;
   quantity: number;
   unit_price: number;
+  tax_code: TaxCode;
 }
 
 export const extraLinesKey = (orderId: string) => ['order-extra-lines', orderId];
@@ -24,11 +27,11 @@ export function useOrderExtraLines(orderId: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('order_extra_lines')
-        .select('id, order_id, label, quantity, unit_price')
+        .select('id, order_id, label, quantity, unit_price, tax_code')
         .eq('order_id', orderId!)
         .order('created_at', { ascending: true });
       if (error) throw error;
-      return (data ?? []).map((r) => ({ ...r, quantity: Number(r.quantity), unit_price: Number(r.unit_price) })) as OrderExtraLine[];
+      return (data ?? []).map((r) => ({ ...r, quantity: Number(r.quantity), unit_price: Number(r.unit_price), tax_code: (r.tax_code ?? 'NONE') as TaxCode })) as OrderExtraLine[];
     },
   });
 }
@@ -59,6 +62,7 @@ export function AddExtraLineForm({ orderId }: { orderId: string }) {
   const [label, setLabel] = useState('');
   const [qty, setQty] = useState('1');
   const [price, setPrice] = useState('');
+  const [tax, setTax] = useState<TaxCode>('NONE');
 
   const q = Number(qty);
   const p = Number(price);
@@ -68,13 +72,13 @@ export function AddExtraLineForm({ orderId }: { orderId: string }) {
     mutationFn: async () => {
       const { data: u } = await supabase.auth.getUser();
       const { error } = await supabase.from('order_extra_lines').insert({
-        order_id: orderId, label: label.trim(), quantity: q, unit_price: p, created_by: u.user?.id ?? null,
+        order_id: orderId, label: label.trim(), quantity: q, unit_price: p, tax_code: tax, created_by: u.user?.id ?? null,
       });
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success('Line added');
-      setLabel(''); setQty('1'); setPrice(''); setOpen(false);
+      setLabel(''); setQty('1'); setPrice(''); setTax('NONE'); setOpen(false);
       invalidate();
     },
     onError: () => toast.error('Failed to add line'),
@@ -102,8 +106,13 @@ export function AddExtraLineForm({ orderId }: { orderId: string }) {
         <label className="text-xs font-medium text-muted-foreground">Unit price</label>
         <Input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" />
       </div>
-      <div className="w-24 pb-2 text-right text-sm tabular-nums">
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Tax</label>
+        <TaxRateSelect value={tax} onChange={setTax} />
+      </div>
+      <div className="w-28 pb-2 text-right text-sm tabular-nums">
         ${valid ? (q * p).toFixed(2) : '0.00'}
+        {valid && tax !== 'NONE' && <div className="text-xs text-muted-foreground">+ ${(q * p * TAX_CODES[tax].rate).toFixed(2)} tax</div>}
       </div>
       <Button type="button" size="sm" onClick={() => add.mutate()} disabled={!valid || add.isPending}>Add</Button>
       <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
