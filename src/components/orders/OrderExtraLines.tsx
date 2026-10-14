@@ -87,7 +87,7 @@ export function AddExtraLineForm({ orderId }: { orderId: string }) {
   if (!open) {
     return (
       <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Plus className="mr-1 h-4 w-4" /> Add line
+        <Plus className="mr-1 h-4 w-4" /> Add line item
       </Button>
     );
   }

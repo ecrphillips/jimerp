@@ -1150,7 +1150,13 @@ export default function OrderDetail() {
                       <td className="py-2 text-right">${(li.quantity_units * li.unit_price_locked).toFixed(2)}</td>
                     </tr>
                   ))}
-                  {id && extraLines.map((x) => <EditableExtraLineRow key={x.id} line={x} orderId={id} />)}
+                  {id && (
+                    <tr>
+                      <td colSpan={6} className="py-2">
+                        <AddExtraLineForm orderId={id} />
+                      </td>
+                    </tr>
+                  )}
                   {id && <EditableShippingRow orderId={id} cost={shippingCostCad} taxCode={shippingInfo?.taxCode ?? null} suggestion={taxSuggestion} />}
                 </tbody>
                 <tfoot>
