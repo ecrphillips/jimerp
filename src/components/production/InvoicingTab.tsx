@@ -73,7 +73,7 @@ function InvoiceOrderRow({ order, onMarkInvoiced, onSaveShipping, isUpdating, is
         </CollapsibleTrigger>
         <Link
           to={`/orders/${order.id}`}
-          className="shrink-0 font-semibold text-primary underline-offset-2 hover:underline"
+          className="shrink-0 font-semibold text-primary underline underline-offset-4 hover:opacity-80"
           title={`Open ${order.order_number} order detail`}
         >
           {order.order_number}
