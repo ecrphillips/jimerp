@@ -224,6 +224,7 @@ export function InvoicingTab() {
     onSuccess: () => {
       toast.success('Shipping cost saved');
       queryClient.invalidateQueries({ queryKey: ['shipped-awaiting-invoice'] });
+      queryClient.invalidateQueries({ queryKey: ['order-shipping-cost'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
     },
     onError: (err) => {
