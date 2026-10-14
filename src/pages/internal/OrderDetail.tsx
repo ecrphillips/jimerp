@@ -1179,7 +1179,6 @@ export default function OrderDetail() {
                   </tr>
                 </tfoot>
               </table>
-              {id && <div className="mt-4 border-t pt-4"><AddExtraLineForm orderId={id} /></div>}
             </>
           )}
         </CardContent>
