@@ -30,7 +30,7 @@ import { ALLOWED_ORDER_TRANSITIONS } from '@/lib/orderTransitions';
 import { useAuth } from '@/contexts/AuthContext';
 import { TAX_CODES, computeTaxBreakdown, resolveTaxCode, type TaxCode } from '@/lib/salesTax';
 import { useOrderTaxSuggestion } from '@/components/orders/TaxRateSelect';
-import { AddExtraLineForm, useDeleteExtraLine, useOrderExtraLines } from '@/components/orders/OrderExtraLines';
+import { EditableExtraLineRow, EditableShippingRow, AddExtraLineForm, useDeleteExtraLine, useOrderExtraLines } from '@/components/orders/OrderExtraLines';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -1150,37 +1150,8 @@ export default function OrderDetail() {
                       <td className="py-2 text-right">${(li.quantity_units * li.unit_price_locked).toFixed(2)}</td>
                     </tr>
                   ))}
-                  {extraLines.map((x) => (
-                    <tr key={x.id} className="border-b last:border-0">
-                      <td className="py-2">
-                        <div className="flex items-center gap-2">
-                          <span>{x.label}</span>
-                          {x.tax_code !== 'NONE' && <Badge variant="outline" className="text-xs">{TAX_CODES[x.tax_code].label}</Badge>}
-                          <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Remove line" onClick={() => deleteExtra.mutate(x.id)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </td>
-                      <td className="py-2">{x.quantity}</td>
-                      <td className="py-2">—</td>
-                      <td className="py-2">—</td>
-                      <td className="py-2">${x.unit_price.toFixed(2)}</td>
-                      <td className="py-2 text-right">${(x.quantity * x.unit_price).toFixed(2)}</td>
-                    </tr>
-                  ))}
-                  {shippingCostCad != null && (
-                    <tr className="border-b last:border-0">
-                      <td className="py-2">
-                        Shipping
-                        {shippingTaxCode !== 'NONE' && <Badge variant="outline" className="ml-2 text-xs">{TAX_CODES[shippingTaxCode].label}{shippingInfo?.taxCode ? '' : ' (suggested)'}</Badge>}
-                      </td>
-                      <td className="py-2">—</td>
-                      <td className="py-2">—</td>
-                      <td className="py-2">—</td>
-                      <td className="py-2">—</td>
-                      <td className="py-2 text-right">${shippingCostCad.toFixed(2)}</td>
-                    </tr>
-                  )}
+                  {id && extraLines.map((x) => <EditableExtraLineRow key={x.id} line={x} orderId={id} />)}
+                  {id && <EditableShippingRow orderId={id} cost={shippingCostCad} taxCode={shippingInfo?.taxCode ?? null} suggestion={taxSuggestion} />}
                 </tbody>
                 <tfoot>
                   {taxBreakdown.taxes.length > 0 && (
