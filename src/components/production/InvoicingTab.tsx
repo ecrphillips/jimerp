@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -70,8 +71,14 @@ function InvoiceOrderRow({ order, onMarkInvoiced, onSaveShipping, isUpdating, is
             {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </Button>
         </CollapsibleTrigger>
+        <Link
+          to={`/orders/${order.id}`}
+          className="shrink-0 font-semibold text-primary underline underline-offset-4 hover:opacity-80"
+          title={`Open ${order.order_number} order detail`}
+        >
+          {order.order_number}
+        </Link>
         <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-3 text-left">
-          <span className="font-semibold">{order.order_number}</span>
           <span className="text-muted-foreground">•</span>
           <span className="truncate">{order.account?.account_name ?? order.client?.name ?? 'Unknown'}</span>
           {order.location?.location_name && (
