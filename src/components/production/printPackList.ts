@@ -1,7 +1,8 @@
+import { packLineProgress } from '@/lib/packLineSplit';
 import type { PackL1Node, PackGroupMode, PackLeafNode } from './PackGroupedView';
 
 const esc = (s: unknown) =>
-  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] ?? c)));
 
 /**
  * Print the pack list. Completed lines are excluded; for the rest the big
@@ -21,9 +22,7 @@ export function printPackList(
   // complete only when the SKU's global demand is fully covered.
   const progressFor = (leaf: PackLeafNode, globalDemand: number) => {
     if (!leaf.requiresProduction) return { packed: leaf.units, complete: true };
-    const effectivePacked = Math.min(globalDemand, (availableByProduct[leaf.productId] ?? 0) + (pickedByProduct[leaf.productId] ?? 0));
-    const complete = globalDemand > 0 && effectivePacked >= globalDemand;
-    return { packed: complete ? leaf.units : Math.min(leaf.units, effectivePacked), complete };
+    return packLineProgress(leaf.units, leaf.packed);
   };
 
   const globalDemandOf = (leaves: PackLeafNode[], productId: string) =>

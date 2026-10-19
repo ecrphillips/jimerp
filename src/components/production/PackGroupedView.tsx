@@ -12,6 +12,7 @@ import {
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { InlinePackingControl } from './InlinePackingControl';
 import { partitionPackDrawerLines } from '@/lib/packGroupSort';
+import { packLineProgress } from '@/lib/packLineSplit';
 
 export type PackGroupMode = 'account' | 'roastgroup';
 export type WipStatus = 'full' | 'partial' | 'none';
@@ -27,6 +28,10 @@ export interface PackingRun {
 
 /** A single product under one account (per-account demanded quantity). */
 export interface PackLeafNode {
+  lineIds: string[];
+  packed: number;
+  picked: number;
+  grindLabel: string | null;
   /** Stable key for expand state — includes the full path so the same SKU under
    *  two accounts expands independently. */
   key: string;
@@ -95,39 +100,8 @@ interface PackGroupedViewProps {
     roastGroupKey: string,
     previousUnits: number,
   ) => Promise<void>;
+  onUpdateLineUnits: (lineIds: string[], units: number) => Promise<void>;
   onEditingChange: (productId: string, isEditing: boolean) => void;
-}
-
-function GrindBadges({
-  grindUnits,
-  wholeBeanUnits,
-  grindByLabel,
-}: {
-  grindUnits: number;
-  wholeBeanUnits: number;
-  grindByLabel: Record<string, number>;
-}) {
-  if (grindUnits <= 0) return null;
-  return (
-    <div className="mt-1 flex items-center gap-2 flex-wrap">
-      <Badge className="text-xs font-bold uppercase tracking-wide bg-orange-500 text-white border-orange-600 hover:bg-orange-500">
-        <AlertTriangle className="h-3.5 w-3.5 mr-1" />
-        {grindUnits} GRIND
-      </Badge>
-      {wholeBeanUnits > 0 && (
-        <span className="text-xs font-medium text-muted-foreground">{wholeBeanUnits} whole bean</span>
-      )}
-      {Object.entries(grindByLabel).map(([label, qty]) => (
-        <Badge
-          key={label}
-          variant="outline"
-          className="text-xs font-semibold border-orange-400 text-orange-700 bg-orange-50 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800"
-        >
-          {qty} × {label}
-        </Badge>
-      ))}
-    </div>
-  );
 }
 
 /** Left-border accent by WIP readiness, matching the flat pack row cues. */
@@ -164,16 +138,7 @@ function wipBarClass(wipStatus: WipStatus | null): string {
 
 function progressForLeaf(leaf: PackLeafNode, props: PackGroupedViewProps) {
   if (!leaf.requiresProduction) return { packed: leaf.units, needed: leaf.units, complete: true };
-  const globalDemand = props.globalDemandByProduct[leaf.productId] ?? 0;
-  const available = props.availableByProduct[leaf.productId] ?? 0;
-  const picked = props.pickedByProduct[leaf.productId] ?? 0;
-  const effectivePacked = Math.min(globalDemand, available + picked);
-  const complete = globalDemand > 0 && effectivePacked >= globalDemand;
-  return {
-    packed: complete ? leaf.units : Math.min(leaf.units, effectivePacked),
-    needed: leaf.units,
-    complete,
-  };
+  return packLineProgress(leaf.units, leaf.packed);
 }
 
 function progressForLeaves(leaves: PackLeafNode[], props: PackGroupedViewProps) {
@@ -205,24 +170,19 @@ function LeafRow({
     pickedByProduct,
     wipStatusByProduct,
     timeSensitiveByProduct,
-    onUpdatePackedUnits,
+    onUpdateLineUnits,
     onEditingChange,
   } = props;
 
   const pid = leaf.productId;
   const wipStatus = wipStatusByProduct[pid] ?? 'none';
-  const globalDemand = globalDemandByProduct[pid] ?? 0;
-  const available = availableByProduct[pid] ?? 0;
-  const picked = pickedByProduct[pid] ?? 0;
-  const effectivePacked = available + picked;
-  const isComplete = leaf.requiresProduction
-    ? globalDemand > 0 && effectivePacked >= globalDemand
-    : true;
+  const effectivePacked = leaf.packed;
+  const isComplete = !leaf.requiresProduction || packLineProgress(leaf.units, effectivePacked).complete;
   const isStarted = effectivePacked > 0;
   const timeSensitive = timeSensitiveByProduct[pid] ?? false;
 
   return (
-    <div className={`border-l-4 transition-opacity ${isComplete && leaf.requiresProduction ? 'border-l-success opacity-50 focus-within:opacity-100 hover:opacity-100' : leafAccent(wipStatus, leaf.requiresProduction)}`}>
+    <div data-pack-line={leaf.key} className={`border-l-4 transition-opacity ${isComplete && leaf.requiresProduction ? 'border-l-success opacity-50 focus-within:opacity-100 hover:opacity-100' : leafAccent(wipStatus, leaf.requiresProduction)}`}>
       <div
         className={`flex items-center gap-3 border-b px-3 py-3 transition-colors ${compact ? 'pl-4' : 'pl-6'} ${
           isComplete
@@ -239,6 +199,11 @@ function LeafRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-sm text-foreground">{leaf.productName}</span>
+            {leaf.grindLabel ? (
+              <Badge variant="outline" className="font-bold text-warning border-warning bg-warning/15">
+                <AlertTriangle className="h-3.5 w-3.5 mr-1" />GRIND · {leaf.grindLabel}
+              </Badge>
+            ) : <span className="text-xs text-muted-foreground">Whole bean</span>}
             {!leaf.requiresProduction && (
               <Badge className="text-xs font-bold uppercase tracking-wide bg-amber-500 text-white border-amber-600 hover:bg-amber-500">
                 <AlertTriangle className="h-3.5 w-3.5 mr-1" />
@@ -270,11 +235,7 @@ function LeafRow({
               </Badge>
             )}
           </div>
-          <GrindBadges
-            grindUnits={leaf.grindUnits}
-            wholeBeanUnits={leaf.wholeBeanUnits}
-            grindByLabel={leaf.grindByLabel}
-          />
+
         </div>
 
         <div className="shrink-0 flex items-center justify-end gap-2 text-right">
@@ -297,7 +258,7 @@ function LeafRow({
             <div className="text-right">
               <div className="flex items-center justify-end gap-1 text-sm font-black tabular-nums text-foreground">
                 {isComplete && <Check className="h-3.5 w-3.5 text-success" />}
-                {effectivePacked}/{globalDemand}
+                {effectivePacked}/{leaf.units}
               </div>
               <div className="text-[10px] font-bold uppercase text-muted-foreground">packed</div>
             </div>
@@ -306,13 +267,11 @@ function LeafRow({
         {leaf.requiresProduction && (
           <div className="shrink-0">
             <InlinePackingControl
-              value={available}
-              onCommit={(v) =>
-                onUpdatePackedUnits(pid, v, leaf.bagSizeG, leaf.roastGroupKey, available)
-              }
+              value={effectivePacked}
+              onCommit={(v) => onUpdateLineUnits(leaf.lineIds, v)}
               onEditingChange={(editing) => onEditingChange(pid, editing)}
               isComplete={isComplete}
-              fillValue={Math.max(0, globalDemand - picked)}
+              fillValue={leaf.units}
             />
           </div>
         )}
@@ -511,7 +470,7 @@ export function PackGroupedView(props: PackGroupedViewProps) {
           l1.children,
           (leaf) => leaf.requiresProduction && progressForLeaf(leaf, props).complete,
           // Smallest to largest bag size so every drawer reads in the same order.
-          (a, b) => a.bagSizeG - b.bagSizeG || a.productName.localeCompare(b.productName),
+          (a, b) => a.bagSizeG - b.bagSizeG || a.productName.localeCompare(b.productName) || Number(Boolean(a.grindLabel)) - Number(Boolean(b.grindLabel)) || (a.grindLabel ?? '').localeCompare(b.grindLabel ?? ''),
         );
         return (
           <div
