@@ -40,20 +40,36 @@ export default function AuthCallback() {
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        // Get token info from URL hash (Supabase puts tokens in hash fragment)
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        // Get token info from URL hash (Supabase puts tokens in hash fragment).
+        // The auth client may consume/clear the hash before this runs, so fall
+        // back to the copy stashed by index.html on page load.
+        let rawHash = window.location.hash.substring(1);
+        try {
+          const stashed = sessionStorage.getItem('hi_auth_cb_hash');
+          sessionStorage.removeItem('hi_auth_cb_hash');
+          if (!rawHash && stashed) rawHash = stashed;
+        } catch { /* ignore */ }
+        const hashParams = new URLSearchParams(rawHash);
         const accessToken = hashParams.get('access_token');
         const refreshToken = hashParams.get('refresh_token');
         const type = hashParams.get('type');
         
-        // Also check query params for error cases
-        const errorDescription = searchParams.get('error_description');
+        // Expired/used links report errors in the query or the hash
+        const errorDescription = searchParams.get('error_description') || hashParams.get('error_description');
         if (errorDescription) {
-          setError(errorDescription);
+          setError(errorDescription.replace(/\+/g, ' '));
           return;
         }
 
-        
+        // Session already established by the auth client from the link, but
+        // this was an invite/reset — the user still needs to choose a password.
+        if (!accessToken && (type === 'invite' || type === 'signup' || type === 'recovery')) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            navigate('/auth/set-password', { replace: true });
+            return;
+          }
+        }
 
         // If we have tokens in the hash, set the session
         if (accessToken && refreshToken) {

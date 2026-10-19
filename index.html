@@ -1,6 +1,14 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      // Stash invite/reset link details before the sign-in library clears them from the URL.
+      try {
+        if (location.pathname === '/auth/callback' && location.hash.length > 1) {
+          sessionStorage.setItem('hi_auth_cb_hash', location.hash.substring(1));
+        }
+      } catch (e) {}
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Home Island Coffee Partners</title>
