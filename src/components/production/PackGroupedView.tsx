@@ -219,13 +219,13 @@ function LeafRow({
                 Urgent
               </Badge>
             )}
-            {leaf.requiresProduction && wipStatus === 'full' && (
+            {leaf.requiresProduction && !isComplete && wipStatus === 'full' && (
               <Badge variant="outline" className="text-xs bg-success/15 text-success border-success/30">
                 <CheckCircle className="h-3 w-3 mr-1 text-success" />
                 WIP ready
               </Badge>
             )}
-            {leaf.requiresProduction && wipStatus === 'partial' && (
+            {leaf.requiresProduction && !isComplete && wipStatus === 'partial' && (
               <Badge variant="outline" className="text-xs bg-warning/15 text-warning border-warning/30">
                 <AlertCircle className="h-3 w-3 mr-1 text-warning" />
                 WIP partial
