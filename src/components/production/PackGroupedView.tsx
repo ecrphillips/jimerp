@@ -317,7 +317,9 @@ function GroupHeader({
   wipStatus: WipStatus | null;
   onClick: () => void;
 }) {
-  const { weightToDisplay, suffix } = useWeightUnit();
+  // Pack-floor weights are always in kg, regardless of the pricing-sheet lb/kg toggle.
+  const weightToDisplay = (kg: number) => kg;
+  const suffix = 'kg';
   // Complete keeps its green bar; collapsed drawers show the aggregate WIP cue;
   // expanded-but-incomplete stays neutral so the row bands do the talking.
   const barClass = complete
