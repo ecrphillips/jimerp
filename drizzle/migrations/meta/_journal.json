@@ -43,6 +43,13 @@
       "when": 1792012630446,
       "tag": "0005_sales_tax_codes",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792436432480,
+      "tag": "0006_independent_pack_line_progress",
+      "breakpoints": true
     }
   ]
 }

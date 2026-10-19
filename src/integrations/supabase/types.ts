@@ -4200,6 +4200,32 @@ export type Database = {
           },
         ]
       }
+      pack_line_progress: {
+        Row: {
+          order_line_item_id: string
+          packed_units: number
+          updated_at: string
+        }
+        Insert: {
+          order_line_item_id: string
+          packed_units?: number
+          updated_at?: string
+        }
+        Update: {
+          order_line_item_id?: string
+          packed_units?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pack_line_progress_order_line_item_id_fkey"
+            columns: ["order_line_item_id"]
+            isOneToOne: true
+            referencedRelation: "order_line_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       packaging_costs: {
         Row: {
           id: string
@@ -6539,6 +6565,14 @@ export type Database = {
         Args: { p_order_id: string }
         Returns: Json
       }
+      get_pack_line_allocations: {
+        Args: never
+        Returns: {
+          order_line_item_id: string
+          packed_units: number
+          picked_units: number
+        }[]
+      }
       get_product_delete_preflight: {
         Args: { p_product_id: string }
         Returns: Json
@@ -6793,6 +6827,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      update_pack_line_units: {
+        Args: { p_line_ids: string[]; p_new_units: number }
+        Returns: undefined
       }
       update_packing_units: {
         Args: {
