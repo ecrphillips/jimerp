@@ -176,7 +176,9 @@ function LeafRow({
   } = props;
 
   const pid = leaf.productId;
-  const wipStatus = wipStatusByProduct[pid] ?? 'none';
+  const remainingKg = Math.max(0, leaf.units - leaf.packed) * leaf.bagSizeG / 1000;
+  const availableWip = props.wipAvailableKgByProduct[pid] ?? 0;
+  const wipStatus: WipStatus = availableWip >= remainingKg ? 'full' : availableWip > 0 ? 'partial' : 'none';
   const effectivePacked = leaf.packed;
   const isComplete = !leaf.requiresProduction || packLineProgress(leaf.units, effectivePacked).complete;
   const isStarted = effectivePacked > 0;
@@ -185,7 +187,7 @@ function LeafRow({
   return (
     <div data-pack-line={leaf.key} className={`border-l-4 transition-opacity ${isComplete && leaf.requiresProduction ? 'border-l-success opacity-50 focus-within:opacity-100 hover:opacity-100' : leafAccent(wipStatus, leaf.requiresProduction)}`}>
       <div
-        className={`flex items-center gap-3 border-b px-3 py-3 transition-colors ${compact ? 'pl-4' : 'pl-6'} ${
+        className={`flex flex-wrap items-center gap-3 border-b px-3 py-3 transition-colors ${compact ? 'pl-4' : 'pl-6'} ${
           isComplete
             ? 'bg-success/15'
             : isStarted
@@ -197,14 +199,14 @@ function LeafRow({
                   : 'bg-destructive/15'
         }`}
       >
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 basis-48 grow">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-sm text-foreground">{leaf.productName}</span>
             {leaf.grindLabel ? (
-              <Badge variant="outline" className="font-bold text-warning border-warning bg-warning/15">
+              <Badge variant="outline" className="font-bold text-warning border-warning bg-warning/15 whitespace-normal">
                 <AlertTriangle className="h-3.5 w-3.5 mr-1" />GRIND · {leaf.grindLabel}
               </Badge>
-            ) : <span className="text-xs text-muted-foreground">Whole bean</span>}
+            ) : leaf.requiresProduction ? <span className="text-xs text-muted-foreground">Whole bean</span> : null}
             {!leaf.requiresProduction && (
               <Badge className="text-xs font-bold uppercase tracking-wide bg-amber-500 text-white border-amber-600 hover:bg-amber-500">
                 <AlertTriangle className="h-3.5 w-3.5 mr-1" />
