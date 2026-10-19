@@ -1292,7 +1292,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                 size="sm"
                 disabled={packTree.length === 0}
                 onClick={() => {
-                  if (!printPackList(packTree, groupMode, packWeightUnit.weightToDisplay, packWeightUnit.suffix)) toast.error('Allow pop-ups to print the pack list');
+                  if (!printPackList(packTree, groupMode)) toast.error('Allow pop-ups to print the pack list');
                 }}
               >
                 <Printer className="h-4 w-4 mr-1" />
