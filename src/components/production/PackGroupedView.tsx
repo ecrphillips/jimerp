@@ -12,7 +12,6 @@ import {
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { InlinePackingControl } from './InlinePackingControl';
 import { partitionPackDrawerLines } from '@/lib/packGroupSort';
-import { useWeightUnit } from '@/hooks/useWeightUnit';
 import { remainingPackWeightKg, packLineProgress } from '@/lib/packLineSplit';
 
 export type PackGroupMode = 'account' | 'roastgroup';

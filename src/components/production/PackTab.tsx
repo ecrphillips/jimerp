@@ -26,7 +26,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Package, Layers, GripVertical, RotateCcw, ChevronDown, ChevronRight, ChevronsUpDown, Printer } from 'lucide-react';
 import { printPackList } from './printPackList';
-import { useWeightUnit } from '@/hooks/useWeightUnit';
 import { splitPackLine } from '@/lib/packLineSplit';
 import { BlendHoldsPanel } from './BlendHoldsPanel';
 import { Link } from 'react-router-dom';
