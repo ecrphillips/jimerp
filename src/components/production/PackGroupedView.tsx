@@ -328,7 +328,7 @@ function GroupHeader({
       : 'border-l-transparent';
   return (
     <div
-      className={`relative flex items-center justify-between gap-4 cursor-pointer overflow-hidden transition-all ${
+      className={`relative flex flex-wrap items-center justify-between gap-4 cursor-pointer overflow-hidden transition-all ${
         level === 1
           ? 'bg-card hover:bg-muted/40 px-4 py-4'
           : 'bg-muted/40 hover:bg-muted/60 px-4 py-3 pl-7'
@@ -337,14 +337,14 @@ function GroupHeader({
       }`}
       onClick={onClick}
     >
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center gap-2 min-w-0 basis-48 grow">
         {collapsed ? (
           <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
         ) : (
           <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
         )}
         <span
-          className={`truncate ${
+          className={`break-words ${
             level === 1
               ? 'text-lg font-black uppercase text-foreground'
               : 'text-sm font-semibold text-foreground'
@@ -358,9 +358,9 @@ function GroupHeader({
           </Badge>
         )}
       </div>
-      <div className="flex items-center gap-4 shrink-0 text-xs text-muted-foreground">
+      <div className="flex items-center justify-between gap-4 min-w-0 grow text-xs text-muted-foreground">
         {kind === 'roastgroup' && wipKg != null && (
-          <span className="font-medium">
+          <span className="font-medium min-w-0">
             {weightToDisplay(Math.max(0, wipKg - (heldKg ?? 0))).toFixed(1)} {suffix} available WIP · <span className="text-foreground font-bold">{weightToDisplay(remainingKg).toFixed(1)} {suffix} to pack</span>
             {heldKg != null && heldKg > 0.01 && (
               <> · <span className="text-warning font-semibold">{weightToDisplay(heldKg).toFixed(1)} {suffix} held for blend</span></>
@@ -370,7 +370,7 @@ function GroupHeader({
             )}
           </span>
         )}
-        <div className="min-w-20 text-right">
+        <div className="min-w-20 shrink-0 text-right">
           <div className="text-xl font-black leading-none tabular-nums text-foreground">
             {packedUnits}<span className="mx-1 font-normal text-muted-foreground">/</span>{totalUnits}
           </div>
