@@ -598,7 +598,6 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   }, [demandByProduct]);
 
   // Per-(account × product) leaf demand, built from the same filtered line items.
-  const packWeightUnit = useWeightUnit();
   const { data: lineAllocations = [] } = useQuery({
     queryKey: ['pack-line-allocations'],
     queryFn: async () => {
