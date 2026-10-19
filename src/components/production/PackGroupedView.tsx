@@ -12,7 +12,8 @@ import {
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { InlinePackingControl } from './InlinePackingControl';
 import { partitionPackDrawerLines } from '@/lib/packGroupSort';
-import { packLineProgress } from '@/lib/packLineSplit';
+import { useWeightUnit } from '@/hooks/useWeightUnit';
+import { remainingPackWeightKg, packLineProgress } from '@/lib/packLineSplit';
 
 export type PackGroupMode = 'account' | 'roastgroup';
 export type WipStatus = 'full' | 'partial' | 'none';
@@ -291,6 +292,7 @@ function GroupHeader({
   collapsed,
   level,
   packedUnits,
+  remainingKg,
   complete,
   deemphasized,
   wipStatus,
@@ -307,12 +309,14 @@ function GroupHeader({
   collapsed: boolean;
   level: 1 | 2;
   packedUnits: number;
+  remainingKg: number;
   complete: boolean;
   deemphasized: boolean;
   /** Aggregated WIP readiness for the drawer — shown as a left bar when collapsed. */
   wipStatus: WipStatus | null;
   onClick: () => void;
 }) {
+  const { weightToDisplay, suffix } = useWeightUnit();
   // Complete keeps its green bar; collapsed drawers show the aggregate WIP cue;
   // expanded-but-incomplete stays neutral so the row bands do the talking.
   const barClass = complete
@@ -355,12 +359,12 @@ function GroupHeader({
       <div className="flex items-center gap-4 shrink-0 text-xs text-muted-foreground">
         {kind === 'roastgroup' && wipKg != null && (
           <span className="font-medium">
-            {wipKg.toFixed(1)} kg {heldKg && heldKg > 0.01 ? 'on hand' : 'WIP'}
+            {weightToDisplay(Math.max(0, wipKg - (heldKg ?? 0))).toFixed(1)} {suffix} available WIP · <span className="text-foreground font-bold">{weightToDisplay(remainingKg).toFixed(1)} {suffix} to pack</span>
             {heldKg != null && heldKg > 0.01 && (
-              <> · <span className="text-warning font-semibold">{heldKg.toFixed(1)} kg held for blend</span></>
+              <> · <span className="text-warning font-semibold">{weightToDisplay(heldKg).toFixed(1)} {suffix} held for blend</span></>
             )}
             {planned && planned.count > 0 && (
-              <> · {planned.count} planned (~{planned.planned_kg.toFixed(1)} kg)</>
+              <> · {planned.count} planned (~{weightToDisplay(planned.planned_kg).toFixed(1)} {suffix})</>
             )}
           </span>
         )}
@@ -490,6 +494,7 @@ export function PackGroupedView(props: PackGroupedViewProps) {
               collapsed={l1Collapsed}
               level={1}
               packedUnits={l1Progress.packed}
+              remainingKg={remainingPackWeightKg(l1Leaves)}
               complete={l1Progress.complete}
               deemphasized={l1Collapsed && demotedKeys.has(l1.key) && l1Progress.complete}
               wipStatus={l1WipStatus}

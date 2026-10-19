@@ -1,32 +1,33 @@
-import { packLineProgress } from '@/lib/packLineSplit';
+import { remainingPackWeightKg, packLineProgress } from '@/lib/packLineSplit';
 import type { PackL1Node, PackGroupMode, PackLeafNode } from './PackGroupedView';
 
 const esc = (s: unknown) =>
-  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] ?? c)));
+  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] ?? c));
 
 /**
  * Print the pack list. Completed lines are excluded; for the rest the big
  * number is the units still to pack, with the packed/needed count alongside.
- * Packed counts are per-SKU global (available + picked), matching the screen.
+ * Packed counts use independent order-line allocations, matching the screen.
  */
 export function printPackList(
   tree: PackL1Node[],
   mode: PackGroupMode,
-  availableByProduct: Record<string, number> = {},
-  pickedByProduct: Record<string, number> = {},
+  weightToDisplay: (kg: number) => number = (kg) => kg,
+  suffix = 'kg',
 ) {
   const now = new Date().toLocaleString('en-CA', { timeZone: 'America/Vancouver', dateStyle: 'medium', timeStyle: 'short' });
   const title = mode === 'account' ? 'Account → Roast' : 'Roast → Account';
 
-  // Per-leaf progress, mirroring leafProgress in PackGroupedView: a line is
-  // complete only when the SKU's global demand is fully covered.
-  const progressFor = (leaf: PackLeafNode, globalDemand: number) => {
+  const progressFor = (leaf: PackLeafNode) => {
     if (!leaf.requiresProduction) return { packed: leaf.units, complete: true };
     return packLineProgress(leaf.units, leaf.packed);
   };
-
-  const globalDemandOf = (leaves: PackLeafNode[], productId: string) =>
-    leaves.filter((l) => l.productId === productId).reduce((s, l) => s + l.units, 0);
+  const weightSummary = (node: PackL1Node | PackL1Node['children'][number], leaves: PackLeafNode[]) => {
+    if (node.kind !== 'roastgroup') return '';
+    const available = Math.max(0, (node.wipKg ?? 0) - (node.heldKg ?? 0));
+    const remaining = remainingPackWeightKg(leaves);
+    return ` · ${weightToDisplay(available).toFixed(1)} ${esc(suffix)} available WIP · ${weightToDisplay(remaining).toFixed(1)} ${esc(suffix)} to pack`;
+  };
 
   let grandRemaining = 0;
   let grandPacked = 0;
@@ -39,7 +40,7 @@ export function printPackList(
         .map((l2) => {
           const rows = l2.leaves
             .map((leaf) => {
-              const { packed, complete } = progressFor(leaf, globalDemandOf(allLeaves, leaf.productId));
+              const { packed, complete } = progressFor(leaf);
               if (complete) return '';
               const remaining = leaf.units - packed;
               grandRemaining += remaining;
@@ -63,20 +64,20 @@ export function printPackList(
             .join('');
           if (!rows) return '';
           const remaining = l2.leaves.reduce((s, leaf) => {
-            const { packed, complete } = progressFor(leaf, globalDemandOf(allLeaves, leaf.productId));
+            const { packed, complete } = progressFor(leaf);
             return complete ? s : s + (leaf.units - packed);
           }, 0);
-          return `<div class="l2"><h3>${esc(l2.label)} <span class="muted">· ${remaining} to pack</span></h3>
+          return `<div class="l2"><h3>${esc(l2.label)} <span class="muted">· ${remaining} units to pack${weightSummary(l2, l2.leaves)}</span></h3>
             <table><thead><tr><th></th><th>Product</th><th class="num">To pack</th></tr></thead><tbody>${rows}</tbody></table></div>`;
         })
         .filter(Boolean)
         .join('');
       if (!l2s) return '';
       const remaining = l1.children.reduce((s, l2) => s + l2.leaves.reduce((s2, leaf) => {
-        const { packed, complete } = progressFor(leaf, globalDemandOf(allLeaves, leaf.productId));
+        const { packed, complete } = progressFor(leaf);
         return complete ? s2 : s2 + (leaf.units - packed);
       }, 0), 0);
-      return `<section><h2>${esc(l1.label)} <span class="muted">· ${remaining} to pack</span></h2>${l2s}</section>`;
+      return `<section><h2>${esc(l1.label)} <span class="muted">· ${remaining} units to pack${weightSummary(l1, allLeaves)}</span></h2>${l2s}</section>`;
     })
     .filter(Boolean)
     .join('');
