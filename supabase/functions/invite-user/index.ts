@@ -230,7 +230,7 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: `User setup completed. Password reset email sent to ${email}.`,
+          message: resetError ? `User setup completed, but the email to ${email} failed: ${resetError.message}` : `User setup completed. Password reset email sent to ${email}.`,
           user_id: existingUser.id,
           email_sent: !resetError
         }),
