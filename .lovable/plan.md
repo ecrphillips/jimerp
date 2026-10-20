@@ -1,20 +1,25 @@
-# Fetch FUNK and No Smoke orders separately
+# Fetch review page for FUNK and No Smoke
 
-## Finding
-Nothing forces the two stores to fetch together. The fetch already supports pulling one store at a time. The single button was a screen simplification made when the old No Smoke button and the FUNK file import were replaced. Fetching separately is a screen-only change.
+Yes, this is possible. Nothing forces the two stores to fetch together, because the fetch can already pull one store at a time. Today a fetch reads Shopify and creates the bundled order in one step. The new page puts a review step in between. The current Fetch button and the daily automatic fetch stay exactly as they are.
 
-## What changes
-1. **Orders page fetch tile**: replace the single "Fetch FUNK and No Smoke Orders" button with one row per active store:
-   - Store name, its own "Last fetch" time (auto/manual, and any errors), and its own **Fetch** button.
-   - Fetching one store never touches the other.
-   - Add a small "Fetch all" link for when you do want both.
-2. **Results toast**: shows only the store you fetched.
-3. **Daily automatic fetch**: unchanged. It still pulls both stores once a day. Turning it off per store would be a separate option if you want it.
+## New page: Orders → Shopify Fetch
+1. **Choose store(s)**: FUNK, No Smoke, or both. Each shows its last fetch time.
+2. **Preview**: lists every Shopify order the fetch would pull in. Nothing is created yet. Each order is an expandable row showing:
+   - Order number, date, customer
+   - Every line with title, variant, SKU and quantity, plus what it maps to in JIM (product, size, grind) or "needs mapping"
+   - Any extra details Shopify lets us read: order note, tags, shipping/delivery method, payment status
+3. **Omit**: tick to leave an order out. It shows as struck through, and the totals (orders, bags, kg per product) update live.
+4. **Create order**: builds the bundled order from only the orders left in, the same way the regular fetch does. Unmapped lines still go to the existing review list.
 
-## Not in this plan (offer later if still needed)
-- A bulk "dismiss / cancel" tool for orders that came in unwanted. Separate fetching should remove most of that need.
+## Omitted orders
+- Omitted orders are remembered, so a later fetch, manual or automatic, won't pull them back in.
+- A "Skipped orders" section on the same page lets you un-skip one. It returns on the next fetch.
 
 ## Technical details
-- `ShopifyFetchTile.tsx`: load the active `shopify_sources` rows (id, store_slug or label). For each one, read its latest `shopify_pull_log` row filtered by `source_id`. Call `shopify-pull-orders` with `{ source_id }` for each row's button, or `{}` for Fetch all.
-- Per-source spinner state; query invalidation is unchanged.
-- No backend or database changes.
+- `shopify-pull-orders`: add a `mode` field.
+  - `preview` reads Shopify and returns the orders plus their resolved mappings. It has no writes and creates no pull-log order.
+  - `commit` accepts `exclude_order_ids[]`. Excluded orders are dropped before bundling and recorded as skipped.
+  - With no mode, behaviour is unchanged (button and cron).
+- Extend the GraphQL query with `note`, `tags`, `displayFinancialStatus` and shipping-line title. Every extra field is optional and fail-open, so a missing Shopify permission never breaks the fetch.
+- Store skips in `shopify_bundle_source_orders` with a null `bundle_order_id` and a `skipped` flag, or in a small new `shopify_skipped_orders` table. Either way the existing "already imported" check also skips them. RLS is limited to ADMIN/OPS.
+- New page `src/pages/internal/ShopifyFetchReview.tsx`, with a route and a link from the existing fetch tile.
