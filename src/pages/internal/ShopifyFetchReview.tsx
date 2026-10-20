@@ -285,7 +285,7 @@ export default function ShopifyFetchReview() {
                           <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
                             {o.shippingTitle && <Badge variant="outline">{o.shippingTitle}</Badge>}
                             {unmapped > 0 && <Badge variant="destructive">{unmapped} needs mapping</Badge>}
-                            {omitted ? <Badge variant="secondary">Omitted</Badge> : `${units} bag${units === 1 ? '' : 's'}`}
+                            {omitted ? <Badge variant="secondary">Omitted</Badge> : units === 0 && unmapped === 0 ? 'Nothing to make' : `${units} bag${units === 1 ? '' : 's'}`}
                           </span>
                         </button>
                       </div>
