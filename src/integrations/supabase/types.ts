@@ -5908,6 +5908,50 @@ export type Database = {
           },
         ]
       }
+      shopify_skipped_orders: {
+        Row: {
+          customer_name: string | null
+          id: string
+          line_items: Json | null
+          shopify_created_at: string | null
+          shopify_order_id: string
+          shopify_order_number: string | null
+          skipped_at: string
+          skipped_by: string | null
+          source_id: string
+        }
+        Insert: {
+          customer_name?: string | null
+          id?: string
+          line_items?: Json | null
+          shopify_created_at?: string | null
+          shopify_order_id: string
+          shopify_order_number?: string | null
+          skipped_at?: string
+          skipped_by?: string | null
+          source_id: string
+        }
+        Update: {
+          customer_name?: string | null
+          id?: string
+          line_items?: Json | null
+          shopify_created_at?: string | null
+          shopify_order_id?: string
+          shopify_order_number?: string | null
+          skipped_at?: string
+          skipped_by?: string | null
+          source_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_skipped_orders_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shopify_sources: {
         Row: {
           api_access_token: string | null
