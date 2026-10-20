@@ -1243,7 +1243,7 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
                         onClick={() => sendResetMutation.mutate({ user_id: u.user_id, email })}
                       >
                         <Mail className="h-3 w-3 mr-1" />
-                        {sendResetMutation.isPending ? 'Sending…' : 'Reset Password'}
+                        {sendResetMutation.isPending && sendResetMutation.variables?.user_id === u.user_id ? 'Sending…' : 'Reset Password'}
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent className="text-xs">Send a branded password reset email to this user</TooltipContent>
