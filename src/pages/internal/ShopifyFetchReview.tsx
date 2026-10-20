@@ -211,14 +211,15 @@ export default function ShopifyFetchReview() {
         <div className="text-sm font-semibold text-foreground">1. Choose store(s)</div>
         <div className="flex flex-wrap gap-3">
           {(sourcesQ.data ?? []).map((s) => (
-            <button
-              type="button"
+            <div
               key={s.id}
               role="checkbox"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setSelected(toggle(selected, s.id)); } }}
               aria-checked={selected.has(s.id)}
               aria-label={s.store_name}
               onClick={() => setSelected(toggle(selected, s.id))}
-              className="flex items-start gap-2 rounded-md border border-border px-3 py-2 text-left hover:bg-muted/50"
+              className="flex cursor-pointer items-start gap-2 rounded-md border border-border px-3 py-2 text-left hover:bg-muted/50"
             >
               <Checkbox checked={selected.has(s.id)} tabIndex={-1} className="pointer-events-none mt-0.5" />
               <div>
@@ -229,7 +230,7 @@ export default function ShopifyFetchReview() {
                     : 'Never fetched'}
                 </div>
               </div>
-            </button>
+            </div>
           ))}
         </div>
         <Button onClick={runPreview} disabled={loading || selected.size === 0}>
