@@ -40,7 +40,7 @@ export function EditableCell<TRow>({ row, column, isHighlighted, onSave }: Props
 
   if (column.readOnly) {
     return (
-      <td className="px-2 py-1 text-xs text-muted-foreground bg-muted/30 border-r last:border-r-0 truncate" style={{ width: column.width }}>
+      <td className="px-2 py-1 text-xs text-muted-foreground bg-muted/30 border-r last:border-r-0 truncate" title={String(formatted ?? '')}>
         {String(formatted ?? '')}
       </td>
     );
@@ -78,11 +78,12 @@ export function EditableCell<TRow>({ row, column, isHighlighted, onSave }: Props
   );
 
   return (
-    <td className={cellClass} style={{ width: column.width }} title={error ?? undefined}>
+    <td className={cn(cellClass, 'overflow-hidden')} title={error ?? undefined}>
       {column.type === 'text' && (
         <Input
           className="h-7 text-xs"
           value={(value as string) ?? ''}
+          title={(value as string) ?? ''}
           onChange={(e) => setValue(e.target.value)}
           onBlur={() => commit(value)}
           disabled={saving}

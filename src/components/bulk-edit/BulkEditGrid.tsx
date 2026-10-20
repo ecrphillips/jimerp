@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Check, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Download, Undo2, Upload, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns3, Download, Undo2, Upload, X } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 import { toast } from 'sonner';
 import { EditableCell } from './cells/EditableCell';
@@ -215,7 +224,51 @@ export function BulkEditGrid<TRow>({
     });
   };
 
-  const totalCols = columns.length;
+  // ---- Column layout (widths + hidden), persisted per table ----
+  const layoutKey = `bulk-edit-layout:${tableKey}`;
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+    try { return JSON.parse(localStorage.getItem(layoutKey) ?? '{}').widths ?? {}; } catch { return {}; }
+  });
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(layoutKey) ?? '{}').hidden ?? []); } catch { return new Set(); }
+  });
+  useEffect(() => {
+    localStorage.setItem(layoutKey, JSON.stringify({ widths: colWidths, hidden: [...hiddenCols] }));
+  }, [layoutKey, colWidths, hiddenCols]);
+
+  const widthOf = (col: ColumnDef<TRow>) => colWidths[col.key] ?? (parseInt(col.width ?? '', 10) || 140);
+  const visibleColumns = columns.filter((c) => !hiddenCols.has(c.key));
+  const tableWidth = visibleColumns.reduce((s, c) => s + widthOf(c), 0);
+
+  const startResize = (e: React.MouseEvent, col: ColumnDef<TRow>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = widthOf(col);
+    const onMove = (ev: MouseEvent) => {
+      const w = Math.max(50, startW + ev.clientX - startX);
+      setColWidths((prev) => ({ ...prev, [col.key]: w }));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  const toggleColumn = (key: string) => {
+    setHiddenCols((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+  const resetLayout = () => { setColWidths({}); setHiddenCols(new Set()); };
+
+  const totalCols = visibleColumns.length;
 
   return (
     <div className="border rounded-md bg-background">
@@ -250,6 +303,30 @@ export function BulkEditGrid<TRow>({
               {allCollapsed ? 'Expand all' : 'Collapse all'}
             </Button>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+                <Columns3 className="h-3.5 w-3.5" /> Columns{hiddenCols.size > 0 ? ` (${hiddenCols.size} hidden)` : ''}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuLabel className="text-xs">Show columns</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {columns.map((c) => (
+                <DropdownMenuCheckboxItem
+                  key={c.key}
+                  checked={!hiddenCols.has(c.key)}
+                  onCheckedChange={() => toggleColumn(c.key)}
+                  onSelect={(e) => e.preventDefault()}
+                  className="text-xs"
+                >
+                  {c.header}
+                </DropdownMenuCheckboxItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={resetLayout} className="text-xs">Reset widths &amp; columns</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" size="sm" onClick={handleUndo} disabled={undo.size === 0} className="h-7 text-xs gap-1">
             <Undo2 className="h-3.5 w-3.5" /> Undo last change ({undo.size})
           </Button>
@@ -277,17 +354,27 @@ export function BulkEditGrid<TRow>({
         </div>
       </div>
       <div className="overflow-x-auto max-h-[calc(100vh-260px)]">
-        <table className="w-full text-xs border-collapse">
+        <table className="text-xs border-collapse table-fixed" style={{ width: tableWidth, minWidth: '100%' }}>
+          <colgroup>
+            {visibleColumns.map((col) => <col key={col.key} style={{ width: widthOf(col) }} />)}
+          </colgroup>
           <thead className="sticky top-0 bg-background z-10">
             <tr className="border-b">
-              {columns.map((col) => (
+              {visibleColumns.map((col) => (
                 <th
                   key={col.key}
-                  className="px-2 py-1.5 text-left font-medium text-muted-foreground border-r last:border-r-0 whitespace-nowrap"
-                  style={{ width: col.width }}
+                  className="relative px-2 py-1.5 text-left font-medium text-muted-foreground border-r last:border-r-0 whitespace-nowrap overflow-hidden text-ellipsis"
+                  title={col.header}
                 >
                   {col.header}
                   {col.readOnly && <span className="ml-1 text-[10px] opacity-60">(read-only)</span>}
+                  <span
+                    role="separator"
+                    aria-label={`Resize ${col.header}`}
+                    onMouseDown={(e) => startResize(e, col)}
+                    onDoubleClick={() => setColWidths((p) => { const n = { ...p }; delete n[col.key]; return n; })}
+                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40"
+                  />
                 </th>
               ))}
             </tr>
@@ -321,7 +408,7 @@ export function BulkEditGrid<TRow>({
                         const rowId = getRowId(row);
                         return (
                           <tr key={rowId} className="border-b hover:bg-accent/20">
-                            {columns.map((col) => (
+                            {visibleColumns.map((col) => (
                               <EditableCell
                                 key={col.key}
                                 row={row}
