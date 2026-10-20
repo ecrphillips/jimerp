@@ -99,7 +99,7 @@ function buildDisplayName(productName: string, packagingTypeName: string | null,
 
 export default function NewOrder() {
   const { authUser } = useAuth();
-  const { isPreviewMode } = usePreview();
+  const { isPreviewMode, previewAccountId } = usePreview();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -131,7 +131,8 @@ export default function NewOrder() {
     multiplier: number;
   } | null>(null);
 
-  const { constraints, isLoading: constraintsLoading } = useClientOrderingConstraints(authUser?.accountId);
+  const { constraints, isLoading: constraintsLoading } = useClientOrderingConstraints(previewAccountId ?? authUser?.accountId);
+  const productAccountId = previewAccountId ?? authUser?.accountId ?? null;
   const { hidePricing } = usePricingVisibility();
 
   // Account's standard production schedule — used to auto-set the work deadline
@@ -153,7 +154,7 @@ export default function NewOrder() {
 
   // Fetch allowed products with packaging type join
   const { data: products, isLoading: productsLoading } = useQuery({
-    queryKey: ['client-products', authUser?.accountId, constraints.allowedProductIds],
+    queryKey: ['client-products', productAccountId, constraints.allowedProductIds],
     queryFn: async () => {
       let query = supabase
         .from('products')
@@ -163,13 +164,16 @@ export default function NewOrder() {
 
       if (constraints.allowedProductIds && constraints.allowedProductIds.length > 0) {
         query = query.in('id', constraints.allowedProductIds);
+      } else {
+        // Unrestricted accounts still only see their own products.
+        query = query.eq('account_id', productAccountId!);
       }
 
       const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as Product[];
     },
-    enabled: !constraintsLoading,
+    enabled: !constraintsLoading && !!productAccountId,
   });
 
   const { data: prices } = useQuery({
