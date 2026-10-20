@@ -138,18 +138,18 @@ export default function NewOrder() {
   // Account's standard production schedule — used to auto-set the work deadline
   // on submit. Members never see/edit it; admins configure it per account.
   const { data: accountSchedule, isLoading: scheduleLoading } = useQuery({
-    queryKey: ['account-schedule', authUser?.accountId],
+    queryKey: ['account-schedule', productAccountId],
     queryFn: async () => {
-      if (!authUser?.accountId) return null;
+      if (!productAccountId) return null;
       const { data, error } = await supabase
         .from('accounts')
         .select('production_weekdays, order_cutoff_hour')
-        .eq('id', authUser.accountId)
+        .eq('id', productAccountId)
         .single();
       if (error) throw error;
       return data;
     },
-    enabled: !!authUser?.accountId,
+    enabled: !!productAccountId,
   });
 
   // Fetch allowed products with packaging type join
@@ -273,13 +273,13 @@ export default function NewOrder() {
   }, [lineItems]);
 
   const checkUnusualOrderSize = async (): Promise<boolean> => {
-    if (!authUser?.accountId) return false;
+    if (!productAccountId) return false;
 
     try {
       const { data: lastOrder } = await supabase
         .from('orders')
         .select('id, order_line_items(product_id, quantity_units)')
-        .eq('account_id', authUser.accountId)
+        .eq('account_id', productAccountId)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'])
         .order('created_at', { ascending: false })
         .limit(1)
@@ -288,7 +288,7 @@ export default function NewOrder() {
       const { data: recentOrders } = await supabase
         .from('orders')
         .select('id')
-        .eq('account_id', authUser.accountId)
+        .eq('account_id', productAccountId)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'])
         .order('created_at', { ascending: false })
         .limit(5);
@@ -743,15 +743,15 @@ export default function NewOrder() {
       </div>
 
       <OrderContextBanner
-        accountId={authUser?.accountId}
+        accountId={productAccountId}
         locationId={selectedLocationId || null}
       />
 
-      {authUser?.accountId && (
+      {productAccountId && (
         <Card className="mb-4">
           <CardContent className="pt-4">
             <LocationSelect
-              clientId={authUser.accountId}
+              clientId={productAccountId}
               value={selectedLocationId}
               onChange={setSelectedLocationId}
               required
