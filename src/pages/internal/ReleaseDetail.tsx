@@ -554,10 +554,10 @@ export default function ReleaseDetail() {
                   const lineKg = (l.bags_requested || 0) * Number(l.bag_size_kg || 0);
                   const bookKg = bookValuePerKgUsd(l.price_per_lb_usd, sharedShareUsdPerKg);
                   const bookLb = bookValuePerLbUsd(l.price_per_lb_usd, sharedShareUsdPerKg);
-                  // Origin: use line-level field first (PURCHASE/ADHOC), fall back to contract
+                  // Origin: use line-level field first (PURCHASE/PLACEHOLDER), fall back to contract
                   const originDisplay = l.origin_country || contract?.origin_country || contract?.origin || '—';
                   const vendorName = l.vendor_id ? (lineVendorMap[l.vendor_id] || '—') : (vendor?.name || '—');
-                  const sourceLabel = l.source_type === 'PURCHASE' ? 'Purchase' : l.source_type === 'ADHOC' ? 'Ad-hoc' : 'Contract';
+                  const sourceLabel = l.source_type === 'PURCHASE' ? 'Purchase' : l.source_type === 'PLACEHOLDER' ? 'Ad-hoc' : 'Contract';
                   return (
                     <TableRow key={l.id}>
                       <TableCell className="font-mono text-xs">{lot?.lot_number || '—'}</TableCell>
