@@ -57,6 +57,13 @@
       "when": 1792515671547,
       "tag": "0007_shopify_skipped_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792611521230,
+      "tag": "0008_baskets_phase_1",
+      "breakpoints": true
     }
   ]
 }
