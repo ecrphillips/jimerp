@@ -32,6 +32,7 @@ import {
   FlaskConical,
   FileSignature,
   Boxes,
+  ShoppingBasket,
   MessageSquarePlus,
   Megaphone,
   Truck,
@@ -231,6 +232,7 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 <NavItem to="/sourcing/purchases" icon={Receipt} label="Purchases" onClick={closeSidebar} />
                 <NavItem to="/sourcing/releases" icon={Truck} label="Releases" onClick={closeSidebar} />
                 <NavItem to="/sourcing/lots" icon={Boxes} label="Lots" onClick={closeSidebar} />
+                <NavItem to="/sourcing/baskets" icon={ShoppingBasket} label="Baskets" onClick={closeSidebar} />
               </NavGroup>
 
               {/* Co-Roasting */}

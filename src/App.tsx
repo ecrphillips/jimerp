@@ -42,6 +42,8 @@ import SourcingLots from "@/pages/internal/SourcingLots";
 import SourcingPurchases from "@/pages/internal/SourcingPurchases";
 import SourcingReleases from "@/pages/internal/SourcingReleases";
 import ReleaseDetail from "@/pages/internal/ReleaseDetail";
+import Baskets from "@/pages/internal/Baskets";
+import BasketDetail from "@/pages/internal/BasketDetail";
 import CoRoastMembers from "@/pages/internal/CoRoastMembers";
 import CoRoastMemberDetail from "@/pages/internal/CoRoastMemberDetail";
 import CoRoastLoringSchedule from "@/pages/internal/CoRoastLoringSchedule";
@@ -250,6 +252,16 @@ const App = () => (
             <Route path="/sourcing/releases/:id" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><ReleaseDetail /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/sourcing/baskets" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><Baskets /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/sourcing/baskets/:id" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><BasketDetail /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/inventory" element={

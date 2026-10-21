@@ -365,6 +365,78 @@ export type Database = {
         }
         Relationships: []
       }
+      basket_lots: {
+        Row: {
+          active_pct: number | null
+          basket_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          lot_id: string
+        }
+        Insert: {
+          active_pct?: number | null
+          basket_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lot_id: string
+        }
+        Update: {
+          active_pct?: number | null
+          basket_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lot_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "basket_lots_basket_id_fkey"
+            columns: ["basket_id"]
+            isOneToOne: false
+            referencedRelation: "baskets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "basket_lots_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "green_lots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      baskets: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       client_allowed_products: {
         Row: {
           account_id: string | null
@@ -2594,6 +2666,7 @@ export type Database = {
           purchase_id: string | null
           received_date: string | null
           release_id: string | null
+          source_sample_id: string | null
           status: string
           transaction_fees_cad: number | null
           transaction_fees_cad_confirmed_at: string | null
@@ -2678,6 +2751,7 @@ export type Database = {
           purchase_id?: string | null
           received_date?: string | null
           release_id?: string | null
+          source_sample_id?: string | null
           status?: string
           transaction_fees_cad?: number | null
           transaction_fees_cad_confirmed_at?: string | null
@@ -2762,6 +2836,7 @@ export type Database = {
           purchase_id?: string | null
           received_date?: string | null
           release_id?: string | null
+          source_sample_id?: string | null
           status?: string
           transaction_fees_cad?: number | null
           transaction_fees_cad_confirmed_at?: string | null
@@ -2794,6 +2869,13 @@ export type Database = {
             columns: ["release_id"]
             isOneToOne: false
             referencedRelation: "green_releases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "green_lots_source_sample_id_fkey"
+            columns: ["source_sample_id"]
+            isOneToOne: false
+            referencedRelation: "green_samples"
             referencedColumns: ["id"]
           },
         ]

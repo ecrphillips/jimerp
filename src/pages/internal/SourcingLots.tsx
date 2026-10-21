@@ -34,6 +34,8 @@ import { MarkLotReceivedModal } from '@/components/sourcing/MarkLotReceivedModal
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useDefaultPricingFinancing } from '@/hooks/useDefaultPricingFinancing';
 import { useEffectiveFxRate } from '@/lib/fxRate';
+import { useBasketTagsByLot } from '@/hooks/useBaskets';
+import { BasketTags } from '@/components/baskets/BasketParts';
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -49,6 +51,7 @@ interface LotRow {
   kg_on_hand: number;
   status: 'EN_ROUTE' | 'RECEIVED';
   costing_status: 'INCOMPLETE' | 'COMPLETE';
+  is_placeholder?: boolean;
   expected_delivery_date: string | null;
   received_date: string | null;
   carrier: string | null;
@@ -147,6 +150,10 @@ function CostingStatusBadge({ costingStatus }: { costingStatus: string }) {
   return <Badge variant="outline" className={`${cls} border-0 text-xs`}>{costingStatus === 'COMPLETE' ? 'Costed' : 'Not Costed'}</Badge>;
 }
 
+function PlaceholderBadge() {
+  return <Badge variant="outline" className="bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200 border-0 text-xs">Placeholder</Badge>;
+}
+
 // ─── Main Page ─────────────────────────────────────────────
 
 export default function SourcingLots() {
@@ -167,6 +174,7 @@ export default function SourcingLots() {
   const [floorCountOpen, setFloorCountOpen] = useState(false);
   const [bookValueOpen, setBookValueOpen] = useState(false);
   const [markReceivedLot, setMarkReceivedLot] = useState<LotRow | null>(null);
+  const basketTagsByLot = useBasketTagsByLot();
 
   const deleteLotMutation = useMutation({
     mutationFn: async (lotId: string) => {
@@ -342,8 +350,10 @@ export default function SourcingLots() {
                       <div className="flex flex-wrap items-center gap-1.5">
                         <PhysicalStatusBadge status={lot.status} />
                         <CostingStatusBadge costingStatus={lot.costing_status} />
+                        {lot.is_placeholder && <PlaceholderBadge />}
                         {lot.exceptions_noted && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
                       </div>
+                      <BasketTags tags={basketTagsByLot.get(lot.id)} />
                       <p className="text-sm">{lot.bags_released} bags · {kgReceived.toLocaleString()} kg</p>
                       {lot.status === 'EN_ROUTE' && lot.expected_delivery_date && (
                         <p className="text-xs text-muted-foreground">Arriving {format(new Date(lot.expected_delivery_date + 'T00:00:00'), 'MMM d, yyyy')}</p>
@@ -404,8 +414,18 @@ export default function SourcingLots() {
                             {lot.exceptions_noted && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
                           </span>
                         </TableCell>
-                        <TableCell>{subtitle}</TableCell>
-                        <TableCell><PhysicalStatusBadge status={lot.status} /></TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <span>{subtitle}</span>
+                            <BasketTags tags={basketTagsByLot.get(lot.id)} />
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-flex flex-wrap items-center gap-1">
+                            <PhysicalStatusBadge status={lot.status} />
+                            {lot.is_placeholder && <PlaceholderBadge />}
+                          </span>
+                        </TableCell>
                         <TableCell><CostingStatusBadge costingStatus={lot.costing_status} /></TableCell>
                         <TableCell className="text-right">{lot.bags_released}</TableCell>
                         <TableCell className="text-right">{lot.kg_on_hand.toLocaleString()} kg</TableCell>
