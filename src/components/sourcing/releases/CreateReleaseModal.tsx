@@ -357,7 +357,7 @@ export function CreateReleaseModal({ open, onOpenChange, onSuccess }: Props) {
       ...prev,
       [key]: {
         key,
-        source_type: 'ADHOC',
+        source_type: 'PLACEHOLDER',
         vendor_id: adhocVendorId || null,
         vendor_name: vendor?.name || '—',
         vendor_abbr: vendor?.abbreviation || null,
