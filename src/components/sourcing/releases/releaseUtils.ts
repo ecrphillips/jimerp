@@ -89,7 +89,9 @@ export function bookValuePerLbUsd(
 
 // ─── Multi-source line types ───────────────────────────────────────────────
 
-export type SelectedLineSource = 'CONTRACT' | 'PURCHASE' | 'ADHOC';
+// PLACEHOLDER = the "Ad-hoc" tab: a line with no contract or purchase entered yet.
+// Must match green_release_lines_source_type_check (migration 20260509064233).
+export type SelectedLineSource = 'CONTRACT' | 'PURCHASE' | 'PLACEHOLDER';
 
 export interface SelectedLine {
   // key — unique within the modal's selected map
