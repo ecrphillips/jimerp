@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { fetchAllRows } from '@/lib/fetchAllRows';
 import { toast } from 'sonner';
 import { Loader2, AlertTriangle, CheckCircle2, Layers, ArrowRight, Beaker } from 'lucide-react';
+import { BlendHoldsPanel } from './BlendHoldsPanel';
 
 interface RoastedBatch {
   id: string;
@@ -416,6 +417,7 @@ export function BlendExecuteModal({
       queryClient.invalidateQueries({ queryKey: ['authoritative-roast-demand'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-roast-groups-info'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
+      queryClient.invalidateQueries({ queryKey: ['blend-holds'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-component-batches-for-blending'] });
       queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
@@ -475,6 +477,12 @@ export function BlendExecuteModal({
             <p className="text-sm text-muted-foreground">
               The blend WIP is now available for packing in the Pack station.
             </p>
+
+            <BlendHoldsPanel
+              blendRoastGroup={blendRoastGroup}
+              title={`Leftover batches still held for ${blendDisplayName}`}
+              description="Keep them held for the next blend, or release them so other products can pack them."
+            />
             
             <DialogFooter>
               <Button onClick={() => onOpenChange(false)}>Done</Button>

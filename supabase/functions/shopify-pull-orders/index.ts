@@ -39,7 +39,7 @@ import { isPickupPrepared, type PickupState } from '../_shared/pickupReady.ts';
 
 const SHOPIFY_API_VERSION = '2025-01';
 // Bump on schema-affecting changes; echoed in responses/logs to verify deploys.
-const FUNCTION_VERSION = '3.8-pickup-ready';
+const FUNCTION_VERSION = '3.9-review-preview';
 
 interface ShopifyLineItem {
   sku: string | null;
@@ -57,6 +57,47 @@ interface ShopifyOrder {
   createdAt: string | null;
   customerName: string | null; // null when Protected Customer Data access not granted
   lineItems: ShopifyLineItem[];
+}
+
+// Optional extra order details for the review page. Read in a separate call so a
+// missing permission can never break the pull itself (fail-open).
+async function fetchOrderExtras(
+  storeUrl: string,
+  accessToken: string,
+  orders: ShopifyOrder[],
+): Promise<{ extras: Map<string, Record<string, unknown>>; note: string | null }> {
+  const endpoint = `https://${shopHost(storeUrl)}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const extras = new Map<string, Record<string, unknown>>();
+  try {
+    for (let i = 0; i < orders.length; i += 50) {
+      const ids = orders.slice(i, i + 50).map((o) => `gid://shopify/Order/${o.id}`);
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': accessToken },
+        body: JSON.stringify({
+          query: `query Extras($ids: [ID!]!) { nodes(ids: $ids) { ... on Order { id note tags displayFinancialStatus displayFulfillmentStatus shippingLine { title } } } }`,
+          variables: { ids },
+        }),
+      });
+      if (!res.ok) throw new Error(`Shopify API ${res.status}`);
+      const payload = await res.json();
+      if (payload.errors?.length && !payload.data) throw new Error(JSON.stringify(payload.errors).slice(0, 200));
+      for (const node of payload.data?.nodes ?? []) {
+        const id = legacyId(node?.id as string | undefined);
+        if (!id) continue;
+        extras.set(id, {
+          note: node.note ?? null,
+          tags: node.tags ?? [],
+          financialStatus: node.displayFinancialStatus ?? null,
+          fulfillmentStatus: node.displayFulfillmentStatus ?? null,
+          shippingTitle: node.shippingLine?.title ?? null,
+        });
+      }
+    }
+    return { extras, note: null };
+  } catch (e) {
+    return { extras, note: `extra details not read: ${e instanceof Error ? e.message : String(e)}` };
+  }
 }
 
 function json(body: unknown, status: number, headers: Record<string, string>) {
@@ -313,6 +354,7 @@ interface PullResult {
   order_id?: string;
   order_number?: string;
   error?: string;
+  preview?: unknown;
 }
 
 async function pullSource(
@@ -329,7 +371,9 @@ async function pullSource(
   },
   triggerType: 'manual' | 'scheduled',
   opts?: { createdAtMin?: string; createdAtMax?: string },
+  review?: { mode: 'preview' | 'commit'; excludeIds: string[]; userId: string | null },
 ): Promise<PullResult> {
+  const isPreview = review?.mode === 'preview';
   const base: PullResult = {
     source_id: source.id,
     store_slug: source.store_slug,
@@ -340,22 +384,27 @@ async function pullSource(
   };
 
   // Pull-log row first so the created order and quarantine rows can reference it.
-  const { data: logRow, error: logErr } = await admin
-    .from('shopify_pull_log')
-    .insert({
-      source_id: source.id,
-      result: 'success',
-      trigger_type: triggerType,
-    })
-    .select('id')
-    .single();
-  if (logErr || !logRow) {
-    return { ...base, result: 'error', error: `pull_log insert failed: ${logErr?.message}` };
+  // Preview runs write nothing, so they get no log row.
+  let pullLogId: string | null = null;
+  if (!isPreview) {
+    const { data: logRow, error: logErr } = await admin
+      .from('shopify_pull_log')
+      .insert({
+        source_id: source.id,
+        result: 'success',
+        trigger_type: triggerType,
+      })
+      .select('id')
+      .single();
+    if (logErr || !logRow) {
+      return { ...base, result: 'error', error: `pull_log insert failed: ${logErr?.message}` };
+    }
+    pullLogId = logRow.id as string;
   }
-  const pullLogId = logRow.id as string;
 
   const finalize = async (patch: Partial<PullResult>, details?: unknown): Promise<PullResult> => {
     const out = { ...base, ...patch };
+    if (!pullLogId) return out;
     const { error: updErr } = await admin
       .from('shopify_pull_log')
       .update({
@@ -378,17 +427,29 @@ async function pullSource(
     const accessToken = await resolveAccessToken(source);
     const shopifyOrders = await fetchUnfulfilledOrders(source.store_url, accessToken, opts);
 
-    // Dedupe against orders already bundled in prior runs.
+    // Dedupe against orders already bundled in prior runs, and orders a user
+    // chose to skip on the review page.
     const { data: existing, error: existErr } = await admin
       .from('shopify_bundle_source_orders')
       .select('shopify_order_id')
       .eq('source_id', source.id);
     if (existErr) throw new Error(`bundle lookup failed: ${existErr.message}`);
-    const seen = new Set((existing ?? []).map((r) => r.shopify_order_id));
+    const { data: skippedRows, error: skipErr } = await admin
+      .from('shopify_skipped_orders')
+      .select('shopify_order_id')
+      .eq('source_id', source.id);
+    if (skipErr) throw new Error(`skipped lookup failed: ${skipErr.message}`);
+    const seen = new Set([
+      ...(existing ?? []).map((r) => r.shopify_order_id),
+      ...(skippedRows ?? []).map((r) => r.shopify_order_id),
+    ]);
     const candidates = shopifyOrders.filter((o) => !seen.has(o.id));
 
     if (candidates.length === 0) {
-      return await finalize({ orders_retrieved: shopifyOrders.length });
+      return await finalize({
+        orders_retrieved: shopifyOrders.length,
+        ...(isPreview ? { preview: { orders: [], pickup_ready_skipped: [], notes: [] } } : {}),
+      });
     }
 
     // Orders the bar has already prepared for collection are not new work. A
@@ -397,11 +458,35 @@ async function pullSource(
     // ../_shared/pickupReady.ts for the states that do.
     const pickup = await fetchPickupStates(source.store_url, accessToken, candidates);
     const pickupReadyNames: string[] = [];
-    const newOrders = candidates.filter((o) => {
+    let newOrders = candidates.filter((o) => {
       if (!isPickupPrepared(pickup.states.get(o.id))) return true;
       pickupReadyNames.push(o.name);
       return false;
     });
+
+    // Review-page omissions: remember them so later pulls (incl. cron) skip them.
+    const excludeSet = new Set(review?.mode === 'commit' ? review.excludeIds : []);
+    if (excludeSet.size > 0) {
+      const omitted = newOrders.filter((o) => excludeSet.has(o.id));
+      if (omitted.length > 0) {
+        const { error: omitErr } = await admin.from('shopify_skipped_orders').upsert(
+          omitted.map((o) => ({
+            source_id: source.id,
+            shopify_order_id: o.id,
+            shopify_order_number: o.name,
+            customer_name: o.customerName,
+            shopify_created_at: o.createdAt,
+            skipped_by: review?.userId ?? null,
+            line_items: o.lineItems
+              .filter((li) => li.unfulfilledQuantity > 0)
+              .map((li) => ({ title: li.title, variant_title: li.variantTitle, sku: li.sku, quantity: li.unfulfilledQuantity })),
+          })),
+          { onConflict: 'source_id,shopify_order_id' },
+        );
+        if (omitErr) throw new Error(`skip record failed: ${omitErr.message}`);
+      }
+      newOrders = newOrders.filter((o) => !excludeSet.has(o.id));
+    }
 
     // Variant-keyed overrides: jim_product_id maps a line; do_not_produce drops it.
     // Product-level (variant-null) and SKU matching are intentionally NOT used —
@@ -573,6 +658,55 @@ async function pullSource(
       orderHasResolved.set(o.id, resolvedAny);
       if (resolvedAny) includedOrders.push(o);
       if (qLines.length > 0) quarantineByOrder.set(o.id, qLines);
+    }
+
+    // Preview: describe what each order would do, then stop — no writes.
+    if (isPreview) {
+      const extras = await fetchOrderExtras(source.store_url, accessToken, newOrders);
+      const prodById = new Map((acctProducts ?? []).map((p) => [p.id as string, p]));
+      const orders = newOrders.map((o) => ({
+        id: o.id,
+        name: o.name,
+        createdAt: o.createdAt,
+        customerName: o.customerName,
+        ...(extras.extras.get(o.id) ?? {}),
+        lines: o.lineItems
+          .filter((li) => li.unfulfilledQuantity > 0)
+          .map((li) => {
+            const fate = classify(li);
+            const parsed = parseGrindSignal(li.variantTitle);
+            const gRule = li.variantId ? grindRuleByVariant.get(li.variantId) : undefined;
+            let grindLabel = parsed.needsGrind ? parsed.grindLabel : null;
+            if (gRule?.rule === 'NEVER') grindLabel = null;
+            else if (gRule?.rule === 'ALWAYS') grindLabel = gRule.label ?? parsed.grindLabel ?? 'Grind';
+            const p = fate.kind === 'product' ? prodById.get(fate.productId) : undefined;
+            return {
+              title: li.title,
+              variantTitle: li.variantTitle,
+              sku: li.sku,
+              quantity: li.unfulfilledQuantity,
+              fate: fate.kind,
+              reason: fate.kind === 'quarantine' ? fate.reason : null,
+              productId: fate.kind === 'product' ? fate.productId : null,
+              productName: p?.product_name ?? null,
+              bagSizeG: p?.bag_size_g ?? null,
+              units: fate.kind === 'product' ? li.unfulfilledQuantity * fate.unitsPerShopifyUnit : 0,
+              grindLabel: fate.kind === 'product' ? grindLabel : null,
+            };
+          }),
+      }));
+      return {
+        ...base,
+        orders_retrieved: shopifyOrders.length,
+        orders_included: includedOrders.length,
+        orders_quarantined: quarantineByOrder.size,
+        orders_skipped: pickupReadyNames.length,
+        preview: {
+          orders,
+          pickup_ready_skipped: pickupReadyNames,
+          notes: [pickup.note, extras.note].filter(Boolean),
+        },
+      };
     }
 
     // Persist derived variant mappings (non-fatal: a mapping failure must not block
@@ -851,12 +985,14 @@ Deno.serve(async (req) => {
   const authHeader = req.headers.get('Authorization') ?? '';
   const token = authHeader.replace('Bearer ', '');
   let triggerType: 'manual' | 'scheduled' = 'manual';
+  let userId: string | null = null;
 
   if (token === serviceRoleKey) {
     triggerType = 'scheduled';
   } else {
     const { data: { user }, error: authError } = await admin.auth.getUser(token);
     if (authError || !user) return json({ error: 'Unauthorized' }, 401, corsHeaders);
+    userId = user.id;
     const { data: roleData } = await admin
       .from('user_roles')
       .select('role')
@@ -872,6 +1008,8 @@ Deno.serve(async (req) => {
     trigger?: string;
     created_at_min?: string;
     created_at_max?: string;
+    mode?: string;
+    exclude_order_ids?: unknown;
   } = {};
   try {
     body = await req.json();
@@ -879,6 +1017,13 @@ Deno.serve(async (req) => {
     // empty body is fine
   }
   if (body.trigger === 'scheduled' && token === serviceRoleKey) triggerType = 'scheduled';
+
+  const mode: 'preview' | 'commit' | null =
+    body.mode === 'preview' || body.mode === 'commit' ? body.mode : null;
+  const excludeIds = Array.isArray(body.exclude_order_ids)
+    ? body.exclude_order_ids.filter((x): x is string => typeof x === 'string').slice(0, 2000)
+    : [];
+  const review = mode ? { mode, excludeIds, userId } : undefined;
 
   // Created-at window is a MANUAL-only override (for one-off back-fill / testing).
   // The scheduled cron always runs the unbounded open+unfulfilled query.
@@ -920,7 +1065,7 @@ Deno.serve(async (req) => {
       continue;
     }
     results.push(
-      await pullSource(admin, source as Parameters<typeof pullSource>[1], triggerType, pullOpts),
+      await pullSource(admin, source as Parameters<typeof pullSource>[1], triggerType, pullOpts, review),
     );
   }
 

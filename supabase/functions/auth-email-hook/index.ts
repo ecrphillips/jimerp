@@ -19,7 +19,7 @@ const SITE_NAME = "Home Island Coffee Partners"
 const SENDER_DOMAIN = "notify.homeislandcoffee.com"
 const ROOT_DOMAIN = "homeislandcoffee.com"
 const FROM_DOMAIN = "notify.homeislandcoffee.com"
-const SITE_URL = `https://${ROOT_DOMAIN}`
+const SITE_URL = "https://homeislandcoffeepartners.lovable.app"
 
 // Template mapping for preview mode
 const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {

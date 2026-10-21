@@ -151,6 +151,14 @@ As of `supabase/migrations/20261008120000_*.sql`, clients edit orders only throu
 - Planned ship date = work-deadline day for AM/Noon, next business day for PM: `plannedShipDate` in `src/lib/clientOrderDisplay.ts`, mirrored in `supabase/functions/_shared/plannedShipDate.ts`.
 - Client green-lot info comes only from `get_client_green_detail` (descriptive fields; no cost/inventory). Client product notes: `client_product_notes`, keyed (account, roast group), visible to staff on Account Detail → Product Notes.
 
+## Sourcing: Baskets (Phase 1)
+
+`baskets` + `basket_lots` (migration `20261021120000_*.sql`). `basket_lots.active_pct`: number = active at that %, `NULL` = lined up. Pure logic (grouping, auto-sort, volumes, running-low, shared names) lives in `src/lib/baskets.ts`; data + mutations in `src/hooks/useBaskets.ts`; pages `Baskets.tsx` / `BasketDetail.tsx`.
+- "In store" = status not `EN_ROUTE` or has `received_date`; else `is_placeholder` → Planned; else Contracted.
+- Running low reuses `DEPLETION_THRESHOLD` (10 kg) and the Green Lot Mapping "< 5 days left" rule.
+- Delete guard: `findRoastGroupsUsingBasket` in `src/lib/basketDeleteGuard.ts` returns `[]` until Phase 2 links roast groups to baskets — fill it in then.
+- Placeholder lots from samples set `green_lots.source_sample_id` and get a lot number from the normal sequence with `P0000` (no PO consumed).
+
 ## Migration Discipline
 
 - Filenames: `YYYYMMDDHHMMSS_<uuid>.sql` in `supabase/migrations/`

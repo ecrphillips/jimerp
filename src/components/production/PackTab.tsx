@@ -26,6 +26,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Package, Layers, GripVertical, RotateCcw, ChevronDown, ChevronRight, ChevronsUpDown, Printer } from 'lucide-react';
 import { printPackList } from './printPackList';
+import { splitPackLine } from '@/lib/packLineSplit';
+import { BlendHoldsPanel } from './BlendHoldsPanel';
 import { Link } from 'react-router-dom';
 import { type PackagingVariant } from '@/components/PackagingBadge';
 import { SortablePackRow } from './SortablePackRow';
@@ -596,7 +598,28 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   }, [demandByProduct]);
 
   // Per-(account × product) leaf demand, built from the same filtered line items.
+  const { data: lineAllocations = [] } = useQuery({
+    queryKey: ['pack-line-allocations'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_pack_line_allocations');
+      if (error) throw error;
+      return data ?? [];
+    },
+    refetchInterval: 10000,
+  });
+  const allocationByLine = useMemo(() => new Map(lineAllocations.map(row => [row.order_line_item_id, row])), [lineAllocations]);
+
+  const updateLinePacking = async (lineIds: string[], units: number) => {
+    const { error } = await supabase.rpc('update_pack_line_units', { p_line_ids: lineIds, p_new_units: units });
+    if (error) { toast.error(error.message); throw error; }
+    await Promise.all(['pack-line-allocations', 'packing-runs', 'authoritative-packing-runs', 'authoritative-wip-ledger', 'authoritative-fg-ledger', 'inventory-ledger-wip', 'inventory-ledger-fg'].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
+  };
+
   interface RawLeaf {
+    lineIds: string[];
+    packed: number;
+    picked: number;
+    grindLabel: string | null;
     accountKey: string;
     accountName: string;
     productId: string;
@@ -624,10 +647,15 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       const roastGroupKey = requiresProduction
         ? (li.product.roast_group ?? UNASSIGNED)
         : NO_PRODUCTION;
-      const k = `${accountKey}::${li.product_id}`;
+      const grindLabel = li.needs_grind ? (li.grind_label || 'Grind') : null;
+      const k = JSON.stringify([accountKey, li.product_id, grindLabel]);
       let leaf = map.get(k);
       if (!leaf) {
         leaf = {
+          lineIds: [],
+          packed: 0,
+          picked: 0,
+          grindLabel,
           accountKey,
           accountName: accountId
             ? (accountNameById.get(accountId) ?? 'Unknown account')
@@ -649,6 +677,9 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
         };
         map.set(k, leaf);
       }
+      leaf.lineIds.push(li.id);
+      leaf.packed += allocationByLine.get(li.id)?.packed_units ?? 0;
+      leaf.picked += allocationByLine.get(li.id)?.picked_units ?? 0;
       leaf.units += li.quantity_units;
       if (li.needs_grind) {
         leaf.grindUnits += li.quantity_units;
@@ -659,8 +690,8 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       }
       leaf.orderIds.add(li.order_id);
     }
-    return Array.from(map.values());
-  }, [orderLineItems, accountNameById, products]);
+    return Array.from(map.values()).flatMap(splitPackLine);
+  }, [orderLineItems, accountNameById, products, allocationByLine]);
 
   // Assemble the two-level tree for the active mode.
   // account mode : L1 = account,     L2 = roast group
@@ -689,7 +720,11 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       a.packDisplayOrder - b.packDisplayOrder || a.productName.localeCompare(b.productName);
 
     const toLeafNode = (leaf: RawLeaf, l1Key: string, l2Key: string): PackLeafNode => ({
-      key: `${l1Key}::${l2Key}::${leaf.productId}`,
+      key: JSON.stringify([l1Key, l2Key, leaf.productId, leaf.grindLabel]),
+      lineIds: leaf.lineIds,
+      packed: leaf.packed,
+      picked: leaf.picked,
+      grindLabel: leaf.grindLabel,
       productId: leaf.productId,
       productName: leaf.productName,
       sku: leaf.sku,
@@ -720,7 +755,8 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
           kind: isRoastLevel,
           totalUnits: leaves.reduce((s, l) => s + l.units, 0),
           orderCount: isRoastLevel === 'account' ? orderIds.size : undefined,
-          wipKg: isRoastLevel === 'roastgroup' ? (roastedInventory[roastKey] ?? null) : undefined,
+          wipKg: isRoastLevel === 'roastgroup' ? (authWip?.[roastKey]?.wip_net_kg ?? null) : undefined,
+          heldKg: isRoastLevel === 'roastgroup' ? (authWip?.[roastKey]?.reserved_for_blend_kg ?? 0) : undefined,
           planned:
             isRoastLevel === 'roastgroup' ? (plannedWip?.[roastKey] ?? null) : undefined,
           leaves: sorted.map((l) => toLeafNode(l, l1Key, l2Key)),
@@ -749,7 +785,8 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
         kind: l1IsRoast,
         totalUnits: l2Nodes.reduce((s, n) => s + n.totalUnits, 0),
         orderCount: l1IsRoast === 'account' ? l1OrderIds.size : undefined,
-        wipKg: l1IsRoast === 'roastgroup' ? (roastedInventory[l1Key] ?? null) : undefined,
+        wipKg: l1IsRoast === 'roastgroup' ? (authWip?.[l1Key]?.wip_net_kg ?? null) : undefined,
+        heldKg: l1IsRoast === 'roastgroup' ? (authWip?.[l1Key]?.reserved_for_blend_kg ?? 0) : undefined,
         planned: l1IsRoast === 'roastgroup' ? (plannedWip?.[l1Key] ?? null) : undefined,
         children: l2Nodes,
       });
@@ -767,7 +804,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     });
 
     return nodes;
-  }, [rawLeaves, groupMode, accountNameById, roastGroupInfo, roastedInventory, plannedWip]);
+  }, [rawLeaves, groupMode, accountNameById, roastGroupInfo, roastedInventory, authWip, plannedWip]);
 
   // Every expandable key, for the collapse-all / expand-all control.
   const allNestedKeys = useMemo(() => {
@@ -1199,6 +1236,12 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
     <div className="space-y-4">
       {/* Authoritative Totals Summary */}
       <AuthoritativeSummaryPanel tab="pack" />
+
+      {/* Coffee ring-fenced for post-roast blends, with release to stock */}
+      <BlendHoldsPanel
+        title="Roasted coffee held for blends"
+        description="This coffee is counted in inventory but can't be packed for other products until the blend uses it. Release it if it won't be blended."
+      />
       
       {/* Packing Progress */}
       <Card className="overflow-hidden border-2 shadow-sm">
@@ -1248,7 +1291,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
                 size="sm"
                 disabled={packTree.length === 0}
                 onClick={() => {
-                  if (!printPackList(packTree, groupMode, availableByProductUnits, pickedByProductUnits ?? {})) toast.error('Allow pop-ups to print the pack list');
+                  if (!printPackList(packTree, groupMode)) toast.error('Allow pop-ups to print the pack list');
                 }}
               >
                 <Printer className="h-4 w-4 mr-1" />
@@ -1293,6 +1336,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
               requiredKgByProduct={globalMapsByProduct.requiredKg}
               timeSensitiveByProduct={globalMapsByProduct.timeSensitive}
               onUpdatePackedUnits={updatePackingUnits}
+              onUpdateLineUnits={updateLinePacking}
               onEditingChange={handleEditingChange}
             />
           )}

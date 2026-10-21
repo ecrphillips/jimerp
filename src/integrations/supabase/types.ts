@@ -365,6 +365,78 @@ export type Database = {
         }
         Relationships: []
       }
+      basket_lots: {
+        Row: {
+          active_pct: number | null
+          basket_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          lot_id: string
+        }
+        Insert: {
+          active_pct?: number | null
+          basket_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lot_id: string
+        }
+        Update: {
+          active_pct?: number | null
+          basket_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lot_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "basket_lots_basket_id_fkey"
+            columns: ["basket_id"]
+            isOneToOne: false
+            referencedRelation: "baskets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "basket_lots_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "green_lots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      baskets: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       client_allowed_products: {
         Row: {
           account_id: string | null
@@ -2594,6 +2666,7 @@ export type Database = {
           purchase_id: string | null
           received_date: string | null
           release_id: string | null
+          source_sample_id: string | null
           status: string
           transaction_fees_cad: number | null
           transaction_fees_cad_confirmed_at: string | null
@@ -2678,6 +2751,7 @@ export type Database = {
           purchase_id?: string | null
           received_date?: string | null
           release_id?: string | null
+          source_sample_id?: string | null
           status?: string
           transaction_fees_cad?: number | null
           transaction_fees_cad_confirmed_at?: string | null
@@ -2762,6 +2836,7 @@ export type Database = {
           purchase_id?: string | null
           received_date?: string | null
           release_id?: string | null
+          source_sample_id?: string | null
           status?: string
           transaction_fees_cad?: number | null
           transaction_fees_cad_confirmed_at?: string | null
@@ -2794,6 +2869,13 @@ export type Database = {
             columns: ["release_id"]
             isOneToOne: false
             referencedRelation: "green_releases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "green_lots_source_sample_id_fkey"
+            columns: ["source_sample_id"]
+            isOneToOne: false
+            referencedRelation: "green_samples"
             referencedColumns: ["id"]
           },
         ]
@@ -3733,6 +3815,54 @@ export type Database = {
           },
         ]
       }
+      order_extra_lines: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          label: string
+          order_id: string
+          quantity: number
+          tax_code: string
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label: string
+          order_id: string
+          quantity?: number
+          tax_code?: string
+          unit_price?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string
+          order_id?: string
+          quantity?: number
+          tax_code?: string
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_extra_lines_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_extra_lines_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_all"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_line_items: {
         Row: {
           created_at: string
@@ -3749,6 +3879,7 @@ export type Database = {
           short_ship_reason: string | null
           short_ship_recorded_at: string | null
           short_ship_recorded_by: string | null
+          tax_code: string | null
           unit_price_locked: number
         }
         Insert: {
@@ -3766,6 +3897,7 @@ export type Database = {
           short_ship_reason?: string | null
           short_ship_recorded_at?: string | null
           short_ship_recorded_by?: string | null
+          tax_code?: string | null
           unit_price_locked: number
         }
         Update: {
@@ -3783,6 +3915,7 @@ export type Database = {
           short_ship_reason?: string | null
           short_ship_recorded_at?: string | null
           short_ship_recorded_by?: string | null
+          tax_code?: string | null
           unit_price_locked?: number
         }
         Relationships: [
@@ -4027,6 +4160,7 @@ export type Database = {
           shipped_at: string | null
           shipped_or_ready: boolean
           shipping_cost_cad: number | null
+          shipping_tax_code: string | null
           shopify_pull_log_id: string | null
           shopify_source_id: string | null
           source_channel: string
@@ -4060,6 +4194,7 @@ export type Database = {
           shipped_at?: string | null
           shipped_or_ready?: boolean
           shipping_cost_cad?: number | null
+          shipping_tax_code?: string | null
           shopify_pull_log_id?: string | null
           shopify_source_id?: string | null
           source_channel?: string
@@ -4093,6 +4228,7 @@ export type Database = {
           shipped_at?: string | null
           shipped_or_ready?: boolean
           shipping_cost_cad?: number | null
+          shipping_tax_code?: string | null
           shopify_pull_log_id?: string | null
           shopify_source_id?: string | null
           source_channel?: string
@@ -4142,6 +4278,32 @@ export type Database = {
             columns: ["shopify_source_id"]
             isOneToOne: false
             referencedRelation: "shopify_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pack_line_progress: {
+        Row: {
+          order_line_item_id: string
+          packed_units: number
+          updated_at: string
+        }
+        Insert: {
+          order_line_item_id: string
+          packed_units?: number
+          updated_at?: string
+        }
+        Update: {
+          order_line_item_id?: string
+          packed_units?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pack_line_progress_order_line_item_id_fkey"
+            columns: ["order_line_item_id"]
+            isOneToOne: true
+            referencedRelation: "order_line_items"
             referencedColumns: ["id"]
           },
         ]
@@ -4658,6 +4820,7 @@ export type Database = {
           requires_production: boolean
           roast_group: string | null
           sku: string | null
+          tax_code: string
           updated_at: string
           yield_loss_pct_override: number | null
         }
@@ -4694,6 +4857,7 @@ export type Database = {
           requires_production?: boolean
           roast_group?: string | null
           sku?: string | null
+          tax_code?: string
           updated_at?: string
           yield_loss_pct_override?: number | null
         }
@@ -4730,6 +4894,7 @@ export type Database = {
           requires_production?: boolean
           roast_group?: string | null
           sku?: string | null
+          tax_code?: string
           updated_at?: string
           yield_loss_pct_override?: number | null
         }
@@ -5825,6 +5990,50 @@ export type Database = {
           },
         ]
       }
+      shopify_skipped_orders: {
+        Row: {
+          customer_name: string | null
+          id: string
+          line_items: Json | null
+          shopify_created_at: string | null
+          shopify_order_id: string
+          shopify_order_number: string | null
+          skipped_at: string
+          skipped_by: string | null
+          source_id: string
+        }
+        Insert: {
+          customer_name?: string | null
+          id?: string
+          line_items?: Json | null
+          shopify_created_at?: string | null
+          shopify_order_id: string
+          shopify_order_number?: string | null
+          skipped_at?: string
+          skipped_by?: string | null
+          source_id: string
+        }
+        Update: {
+          customer_name?: string | null
+          id?: string
+          line_items?: Json | null
+          shopify_created_at?: string | null
+          shopify_order_id?: string
+          shopify_order_number?: string | null
+          skipped_at?: string
+          skipped_by?: string | null
+          source_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_skipped_orders_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shopify_sources: {
         Row: {
           api_access_token: string | null
@@ -6482,6 +6691,14 @@ export type Database = {
         Args: { p_order_id: string }
         Returns: Json
       }
+      get_pack_line_allocations: {
+        Args: never
+        Returns: {
+          order_line_item_id: string
+          packed_units: number
+          picked_units: number
+        }[]
+      }
       get_product_delete_preflight: {
         Args: { p_product_id: string }
         Returns: Json
@@ -6721,6 +6938,7 @@ export type Database = {
           shipped_at: string | null
           shipped_or_ready: boolean
           shipping_cost_cad: number | null
+          shipping_tax_code: string | null
           shopify_pull_log_id: string | null
           shopify_source_id: string | null
           source_channel: string
@@ -6735,6 +6953,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      update_pack_line_units: {
+        Args: { p_line_ids: string[]; p_new_units: number }
+        Returns: undefined
       }
       update_packing_units: {
         Args: {

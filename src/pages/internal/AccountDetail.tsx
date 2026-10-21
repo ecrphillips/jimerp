@@ -1121,12 +1121,22 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
           );
           if (locErr) throw locErr;
         }
+        return { emailSent: (inviteJson as { email_sent?: boolean }).email_sent !== false, userId: inviteJson.user_id };
       }
+      return { emailSent: true, userId: null as string | null };
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['account-users'] });
       queryClient.invalidateQueries({ queryKey: ['account-user-locations'] });
-      toast.success(editId ? 'User updated' : `Invitation sent to ${form.email}`);
+      if (editId) toast.success('User updated');
+      else if (!res?.emailSent) {
+        const uid = res?.userId;
+        toast.warning(`User added, but the email to ${form.email} could not be sent.`, {
+          description: 'Use Send reset to try again, or copy a manual link to share yourself.',
+          action: uid ? { label: 'Copy manual link', onClick: () => copyManualResetLink(uid) } : undefined,
+          duration: 12000,
+        });
+      } else toast.success(`Invitation sent to ${form.email}`);
       resetForm();
     },
     onError: (err: Error) => toast.error(err.message),
@@ -1234,7 +1244,7 @@ function UsersTab({ accountId, account }: { accountId: string; account: any }) {
                         onClick={() => sendResetMutation.mutate({ user_id: u.user_id, email })}
                       >
                         <Mail className="h-3 w-3 mr-1" />
-                        {sendResetMutation.isPending ? 'Sending…' : 'Reset Password'}
+                        {sendResetMutation.isPending && sendResetMutation.variables?.user_id === u.user_id ? 'Sending…' : 'Reset Password'}
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent className="text-xs">Send a branded password reset email to this user</TooltipContent>

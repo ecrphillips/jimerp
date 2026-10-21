@@ -101,7 +101,7 @@ function buildDisplayName(productName: string, packagingTypeName: string | null,
 
 export default function NewOrder() {
   const { authUser } = useAuth();
-  const { isPreviewMode } = usePreview();
+  const { isPreviewMode, previewAccountId } = usePreview();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -133,29 +133,30 @@ export default function NewOrder() {
     multiplier: number;
   } | null>(null);
 
-  const { constraints, isLoading: constraintsLoading } = useClientOrderingConstraints(authUser?.accountId);
+  const { constraints, isLoading: constraintsLoading } = useClientOrderingConstraints(previewAccountId ?? authUser?.accountId);
+  const productAccountId = previewAccountId ?? authUser?.accountId ?? null;
   const { hidePricing } = usePricingVisibility();
 
   // Account's standard production schedule — used to auto-set the work deadline
   // on submit. Members never see/edit it; admins configure it per account.
   const { data: accountSchedule, isLoading: scheduleLoading } = useQuery({
-    queryKey: ['account-schedule', authUser?.accountId],
+    queryKey: ['account-schedule', productAccountId],
     queryFn: async () => {
-      if (!authUser?.accountId) return null;
+      if (!productAccountId) return null;
       const { data, error } = await supabase
         .from('accounts')
         .select('production_weekdays, order_cutoff_hour')
-        .eq('id', authUser.accountId)
+        .eq('id', productAccountId)
         .single();
       if (error) throw error;
       return data;
     },
-    enabled: !!authUser?.accountId,
+    enabled: !!productAccountId,
   });
 
   // Fetch allowed products with packaging type join
   const { data: products, isLoading: productsLoading } = useQuery({
-    queryKey: ['client-products', authUser?.accountId, constraints.allowedProductIds],
+    queryKey: ['client-products', productAccountId, constraints.allowedProductIds],
     queryFn: async () => {
       let query = supabase
         .from('products')
@@ -165,13 +166,16 @@ export default function NewOrder() {
 
       if (constraints.allowedProductIds && constraints.allowedProductIds.length > 0) {
         query = query.in('id', constraints.allowedProductIds);
+      } else {
+        // Unrestricted accounts still only see their own products.
+        query = query.eq('account_id', productAccountId!);
       }
 
       const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as Product[];
     },
-    enabled: !constraintsLoading,
+    enabled: !constraintsLoading && !!productAccountId,
   });
 
   const { data: prices } = useQuery({
@@ -271,13 +275,13 @@ export default function NewOrder() {
   }, [lineItems]);
 
   const checkUnusualOrderSize = async (): Promise<boolean> => {
-    if (!authUser?.accountId) return false;
+    if (!productAccountId) return false;
 
     try {
       const { data: lastOrder } = await supabase
         .from('orders')
         .select('id, order_line_items(product_id, quantity_units)')
-        .eq('account_id', authUser.accountId)
+        .eq('account_id', productAccountId)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'])
         .order('created_at', { ascending: false })
         .limit(1)
@@ -286,7 +290,7 @@ export default function NewOrder() {
       const { data: recentOrders } = await supabase
         .from('orders')
         .select('id')
-        .eq('account_id', authUser.accountId)
+        .eq('account_id', productAccountId)
         .in('status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY', 'SHIPPED'])
         .order('created_at', { ascending: false })
         .limit(5);
@@ -741,15 +745,15 @@ export default function NewOrder() {
       </div>
 
       <OrderContextBanner
-        accountId={authUser?.accountId}
+        accountId={productAccountId}
         locationId={selectedLocationId || null}
       />
 
-      {authUser?.accountId && (
+      {productAccountId && (
         <Card className="mb-4">
           <CardContent className="pt-4">
             <LocationSelect
-              clientId={authUser.accountId}
+              clientId={productAccountId}
               value={selectedLocationId}
               onChange={setSelectedLocationId}
               required

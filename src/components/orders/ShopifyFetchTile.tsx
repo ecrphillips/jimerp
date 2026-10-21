@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { RefreshCw, Cloud } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -119,7 +120,10 @@ export function ShopifyFetchTile({ onPulled }: { onPulled?: () => void }) {
         </div>
         <div className="text-xs text-muted-foreground">{lastLabel}</div>
       </div>
-      <Button onClick={handlePull} disabled={pulling} variant="secondary" className="ml-auto">
+      <Button asChild variant="outline" className="ml-auto">
+        <Link to="/orders/shopify-fetch">Review before fetching</Link>
+      </Button>
+      <Button onClick={handlePull} disabled={pulling} variant="secondary">
         <RefreshCw className={`mr-2 h-4 w-4 ${pulling ? 'animate-spin' : ''}`} />
         {pulling ? 'Fetching…' : 'Fetch'}
       </Button>

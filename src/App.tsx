@@ -42,6 +42,8 @@ import SourcingLots from "@/pages/internal/SourcingLots";
 import SourcingPurchases from "@/pages/internal/SourcingPurchases";
 import SourcingReleases from "@/pages/internal/SourcingReleases";
 import ReleaseDetail from "@/pages/internal/ReleaseDetail";
+import Baskets from "@/pages/internal/Baskets";
+import BasketDetail from "@/pages/internal/BasketDetail";
 import CoRoastMembers from "@/pages/internal/CoRoastMembers";
 import CoRoastMemberDetail from "@/pages/internal/CoRoastMemberDetail";
 import CoRoastLoringSchedule from "@/pages/internal/CoRoastLoringSchedule";
@@ -60,6 +62,7 @@ import UsersAccess from "@/pages/internal/UsersAccess";
 import AdminFeedback from "@/pages/internal/AdminFeedback";
 import ShopifyDebug from "@/pages/internal/ShopifyDebug";
 import FunkImport from "@/pages/internal/FunkImport";
+import ShopifyFetchReview from "@/pages/internal/ShopifyFetchReview";
 import Portal from "@/pages/client/Portal";
 import NewOrder from "@/pages/client/NewOrder";
 import OrderHistory from "@/pages/client/OrderHistory";
@@ -251,6 +254,16 @@ const App = () => (
                 <InternalLayout><ReleaseDetail /></InternalLayout>
               </ProtectedRoute>
             } />
+            <Route path="/sourcing/baskets" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><Baskets /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/sourcing/baskets/:id" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><BasketDetail /></InternalLayout>
+              </ProtectedRoute>
+            } />
             <Route path="/inventory" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><Inventory /></InternalLayout>
@@ -299,6 +312,11 @@ const App = () => (
             <Route path="/admin-tools" element={
               <ProtectedRoute allowedRoles={['ADMIN']}>
                 <InternalLayout><AdminTools /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/orders/shopify-fetch" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
+                <InternalLayout><ShopifyFetchReview /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/admin/funk-import" element={

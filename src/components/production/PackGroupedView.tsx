@@ -12,6 +12,7 @@ import {
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { InlinePackingControl } from './InlinePackingControl';
 import { partitionPackDrawerLines } from '@/lib/packGroupSort';
+import { remainingPackWeightKg, packLineProgress } from '@/lib/packLineSplit';
 
 export type PackGroupMode = 'account' | 'roastgroup';
 export type WipStatus = 'full' | 'partial' | 'none';
@@ -27,6 +28,10 @@ export interface PackingRun {
 
 /** A single product under one account (per-account demanded quantity). */
 export interface PackLeafNode {
+  lineIds: string[];
+  packed: number;
+  picked: number;
+  grindLabel: string | null;
   /** Stable key for expand state — includes the full path so the same SKU under
    *  two accounts expands independently. */
   key: string;
@@ -53,6 +58,8 @@ export interface PackL2Node {
   totalUnits: number;
   orderCount?: number;
   wipKg?: number | null;
+  /** kg of wipKg held for a post-roast blend (not packable by other products). */
+  heldKg?: number;
   planned?: { planned_kg: number; count: number } | null;
   leaves: PackLeafNode[];
 }
@@ -65,6 +72,8 @@ export interface PackL1Node {
   totalUnits: number;
   orderCount?: number;
   wipKg?: number | null;
+  /** kg of wipKg held for a post-roast blend (not packable by other products). */
+  heldKg?: number;
   planned?: { planned_kg: number; count: number } | null;
   children: PackL2Node[];
 }
@@ -91,39 +100,8 @@ interface PackGroupedViewProps {
     roastGroupKey: string,
     previousUnits: number,
   ) => Promise<void>;
+  onUpdateLineUnits: (lineIds: string[], units: number) => Promise<void>;
   onEditingChange: (productId: string, isEditing: boolean) => void;
-}
-
-function GrindBadges({
-  grindUnits,
-  wholeBeanUnits,
-  grindByLabel,
-}: {
-  grindUnits: number;
-  wholeBeanUnits: number;
-  grindByLabel: Record<string, number>;
-}) {
-  if (grindUnits <= 0) return null;
-  return (
-    <div className="mt-1 flex items-center gap-2 flex-wrap">
-      <Badge className="text-xs font-bold uppercase tracking-wide bg-orange-500 text-white border-orange-600 hover:bg-orange-500">
-        <AlertTriangle className="h-3.5 w-3.5 mr-1" />
-        {grindUnits} GRIND
-      </Badge>
-      {wholeBeanUnits > 0 && (
-        <span className="text-xs font-medium text-muted-foreground">{wholeBeanUnits} whole bean</span>
-      )}
-      {Object.entries(grindByLabel).map(([label, qty]) => (
-        <Badge
-          key={label}
-          variant="outline"
-          className="text-xs font-semibold border-orange-400 text-orange-700 bg-orange-50 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800"
-        >
-          {qty} × {label}
-        </Badge>
-      ))}
-    </div>
-  );
 }
 
 /** Left-border accent by WIP readiness, matching the flat pack row cues. */
@@ -160,16 +138,7 @@ function wipBarClass(wipStatus: WipStatus | null): string {
 
 function progressForLeaf(leaf: PackLeafNode, props: PackGroupedViewProps) {
   if (!leaf.requiresProduction) return { packed: leaf.units, needed: leaf.units, complete: true };
-  const globalDemand = props.globalDemandByProduct[leaf.productId] ?? 0;
-  const available = props.availableByProduct[leaf.productId] ?? 0;
-  const picked = props.pickedByProduct[leaf.productId] ?? 0;
-  const effectivePacked = Math.min(globalDemand, available + picked);
-  const complete = globalDemand > 0 && effectivePacked >= globalDemand;
-  return {
-    packed: complete ? leaf.units : Math.min(leaf.units, effectivePacked),
-    needed: leaf.units,
-    complete,
-  };
+  return packLineProgress(leaf.units, leaf.packed);
 }
 
 function progressForLeaves(leaves: PackLeafNode[], props: PackGroupedViewProps) {
@@ -201,26 +170,23 @@ function LeafRow({
     pickedByProduct,
     wipStatusByProduct,
     timeSensitiveByProduct,
-    onUpdatePackedUnits,
+    onUpdateLineUnits,
     onEditingChange,
   } = props;
 
   const pid = leaf.productId;
-  const wipStatus = wipStatusByProduct[pid] ?? 'none';
-  const globalDemand = globalDemandByProduct[pid] ?? 0;
-  const available = availableByProduct[pid] ?? 0;
-  const picked = pickedByProduct[pid] ?? 0;
-  const effectivePacked = available + picked;
-  const isComplete = leaf.requiresProduction
-    ? globalDemand > 0 && effectivePacked >= globalDemand
-    : true;
+  const remainingKg = Math.max(0, leaf.units - leaf.packed) * leaf.bagSizeG / 1000;
+  const availableWip = props.wipAvailableKgByProduct[pid] ?? 0;
+  const wipStatus: WipStatus = availableWip >= remainingKg ? 'full' : availableWip > 0 ? 'partial' : 'none';
+  const effectivePacked = leaf.packed;
+  const isComplete = !leaf.requiresProduction || packLineProgress(leaf.units, effectivePacked).complete;
   const isStarted = effectivePacked > 0;
   const timeSensitive = timeSensitiveByProduct[pid] ?? false;
 
   return (
-    <div className={`border-l-4 transition-opacity ${isComplete && leaf.requiresProduction ? 'border-l-success opacity-50 focus-within:opacity-100 hover:opacity-100' : leafAccent(wipStatus, leaf.requiresProduction)}`}>
+    <div data-pack-line={leaf.key} className={`border-l-4 transition-opacity ${isComplete && leaf.requiresProduction ? 'border-l-success opacity-50 focus-within:opacity-100 hover:opacity-100' : leafAccent(wipStatus, leaf.requiresProduction)}`}>
       <div
-        className={`flex items-center gap-3 border-b px-3 py-3 transition-colors ${compact ? 'pl-4' : 'pl-6'} ${
+        className={`flex flex-wrap items-center gap-3 border-b px-3 py-3 transition-colors ${compact ? 'pl-4' : 'pl-6'} ${
           isComplete
             ? 'bg-success/15'
             : isStarted
@@ -232,9 +198,14 @@ function LeafRow({
                   : 'bg-destructive/15'
         }`}
       >
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 basis-48 grow">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-sm text-foreground">{leaf.productName}</span>
+            {leaf.grindLabel ? (
+              <Badge variant="outline" className="font-bold text-warning border-warning bg-warning/15 whitespace-normal">
+                <AlertTriangle className="h-3.5 w-3.5 mr-1" />GRIND · {leaf.grindLabel}
+              </Badge>
+            ) : leaf.requiresProduction ? <span className="text-xs text-muted-foreground">Whole bean</span> : null}
             {!leaf.requiresProduction && (
               <Badge className="text-xs font-bold uppercase tracking-wide bg-amber-500 text-white border-amber-600 hover:bg-amber-500">
                 <AlertTriangle className="h-3.5 w-3.5 mr-1" />
@@ -247,13 +218,13 @@ function LeafRow({
                 Urgent
               </Badge>
             )}
-            {leaf.requiresProduction && wipStatus === 'full' && (
+            {leaf.requiresProduction && !isComplete && wipStatus === 'full' && (
               <Badge variant="outline" className="text-xs bg-success/15 text-success border-success/30">
                 <CheckCircle className="h-3 w-3 mr-1 text-success" />
                 WIP ready
               </Badge>
             )}
-            {leaf.requiresProduction && wipStatus === 'partial' && (
+            {leaf.requiresProduction && !isComplete && wipStatus === 'partial' && (
               <Badge variant="outline" className="text-xs bg-warning/15 text-warning border-warning/30">
                 <AlertCircle className="h-3 w-3 mr-1 text-warning" />
                 WIP partial
@@ -266,11 +237,7 @@ function LeafRow({
               </Badge>
             )}
           </div>
-          <GrindBadges
-            grindUnits={leaf.grindUnits}
-            wholeBeanUnits={leaf.wholeBeanUnits}
-            grindByLabel={leaf.grindByLabel}
-          />
+
         </div>
 
         <div className="shrink-0 flex items-center justify-end gap-2 text-right">
@@ -293,7 +260,7 @@ function LeafRow({
             <div className="text-right">
               <div className="flex items-center justify-end gap-1 text-sm font-black tabular-nums text-foreground">
                 {isComplete && <Check className="h-3.5 w-3.5 text-success" />}
-                {effectivePacked}/{globalDemand}
+                {effectivePacked}/{leaf.units}
               </div>
               <div className="text-[10px] font-bold uppercase text-muted-foreground">packed</div>
             </div>
@@ -302,13 +269,11 @@ function LeafRow({
         {leaf.requiresProduction && (
           <div className="shrink-0">
             <InlinePackingControl
-              value={available}
-              onCommit={(v) =>
-                onUpdatePackedUnits(pid, v, leaf.bagSizeG, leaf.roastGroupKey, available)
-              }
+              value={effectivePacked}
+              onCommit={(v) => onUpdateLineUnits(leaf.lineIds, v)}
               onEditingChange={(editing) => onEditingChange(pid, editing)}
               isComplete={isComplete}
-              fillValue={Math.max(0, globalDemand - picked)}
+              fillValue={leaf.units}
             />
           </div>
         )}
@@ -323,10 +288,12 @@ function GroupHeader({
   totalUnits,
   orderCount,
   wipKg,
+  heldKg,
   planned,
   collapsed,
   level,
   packedUnits,
+  remainingKg,
   complete,
   deemphasized,
   wipStatus,
@@ -337,16 +304,22 @@ function GroupHeader({
   totalUnits: number;
   orderCount?: number;
   wipKg?: number | null;
+  /** kg of wipKg held for a post-roast blend (not packable by other products). */
+  heldKg?: number;
   planned?: { planned_kg: number; count: number } | null;
   collapsed: boolean;
   level: 1 | 2;
   packedUnits: number;
+  remainingKg: number;
   complete: boolean;
   deemphasized: boolean;
   /** Aggregated WIP readiness for the drawer — shown as a left bar when collapsed. */
   wipStatus: WipStatus | null;
   onClick: () => void;
 }) {
+  // Pack-floor weights are always in kg, regardless of the pricing-sheet lb/kg toggle.
+  const weightToDisplay = (kg: number) => kg;
+  const suffix = 'kg';
   // Complete keeps its green bar; collapsed drawers show the aggregate WIP cue;
   // expanded-but-incomplete stays neutral so the row bands do the talking.
   const barClass = complete
@@ -356,7 +329,7 @@ function GroupHeader({
       : 'border-l-transparent';
   return (
     <div
-      className={`relative flex items-center justify-between gap-4 cursor-pointer overflow-hidden transition-all ${
+      className={`relative flex flex-wrap items-center justify-between gap-4 cursor-pointer overflow-hidden transition-all ${
         level === 1
           ? 'bg-card hover:bg-muted/40 px-4 py-4'
           : 'bg-muted/40 hover:bg-muted/60 px-4 py-3 pl-7'
@@ -365,14 +338,14 @@ function GroupHeader({
       }`}
       onClick={onClick}
     >
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center gap-2 min-w-0 basis-48 grow">
         {collapsed ? (
           <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
         ) : (
           <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
         )}
         <span
-          className={`truncate ${
+          className={`break-words ${
             level === 1
               ? 'text-lg font-black uppercase text-foreground'
               : 'text-sm font-semibold text-foreground'
@@ -386,16 +359,19 @@ function GroupHeader({
           </Badge>
         )}
       </div>
-      <div className="flex items-center gap-4 shrink-0 text-xs text-muted-foreground">
+      <div className="flex items-center justify-between gap-4 min-w-0 grow text-xs text-muted-foreground">
         {kind === 'roastgroup' && wipKg != null && (
-          <span className="font-medium">
-            {wipKg.toFixed(1)} kg WIP
+          <span className="font-medium min-w-0">
+            {weightToDisplay(Math.max(0, wipKg - (heldKg ?? 0))).toFixed(1)} {suffix} available WIP · <span className="text-foreground font-bold">{weightToDisplay(remainingKg).toFixed(1)} {suffix} to pack</span>
+            {heldKg != null && heldKg > 0.01 && (
+              <> · <span className="text-warning font-semibold">{weightToDisplay(heldKg).toFixed(1)} {suffix} held for blend</span></>
+            )}
             {planned && planned.count > 0 && (
-              <> · {planned.count} planned (~{planned.planned_kg.toFixed(1)} kg)</>
+              <> · {planned.count} planned (~{weightToDisplay(planned.planned_kg).toFixed(1)} {suffix})</>
             )}
           </span>
         )}
-        <div className="min-w-20 text-right">
+        <div className="min-w-20 shrink-0 text-right">
           <div className="text-xl font-black leading-none tabular-nums text-foreground">
             {packedUnits}<span className="mx-1 font-normal text-muted-foreground">/</span>{totalUnits}
           </div>
@@ -501,7 +477,7 @@ export function PackGroupedView(props: PackGroupedViewProps) {
           l1.children,
           (leaf) => leaf.requiresProduction && progressForLeaf(leaf, props).complete,
           // Smallest to largest bag size so every drawer reads in the same order.
-          (a, b) => a.bagSizeG - b.bagSizeG || a.productName.localeCompare(b.productName),
+          (a, b) => a.bagSizeG - b.bagSizeG || a.productName.localeCompare(b.productName) || Number(Boolean(a.grindLabel)) - Number(Boolean(b.grindLabel)) || (a.grindLabel ?? '').localeCompare(b.grindLabel ?? ''),
         );
         return (
           <div
@@ -516,10 +492,12 @@ export function PackGroupedView(props: PackGroupedViewProps) {
               totalUnits={l1.totalUnits}
               orderCount={l1.orderCount}
               wipKg={l1.wipKg}
+              heldKg={l1.heldKg}
               planned={l1.planned}
               collapsed={l1Collapsed}
               level={1}
               packedUnits={l1Progress.packed}
+              remainingKg={remainingPackWeightKg(l1Leaves)}
               complete={l1Progress.complete}
               deemphasized={l1Collapsed && demotedKeys.has(l1.key) && l1Progress.complete}
               wipStatus={l1WipStatus}

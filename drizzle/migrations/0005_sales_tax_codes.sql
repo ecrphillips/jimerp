@@ -1,0 +1,4 @@
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS shipping_tax_code text CHECK (shipping_tax_code IN ('NONE','GST5','HST13','HST14','HST15'));
+ALTER TABLE public.order_extra_lines ADD COLUMN IF NOT EXISTS tax_code text NOT NULL DEFAULT 'NONE' CHECK (tax_code IN ('NONE','GST5','HST13','HST14','HST15'));
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS tax_code text NOT NULL DEFAULT 'NONE' CHECK (tax_code IN ('NONE','GST5','HST13','HST14','HST15','BY_PROVINCE'));
+ALTER TABLE public.order_line_items ADD COLUMN IF NOT EXISTS tax_code text CHECK (tax_code IN ('NONE','GST5','HST13','HST14','HST15','BY_PROVINCE'));

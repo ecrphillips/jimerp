@@ -1,5 +1,8 @@
 # Roadmap
 
+- [x] Separate ground packing lines and verify independent completion without double-counting stock.
+- [x] Show remaining packing weight beside available WIP and include both figures in the printed pack list.
+
 - [x] Keep completed packing lines visible, faded, and below unfinished lines inside both drawer views.
 
 - [x] Make Today the standard run-sheet filter and show it as a visible left rail (a strip above the tabs on narrower screens).

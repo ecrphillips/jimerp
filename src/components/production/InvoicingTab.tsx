@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,15 +11,20 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatMoney } from '@/lib/formatMoney';
 import { formatInvoiceWeight, invoiceOrderWeightKg } from '@/lib/invoiceTotals';
 import { useWeightUnit } from '@/hooks/useWeightUnit';
-import { CheckCircle2, ChevronDown, ChevronRight, FileText, Save } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronRight, FileText, Save, Trash2 } from 'lucide-react';
+import { AddExtraLineForm, useDeleteExtraLine, useOrderExtraLines } from '@/components/orders/OrderExtraLines';
 import { toast } from 'sonner';
+import { TAX_CODES, computeTaxBreakdown, resolveTaxCode, type TaxCode } from '@/lib/salesTax';
+import { TaxRateSelect, TaxSuggestionChip, useOrderTaxSuggestion } from '@/components/orders/TaxRateSelect';
 
 interface InvoiceLineItem {
   id: string;
   quantity_units: number;
   unit_price_locked: number;
   grind_label: string | null;
+  tax_code: string | null;
   product: {
+    tax_code: string | null;
     product_name: string;
     bag_size_g: number;
     packaging_variant: PackagingVariant | null;
@@ -32,13 +38,14 @@ interface AwaitingInvoiceOrder {
   account: { account_name: string } | null;
   location: { location_name: string } | null;
   shipping_cost_cad: number | null;
+  shipping_tax_code: string | null;
   line_items: InvoiceLineItem[] | null;
 }
 
 function InvoiceOrderRow({ order, onMarkInvoiced, onSaveShipping, isUpdating, isSavingShipping }: {
   order: AwaitingInvoiceOrder;
   onMarkInvoiced: (orderId: string) => void;
-  onSaveShipping: (orderId: string, shippingCost: number | null) => void;
+  onSaveShipping: (orderId: string, shippingCost: number | null, taxCode: TaxCode | null) => void;
   isUpdating: boolean;
   isSavingShipping: boolean;
 }) {
@@ -47,7 +54,12 @@ function InvoiceOrderRow({ order, onMarkInvoiced, onSaveShipping, isUpdating, is
     order.shipping_cost_cad == null ? '' : order.shipping_cost_cad.toFixed(2),
   );
   const w = useWeightUnit();
+  const { data: suggestion } = useOrderTaxSuggestion(isOpen ? order.id : undefined);
+  const [shipTax, setShipTax] = useState<TaxCode | null>((order.shipping_tax_code as TaxCode | null) ?? null);
+  const effectiveShipTax: TaxCode = shipTax ?? suggestion?.code ?? 'GST5';
   const lineItems = order.line_items ?? [];
+  const { data: extraLines = [] } = useOrderExtraLines(isOpen ? order.id : undefined);
+  const deleteExtra = useDeleteExtraLine(order.id);
   const totalUnits = lineItems.reduce((sum, line) => sum + line.quantity_units, 0);
   const totalKg = invoiceOrderWeightKg(lineItems);
   const kgLabel = formatInvoiceWeight(totalKg, (v) => v, 'kg');
@@ -57,7 +69,13 @@ function InvoiceOrderRow({ order, onMarkInvoiced, onSaveShipping, isUpdating, is
   const parsedShippingCost = shippingCost.trim() === '' ? null : Number(shippingCost);
   const shippingCostIsValid = parsedShippingCost == null || (Number.isFinite(parsedShippingCost) && parsedShippingCost >= 0);
   const savedShippingCost = order.shipping_cost_cad == null ? null : Number(order.shipping_cost_cad);
-  const shippingCostChanged = shippingCostIsValid && parsedShippingCost !== savedShippingCost;
+  const shippingCostChanged = shippingCostIsValid && (parsedShippingCost !== savedShippingCost || (parsedShippingCost != null && effectiveShipTax !== order.shipping_tax_code));
+  const fallback = suggestion ?? { code: 'GST5' as TaxCode, province: null, international: false, message: '' };
+  const breakdown = computeTaxBreakdown([
+    ...lineItems.map((l) => ({ amount: l.quantity_units * Number(l.unit_price_locked), taxCode: resolveTaxCode(l.tax_code ?? l.product?.tax_code, fallback) })),
+    ...extraLines.map((x) => ({ amount: x.quantity * x.unit_price, taxCode: x.tax_code })),
+    ...(savedShippingCost != null ? [{ amount: savedShippingCost, taxCode: resolveTaxCode(order.shipping_tax_code ?? effectiveShipTax, fallback) }] : []),
+  ]);
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="rounded-md border bg-background">
@@ -67,8 +85,14 @@ function InvoiceOrderRow({ order, onMarkInvoiced, onSaveShipping, isUpdating, is
             {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </Button>
         </CollapsibleTrigger>
+        <Link
+          to={`/orders/${order.id}`}
+          className="shrink-0 font-semibold text-primary underline underline-offset-4 hover:opacity-80"
+          title={`Open ${order.order_number} order detail`}
+        >
+          {order.order_number}
+        </Link>
         <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-3 text-left">
-          <span className="font-semibold">{order.order_number}</span>
           <span className="text-muted-foreground">•</span>
           <span className="truncate">{order.account?.account_name ?? order.client?.name ?? 'Unknown'}</span>
           {order.location?.location_name && (
@@ -109,9 +133,30 @@ function InvoiceOrderRow({ order, onMarkInvoiced, onSaveShipping, isUpdating, is
               <span className="text-right tabular-nums">{formatMoney(Number(line.unit_price_locked))}</span>
             </div>
           ))}
+          {extraLines.map((x) => (
+            <div key={x.id} className="grid grid-cols-[minmax(0,1fr)_5rem_7rem] items-center gap-4 border-b px-3 py-2.5 last:border-b-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="font-medium">{x.label}</span>
+                {x.tax_code !== 'NONE' && <Badge variant="outline" className="text-xs">{TAX_CODES[x.tax_code].label}</Badge>}
+                <span className="text-xs text-muted-foreground">subtotal {formatMoney(x.quantity * x.unit_price)}</span>
+                <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Remove line" onClick={() => deleteExtra.mutate(x.id)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <span className="text-right font-semibold">{x.quantity}</span>
+              <span className="text-right tabular-nums">{formatMoney(x.unit_price)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3">
+          <AddExtraLineForm orderId={order.id} />
         </div>
 
-        <div className="mt-3 flex flex-wrap items-end justify-end gap-2 border-t pt-3">
+        <div className="mt-3 flex flex-col items-end gap-2 border-t pt-3">
+          {suggestion && parsedShippingCost != null && (
+            <TaxSuggestionChip suggestion={suggestion} current={effectiveShipTax} onApply={setShipTax} />
+          )}
+        <div className="flex flex-wrap items-end justify-end gap-2">
           <div className="w-full max-w-56 space-y-1.5">
             <label htmlFor={`shipping-cost-${order.id}`} className="text-xs font-medium text-muted-foreground">
               Shipping cost (CAD)
@@ -132,15 +177,28 @@ function InvoiceOrderRow({ order, onMarkInvoiced, onSaveShipping, isUpdating, is
               />
             </div>
           </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Tax on shipping</label>
+            <TaxRateSelect value={effectiveShipTax} onChange={setShipTax} />
+          </div>
           <Button
             type="button"
             variant="outline"
-            onClick={() => onSaveShipping(order.id, parsedShippingCost)}
+            onClick={() => onSaveShipping(order.id, parsedShippingCost, parsedShippingCost == null ? null : effectiveShipTax)}
             disabled={!shippingCostChanged || isSavingShipping}
           >
             <Save className="mr-2 h-4 w-4" />
             {isSavingShipping ? 'Saving…' : 'Save shipping'}
           </Button>
+        </div>
+        </div>
+
+        <div className="mt-3 ml-auto w-full max-w-64 space-y-1 text-sm tabular-nums">
+          <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatMoney(breakdown.subtotal)}</span></div>
+          {breakdown.taxes.map((t) => (
+            <div key={t.code} className="flex justify-between"><span className="text-muted-foreground">{t.label}</span><span>{formatMoney(t.amount)}</span></div>
+          ))}
+          <div className="flex justify-between border-t pt-1 font-semibold"><span>Total</span><span>{formatMoney(breakdown.total)}</span></div>
         </div>
       </CollapsibleContent>
     </Collapsible>
@@ -158,6 +216,7 @@ export function InvoicingTab() {
           id,
           order_number,
           shipping_cost_cad,
+          shipping_tax_code,
           client:clients(name),
           account:accounts(account_name),
           location:account_locations!orders_location_id_fkey(location_name),
@@ -166,7 +225,8 @@ export function InvoicingTab() {
             quantity_units,
             unit_price_locked,
             grind_label,
-            product:products(product_name, bag_size_g, packaging_variant)
+            tax_code,
+            product:products(tax_code, product_name, bag_size_g, packaging_variant)
           )
         `)
         .eq('status', 'SHIPPED')
@@ -195,16 +255,18 @@ export function InvoicingTab() {
   });
 
   const saveShippingCostMutation = useMutation({
-    mutationFn: async ({ orderId, shippingCost }: { orderId: string; shippingCost: number | null }) => {
+    mutationFn: async ({ orderId, shippingCost, taxCode }: { orderId: string; shippingCost: number | null; taxCode: TaxCode | null }) => {
       const { error } = await supabase
         .from('orders')
-        .update({ shipping_cost_cad: shippingCost })
+        .update({ shipping_cost_cad: shippingCost, shipping_tax_code: taxCode })
         .eq('id', orderId);
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success('Shipping cost saved');
       queryClient.invalidateQueries({ queryKey: ['shipped-awaiting-invoice'] });
+      queryClient.invalidateQueries({ queryKey: ['order-shipping-cost'] });
+      queryClient.invalidateQueries({ queryKey: ['order-tax-suggestion'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
     },
     onError: (err) => {
@@ -241,7 +303,7 @@ export function InvoicingTab() {
                 key={order.id}
                 order={order}
                 onMarkInvoiced={(orderId) => markOrderInvoicedMutation.mutate(orderId)}
-                onSaveShipping={(orderId, shippingCost) => saveShippingCostMutation.mutate({ orderId, shippingCost })}
+                onSaveShipping={(orderId, shippingCost, taxCode) => saveShippingCostMutation.mutate({ orderId, shippingCost, taxCode })}
                 isUpdating={markOrderInvoicedMutation.isPending}
                 isSavingShipping={saveShippingCostMutation.isPending && saveShippingCostMutation.variables?.orderId === order.id}
               />

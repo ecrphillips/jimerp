@@ -22,6 +22,41 @@
       "when": 1791412315614,
       "tag": "0002_block_batches_on_post_roast_blends",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792010018152,
+      "tag": "0003_order_extra_lines",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792011436347,
+      "tag": "0004_grant_order_extra_lines",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792012630446,
+      "tag": "0005_sales_tax_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792436432480,
+      "tag": "0006_independent_pack_line_progress",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792515671547,
+      "tag": "0007_shopify_skipped_orders",
+      "breakpoints": true
     }
   ]
 }
