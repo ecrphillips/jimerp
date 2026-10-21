@@ -114,6 +114,19 @@ export default function Orders() {
   const isTerminalOrder = (order: NonNullable<typeof data>[0]) => 
     order.status === 'SHIPPED' || order.status === 'CANCELLED' || order.shipped_or_ready;
 
+  // Orders with a client change request awaiting review.
+  const { data: pendingChangeOrderIds } = useQuery({
+    queryKey: ['order-change-requests', 'pending-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('order_change_requests')
+        .select('order_id')
+        .eq('status', 'PENDING');
+      if (error) throw error;
+      return new Set((data ?? []).map((r) => r.order_id));
+    },
+  });
+
   // Fetch packing runs for pack completion calculation
   const { data: packingRuns } = useQuery({
     queryKey: ['packing-runs-all'],
@@ -388,6 +401,11 @@ export default function Orders() {
                       </span>
                       <LocationCodeDisplay locationId={o.location_id} />
                       <span className="text-sm text-muted-foreground">{o.order_number}</span>
+                      {pendingChangeOrderIds?.has(o.id) && (
+                        <span className="inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800" title="Client requested a change — review on the order page">
+                          Change requested
+                        </span>
+                      )}
                       {o.created_by_admin && (
                         <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary" title="Created by Admin">
                           <UserPlus className="h-3 w-3" />

@@ -11,6 +11,7 @@ const EVENTS = [
   { key: 'ORDER_SHIPPED', label: 'Order shipped' },
   { key: 'ORDER_CANCELLED', label: 'Order cancelled' },
   { key: 'ORDER_CLIENT_EDITED', label: 'Order edited' },
+  { key: 'ORDER_CHANGE_DECLINED', label: 'Change request declined' },
 ] as const;
 
 const CHANNELS = [

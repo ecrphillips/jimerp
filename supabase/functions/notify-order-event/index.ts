@@ -1,5 +1,6 @@
 // Generic order lifecycle email notifier.
-// Handles ORDER_CONFIRMED, ORDER_SHIPPED, ORDER_CANCELLED, ORDER_CLIENT_EDITED.
+// Handles ORDER_CONFIRMED, ORDER_SHIPPED, ORDER_CANCELLED, ORDER_CLIENT_EDITED,
+// ORDER_CHANGE_DECLINED (staff declined a client change request).
 // (ORDER_SUBMITTED is handled by the dedicated notify-new-order function.)
 //
 // Recipients:
@@ -30,12 +31,19 @@ type OrderEventType =
   | "ORDER_CONFIRMED"
   | "ORDER_SHIPPED"
   | "ORDER_CANCELLED"
-  | "ORDER_CLIENT_EDITED";
+  | "ORDER_CLIENT_EDITED"
+  | "ORDER_CHANGE_DECLINED";
+
+// Only staff may fire these.
+const INTERNAL_ONLY_EVENTS: OrderEventType[] = ["ORDER_CHANGE_DECLINED"];
 
 interface NotifyBody {
   order_id: string;
   event_type: OrderEventType;
   details?: string;
+  // Distinguishes repeat events on the same order (e.g. a second client edit)
+  // so the email provider's idempotency key doesn't swallow them.
+  idempotency_suffix?: string;
 }
 
 // orders@homeislandcoffee.com is ONLY a hardcoded recipient for ORDER_SUBMITTED
@@ -62,10 +70,14 @@ interface ShipTo {
   ship_to_country: string | null;
 }
 
+// requested_ship_date is a Postgres DATE; null means the client asked for
+// "Soonest possible".
 function formatDate(d: string | null): string {
-  if (!d) return "TBD";
+  if (!d) return "Soonest";
   try {
-    return new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    return new Date(`${d.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", {
+      timeZone: "UTC", year: "numeric", month: "long", day: "numeric",
+    });
   } catch {
     return d;
   }
@@ -90,6 +102,8 @@ function buildSubject(event: OrderEventType, orderNumber: string, accountName: s
       return `Order ${orderNumber} cancelled — ${accountName}`;
     case "ORDER_CLIENT_EDITED":
       return `Order ${orderNumber} updated by client — ${accountName}`;
+    case "ORDER_CHANGE_DECLINED":
+      return `Requested change to order ${orderNumber} not applied — ${accountName}`;
   }
 }
 
@@ -103,12 +117,15 @@ function eventHeadline(event: OrderEventType, orderNumber: string, accountName: 
       return `Order ${orderNumber} for ${accountName} has been cancelled.`;
     case "ORDER_CLIENT_EDITED":
       return `Order ${orderNumber} for ${accountName} was updated by the client.`;
+    case "ORDER_CHANGE_DECLINED":
+      return `We weren't able to apply the requested change to order ${orderNumber} for ${accountName}. The order below is unchanged and still going ahead.`;
   }
 }
 
 function formatShipTo(ship: ShipTo | null): { text: string; html: string } {
   if (!ship) return { text: "TBD", html: "TBD" };
-  const method = ship.delivery_method ? `${ship.delivery_method}` : "Delivery";
+  // Clients choose Pickup or Delivered; courier vs our own delivery is internal.
+  const method = ship.delivery_method === "PICKUP" ? "Pickup" : "Delivered";
   const addrParts = [
     ship.ship_to_name,
     ship.ship_to_address_line1,
@@ -266,6 +283,11 @@ serve(async (req: Request) => {
       .eq("user_id", user.id)
       .maybeSingle();
     const isInternal = roleData?.role === "ADMIN" || roleData?.role === "OPS";
+    if (!isInternal && INTERNAL_ONLY_EVENTS.includes(body.event_type)) {
+      return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     if (!isInternal) {
       let authorized = false;
       if (order.account_id) {
@@ -368,7 +390,7 @@ serve(async (req: Request) => {
     }
 
     const subject = buildSubject(body.event_type, order.order_number, accountName);
-    const requestedShip = order.requested_ship_date ?? order.work_deadline ?? null;
+    const requestedShip = order.requested_ship_date ?? null;
     const text = buildText(body.event_type, order.order_number, accountName, requestedShip, lineItems, ship, body.details);
     const html = buildHtml(body.event_type, order.order_number, accountName, requestedShip, lineItems, ship, body.details);
     const label = `order_${body.event_type.toLowerCase().replace(/^order_/, "")}_notification`;
@@ -378,7 +400,8 @@ serve(async (req: Request) => {
     let enqueued = 0;
     const errors: string[] = [];
     for (const r of recipients) {
-      const { ok, error } = await sendEmail(adminClient, r, label, subject, text, html, `${label}-${order.id}-${r}`);
+      const suffix = body.idempotency_suffix ? `-${body.idempotency_suffix}` : "";
+      const { ok, error } = await sendEmail(adminClient, r, label, subject, text, html, `${label}-${order.id}${suffix}-${r}`);
       if (ok) enqueued++; else if (error) errors.push(`${r}: ${error}`);
     }
 
