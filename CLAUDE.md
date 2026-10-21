@@ -139,6 +139,14 @@ As of `supabase/migrations/20260707130000_*.sql`, a **RESTRICTIVE** RLS SELECT p
 - **Consequences**: direct PostgREST UPDATE/DELETE against an already-cancelled order match zero rows (silently). Cancelled orders are read-only in the UI; anything that must touch them goes through SECURITY DEFINER RPCs. Client self-cancel uses the `client_cancel_own_order` RPC (a direct update's RETURNING comes back empty under the policy and reads as failure).
 - **Cancelling from OrderDetail**: non-shipped orders use `cancel_order_with_picks` in `'return'` mode (picked FG returns to stock). Shipped orders are wired to a `cancel_shipped_order` RPC that does **not exist yet** — a follow-up migration must add it (mark CANCELLED + audit row, no inventory writes) and allow `SHIPPED → CANCELLED` in the DB `is_allowed_order_transition`; the frontend cancel flow already bypasses the transition ladder.
 
+## Sourcing: Baskets (Phase 1)
+
+`baskets` + `basket_lots` (migration `20261021120000_*.sql`). `basket_lots.active_pct`: number = active at that %, `NULL` = lined up. Pure logic (grouping, auto-sort, volumes, running-low, shared names) lives in `src/lib/baskets.ts`; data + mutations in `src/hooks/useBaskets.ts`; pages `Baskets.tsx` / `BasketDetail.tsx`.
+- "In store" = status not `EN_ROUTE` or has `received_date`; else `is_placeholder` → Planned; else Contracted.
+- Running low reuses `DEPLETION_THRESHOLD` (10 kg) and the Green Lot Mapping "< 5 days left" rule.
+- Delete guard: `findRoastGroupsUsingBasket` in `src/lib/basketDeleteGuard.ts` returns `[]` until Phase 2 links roast groups to baskets — fill it in then.
+- Placeholder lots from samples set `green_lots.source_sample_id` and get a lot number from the normal sequence with `P0000` (no PO consumed).
+
 ## Migration Discipline
 
 - Filenames: `YYYYMMDDHHMMSS_<uuid>.sql` in `supabase/migrations/`
