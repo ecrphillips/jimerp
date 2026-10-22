@@ -37,6 +37,7 @@ interface LineItem {
   price: number | null;
   packagingTypeName: string | null;
   gramsPerUnit: number | null;
+  caseLotUnits: number | null;
   shipmentLocalId?: string;
 }
 
