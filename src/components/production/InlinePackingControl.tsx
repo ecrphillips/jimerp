@@ -2,228 +2,95 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Minus, Plus, Loader2, Check } from 'lucide-react';
+import { blockNonIntegerKeys } from '@/lib/numericInput';
 
 interface InlinePackingControlProps {
+  /** Current packed total (absolute). */
   value: number;
+  /** Receives the new absolute packed total. */
   onCommit: (newValue: number) => Promise<void>;
   onEditingChange?: (isEditing: boolean) => void;
   disabled?: boolean;
   isComplete?: boolean;
-  /** When set, shows an "All packed" button that fills to this value (the demand). */
+  /** Target packed total; enables the "All packed" button. */
   fillValue?: number;
 }
 
+/**
+ * Additive packing entry: staff type how many bags they just packed and press
+ * Add — the control adds it to the running total, so nobody does mental math.
+ * −/+ correct the total by one bag.
+ */
 export function InlinePackingControl({
   value,
   onCommit,
   onEditingChange,
   disabled = false,
-  isComplete = false,
   fillValue,
 }: InlinePackingControlProps) {
-  const [localValue, setLocalValue] = useState<string>(value.toString());
+  const [addText, setAddText] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [lastSavedValue, setLastSavedValue] = useState(value);
-  const [isFocused, setIsFocused] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
-  const isCommittingRef = useRef(false);
-  const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [total, setTotal] = useState(value);
+  const committingRef = useRef(false);
+  const pendingRef = useRef<number | null>(null);
 
-  // Sync local value when external value changes (e.g., after refetch)
   useEffect(() => {
-    if (!isCommittingRef.current && !isFocused) {
-      setLocalValue(value.toString());
-      setLastSavedValue(value);
-    }
-  }, [value, isFocused]);
+    if (!committingRef.current) setTotal(value);
+  }, [value]);
 
-  // Notify parent of editing state changes
-  const notifyEditingChange = useCallback((editing: boolean) => {
-    onEditingChange?.(editing);
-  }, [onEditingChange]);
-
-  // Reset idle timeout - allows re-sort after 1200ms of inactivity
-  const resetIdleTimeout = useCallback(() => {
-    if (idleTimeoutRef.current) {
-      clearTimeout(idleTimeoutRef.current);
-    }
-    idleTimeoutRef.current = setTimeout(() => {
-      // After idle period, allow re-sort even if still focused
-      notifyEditingChange(false);
-    }, 1200);
-  }, [notifyEditingChange]);
-
-  const pendingValueRef = useRef<number | null>(null);
-
-  const commitValue = useCallback(async (newValue: number) => {
-    if (newValue === lastSavedValue) return;
-
-    // Serialize commits: if one is in flight, remember only the latest target
-    // and send it when the current commit settles. Firing commits concurrently
-    // risks them landing out of order (absolute targets → last-arrived wins).
-    if (isCommittingRef.current) {
-      pendingValueRef.current = newValue;
-      return;
-    }
-
-    isCommittingRef.current = true;
+  const commit = useCallback(async (next: number) => {
+    next = Math.max(0, next);
+    setTotal(next);
+    if (committingRef.current) { pendingRef.current = next; return; }
+    committingRef.current = true;
     setIsSaving(true);
-
+    onEditingChange?.(true);
+    let target: number | null = next;
     try {
-      await onCommit(newValue);
-      setLastSavedValue(newValue);
-    } catch (error) {
-      // Revert on failure
-      pendingValueRef.current = null;
-      setLocalValue(lastSavedValue.toString());
+      while (target !== null) {
+        await onCommit(target);
+        target = pendingRef.current;
+        pendingRef.current = null;
+      }
+    } catch {
+      pendingRef.current = null;
+      setTotal(value);
     } finally {
+      committingRef.current = false;
       setIsSaving(false);
-      isCommittingRef.current = false;
-      if (pendingValueRef.current !== null) {
-        const next = pendingValueRef.current;
-        pendingValueRef.current = null;
-        commitValue(next);
-      }
+      onEditingChange?.(false);
     }
-  }, [onCommit, lastSavedValue]);
+  }, [onCommit, onEditingChange, value]);
 
-  const scheduleCommit = useCallback((newValue: number) => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-    debounceRef.current = setTimeout(() => {
-      commitValue(newValue);
-    }, 400);
-  }, [commitValue]);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const inputValue = e.target.value;
-    
-    // Reset idle timeout on any change
-    resetIdleTimeout();
-    
-    // Allow empty string while typing
-    if (inputValue === '') {
-      setLocalValue('');
-      return;
-    }
-    
-    const parsed = parseInt(inputValue, 10);
-    if (!isNaN(parsed) && parsed >= 0) {
-      setLocalValue(parsed.toString());
-      scheduleCommit(parsed);
-    }
+  const addQty = parseInt(addText, 10) || 0;
+  const handleAdd = () => {
+    if (addQty <= 0) return;
+    setAddText('');
+    commit(total + addQty);
   };
-
-  const handleFocus = () => {
-    setIsFocused(true);
-    notifyEditingChange(true);
-    resetIdleTimeout();
-  };
-
-  const handleBlur = () => {
-    setIsFocused(false);
-    
-    // Clear idle timeout
-    if (idleTimeoutRef.current) {
-      clearTimeout(idleTimeoutRef.current);
-      idleTimeoutRef.current = null;
-    }
-    
-    // Clear any pending debounce
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-    
-    // Treat empty as 0
-    const finalValue = localValue === '' ? 0 : parseInt(localValue, 10) || 0;
-    setLocalValue(finalValue.toString());
-    commitValue(finalValue);
-    
-    // Notify editing ended
-    notifyEditingChange(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.currentTarget.blur();
-    }
-  };
-
-  const handleButtonClick = (delta: number) => {
-    const current = parseInt(localValue, 10) || 0;
-    const newValue = Math.max(0, current + delta);
-    setLocalValue(newValue.toString());
-    
-    // Notify editing started, reset idle
-    notifyEditingChange(true);
-    resetIdleTimeout();
-    
-    // Clear debounce and commit immediately for button clicks
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-    commitValue(newValue);
-  };
-
-  const handleFill = () => {
-    if (fillValue === undefined) return;
-    setLocalValue(fillValue.toString());
-
-    notifyEditingChange(true);
-    resetIdleTimeout();
-
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-    commitValue(fillValue);
-  };
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-      if (idleTimeoutRef.current) {
-        clearTimeout(idleTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const isDisabled = disabled || isSaving;
-  const displayValue = localValue;
 
   return (
-    <div 
-      className="flex items-center gap-1 justify-end"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="h-7 w-7"
-        onClick={() => handleButtonClick(-1)}
-        disabled={isDisabled || parseInt(localValue, 10) <= 0}
-      >
-        <Minus className="h-3 w-3" />
+    <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
+      <Button type="button" variant="outline" size="icon" className="h-8 w-8"
+        onClick={() => commit(total - 1)} disabled={disabled || total <= 0} title="Remove 1 packed bag">
+        <Minus className="h-3.5 w-3.5" />
       </Button>
-      
       <div className="relative">
         <Input
-          type="number"
-          min={0}
-          className={`w-16 h-7 text-center text-sm px-1 ${isComplete ? 'font-medium' : ''}`}
-          value={displayValue}
-          onChange={handleInputChange}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          onKeyDown={handleKeyDown}
-          disabled={isDisabled}
+          type="text"
+          inputMode="numeric"
+          aria-label="Bags just packed"
+          placeholder="+ qty"
+          className="w-16 h-8 text-center text-sm px-1"
+          value={addText}
+          onChange={(e) => setAddText(e.target.value.replace(/[^0-9]/g, ''))}
+          onFocus={() => onEditingChange?.(true)}
+          onBlur={() => onEditingChange?.(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); handleAdd(); return; }
+            blockNonIntegerKeys(e);
+          }}
+          disabled={disabled}
         />
         {isSaving && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/50 rounded">
@@ -231,28 +98,19 @@ export function InlinePackingControl({
           </div>
         )}
       </div>
-      
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="h-7 w-7"
-        onClick={() => handleButtonClick(1)}
-        disabled={isDisabled}
-      >
-        <Plus className="h-3 w-3" />
-      </Button>
-
+      {addQty > 0 ? (
+        <Button type="button" size="sm" className="h-8 px-2 text-xs font-bold" onClick={handleAdd} disabled={disabled}>
+          Add {addQty}
+        </Button>
+      ) : (
+        <Button type="button" variant="outline" size="icon" className="h-8 w-8"
+          onClick={() => commit(total + 1)} disabled={disabled} title="Add 1 packed bag">
+          <Plus className="h-3.5 w-3.5" />
+        </Button>
+      )}
       {fillValue !== undefined && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 px-2 text-xs gap-1"
-          onClick={handleFill}
-          disabled={isDisabled || (parseInt(localValue, 10) || 0) >= fillValue}
-          title="All packed"
-        >
+        <Button type="button" variant="outline" size="sm" className="h-8 px-2 text-xs gap-1"
+          onClick={() => commit(fillValue)} disabled={disabled || total >= fillValue} title="All packed">
           <Check className="h-3 w-3" />
           All packed
         </Button>

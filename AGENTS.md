@@ -1,5 +1,7 @@
 # Architecture Rules
 
+- Configure invite email functions with Deno automatic npm dependency resolution, because managed email imports must resolve during validation and deployment without frontend dependencies.
+
 - Persist packing allocations per order line and update product inventory atomically by the allocation delta, because whole-bean and grind rows need independent progress without duplicating FG or WIP consumption.
 
 - Keep pack-drawer demotion as transient UI state triggered on closing a completed drawer, because live inventory updates must not unexpectedly reorder open work.
