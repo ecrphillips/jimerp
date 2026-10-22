@@ -71,6 +71,13 @@
       "when": 1792612448308,
       "tag": "0009_client_green_lot_json_received_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792700009576,
+      "tag": "0010_baskets_phase_2_roast_group_baskets",
+      "breakpoints": true
     }
   ]
 }
