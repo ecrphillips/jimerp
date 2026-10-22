@@ -28,6 +28,8 @@ export interface PackingRun {
 
 /** A single product under one account (per-account demanded quantity). */
 export interface PackLeafNode {
+  caseUnits?: number | null;
+  constituentBagSizeG?: number | null;
   lineIds: string[];
   packed: number;
   picked: number;
@@ -241,7 +243,12 @@ function LeafRow({
         </div>
 
         <div className="shrink-0 flex items-center justify-end gap-2 text-right">
-          <PackagingBadge variant={leaf.packagingVariant} bagSizeG={leaf.bagSizeG} className="bg-card/70" />
+          {leaf.caseUnits ? (
+            <div className="text-right text-xs">
+              <Badge variant="outline">Case · {leaf.caseUnits} × {leaf.constituentBagSizeG}g</Badge>
+              <div className="text-muted-foreground mt-1">{leaf.units * leaf.caseUnits} bags ordered · {Math.max(0, leaf.units - effectivePacked) * leaf.caseUnits} bags left</div>
+            </div>
+          ) : <PackagingBadge variant={leaf.packagingVariant} bagSizeG={leaf.bagSizeG} className="bg-card/70" />}
         </div>
 
         <div className="min-w-28 shrink-0 flex justify-end">
@@ -257,20 +264,21 @@ function LeafRow({
               <div className="flex items-center justify-end gap-1 text-lg font-black text-success">
                 <Check className="h-4 w-4" /> Done
               </div>
-              <div className="text-[11px] font-semibold tabular-nums text-muted-foreground">{effectivePacked} of {leaf.units} packed</div>
+              <div className="text-[11px] font-semibold tabular-nums text-muted-foreground">{effectivePacked} of {leaf.units} {leaf.caseUnits ? 'cases' : 'bags'} packed</div>
             </div>
           ) : (
             <div className="text-right">
               <div className="text-lg font-black tabular-nums text-foreground leading-tight">
-                {Math.max(0, leaf.units - effectivePacked)} <span className="text-xs font-bold uppercase">to pack</span>
+                {Math.max(0, leaf.units - effectivePacked)} <span className="text-xs font-bold uppercase">{leaf.caseUnits ? 'cases ' : ''}to pack</span>
               </div>
-              <div className="text-[11px] font-semibold tabular-nums text-muted-foreground">{effectivePacked} of {leaf.units} packed</div>
+              <div className="text-[11px] font-semibold tabular-nums text-muted-foreground">{effectivePacked} of {leaf.units} {leaf.caseUnits ? 'cases' : 'bags'} packed</div>
             </div>
           )}
         </div>
         {leaf.requiresProduction && (
           <div className="shrink-0">
             <InlinePackingControl
+              unitLabel={leaf.caseUnits ? 'case' : 'bag'}
               value={effectivePacked}
               onCommit={(v) => onUpdateLineUnits(leaf.lineIds, v)}
               onEditingChange={(editing) => onEditingChange(pid, editing)}

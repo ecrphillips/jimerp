@@ -5,6 +5,7 @@ import { Minus, Plus, Loader2, Check } from 'lucide-react';
 import { blockNonIntegerKeys } from '@/lib/numericInput';
 
 interface InlinePackingControlProps {
+  unitLabel?: 'case' | 'bag';
   /** Current packed total (absolute). */
   value: number;
   /** Receives the new absolute packed total. */
@@ -23,6 +24,7 @@ interface InlinePackingControlProps {
  */
 export function InlinePackingControl({
   value,
+  unitLabel = 'bag',
   onCommit,
   onEditingChange,
   disabled = false,
@@ -72,14 +74,14 @@ export function InlinePackingControl({
   return (
     <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
       <Button type="button" variant="outline" size="icon" className="h-8 w-8"
-        onClick={() => commit(total - 1)} disabled={disabled || total <= 0} title="Remove 1 packed bag">
+        onClick={() => commit(total - 1)} disabled={disabled || total <= 0} title={`Remove 1 packed ${unitLabel}`}>
         <Minus className="h-3.5 w-3.5" />
       </Button>
       <div className="relative">
         <Input
           type="text"
           inputMode="numeric"
-          aria-label="Bags just packed"
+          aria-label={unitLabel === 'case' ? 'Cases just packed' : 'Bags just packed'}
           placeholder="+ qty"
           className="w-16 h-8 text-center text-sm px-1"
           value={addText}
@@ -100,11 +102,11 @@ export function InlinePackingControl({
       </div>
       {addQty > 0 ? (
         <Button type="button" size="sm" className="h-8 px-2 text-xs font-bold" onClick={handleAdd} disabled={disabled}>
-          Add {addQty}
+          Add {addQty}{unitLabel === 'case' ? ' cases' : ''}
         </Button>
       ) : (
         <Button type="button" variant="outline" size="icon" className="h-8 w-8"
-          onClick={() => commit(total + 1)} disabled={disabled} title="Add 1 packed bag">
+          onClick={() => commit(total + 1)} disabled={disabled} title={`Add 1 packed ${unitLabel}`}>
           <Plus className="h-3.5 w-3.5" />
         </Button>
       )}

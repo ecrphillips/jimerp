@@ -297,7 +297,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
           grind_label,
           order_id,
           order:orders!inner(id, status, work_deadline_at, manually_deprioritized, account_id),
-          product:products(id, product_name, sku, bag_size_g, packaging_variant, roast_group, requires_production)
+          product:products!order_line_items_product_id_fkey(id, product_name, sku, bag_size_g, packaging_variant, roast_group, requires_production, case_lot_units, case_lot_product_id, case_contents:products!products_case_lot_product_id_fkey(bag_size_g))
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
       
@@ -616,6 +616,8 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   };
 
   interface RawLeaf {
+    caseUnits: number | null;
+    constituentBagSizeG: number | null;
     lineIds: string[];
     packed: number;
     picked: number;
@@ -661,6 +663,8 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
             ? (accountNameById.get(accountId) ?? 'Unknown account')
             : 'Unassigned account',
           productId: li.product_id,
+          caseUnits: li.product.case_lot_units,
+          constituentBagSizeG: li.product.case_contents?.bag_size_g ?? null,
           productName: li.product.product_name,
           sku: li.product.sku,
           bagSizeG: li.product.bag_size_g,
@@ -726,6 +730,8 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
       picked: leaf.picked,
       grindLabel: leaf.grindLabel,
       productId: leaf.productId,
+      caseUnits: leaf.caseUnits,
+      constituentBagSizeG: leaf.constituentBagSizeG,
       productName: leaf.productName,
       sku: leaf.sku,
       bagSizeG: leaf.bagSizeG,
