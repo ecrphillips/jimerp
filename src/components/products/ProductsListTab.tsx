@@ -825,7 +825,7 @@ export function ProductsListTab() {
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     const account = searchParams.get('account');
-    if (account) setClientFilter(account);
+    if (account) setFilterAccount(account);
   }, [searchParams]);
   useEffect(() => {
     const editId = searchParams.get('edit');
