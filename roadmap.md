@@ -1,6 +1,6 @@
 # Roadmap
 
-- [ ] Show Case Lot contents on screen and print, with case-specific packing counts independent from loose bags; verify checks.
+- [x] Show Case Lot contents on screen and print, with case-specific packing counts independent from loose bags; 9 tests pass and live Pack tab checked. No open case order available for a live packing save.
 
 - [x] Add Case Lot variant creation with a required same-family variant and bag count, saved composition and calculated weight.
 - [x] Verify Case Lot rules with tests; preview click-through not run.
