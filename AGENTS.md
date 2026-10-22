@@ -1,5 +1,7 @@
 # Architecture Rules
 
+- Keep case packing allocations on the case product's order lines, not its constituent product; expand composition only for bag-count display so loose-bag inventory and progress remain independent.
+
 - Store phase-one case composition on products as a contained variant reference and integer count, with a validating trigger deriving case weight; create cases only through the existing-family Add Variant workflow to prevent free-weight cases without contents.
 
 - Configure invite email functions with Deno automatic npm dependency resolution, because managed email imports must resolve during validation and deployment without frontend dependencies.

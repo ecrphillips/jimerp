@@ -53,11 +53,13 @@ export function printPackList(
                       .join(', ')}${leaf.wholeBeanUnits > 0 ? ` · ${leaf.wholeBeanUnits} whole bean` : ''}</div>`
                   : '';
               const stock = leaf.requiresProduction ? '' : '<span class="tag">PULL FROM STOCK</span>';
-              const progress = packed > 0 ? `<span class="prog">${packed}/${leaf.units} packed</span>` : '';
+              const progress = `<span class="prog">${packed}/${leaf.units} ${leaf.caseUnits ? 'cases' : 'bags'} packed</span>`;
+              const size = leaf.caseUnits ? `Case: ${leaf.caseUnits} × ${leaf.constituentBagSizeG}g` : `${leaf.bagSizeG}g`;
+              const contents = leaf.caseUnits ? `<div>${leaf.units * leaf.caseUnits} bags ordered · ${remaining * leaf.caseUnits} bags left</div>` : '';
               return `<tr${isGrind ? ' class="needs-grind"' : ''}>
                 <td class="chk"><span class="box"></span></td>
-                <td><span class="pname">${esc(leaf.productName)}</span> <span class="size">${leaf.bagSizeG}g</span>${stock}${grind}</td>
-                <td class="num">${remaining}${progress}</td>
+                <td><span class="pname">${esc(leaf.productName)}</span> <span class="size">${esc(size)}</span>${contents}${stock}${grind}</td>
+                <td class="num">${remaining}${leaf.caseUnits ? ' cases' : ''}${progress}</td>
               </tr>`;
             })
             .filter(Boolean)
