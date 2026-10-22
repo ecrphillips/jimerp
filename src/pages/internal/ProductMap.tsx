@@ -124,7 +124,7 @@ export default function ProductMap() {
         .from('products')
         .select(`
           id, product_name, bag_size_g, roast_group, account_id,
-          accounts(id, account_name)
+          accounts!products_account_id_fkey(id, account_name)
         `)
         .eq('is_active', true)
         .order('product_name');

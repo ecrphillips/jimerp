@@ -11,11 +11,13 @@ export interface ClientOrderableProduct {
   packaging_variant: string | null;
   roast_group: string | null;
   is_active: boolean;
+  is_perennial: boolean;
+  packaging_type_id: string | null;
+  case_lot_product_id: string | null;
+  case_lot_units: number | null;
+  customer_orderable: boolean;
   packaging_types: { name: string } | null;
 }
-
-const PRODUCT_COLUMNS =
-  'id, product_name, sku, bag_size_g, grams_per_unit, format, packaging_variant, roast_group, is_active, packaging_types(name)';
 
 /**
  * Products an account can order. If the account has client_allowed_products
@@ -23,32 +25,15 @@ const PRODUCT_COLUMNS =
  * products (same convention as useClientOrderingConstraints and the
  * client_edit_order RPC).
  */
-export function useClientOrderableProducts(accountId: string | null | undefined) {
+export function useClientOrderableProducts(accountId: string | null | undefined, catalog = false) {
   return useQuery({
-    queryKey: ['client-orderable-products', accountId],
+    queryKey: ['client-orderable-products', accountId, catalog],
     enabled: !!accountId,
     queryFn: async (): Promise<ClientOrderableProduct[]> => {
-      const { data: allowed, error: allowedErr } = await supabase
-        .from('client_allowed_products')
-        .select(`product_id, products(${PRODUCT_COLUMNS})`)
-        .eq('account_id', accountId!);
-      if (allowedErr) throw allowedErr;
-
-      if (allowed && allowed.length > 0) {
-        return (allowed as unknown as { products: ClientOrderableProduct | null }[])
-          .map((row) => row.products)
-          .filter((p): p is ClientOrderableProduct => !!p && p.is_active)
-          .sort((a, b) => a.product_name.localeCompare(b.product_name));
-      }
-
-      const { data: all, error: allErr } = await supabase
-        .from('products')
-        .select(PRODUCT_COLUMNS)
-        .eq('account_id', accountId!)
-        .eq('is_active', true)
-        .order('product_name', { ascending: true });
-      if (allErr) throw allErr;
-      return (all ?? []) as unknown as ClientOrderableProduct[];
+      if (!accountId) return [];
+      const { data, error } = await supabase.rpc('get_customer_products', { p_account_id: accountId, p_catalog: catalog });
+      if (error) throw error;
+      return (data ?? []) as unknown as ClientOrderableProduct[];
     },
   });
 }

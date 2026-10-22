@@ -99,6 +99,34 @@
       "when": 1792703948904,
       "tag": "0013_sync_product_size_edits",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792704848160,
+      "tag": "0014_customer_product_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792704940623,
+      "tag": "0015_customer_catalog_safe_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792705142912,
+      "tag": "0016_allow_closing_unavailable_product_change_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792705573312,
+      "tag": "0017_fast_staff_product_visibility",
+      "breakpoints": true
     }
   ]
 }

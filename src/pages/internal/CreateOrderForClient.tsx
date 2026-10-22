@@ -23,6 +23,7 @@ import type { Database } from '@/integrations/supabase/types';
 import { LocationSelect } from '@/components/orders/LocationSelect';
 import { OrderContextBanner } from '@/components/orders/OrderContextBanner';
 import { blockNonIntegerKeys } from '@/lib/numericInput';
+import { confirmCaseOnlyOrder } from '@/lib/confirmCaseOnlyOrder';
 
 type DeliveryMethod = Database['public']['Enums']['delivery_method'];
 import { Link } from 'react-router-dom';
@@ -397,6 +398,8 @@ export default function CreateOrderForClient() {
 
     setSubmitting(true);
     try {
+      const confirmedLooseIds = await confirmCaseOnlyOrder(selectedClientId, lineItems.map(li => li.productId));
+      if (confirmedLooseIds === null) return;
       // Determine initial status: CONFIRMED if user checked "Confirm order", else SUBMITTED
       const initialStatus = confirmOnCreate ? 'CONFIRMED' : 'SUBMITTED';
       
@@ -442,6 +445,7 @@ export default function CreateOrderForClient() {
       const lineItemsData = lineItems.map((li) => ({
         order_id: order.id,
         product_id: li.productId,
+        case_only_override_confirmed: confirmedLooseIds.includes(li.productId),
         quantity_units: li.quantity,
         grind: null,
         unit_price_locked: li.price ?? 0,

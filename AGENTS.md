@@ -1,5 +1,8 @@
 # Architecture Rules
 
+- Keep per-account variant access in account_product_access; use the authorized customer-products RPC for catalog/order selectors and database triggers for all customer writes, because staff preview must match customer eligibility and direct API calls must not bypass restrictions.
+- Case-only settings belong to the account's case variant and restrict its contained loose variant; record explicit staff confirmation on order lines without moving packing allocations, because internal exceptions must not change customer access or inventory identity.
+
 - Keep case packing allocations on the case product's order lines, not its constituent product; expand composition only for bag-count display so loose-bag inventory and progress remain independent.
 
 - Store phase-one case composition on products as a contained variant reference and integer count, with a validating trigger deriving case weight; create cases only through the existing-family Add Variant workflow to prevent free-weight cases without contents.

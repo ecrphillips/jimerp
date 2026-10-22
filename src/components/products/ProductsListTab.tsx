@@ -30,6 +30,7 @@ import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
 import { deriveVariantSku } from '@/lib/skuGenerator';
 import { sortVariantsByVolume } from '@/lib/productVariantOrder';
 import { isCaseLotType, caseLotChoices, caseLotGrams } from '@/lib/caseLots';
+import { CaseOnlyToggle } from './CaseOnlyToggle';
 
 
 interface Product {
@@ -256,7 +257,7 @@ export function ProductsListTab() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, grams_per_unit, case_lot_product_id, case_lot_units, grind_options, is_active, is_perennial, is_placeholder, client_id, account_id, packaging_variant, packaging_type:packaging_types(name), roast_group, requires_production, packaging_material_override, packaging_labour_override, client:clients(name), account:accounts(account_name)')
+        .select('id, product_name, sku, format, bag_size_g, grams_per_unit, case_lot_product_id, case_lot_units, grind_options, is_active, is_perennial, is_placeholder, client_id, account_id, packaging_variant, packaging_type:packaging_types(name), roast_group, requires_production, packaging_material_override, packaging_labour_override, client:clients(name), account:accounts!products_account_id_fkey(account_name)')
         .order('product_name');
 
       if (error) throw error;
@@ -823,6 +824,10 @@ export function ProductsListTab() {
   // Auto-open product edit when ?edit=<id> is present in the URL (e.g. from admin audit)
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
+    const account = searchParams.get('account');
+    if (account) setFilterAccount(account);
+  }, [searchParams]);
+  useEffect(() => {
     const editId = searchParams.get('edit');
     const section = searchParams.get('section');
     if (!editId || !products) return;
@@ -1031,6 +1036,7 @@ export function ProductsListTab() {
                                         {products?.find(c => c.id === p.case_lot_product_id)?.packaging_type?.name}
                                       </span>
                                     )}
+                                    {p.case_lot_product_id && p.account_id && <CaseOnlyToggle accountId={p.account_id} productId={p.id} />}
                                   </td>
                                   <td className="py-1.5 px-2 font-mono text-xs">{p.sku || '—'}</td>
                                   <td className="py-1.5 px-2">

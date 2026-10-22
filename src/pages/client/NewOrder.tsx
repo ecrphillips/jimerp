@@ -22,6 +22,7 @@ import { OrderContextBanner } from '@/components/orders/OrderContextBanner';
 import { CaseQuantityInput } from '@/components/orders/CaseQuantityInput';
 import { useClientOrderingConstraints, validateCaseQuantity } from '@/hooks/useClientOrderingConstraints';
 import { usePricingVisibility } from '@/hooks/usePricingVisibility';
+import { useClientOrderableProducts } from '@/hooks/useClientOrderableProducts';
 import { blockNonIntegerKeys } from '@/lib/numericInput';
 import { DatePicker } from '@/components/ui/date-picker';
 import { computeDefaultWorkDeadline } from '@/lib/productionScheduling';
@@ -84,7 +85,7 @@ interface Product {
   sku: string | null;
   bag_size_g: number;
   grams_per_unit: number | null;
-  format: string;
+  format: string | null;
   is_perennial: boolean;
   packaging_type_id: string | null;
   packaging_types: { name: string } | null;
@@ -154,29 +155,7 @@ export default function NewOrder() {
     enabled: !!productAccountId,
   });
 
-  // Fetch allowed products with packaging type join
-  const { data: products, isLoading: productsLoading } = useQuery({
-    queryKey: ['client-products', productAccountId, constraints.allowedProductIds],
-    queryFn: async () => {
-      let query = supabase
-        .from('products')
-        .select('id, product_name, sku, bag_size_g, grams_per_unit, format, is_perennial, packaging_type_id, packaging_types(name)')
-        .eq('is_active', true)
-        .order('product_name', { ascending: true });
-
-      if (constraints.allowedProductIds && constraints.allowedProductIds.length > 0) {
-        query = query.in('id', constraints.allowedProductIds);
-      } else {
-        // Unrestricted accounts still only see their own products.
-        query = query.eq('account_id', productAccountId!);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data ?? []) as Product[];
-    },
-    enabled: !constraintsLoading && !!productAccountId,
-  });
+  const { data: products, isLoading: productsLoading } = useClientOrderableProducts(productAccountId);
 
   const { data: prices } = useQuery({
     queryKey: ['client-prices', authUser?.accountId],
@@ -436,6 +415,7 @@ export default function NewOrder() {
 
   const submitOrder = async () => {
     if (!authUser?.accountId) return;
+    if (isPreviewMode) { toast.error('Orders cannot be submitted in preview mode'); return; }
 
     // The work deadline is derived from the account's production schedule. If
     // that query hasn't resolved yet, the deadline would silently default to
@@ -447,6 +427,9 @@ export default function NewOrder() {
 
     setSubmitting(true);
     try {
+      const { data: eligible, error: eligibilityError } = await supabase.rpc('validate_customer_products', { p_account_id: authUser.accountId, p_product_ids: lineItems.map(li => li.productId) });
+      if (eligibilityError) throw eligibilityError;
+      if (!eligible) throw new Error('One or more products are no longer available to order. Refresh your product list.');
       const { data: validationResult, error: validationError } = await supabase.functions.invoke(
         'validate-order-constraints',
         {

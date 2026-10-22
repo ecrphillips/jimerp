@@ -61,7 +61,7 @@ export function GenericLaneConversion() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, roast_group, account_id, accounts(account_name)')
+        .select('id, product_name, roast_group, account_id, accounts!products_account_id_fkey(account_name)')
         .eq('is_active', true);
       if (error) throw error;
       return (data ?? []) as Array<{

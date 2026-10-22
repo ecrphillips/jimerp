@@ -53,7 +53,7 @@ export default function Products() {
   const { hidePricing } = usePricingVisibility();
   const effectiveAccountId = previewAccountId ?? authUser?.accountId;
 
-  const { data: products = [], isLoading } = useClientOrderableProducts(effectiveAccountId);
+  const { data: products = [], isLoading } = useClientOrderableProducts(effectiveAccountId, true);
   const { data: notes = [] } = useAccountProductNotes(effectiveAccountId);
   const groups = useMemo(() => groupProducts(products), [products]);
 
@@ -102,7 +102,7 @@ export default function Products() {
     <div className="page-container">
       <div className="page-header">
         <h1 className="page-title">My Products</h1>
-        <p className="text-muted-foreground">Products available for your account to order</p>
+        <p className="text-muted-foreground">Your account’s product catalogue</p>
       </div>
 
       <Card>
@@ -181,7 +181,7 @@ export default function Products() {
                               const grams = p.grams_per_unit ?? p.bag_size_g;
                               return (
                                 <tr key={p.id} className="border-b last:border-0">
-                                  <td className="py-2 pr-4">{grams ? formatGramsLabel(grams) : '—'}</td>
+                                  <td className="py-2 pr-4">{grams ? formatGramsLabel(grams) : '—'}{!p.customer_orderable && <span className="block text-xs text-muted-foreground">Not available to order</span>}</td>
                                   <td className="py-2 pr-4 text-muted-foreground">
                                     {p.packaging_types?.name ?? titleCase(p.packaging_variant)}
                                   </td>
