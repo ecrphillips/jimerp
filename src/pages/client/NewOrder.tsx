@@ -37,6 +37,7 @@ interface LineItem {
   price: number | null;
   packagingTypeName: string | null;
   gramsPerUnit: number | null;
+  caseLotUnits: number | null;
   shipmentLocalId?: string;
 }
 
@@ -89,6 +90,7 @@ interface Product {
   is_perennial: boolean;
   packaging_type_id: string | null;
   packaging_types: { name: string } | null;
+  case_lot_units: number | null;
 }
 
 // Helper to build display name with packaging info
@@ -98,6 +100,16 @@ function buildDisplayName(productName: string, packagingTypeName: string | null,
   }
   const sizeLabel = formatGramsLabel(gramsPerUnit);
   return `${productName} — ${packagingTypeName} (${sizeLabel})`;
+}
+
+/**
+ * Case-lot composition, e.g. "12 × 300g bags" — the constituent bag size is
+ * derived from the case weight divided by the bags-per-case count.
+ */
+function caseLotContentsLabel(caseLotUnits: number | null | undefined, caseTotalGrams: number | null | undefined): string | null {
+  if (!caseLotUnits || caseLotUnits <= 0 || !caseTotalGrams || caseTotalGrams <= 0) return null;
+  const bagGrams = Math.round(caseTotalGrams / caseLotUnits);
+  return `${caseLotUnits} × ${formatGramsLabel(bagGrams)} bags`;
 }
 
 export default function NewOrder() {
@@ -216,6 +228,7 @@ export default function NewOrder() {
       price: prices?.[product.id] ?? null,
       packagingTypeName,
       gramsPerUnit,
+      caseLotUnits: product.case_lot_units ?? null,
     };
   };
 
@@ -649,6 +662,11 @@ export default function NewOrder() {
                   <span className="text-sm font-medium">
                     {gramsPerUnit ? formatGramsLabel(gramsPerUnit) : `${variant.bag_size_g}g`}
                   </span>
+                  {variant.case_lot_units ? (
+                    <span className="text-xs text-muted-foreground">
+                      {caseLotContentsLabel(variant.case_lot_units, gramsPerUnit ?? variant.bag_size_g)}
+                    </span>
+                  ) : null}
                   {packagingTypeName && (
                     <span className="text-xs text-muted-foreground">{packagingTypeName}</span>
                   )}
@@ -818,6 +836,11 @@ export default function NewOrder() {
                           <span className="text-sm font-medium">
                             {li.gramsPerUnit ? formatGramsLabel(li.gramsPerUnit) : ''}
                           </span>
+                          {li.caseLotUnits ? (
+                            <span className="text-xs text-muted-foreground">
+                              {caseLotContentsLabel(li.caseLotUnits, li.gramsPerUnit)}
+                            </span>
+                          ) : null}
                           {li.packagingTypeName && (
                             <span className="text-xs text-muted-foreground">{li.packagingTypeName}</span>
                           )}
