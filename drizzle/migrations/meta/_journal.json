@@ -113,6 +113,13 @@
       "when": 1792704940623,
       "tag": "0015_customer_catalog_safe_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792705142912,
+      "tag": "0016_allow_closing_unavailable_product_change_requests",
+      "breakpoints": true
     }
   ]
 }
