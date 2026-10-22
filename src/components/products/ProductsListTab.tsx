@@ -28,6 +28,7 @@ import { useProductsBulkEdit } from '@/components/bulk-edit/configs/products';
 import { useBulkEditLogoutCleanup } from '@/components/bulk-edit/useChangeHighlights';
 import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
 import { deriveVariantSku } from '@/lib/skuGenerator';
+import { sortVariantsByVolume } from '@/lib/productVariantOrder';
 import { isCaseLotType, caseLotChoices, caseLotGrams } from '@/lib/caseLots';
 
 
@@ -512,7 +513,7 @@ export function ProductsListTab() {
         accountName,
         roastGroupName,
         origin,
-        variants: matchingVariants,
+        variants: sortVariantsByVolume(matchingVariants),
         activeCount,
         lastOrderDate: familyLastOrder,
       });
