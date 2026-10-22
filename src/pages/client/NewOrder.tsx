@@ -662,6 +662,11 @@ export default function NewOrder() {
                   <span className="text-sm font-medium">
                     {gramsPerUnit ? formatGramsLabel(gramsPerUnit) : `${variant.bag_size_g}g`}
                   </span>
+                  {variant.case_lot_units ? (
+                    <span className="text-xs text-muted-foreground">
+                      {caseLotContentsLabel(variant.case_lot_units, gramsPerUnit ?? variant.bag_size_g)}
+                    </span>
+                  ) : null}
                   {packagingTypeName && (
                     <span className="text-xs text-muted-foreground">{packagingTypeName}</span>
                   )}
