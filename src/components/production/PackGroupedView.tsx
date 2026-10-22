@@ -242,27 +242,29 @@ function LeafRow({
 
         <div className="shrink-0 flex items-center justify-end gap-2 text-right">
           <PackagingBadge variant={leaf.packagingVariant} bagSizeG={leaf.bagSizeG} className="bg-card/70" />
-          <div className="min-w-14">
-            <span className="text-lg font-black tabular-nums">{leaf.units}</span>
-            <span className="block text-[10px] font-bold uppercase text-muted-foreground">units</span>
-          </div>
         </div>
 
-        <div className="min-w-24 shrink-0 flex justify-end">
+        <div className="min-w-28 shrink-0 flex justify-end">
           {!leaf.requiresProduction ? (
             <Badge
               variant="outline"
               className="text-xs bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800"
             >
-              Pull stock
+              Pull stock · {leaf.units}
             </Badge>
+          ) : isComplete ? (
+            <div className="text-right">
+              <div className="flex items-center justify-end gap-1 text-lg font-black text-success">
+                <Check className="h-4 w-4" /> Done
+              </div>
+              <div className="text-[11px] font-semibold tabular-nums text-muted-foreground">{effectivePacked} of {leaf.units} packed</div>
+            </div>
           ) : (
             <div className="text-right">
-              <div className="flex items-center justify-end gap-1 text-sm font-black tabular-nums text-foreground">
-                {isComplete && <Check className="h-3.5 w-3.5 text-success" />}
-                {effectivePacked}/{leaf.units}
+              <div className="text-lg font-black tabular-nums text-foreground leading-tight">
+                {Math.max(0, leaf.units - effectivePacked)} <span className="text-xs font-bold uppercase">to pack</span>
               </div>
-              <div className="text-[10px] font-bold uppercase text-muted-foreground">packed</div>
+              <div className="text-[11px] font-semibold tabular-nums text-muted-foreground">{effectivePacked} of {leaf.units} packed</div>
             </div>
           )}
         </div>
