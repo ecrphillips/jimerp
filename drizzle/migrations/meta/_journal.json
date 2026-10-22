@@ -120,6 +120,13 @@
       "when": 1792705142912,
       "tag": "0016_allow_closing_unavailable_product_change_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792705573312,
+      "tag": "0017_fast_staff_product_visibility",
+      "breakpoints": true
     }
   ]
 }
