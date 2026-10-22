@@ -257,7 +257,7 @@ export function ProductsListTab() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, grams_per_unit, case_lot_product_id, case_lot_units, grind_options, is_active, is_perennial, is_placeholder, client_id, account_id, packaging_variant, packaging_type:packaging_types(name), roast_group, requires_production, packaging_material_override, packaging_labour_override, client:clients(name), account:accounts(account_name)')
+        .select('id, product_name, sku, format, bag_size_g, grams_per_unit, case_lot_product_id, case_lot_units, grind_options, is_active, is_perennial, is_placeholder, client_id, account_id, packaging_variant, packaging_type:packaging_types(name), roast_group, requires_production, packaging_material_override, packaging_labour_override, client:clients(name), account:accounts!products_account_id_fkey(account_name)')
         .order('product_name');
 
       if (error) throw error;
