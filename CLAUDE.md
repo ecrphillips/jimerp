@@ -166,7 +166,15 @@ As of `supabase/migrations/20261008120000_*.sql`, clients edit orders only throu
 - **Production**: `src/hooks/roastGroupBasketLots.ts` feeds the roast group drawer (green list, green available, batch lot picker: active lots, then in-store lined-up lots) and `useGreenLotDepletion` (basket lots become synthetic links `basket:<rgb id>:<lot id>`, share = basket % × active %, never swapped — `executeDepletionSwaps` skips them).
 - **Client portal**: `get_client_green_detail` shows a basket's active lots as "current" and its first lined-up lot as "next".
 - Code paths tolerate the table being absent (treat as "no baskets").
-- Known gap (not Phase 2): marking a batch roasted only deducts green when a lot is picked, and deducts roasted kg, not green kg.
+
+## Production: Green Deduction on Roast
+
+As of `supabase/migrations/20261022150000_*.sql`, `mark_batch_roasted` takes **green** off lots — only when `app_settings` key `green_deduction` is `{"enabled": true}` (seeded **off**; admin switch in Admin Tools → Green deduction). Never bypass the switch in code.
+- `roasted_batches.planned_output_kg` is **inbound green kg** in production (output is derived from it). Green taken = `p_green_kg` (inbound shown on screen) → else `planned_output_kg` → else roasted ÷ (1 − loss %) (`green_kg_for_roasted`, mirrored by `greenKgForRoasted` in `src/lib/greenUse.ts`).
+- Split across lots via `p_lot_splits` `[{lot_id, pct}]` (normalised server-side). Default split = roast group's sources (`defaultLotSplits`: linked lots + baskets' active lots by %); roasters edit it per batch with `GreenSplitControl`.
+- Each `green_lot_consumption_log` row = what was actually taken (never more than on hand); `revert_batch_to_planned` puts it back and deletes the rows.
+- Depletion warnings treat planned batch kg as green (no yield factor).
+- Not covered: `OhShitModal` inserts roasted batches directly (no green taken). `green_lot_consumption_log.lot_id` has no ON DELETE, so a lot with consumption rows can't be deleted.
 
 ## Migration Discipline
 

@@ -140,8 +140,10 @@ export function useGreenLotDepletion(
 
   const expectedYieldLossPct = Number(rgConfig?.expected_yield_loss_pct ?? 16);
 
-  // kg of green input per kg of planned roasted output
-  const greenFactor = 1 + expectedYieldLossPct / 100;
+  // Planned batch kg is already inbound GREEN kg (production enters inbound
+  // and derives output from it), so no yield adjustment. Kept as a named
+  // factor so the projections below read the same as before.
+  const greenFactor = 1;
 
   // Total planned roasted output (kg) currently scheduled on this RG
   const pendingPlannedOutputKg = useMemo(
@@ -342,7 +344,7 @@ export async function evaluateMultiRoastGroupImpacts(
   (linksData ?? []).forEach((row: any) => {
     const rg = row.roast_group as string;
     const yieldPct = yieldByRg.get(rg) ?? 16;
-    const greenFactor = 1 + yieldPct / 100;
+    const greenFactor = 1; // planned kg is inbound green (see above)
     const pct = row.pct_of_lot == null ? 100 : Number(row.pct_of_lot);
     const onHand = Number(row.green_lots?.kg_on_hand ?? 0);
     const pending = pendingByRg.get(rg) ?? 0;
@@ -380,7 +382,7 @@ export async function evaluateMultiRoastGroupImpacts(
   // Lots reached through baskets (no swap — promoted on the basket page).
   basketLinks.forEach(link => {
     const rg = link.roast_group;
-    const greenFactor = 1 + (yieldByRg.get(rg) ?? 16) / 100;
+    const greenFactor = 1; // planned kg is inbound green
     const pending = pendingByRg.get(rg) ?? 0;
     const newOut = newByRg.get(rg) ?? 0;
     const projectedAfter = link.current_kg_on_hand - (pending + newOut) * greenFactor * (link.pct_of_lot / 100);

@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { OrderNotificationSettings } from '@/components/admin/OrderNotificationSettings';
 import { FxRateSettings } from '@/components/admin/FxRateSettings';
+import { GreenDeductionSettings } from '@/components/admin/GreenDeductionSettings';
 import { QuickBooksSettings } from '@/components/admin/QuickBooksSettings';
 import { BuildInfoPanel } from '@/components/admin/BuildInfoPanel';
 import { PackagingTypesManager } from '@/components/admin/PackagingTypesManager';
@@ -419,6 +420,9 @@ export default function AdminTools() {
 
       {/* USD/CAD Exchange Rate */}
       <FxRateSettings />
+
+      {/* Green deduction on roast */}
+      <GreenDeductionSettings />
 
       {/* QuickBooks (Sandbox) Connection */}
       <QuickBooksSettings />
