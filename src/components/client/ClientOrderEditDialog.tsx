@@ -186,6 +186,9 @@ export function ClientOrderEditDialog({ open, onOpenChange, order, lineItems, pe
     setSubmitting(true);
     try {
       const payload = buildPayload();
+      const { data: eligible, error: eligibilityError } = await supabase.rpc('validate_customer_products', { p_account_id: order.account_id, p_product_ids: payload.line_items.map(li => li.product_id) });
+      if (eligibilityError) throw eligibilityError;
+      if (!eligible) throw new Error('One or more products are no longer available to order. Remove those lines before saving.');
 
       const { data: validation, error: validationError } = await supabase.functions.invoke(
         'validate-order-constraints',

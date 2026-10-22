@@ -30,6 +30,7 @@ import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
 import { deriveVariantSku } from '@/lib/skuGenerator';
 import { sortVariantsByVolume } from '@/lib/productVariantOrder';
 import { isCaseLotType, caseLotChoices, caseLotGrams } from '@/lib/caseLots';
+import { CaseOnlyToggle } from './CaseOnlyToggle';
 
 
 interface Product {
@@ -1031,6 +1032,7 @@ export function ProductsListTab() {
                                         {products?.find(c => c.id === p.case_lot_product_id)?.packaging_type?.name}
                                       </span>
                                     )}
+                                    {p.case_lot_product_id && p.account_id && <CaseOnlyToggle accountId={p.account_id} productId={p.id} />}
                                   </td>
                                   <td className="py-1.5 px-2 font-mono text-xs">{p.sku || '—'}</td>
                                   <td className="py-1.5 px-2">
