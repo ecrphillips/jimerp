@@ -6795,7 +6795,6 @@ export type Database = {
           p_green_kg?: number
           p_loss_kg?: number
           p_loss_note?: string
-          p_green_kg?: number
           p_lot_id?: string
           p_lot_splits?: Json
         }
