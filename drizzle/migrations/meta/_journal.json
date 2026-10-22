@@ -99,6 +99,13 @@
       "when": 1792703948904,
       "tag": "0013_sync_product_size_edits",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792704848160,
+      "tag": "0014_customer_product_access",
+      "breakpoints": true
     }
   ]
 }

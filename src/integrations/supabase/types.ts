@@ -61,6 +61,48 @@ export type Database = {
           },
         ]
       }
+      account_product_access: {
+        Row: {
+          account_id: string
+          case_only: boolean
+          orderable: boolean
+          product_id: string
+          updated_at: string
+          visible: boolean
+        }
+        Insert: {
+          account_id: string
+          case_only?: boolean
+          orderable?: boolean
+          product_id: string
+          updated_at?: string
+          visible?: boolean
+        }
+        Update: {
+          account_id?: string
+          case_only?: boolean
+          orderable?: boolean
+          product_id?: string
+          updated_at?: string
+          visible?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_product_access_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_product_access_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       account_user_locations: {
         Row: {
           account_user_id: string
@@ -3865,6 +3907,7 @@ export type Database = {
       }
       order_line_items: {
         Row: {
+          case_only_override_confirmed: boolean
           created_at: string
           grind: Database["public"]["Enums"]["grind_option"] | null
           grind_label: string | null
@@ -3883,6 +3926,7 @@ export type Database = {
           unit_price_locked: number
         }
         Insert: {
+          case_only_override_confirmed?: boolean
           created_at?: string
           grind?: Database["public"]["Enums"]["grind_option"] | null
           grind_label?: string | null
@@ -3901,6 +3945,7 @@ export type Database = {
           unit_price_locked: number
         }
         Update: {
+          case_only_override_confirmed?: boolean
           created_at?: string
           grind?: Database["public"]["Enums"]["grind_option"] | null
           grind_label?: string | null
@@ -6585,6 +6630,10 @@ export type Database = {
           min_booking_duration_hours: number
         }[]
       }
+      _customer_product_access: {
+        Args: { p_account_id: string; p_mode: string; p_product_id: string }
+        Returns: boolean
+      }
       _derive_green_source: {
         Args: { _line_id: string }
         Returns: {
@@ -6674,6 +6723,10 @@ export type Database = {
         }
         Returns: Json
       }
+      customer_can_view_product: {
+        Args: { p_product_id: string }
+        Returns: boolean
+      }
       decrement_lot_kg: {
         Args: { p_kg: number; p_lot_id: string }
         Returns: undefined
@@ -6747,6 +6800,10 @@ export type Database = {
           overage_rate_per_hr: number
           tier: Database["public"]["Enums"]["coroast_tier"]
         }[]
+      }
+      get_customer_products: {
+        Args: { p_account_id: string; p_catalog?: boolean }
+        Returns: Json
       }
       get_invitation_by_token: { Args: { p_token: string }; Returns: Json }
       get_order_delete_preflight: {
@@ -7035,6 +7092,10 @@ export type Database = {
           p_target_date: string
         }
         Returns: number
+      }
+      validate_customer_products: {
+        Args: { p_account_id: string; p_product_ids: string[] }
+        Returns: boolean
       }
     }
     Enums: {
