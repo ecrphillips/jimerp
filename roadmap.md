@@ -1,6 +1,6 @@
 # Roadmap
 
-- [ ] Add shared admin-editable common-client shortcuts and grouped account options to internal order creation; verify saved shortcuts and ordering.
+- [x] Add shared admin-editable common-client shortcuts and grouped account options to internal order creation; verified save/reload and grouped client selection, four tests pass.
 
 - [x] Add Account → Customer Product Details with per-variant visibility/orderability, case-only controls, notes, and product-page links.
 - [x] Enforce customer product restrictions on new orders and edits; require staff confirmation for case-only loose units.
