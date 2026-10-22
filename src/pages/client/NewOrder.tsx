@@ -228,6 +228,7 @@ export default function NewOrder() {
       price: prices?.[product.id] ?? null,
       packagingTypeName,
       gramsPerUnit,
+      caseLotUnits: product.case_lot_units ?? null,
     };
   };
 
