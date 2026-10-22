@@ -10,6 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useRoastGroupBasketLots, pickableBasketLots } from '@/hooks/roastGroupBasketLots';
 import { isLotReceived } from '@/lib/baskets';
+import { defaultLotSplits, type LotSplit } from '@/lib/greenUse';
+import { GreenSplitControl, type GreenLotOption } from './GreenSplitControl';
+import { useGreenDeductionEnabled } from '@/hooks/useGreenDeductionSetting';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import {
@@ -159,7 +162,9 @@ export function RoastGroupDrawer({
   const [undoConfirmBatchId, setUndoConfirmBatchId] = useState<string | null>(null);
   const [deleteConfirmBatchId, setDeleteConfirmBatchId] = useState<string | null>(null);
   const [ohShitBatch, setOhShitBatch] = useState<RoastBatch | null>(null);
-  const [batchLotSelections, setBatchLotSelections] = useState<Record<string, string>>({});
+  // Per-batch green split edited by the roaster (absent = use the roast group's default split).
+  const [batchSplitOverrides, setBatchSplitOverrides] = useState<Record<string, LotSplit[]>>({});
+  const greenDeductionOn = useGreenDeductionEnabled();
   
   // Undo workflow modal state
   // Edit mode tracking for sort-freeze - freeze order while user is editing
@@ -178,7 +183,7 @@ export function RoastGroupDrawer({
     queryFn: async () => {
       const { data, error } = await supabase
         .from('green_lot_roast_group_links')
-        .select('id, roast_group, lot_id, green_lots!green_lot_roast_group_links_lot_id_fkey(id, lot_number, kg_on_hand, status, contract_id, green_contracts(name))')
+        .select('id, roast_group, lot_id, pct_of_lot, green_lots!green_lot_roast_group_links_lot_id_fkey(id, lot_number, kg_on_hand, status, contract_id, green_contracts(name))')
         .eq('roast_group', roastGroup);
       if (error) throw error;
       return data ?? [];
@@ -209,6 +214,32 @@ export function RoastGroupDrawer({
     }));
     return [...linkedLots, ...fromBaskets];
   }, [linkedLots, basketLotGroups, roastGroup]);
+
+  // Default green split for a batch: the roast group's sources by % (baskets → their active lots).
+  const defaultSplits = useMemo(
+    () => defaultLotSplits(
+      linkedLots
+        .filter(l => l.green_lots)
+        .map(l => ({ lot_id: l.lot_id, lot_number: l.green_lots!.lot_number, pct_of_lot: l.pct_of_lot ?? null })),
+      basketLotGroups,
+    ),
+    [linkedLots, basketLotGroups],
+  );
+  const greenLotOptions: GreenLotOption[] = useMemo(
+    () => greenLots
+      .filter((l: { green_lots: unknown }) => l.green_lots)
+      .map((l: { lot_id: string; via_basket?: string; green_lots: { lot_number: string; kg_on_hand: number } }) => ({
+        lot_id: l.lot_id,
+        lot_number: l.green_lots.lot_number,
+        kg_on_hand: Number(l.green_lots.kg_on_hand ?? 0),
+        via_basket: l.via_basket ?? null,
+      })),
+    [greenLots],
+  );
+  const splitsFor = useCallback(
+    (batchId: string) => batchSplitOverrides[batchId] ?? defaultSplits,
+    [batchSplitOverrides, defaultSplits],
+  );
 
   // For blends: fetch component batches that are linked to this blend
   const { data: componentBatches } = useQuery({
@@ -569,21 +600,22 @@ export function RoastGroupDrawer({
   });
 
   const markRoastedMutation = useMutation({
-    mutationFn: async ({ id, actual_output_kg, roast_group, target_date }: { 
+    mutationFn: async ({ id, actual_output_kg, roast_group, target_date, green_kg }: { 
       id: string; 
       actual_output_kg: number;
+      green_kg?: number;
       roast_group: string;
       target_date: string;
     }) => {
       // Atomic RPC: flips PLANNED → ROASTED, writes the ROAST_OUTPUT ledger row,
-      // and (if a lot is selected) logs + decrements the green lot — all in one
-      // transaction, so the batch can never be marked roasted without its ledger
-      // entry. Returns false if the batch was already roasted (no-op).
-      const selectedLotId = batchLotSelections[id];
+      // and (when green deduction is switched on) takes the batch's inbound green
+      // off the split's lots — all in one transaction. Returns false if the batch
+      // was already roasted (no-op).
       const { data: transitioned, error } = await supabase.rpc('mark_batch_roasted', {
         p_batch_id: id,
         p_actual_output_kg: actual_output_kg,
-        p_lot_id: selectedLotId ?? null,
+        p_lot_splits: splitsFor(id).map(s => ({ lot_id: s.lot_id, pct: s.pct })),
+        p_green_kg: green_kg && green_kg > 0 ? green_kg : null,
       });
       if (error) throw error;
 
@@ -669,23 +701,24 @@ export function RoastGroupDrawer({
 
   // Mutation to mark roasted with an additional LOSS transaction
   const markRoastedWithLossMutation = useMutation({
-    mutationFn: async ({ id, actual_output_kg, roast_group, target_date, loss_kg, loss_note }: { 
+    mutationFn: async ({ id, actual_output_kg, roast_group, target_date, loss_kg, loss_note, green_kg }: { 
       id: string; 
       actual_output_kg: number;
+      green_kg?: number;
       roast_group: string;
       target_date: string;
       loss_kg: number;
       loss_note: string;
     }) => {
-      // Atomic RPC: status flip + ROAST_OUTPUT + LOSS in one transaction.
-      // Lot consumption is intentionally not part of this flow (matches the
-      // pre-RPC behavior of the loss path).
+      // Atomic RPC: status flip + ROAST_OUTPUT + LOSS (+ green deduction when
+      // switched on — the green went into the roaster either way) in one transaction.
       const { data: transitioned, error } = await supabase.rpc('mark_batch_roasted', {
         p_batch_id: id,
         p_actual_output_kg: actual_output_kg,
-        p_lot_id: null,
         p_loss_kg: loss_kg,
         p_loss_note: loss_note,
+        p_lot_splits: splitsFor(id).map(s => ({ lot_id: s.lot_id, pct: s.pct })),
+        p_green_kg: green_kg && green_kg > 0 ? green_kg : null,
       });
       if (error) throw error;
       if (!transitioned) throw new Error('Batch already roasted');
@@ -1141,15 +1174,17 @@ export function RoastGroupDrawer({
                                   key={batch.id}
                                   batch={batch}
                                   expectedYieldLossPct={compYieldLossPct}
-                                  onMarkRoasted={(id, actual) => markRoastedMutation.mutate({ 
+                                  onMarkRoasted={(id, actual, inbound) => markRoastedMutation.mutate({ 
                                     id, 
                                     actual_output_kg: actual,
+                                    green_kg: inbound,
                                     roast_group: batch.roast_group,
                                     target_date: batch.target_date,
                                   })}
-                                  onMarkRoastedWithLoss={(id, actual, lossKg, lossNote) => markRoastedWithLossMutation.mutate({
+                                  onMarkRoastedWithLoss={(id, actual, lossKg, lossNote, inbound) => markRoastedWithLossMutation.mutate({
                                     id,
                                     actual_output_kg: actual,
+                                    green_kg: inbound,
                                     roast_group: batch.roast_group,
                                     target_date: batch.target_date,
                                     loss_kg: lossKg,
@@ -1164,9 +1199,15 @@ export function RoastGroupDrawer({
                                   onInputChange={handleInputChange}
                                   isUpdating={updateBatchMutation.isPending}
                                   getRoasterBadgeColor={getRoasterBadgeColor}
-                                  linkedLots={greenLots}
-                                  selectedLotId={batchLotSelections[batch.id] ?? ''}
-                                  onLotChange={(val) => setBatchLotSelections(prev => ({ ...prev, [batch.id]: val }))}
+                                  greenLotOptions={greenLotOptions}
+                                  greenSplits={splitsFor(batch.id)}
+                                  greenSplitsCustom={!!batchSplitOverrides[batch.id]}
+                                  greenDeductionOn={greenDeductionOn}
+                                  onGreenSplitsChange={(next) => setBatchSplitOverrides(prev => {
+                                    const copy = { ...prev };
+                                    if (next) copy[batch.id] = next; else delete copy[batch.id];
+                                    return copy;
+                                  })}
                                 />
                               ))
                             )}
@@ -1197,15 +1238,17 @@ export function RoastGroupDrawer({
                         key={batch.id}
                         batch={batch}
                         expectedYieldLossPct={yieldLossPct}
-                        onMarkRoasted={(id, actual) => markRoastedMutation.mutate({ 
+                        onMarkRoasted={(id, actual, inbound) => markRoastedMutation.mutate({ 
                           id, 
                           actual_output_kg: actual,
+                          green_kg: inbound,
                           roast_group: batch.roast_group,
                           target_date: batch.target_date,
                         })}
-                        onMarkRoastedWithLoss={(id, actual, lossKg, lossNote) => markRoastedWithLossMutation.mutate({
+                        onMarkRoastedWithLoss={(id, actual, lossKg, lossNote, inbound) => markRoastedWithLossMutation.mutate({
                           id,
                           actual_output_kg: actual,
+                          green_kg: inbound,
                           roast_group: batch.roast_group,
                           target_date: batch.target_date,
                           loss_kg: lossKg,
@@ -1220,9 +1263,15 @@ export function RoastGroupDrawer({
                         onInputChange={handleInputChange}
                         isUpdating={updateBatchMutation.isPending}
                         getRoasterBadgeColor={getRoasterBadgeColor}
-                        linkedLots={greenLots}
-                        selectedLotId={batchLotSelections[batch.id] ?? ''}
-                        onLotChange={(val) => setBatchLotSelections(prev => ({ ...prev, [batch.id]: val }))}
+                        greenLotOptions={greenLotOptions}
+                        greenSplits={splitsFor(batch.id)}
+                        greenSplitsCustom={!!batchSplitOverrides[batch.id]}
+                        greenDeductionOn={greenDeductionOn}
+                        onGreenSplitsChange={(next) => setBatchSplitOverrides(prev => {
+                          const copy = { ...prev };
+                          if (next) copy[batch.id] = next; else delete copy[batch.id];
+                          return copy;
+                        })}
                       />
                     ))}
                     {(hiddenCompletedCount > 0 || showAllCompleted) && (
@@ -1329,8 +1378,8 @@ export function RoastGroupDrawer({
 interface BatchRowProps {
   batch: RoastBatch;
   expectedYieldLossPct: number;
-  onMarkRoasted: (id: string, actualKg: number) => void;
-  onMarkRoastedWithLoss: (id: string, actualKg: number, lossKg: number, lossNote: string) => void;
+  onMarkRoasted: (id: string, actualKg: number, inboundKg: number) => void;
+  onMarkRoastedWithLoss: (id: string, actualKg: number, lossKg: number, lossNote: string, inboundKg: number) => void;
   onUndo: (id: string) => void;
   onDelete: (id: string) => void;
   onOhShit: (batch: RoastBatch) => void;
@@ -1340,9 +1389,11 @@ interface BatchRowProps {
   onInputChange: () => void;
   isUpdating: boolean;
   getRoasterBadgeColor: (roaster: RoasterMachine | null) => string;
-  linkedLots: any[];
-  selectedLotId: string;
-  onLotChange: (val: string) => void;
+  greenLotOptions: GreenLotOption[];
+  greenSplits: LotSplit[];
+  greenSplitsCustom: boolean;
+  greenDeductionOn: boolean;
+  onGreenSplitsChange: (splits: LotSplit[] | null) => void;
 }
 
 interface RoastBatch {
@@ -1376,9 +1427,11 @@ function BatchRow({
   onInputChange,
   isUpdating,
   getRoasterBadgeColor,
-  linkedLots,
-  selectedLotId,
-  onLotChange,
+  greenLotOptions,
+  greenSplits,
+  greenSplitsCustom,
+  greenDeductionOn,
+  onGreenSplitsChange,
 }: BatchRowProps) {
   const [plannedKg, setPlannedKg] = useState(batch.planned_output_kg?.toString() ?? '');
   // Default actual output to expected output based on yield loss
@@ -1504,7 +1557,7 @@ function BatchRow({
       setLossNote('');
       setShowYieldWarning(true);
     } else {
-      onMarkRoasted(batch.id, actualValue);
+      onMarkRoasted(batch.id, actualValue, inboundKg);
     }
   };
 
@@ -1528,7 +1581,8 @@ function BatchRow({
         pendingMarkRoasted.id, 
         pendingMarkRoasted.actualKg, 
         Math.max(0, lossKg), 
-        lossNote.trim()
+        lossNote.trim(),
+        pendingMarkRoasted.inboundKg,
       );
       setShowYieldWarning(false);
       setPendingMarkRoasted(null);
@@ -1538,7 +1592,7 @@ function BatchRow({
 
   const handleConfirmMarkRoasted = () => {
     if (pendingMarkRoasted) {
-      onMarkRoasted(pendingMarkRoasted.id, pendingMarkRoasted.actualKg);
+      onMarkRoasted(pendingMarkRoasted.id, pendingMarkRoasted.actualKg, pendingMarkRoasted.inboundKg);
     }
     setShowYieldWarning(false);
     setPendingMarkRoasted(null);
@@ -1660,29 +1714,18 @@ function BatchRow({
             </SelectContent>
           </Select>
 
-          {/* Lot selector */}
-          {(() => {
-            const receivedLots = linkedLots.filter((l: any) => l.green_lots?.status === 'RECEIVED');
-            if (receivedLots.length === 0) return null;
-            return (
-              <Select value={selectedLotId} onValueChange={onLotChange}>
-                <SelectTrigger
-                  className="h-7 w-24 text-xs"
-                  onFocus={handleLocalInputFocus}
-                  onBlur={handleLocalInputBlur}
-                >
-                  <SelectValue placeholder="Lot" />
-                </SelectTrigger>
-                <SelectContent>
-                  {receivedLots.map((link: any) => (
-                    <SelectItem key={link.lot_id} value={link.lot_id} className="text-xs">
-                      {link.green_lots.lot_number}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            );
-          })()}
+          {/* Green split: which lots this batch's green comes off */}
+          {isPlanned && (
+            <GreenSplitControl
+              splits={greenSplits}
+              isCustom={greenSplitsCustom}
+              options={greenLotOptions}
+              inboundKg={inboundKg}
+              deductionOn={greenDeductionOn}
+              onChange={onGreenSplitsChange}
+              disabled={isUpdating}
+            />
+          )}
 
           {/* Cropster ID */}
           <div className="flex items-center gap-1">

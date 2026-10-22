@@ -6557,6 +6557,10 @@ export type Database = {
       }
       _assert_internal_staff: { Args: never; Returns: undefined }
       _client_green_lot_json: { Args: { p_lot_id: string }; Returns: Json }
+      _consume_green_for_batch: {
+        Args: { p_batch_id: string; p_kg: number; p_lot_id: string }
+        Returns: undefined
+      }
       _coroast_effective_booking_rules: {
         Args: { p_account_id: string }
         Returns: {
@@ -6756,6 +6760,10 @@ export type Database = {
         Args: { _source_id: string }
         Returns: string
       }
+      green_kg_for_roasted: {
+        Args: { p_loss_pct: number; p_roasted_kg: number }
+        Returns: number
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -6786,7 +6794,9 @@ export type Database = {
           p_batch_id: string
           p_loss_kg?: number
           p_loss_note?: string
+          p_green_kg?: number
           p_lot_id?: string
+          p_lot_splits?: Json
         }
         Returns: boolean
       }
