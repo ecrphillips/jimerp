@@ -1,8 +1,8 @@
 # Roadmap
 
-- [ ] Add Account → Customer Product Details with per-variant visibility/orderability, case-only controls, notes, and product-page links.
-- [ ] Enforce customer product restrictions on new orders and edits; require staff confirmation for case-only loose units.
-- [ ] Verify saved settings and customer preview, run rule tests, and check page health.
+- [x] Add Account → Customer Product Details with per-variant visibility/orderability, case-only controls, notes, and product-page links.
+- [x] Enforce customer product restrictions on new orders and edits; require staff confirmation for case-only loose units.
+- [x] Verify Stim's four saved case-only settings, customer new-order/catalogue preview, Products toggle, and staff confirmation acceptance/cancellation; 17 tests pass and current build is clean. No real order was created during verification.
 
 - [x] Show Case Lot contents on screen and print, with case-specific packing counts independent from loose bags; 9 tests pass and live Pack tab checked. No open case order available for a live packing save.
 
