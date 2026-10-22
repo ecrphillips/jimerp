@@ -836,6 +836,11 @@ export default function NewOrder() {
                           <span className="text-sm font-medium">
                             {li.gramsPerUnit ? formatGramsLabel(li.gramsPerUnit) : ''}
                           </span>
+                          {li.caseLotUnits ? (
+                            <span className="text-xs text-muted-foreground">
+                              {caseLotContentsLabel(li.caseLotUnits, li.gramsPerUnit)}
+                            </span>
+                          ) : null}
                           {li.packagingTypeName && (
                             <span className="text-xs text-muted-foreground">{li.packagingTypeName}</span>
                           )}
