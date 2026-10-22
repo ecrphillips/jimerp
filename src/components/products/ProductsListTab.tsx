@@ -824,6 +824,10 @@ export function ProductsListTab() {
   // Auto-open product edit when ?edit=<id> is present in the URL (e.g. from admin audit)
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
+    const account = searchParams.get('account');
+    if (account) setClientFilter(account);
+  }, [searchParams]);
+  useEffect(() => {
     const editId = searchParams.get('edit');
     const section = searchParams.get('section');
     if (!editId || !products) return;

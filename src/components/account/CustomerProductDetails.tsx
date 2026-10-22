@@ -58,8 +58,6 @@ export function CustomerProductDetails({ accountId }: { accountId: string }) {
               const state = productAccessState(p.id, access.data ?? [], products);
               const saved = access.data?.find(s => s.product_id === p.id);
               const setting = { product_id: p.id, visible: saved?.visible ?? true, orderable: saved?.orderable ?? true, case_only: saved?.case_only ?? false };
-              const linkedByAllowList = !products.length; // Eligibility is validated again when ordering.
-              void linkedByAllowList;
               return <tr key={p.id} className={`border-b last:border-0 ${p.is_active ? '' : 'opacity-60'}`}>
                 <td className="py-3 pr-4"><span>{formatGramsLabel(p.grams_per_unit ?? p.bag_size_g)} {p.packaging_types?.name}</span>
                   {p.case_lot_product_id && <span className="block text-xs text-muted-foreground">{p.case_lot_units} × {formatGramsLabel(products.find(c => c.id === p.case_lot_product_id)?.grams_per_unit ?? products.find(c => c.id === p.case_lot_product_id)?.bag_size_g ?? 0)}</span>}
