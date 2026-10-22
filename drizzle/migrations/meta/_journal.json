@@ -92,6 +92,13 @@
       "when": 1792702983151,
       "tag": "0012_single_variant_case_lots",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792703948904,
+      "tag": "0013_sync_product_size_edits",
+      "breakpoints": true
     }
   ]
 }
