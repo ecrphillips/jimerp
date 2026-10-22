@@ -133,7 +133,7 @@ export default function CreateOrderForClient() {
   const isShipDateInPast = !!requestedShipDate && requestedShipDate < todayIsoDate;
 
   // Fetch all accounts (replaces legacy clients query)
-  const { data: clients } = useQuery({
+  const { data: clients, isLoading: clientsLoading } = useQuery({
     queryKey: ['all-accounts-for-orders'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -584,7 +584,7 @@ export default function CreateOrderForClient() {
       <Card className="mb-6">
         <CardHeader><CardTitle>Select Client</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <OrderClientSelector clients={clients ?? []} value={selectedClientId} onChange={setSelectedClientId} />
+          <OrderClientSelector clients={clients ?? []} clientsLoading={clientsLoading} value={selectedClientId} onChange={setSelectedClientId} />
 
           {/* Location selection for clients with locations */}
           {selectedClientId && (

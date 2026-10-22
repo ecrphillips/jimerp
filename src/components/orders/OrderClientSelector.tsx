@@ -14,8 +14,8 @@ import { defaultCommonClientIds, groupOrderClients, type OrderClient } from '@/l
 const SETTINGS_KEY = 'order_common_client_shortcuts';
 const QUERY_KEY = ['app_settings', SETTINGS_KEY] as const;
 
-export function OrderClientSelector({ clients, value, onChange }: {
-  clients: OrderClient[]; value: string; onChange: (id: string) => void;
+export function OrderClientSelector({ clients, value, onChange, clientsLoading = false }: {
+  clients: OrderClient[]; value: string; onChange: (id: string) => void; clientsLoading?: boolean;
 }) {
   const { isAdmin, authUser } = useAuth();
   const queryClient = useQueryClient();
@@ -63,7 +63,7 @@ export function OrderClientSelector({ clients, value, onChange }: {
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Common Clients</p>
-        {isAdmin && <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit common client shortcuts" aria-label="Edit common client shortcuts" disabled={isLoading || isError} onClick={() => { setDraftIds(commonIds); setSearch(''); setEditing(true); }}><Settings2 className="h-4 w-4" /></Button>}
+        {isAdmin && <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit common client shortcuts" aria-label="Edit common client shortcuts" disabled={clientsLoading || isLoading || isError} onClick={() => { setDraftIds(commonIds); setSearch(''); setEditing(true); }}><Settings2 className="h-4 w-4" /></Button>}
       </div>
       <div className="flex flex-wrap gap-2">
         {commonClients.map(client => <Button key={client.id} variant={value === client.id ? 'default' : 'outline'} size="sm" onClick={() => onChange(client.id)}>{client.account_name}</Button>)}
@@ -72,7 +72,7 @@ export function OrderClientSelector({ clients, value, onChange }: {
     </div>
     <div className="space-y-2">
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">All Clients</p>
-      <Select value={value} onValueChange={onChange}>
+      <Select value={value} onValueChange={onChange} disabled={clientsLoading}>
         <SelectTrigger className="w-full max-w-md" aria-label="Choose a client"><SelectValue placeholder="Choose a client..." /></SelectTrigger>
         <SelectContent>
           <SelectGroup><SelectLabel>Scheduled production clients</SelectLabel>
