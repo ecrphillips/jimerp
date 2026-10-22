@@ -1,7 +1,7 @@
 # Roadmap
 
-- [ ] Add Case Lot variant creation with a required same-family variant and bag count, saved composition and calculated weight.
-- [ ] Verify Case Lot validation and the creation flow.
+- [x] Add Case Lot variant creation with a required same-family variant and bag count, saved composition and calculated weight.
+- [x] Verify Case Lot rules with tests; preview click-through not run.
 
 - [x] Audit recent merged migrations against live database records and schema; refresh generated types.
 - [x] Resolve existing function validation errors and synchronize merged email functions.
