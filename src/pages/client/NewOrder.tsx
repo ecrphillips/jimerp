@@ -100,6 +100,16 @@ function buildDisplayName(productName: string, packagingTypeName: string | null,
   return `${productName} — ${packagingTypeName} (${sizeLabel})`;
 }
 
+/**
+ * Case-lot composition, e.g. "12 × 300g bags" — the constituent bag size is
+ * derived from the case weight divided by the bags-per-case count.
+ */
+function caseLotContentsLabel(caseLotUnits: number | null | undefined, caseTotalGrams: number | null | undefined): string | null {
+  if (!caseLotUnits || caseLotUnits <= 0 || !caseTotalGrams || caseTotalGrams <= 0) return null;
+  const bagGrams = Math.round(caseTotalGrams / caseLotUnits);
+  return `${caseLotUnits} × ${formatGramsLabel(bagGrams)} bags`;
+}
+
 export default function NewOrder() {
   const { authUser } = useAuth();
   const { isPreviewMode, previewAccountId } = usePreview();
