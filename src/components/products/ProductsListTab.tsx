@@ -157,6 +157,8 @@ export function ProductsListTab() {
   const productsBulk = useProductsBulkEdit(bulkEditOpen);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editCaseContentId, setEditCaseContentId] = useState('');
+  const [editCaseUnits, setEditCaseUnits] = useState('');
   const [pricingOverridesOpen, setPricingOverridesOpen] = useState(false);
   const editingGreenValue = useRoastGroupGreenValue(editingProduct?.roast_group ?? null);
   const editingGreenMarketPerKg = editingGreenValue.data?.marketValuePerKg && editingGreenValue.data.marketValuePerKg > 0
@@ -187,6 +189,8 @@ export function ProductsListTab() {
     currentRoastGroup: string | null;
     newRoastGroup: string | null;
     fullPayload: {
+      case_lot_product_id?: string;
+      case_lot_units?: number;
       product_name: string;
       sku: string | null;
       format: ProductFormat;
@@ -533,8 +537,18 @@ export function ProductsListTab() {
 
   // ========== Mutations (unchanged) ==========
 
+  const editingCase = !!editingProduct?.case_lot_product_id;
+  const editCaseChoices = editingProduct ? caseLotChoices(editingProduct, products ?? []) : [];
+  const savedCaseContent = products?.find(p => p.id === editingProduct?.case_lot_product_id);
+  if (savedCaseContent && !editCaseChoices.some(p => p.id === savedCaseContent.id)) editCaseChoices.push(savedCaseContent);
+  const editCaseContent = editCaseChoices.find(p => p.id === editCaseContentId);
+  const editCaseCount = Number(editCaseUnits);
+  const editCaseGrams = editCaseContent ? caseLotGrams(editCaseContent.grams_per_unit ?? editCaseContent.bag_size_g, editCaseCount) : 0;
+
   const executeSaveMutation = useMutation({
     mutationFn: async (payload: {
+      case_lot_product_id?: string;
+      case_lot_units?: number;
       product_name: string;
       sku: string | null;
       format: ProductFormat;
@@ -579,6 +593,8 @@ export function ProductsListTab() {
       queryClient.invalidateQueries({ queryKey: ['production-orders'] });
       queryClient.invalidateQueries({ queryKey: ['roast-demand'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['pack-demand-all'] });
+      queryClient.invalidateQueries({ queryKey: ['all-products-for-pack'] });
       closeDialog();
       setShowRerouteModal(false);
       setPendingRerouteData(null);
@@ -587,11 +603,16 @@ export function ProductsListTab() {
   });
 
   const handleSave = useCallback(() => {
+    if (editingCase && !editCaseGrams) {
+      toast.error('Select a variant and enter a positive whole-number quantity per case');
+      return;
+    }
     const trimmedMat = packagingMaterialOverride.trim();
     const matValue = trimmedMat === '' ? null : Number(trimmedMat);
     const trimmedLab = packagingLabourOverride.trim();
     const labValue = trimmedLab === '' ? null : Number(trimmedLab);
     const payload = {
+      ...(editingCase ? { case_lot_product_id: editCaseContentId, case_lot_units: editCaseCount } : {}),
       product_name: productName, sku: sku || null, format: formatState, bag_size_g: bagSize,
       grind_options: grindOptions, client_id: editingProduct?.client_id ?? null,
       account_id: clientId || null, is_active: isActive, is_perennial: isPerennial,
@@ -610,7 +631,7 @@ export function ProductsListTab() {
       }
     }
     executeSaveMutation.mutate(payload);
-  }, [editingProduct, productName, sku, formatState, bagSize, grindOptions, clientId, isActive, isPerennial, packagingVariant, roastGroup, requiresProduction, packagingMaterialOverride, packagingLabourOverride, executeSaveMutation]);
+  }, [editingCase, editCaseGrams, editCaseContentId, editCaseCount, editingProduct, productName, sku, formatState, bagSize, grindOptions, clientId, isActive, isPerennial, packagingVariant, roastGroup, requiresProduction, packagingMaterialOverride, packagingLabourOverride, executeSaveMutation]);
 
   const handleConfirmReroute = useCallback(() => {
     if (pendingRerouteData) executeSaveMutation.mutate(pendingRerouteData.fullPayload);
@@ -764,6 +785,8 @@ export function ProductsListTab() {
   const handleChooseGeneric = (lifecycle: 'perennial' | 'seasonal') => { setTypeChoiceOpen(false); setPendingLifecycle(lifecycle); setSingleOriginCategory('generic'); setSingleOriginModalOpen(true); };
 
   const openEdit = async (p: Product) => {
+    setEditCaseContentId(p.case_lot_product_id ?? '');
+    setEditCaseUnits(p.case_lot_units == null ? '' : String(p.case_lot_units));
     setEditingProduct(p); setProductName(p.product_name); setSku(p.sku ?? '');
     setFormatState(p.format); setBagSize(p.bag_size_g); setGrindOptions(p.grind_options ?? []);
     setClientId(p.account_id ?? p.client_id ?? ''); setIsActive(p.is_active);
@@ -1049,9 +1072,26 @@ export function ProductsListTab() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90vh] flex flex-col p-0 gap-0">
           <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b">
-            <DialogTitle>{editingProduct ? 'Edit Product' : 'New Product'}</DialogTitle>
+            <DialogTitle>{editingCase ? 'Edit Case Lot' : editingProduct ? 'Edit Product' : 'New Product'}</DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+            {editingCase && <div className="space-y-4 border-b pb-4">
+              <div>
+                <Label htmlFor="editCaseContent">Variant in each case</Label>
+                <Select value={editCaseContentId} onValueChange={setEditCaseContentId}>
+                  <SelectTrigger id="editCaseContent"><SelectValue placeholder="Select variant" /></SelectTrigger>
+                  <SelectContent>
+                    {editCaseChoices.map(p => <SelectItem key={p.id} value={p.id}>{formatSizeCompact(p.grams_per_unit ?? p.bag_size_g)} {p.packaging_type?.name ?? 'bag'} · {p.sku ?? p.product_name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="editCaseUnits">Bags / units per case</Label>
+                <Input id="editCaseUnits" type="number" min={1} step={1} value={editCaseUnits} onChange={e => setEditCaseUnits(e.target.value)} />
+                {!editCaseGrams && <p className="text-xs text-destructive mt-1">Choose a variant and enter a positive whole number.</p>}
+              </div>
+              {editCaseGrams > 0 && editCaseContent && <p className="text-sm font-medium">{editCaseCount} × {formatSizeCompact(editCaseContent.grams_per_unit ?? editCaseContent.bag_size_g)} = {formatSizeCompact(editCaseGrams)} per case</p>}
+            </div>}
             <div>
               <Label htmlFor="client">Account</Label>
               <Select value={clientId} onValueChange={setClientId}>
@@ -1080,8 +1120,8 @@ export function ProductsListTab() {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="bagSize">Bag Size (g)</Label>
-                <Input id="bagSize" type="number" value={bagSize} disabled={!!editingProduct?.case_lot_product_id} onChange={(e) => setBagSize(parseInt(e.target.value) || 0)} />
+                <Label htmlFor="bagSize">{editingCase ? 'Case weight (g)' : 'Bag Size (g)'}</Label>
+                <Input id="bagSize" type="number" value={editingCase ? editCaseGrams : bagSize} disabled={editingCase} onChange={(e) => setBagSize(parseInt(e.target.value) || 0)} />
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1216,7 +1256,7 @@ export function ProductsListTab() {
             ) : <div />}
             <div className="flex gap-2">
               <Button variant="outline" onClick={closeDialog}>Cancel</Button>
-              <Button onClick={handleSave} disabled={executeSaveMutation.isPending || !productName || !clientId}>
+              <Button onClick={handleSave} disabled={executeSaveMutation.isPending || !productName || !clientId || (editingCase && !editCaseGrams)}>
                 {executeSaveMutation.isPending ? 'Saving…' : 'Save'}
               </Button>
             </div>
