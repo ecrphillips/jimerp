@@ -59,6 +59,17 @@ interface ShopifyOrder {
   lineItems: ShopifyLineItem[];
 }
 
+interface ShopifyOrdersConnection {
+  nodes?: Array<{
+    id: string;
+    name: string;
+    createdAt?: string | null;
+    customer?: { displayName?: string | null } | null;
+    lineItems?: { nodes?: Array<Record<string, unknown>> } | null;
+  }>;
+  pageInfo: { hasNextPage?: boolean; endCursor: string | null };
+}
+
 // Optional extra order details for the review page. Read in a separate call so a
 // missing permission can never break the pull itself (fail-open).
 async function fetchOrderExtras(
@@ -201,7 +212,7 @@ async function fetchUnfulfilledOrders(
         }
       }`;
 
-    const res = await fetch(endpoint, {
+    const res: Response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -215,12 +226,15 @@ async function fetchUnfulfilledOrders(
       throw new Error(`Shopify API ${res.status}: ${text.slice(0, 300)}`);
     }
 
-    const payload = await res.json();
+    const payload: {
+      errors?: unknown[];
+      data?: { orders?: ShopifyOrdersConnection | null } | null;
+    } = await res.json();
     if (payload.errors?.length) {
       throw new Error(`Shopify GraphQL error: ${JSON.stringify(payload.errors).slice(0, 300)}`);
     }
 
-    const conn = payload.data?.orders;
+    const conn: ShopifyOrdersConnection | null | undefined = payload.data?.orders;
     for (const node of conn?.nodes ?? []) {
       orders.push({
         id: legacyId(node.id)!,

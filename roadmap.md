@@ -1,5 +1,8 @@
 # Roadmap
 
+- [x] Audit recent merged migrations against live database records and schema; refresh generated types.
+- [x] Resolve existing function validation errors and synchronize merged email functions.
+
 - [x] Separate ground packing lines and verify independent completion without double-counting stock.
 - [x] Show remaining packing weight beside available WIP and include both figures in the printed pack list.
 
