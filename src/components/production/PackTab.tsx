@@ -297,7 +297,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
           grind_label,
           order_id,
           order:orders!inner(id, status, work_deadline_at, manually_deprioritized, account_id),
-          product:products!order_line_items_product_id_fkey(id, product_name, sku, bag_size_g, packaging_variant, roast_group, requires_production, case_lot_units, case_lot_product_id, case_contents:products!products_case_lot_product_id_fkey(bag_size_g))
+          product:products!order_line_items_product_id_fkey(id, product_name, sku, bag_size_g, packaging_variant, roast_group, requires_production, case_lot_units, case_lot_product_id)
         `)
         .in('order.status', ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY']);
       
@@ -664,7 +664,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
             : 'Unassigned account',
           productId: li.product_id,
           caseUnits: li.product.case_lot_units,
-          constituentBagSizeG: li.product.case_contents?.bag_size_g ?? null,
+          constituentBagSizeG: li.product.case_lot_units ? li.product.bag_size_g / li.product.case_lot_units : null,
           productName: li.product.product_name,
           sku: li.product.sku,
           bagSizeG: li.product.bag_size_g,
