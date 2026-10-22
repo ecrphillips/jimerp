@@ -78,6 +78,13 @@
       "when": 1792700009576,
       "tag": "0010_baskets_phase_2_roast_group_baskets",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792701447569,
+      "tag": "0011_green_deduction_on_roast",
+      "breakpoints": true
     }
   ]
 }

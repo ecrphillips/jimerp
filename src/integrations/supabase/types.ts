@@ -6792,6 +6792,7 @@ export type Database = {
         Args: {
           p_actual_output_kg: number
           p_batch_id: string
+          p_green_kg?: number
           p_loss_kg?: number
           p_loss_note?: string
           p_green_kg?: number
