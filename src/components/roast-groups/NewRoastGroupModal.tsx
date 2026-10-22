@@ -15,6 +15,8 @@ import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
 import { RoastGroupPreview } from '@/components/products/RoastGroupPreview';
 import { OriginSelect } from '@/components/products/OriginSelect';
 import { ORIGIN_CUSTOM_SENTINEL } from '@/lib/originOptions';
+import { useBasketsQuery } from '@/hooks/useBaskets';
+import { linkRoastGroupToBasket } from '@/lib/roastGroupBasketLink';
 
 interface Props {
   open: boolean;
@@ -39,6 +41,11 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
   const [cropsterRef, setCropsterRef] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [basketId, setBasketId] = useState<string>('');
+  const { data: baskets = [] } = useBasketsQuery();
+  const activeBaskets = baskets.filter(b => b.is_active);
+  // Post-roast blends are made from other roast groups, not green.
+  const usesGreen = !(isBlend && blendType === 'POST_ROAST');
 
   // Fetch existing keys/codes for preview
   const { data: existingData } = useQuery({
@@ -70,6 +77,7 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
     setYieldLoss(16);
     setCropsterRef('');
     setNotes('');
+    setBasketId('');
   };
 
   const effectiveOrigin = origin === ORIGIN_CUSTOM_SENTINEL ? originCustom.trim() : origin;
@@ -106,6 +114,12 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
           blend_type: isBlend ? blendType : null,
         })
         .eq('roast_group', result.roastGroupKey);
+
+      if (basketId && usesGreen) {
+        const basketErr = await linkRoastGroupToBasket(result.roastGroupKey, basketId);
+        if (basketErr) toast.error(`Roast group saved, but the basket couldn't be added: ${basketErr}`);
+        queryClient.invalidateQueries({ queryKey: ['roast-group-baskets'] });
+      }
 
       toast.success(result.created ? 'Roast group created' : 'Existing roast group reused');
       queryClient.invalidateQueries({ queryKey: ['roast-groups-list'] });
@@ -251,6 +265,21 @@ export function NewRoastGroupModal({ open, onOpenChange }: Props) {
               <Input type="number" value={yieldLoss} onChange={e => setYieldLoss(Number(e.target.value))} min={0} max={50} step={0.5} />
             </div>
           </div>
+
+          {/* Green source: basket (optional) */}
+          {usesGreen && activeBaskets.length > 0 && (
+            <div>
+              <Label>Green from a basket (optional)</Label>
+              <Select value={basketId || 'NONE'} onValueChange={(v) => setBasketId(v === 'NONE' ? '' : v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">No basket — link lots later</SelectItem>
+                  {activeBaskets.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">You can add more baskets or specific lots on the roast group page.</p>
+            </div>
+          )}
 
           {/* Cropster */}
           <div>

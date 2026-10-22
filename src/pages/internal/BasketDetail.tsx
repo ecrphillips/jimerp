@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowDownCircle, ArrowLeft, ArrowUpCircle, Pencil, Plus, Power, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
-import { useBasketData, useBasketMutations } from '@/hooks/useBaskets';
+import { useBasketData, useBasketMutations, useBasketUsedBy } from '@/hooks/useBaskets';
 import { defaultPromotePct, normalizeBasketName, type BasketMemberView } from '@/lib/baskets';
 import {
   BasketFormDialog,
@@ -24,6 +24,7 @@ export default function BasketDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const data = useBasketData();
+  const usedByMap = useBasketUsedBy();
   const m = useBasketMutations();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -93,6 +94,18 @@ export default function BasketDetail() {
             <p className="text-sm">
               <span className="font-medium">{formatKg(view.volumes.kgInStore)}</span> in store ·{' '}
               <span className="font-medium">{formatKg(view.volumes.kgContracted)}</span> contracted, not received
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {(usedByMap.get(basket.id) ?? []).length === 0 ? 'Not used by any roast group yet.' : (
+                <>Used by{' '}
+                  {(usedByMap.get(basket.id) ?? []).map((u, i) => (
+                    <React.Fragment key={u.roastGroup}>
+                      {i > 0 && ', '}
+                      <Link to={`/roast-groups/${encodeURIComponent(u.roastGroup)}`} className="underline hover:text-foreground">{u.name}</Link>
+                    </React.Fragment>
+                  ))}
+                </>
+              )}
             </p>
             {basket.notes && <p className="text-sm text-muted-foreground whitespace-pre-wrap">{basket.notes}</p>}
           </div>

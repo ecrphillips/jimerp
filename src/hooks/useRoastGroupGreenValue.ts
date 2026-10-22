@@ -1,19 +1,32 @@
 /**
- * Resolve the weighted green market value ($/kg) for a roast group, by reading
- * its linked green lots (green_lot_roast_group_links → green_lots).
+ * Resolve the weighted green market value ($/kg) for a roast group from its
+ * green sources: linked lots (green_lot_roast_group_links) and baskets
+ * (roast_group_baskets → the basket's active lots).
  *
- * Weighted by pct_of_lot when set; otherwise equal weights across linked lots.
- * Falls back to null when no usable book value exists — the caller is expected
- * to show a placeholder in that case.
+ * Weighted by % when set; otherwise equal weights across sources. A basket's
+ * own value is its active lots weighted by their active %. Falls back to null
+ * when no usable value exists — the caller shows a placeholder in that case.
+ * `lines` carries the full breakdown so the number is never a black box.
  */
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { roastGroupGreenValue, type GreenSourceLine } from '@/lib/greenSources';
+import {
+  LINK_PRICED_SELECT,
+  ROAST_GROUP_BASKET_PRICED_SELECT,
+  toLinkPriced,
+  toRoastGroupBasketPriced,
+  type RawLink,
+  type RawRoastGroupBasket,
+} from '@/lib/greenSourceQueries';
 
 export type RoastGroupGreenValue = {
   marketValuePerKg: number | null;
   bookValuePerKg: number | null;
   source: 'lots' | 'placeholder';
+  /** Number of priced sources (lots and baskets) in the average. */
   lotCount: number;
+  lines: (GreenSourceLine & { weight: number })[];
 };
 
 export function useRoastGroupGreenValue(roastGroupKey: string | null | undefined) {
@@ -21,48 +34,27 @@ export function useRoastGroupGreenValue(roastGroupKey: string | null | undefined
     queryKey: ['roast-group-green-value', roastGroupKey ?? ''],
     enabled: !!roastGroupKey,
     queryFn: async (): Promise<RoastGroupGreenValue> => {
-      const { data, error } = await supabase
-        .from('green_lot_roast_group_links')
-        .select(`
-          pct_of_lot,
-          green_lots!green_lot_roast_group_links_lot_id_fkey (
-            id, book_value_per_kg, market_value_per_kg
-          )
-        `)
-        .eq('roast_group', roastGroupKey!);
-      if (error) throw error;
+      const [linksResp, basketsResp] = await Promise.all([
+        supabase.from('green_lot_roast_group_links').select(LINK_PRICED_SELECT).eq('roast_group', roastGroupKey!),
+        supabase.from('roast_group_baskets').select(ROAST_GROUP_BASKET_PRICED_SELECT).eq('roast_group', roastGroupKey!),
+      ]);
+      if (linksResp.error) throw linksResp.error;
+      // Before the baskets migration is live this table is missing; treat as "no baskets".
+      const basketRows = basketsResp.error ? [] : ((basketsResp.data ?? []) as unknown as RawRoastGroupBasket[]);
 
-      const rows = (data ?? []).filter((r: any) => r.green_lots);
-      if (rows.length === 0) {
-        return { marketValuePerKg: null, bookValuePerKg: null, source: 'placeholder', lotCount: 0 };
-      }
-
-      const usable = rows.filter((r: any) => {
-        const v = r.green_lots?.market_value_per_kg ?? r.green_lots?.book_value_per_kg;
-        return v != null && Number(v) > 0;
-      });
-      if (usable.length === 0) {
-        return { marketValuePerKg: null, bookValuePerKg: null, source: 'placeholder', lotCount: rows.length };
-      }
-
-      const totalPct = usable.reduce((a: number, r: any) => a + (Number(r.pct_of_lot) || 0), 0);
-      const useEqual = totalPct <= 0;
-
-      let market = 0;
-      let book = 0;
-      const w = (r: any) => (useEqual ? 1 / usable.length : (Number(r.pct_of_lot) || 0) / totalPct);
-      for (const r of usable) {
-        const lot = r.green_lots;
-        const mv = lot.market_value_per_kg != null ? Number(lot.market_value_per_kg) : Number(lot.book_value_per_kg);
-        const bv = Number(lot.book_value_per_kg ?? mv);
-        market += w(r) * mv;
-        book += w(r) * bv;
+      const v = roastGroupGreenValue(
+        ((linksResp.data ?? []) as unknown as RawLink[]).map(toLinkPriced),
+        basketRows.map(toRoastGroupBasketPriced),
+      );
+      if (v.marketPerKg == null) {
+        return { marketValuePerKg: null, bookValuePerKg: null, source: 'placeholder', lotCount: v.lines.length, lines: v.lines };
       }
       return {
-        marketValuePerKg: market,
-        bookValuePerKg: book,
+        marketValuePerKg: v.marketPerKg,
+        bookValuePerKg: v.bookPerKg,
         source: 'lots',
-        lotCount: usable.length,
+        lotCount: v.usableCount,
+        lines: v.lines,
       };
     },
     staleTime: 30_000,

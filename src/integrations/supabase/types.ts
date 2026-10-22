@@ -5334,6 +5334,51 @@ export type Database = {
           },
         ]
       }
+      roast_group_baskets: {
+        Row: {
+          basket_id: string
+          created_at: string
+          created_by: string | null
+          display_order: number
+          id: string
+          pct: number | null
+          roast_group: string
+        }
+        Insert: {
+          basket_id: string
+          created_at?: string
+          created_by?: string | null
+          display_order?: number
+          id?: string
+          pct?: number | null
+          roast_group: string
+        }
+        Update: {
+          basket_id?: string
+          created_at?: string
+          created_by?: string | null
+          display_order?: number
+          id?: string
+          pct?: number | null
+          roast_group?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roast_group_baskets_basket_id_fkey"
+            columns: ["basket_id"]
+            isOneToOne: false
+            referencedRelation: "baskets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roast_group_baskets_roast_group_fkey"
+            columns: ["roast_group"]
+            isOneToOne: false
+            referencedRelation: "roast_groups"
+            referencedColumns: ["roast_group"]
+          },
+        ]
+      }
       roast_group_components: {
         Row: {
           component_roast_group: string

@@ -16,6 +16,8 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
 import { allocatePoNumber, allocateSingleLotNumber } from '@/lib/lotNumberGenerator';
+import { useBasketsQuery } from '@/hooks/useBaskets';
+import { linkRoastGroupToBasket } from '@/lib/roastGroupBasketLink';
 import {
   ShoppingCart, Package, Coffee, Boxes, UserPlus,
   ArrowLeft, Search, CalendarIcon, Loader2, Check, ExternalLink,
@@ -85,6 +87,9 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
   const [pNewRGBlend, setPNewRGBlend] = useState(false);
   const [pNewRGOrigin, setPNewRGOrigin] = useState('');
   const [pLotId, setPLotId] = useState('');
+  const [pBasketId, setPBasketId] = useState('');
+  const { data: allBaskets = [] } = useBasketsQuery();
+  const activeBaskets = allBaskets.filter(b => b.is_active);
   const [pSaving, setPSaving] = useState(false);
   const [pResult, setPResult] = useState<any>(null);
   const [pClientSearch, setPClientSearch] = useState('');
@@ -116,7 +121,7 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
     setPRoastGroupMode('existing'); setPExistingRG('');
     setPRequiresProduction(true);
     setPNewRGName(''); setPNewRGBlend(false); setPNewRGOrigin('');
-    setPLotId(''); setPSaving(false); setPResult(null); setPClientSearch('');
+    setPLotId(''); setPBasketId(''); setPSaving(false); setPResult(null); setPClientSearch('');
     setGContractId(''); setGContract(null); setGBags('');
     setGExpectedDate(undefined); setGCarrier(''); setGLotIdentifier('');
     setGSaving(false); setGResult(null); setGContractSearch('');
@@ -277,6 +282,12 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
         });
       }
 
+      if (pBasketId && roastGroupKey) {
+        const basketErr = await linkRoastGroupToBasket(roastGroupKey, pBasketId);
+        if (basketErr) toast.error(`Product saved, but the basket couldn't be added: ${basketErr}`);
+        queryClient.invalidateQueries({ queryKey: ['roast-group-baskets'] });
+      }
+
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['roast-groups-list'] });
 
@@ -287,7 +298,10 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
         roastGroupKey,
         rgCreated,
         rgName: pRoastGroupMode === 'new' ? pNewRGName.trim() : roastGroups.find(r => r.roast_group === pExistingRG)?.display_name || null,
-        lotNumber: pLotId ? greenLots.find(l => l.id === pLotId)?.lot_number : null,
+        lotNumber: [
+          pBasketId ? `${allBaskets.find(b => b.id === pBasketId)?.name ?? ''} basket` : null,
+          pLotId ? greenLots.find(l => l.id === pLotId)?.lot_number : null,
+        ].filter(Boolean).join(' + ') || null,
         createdProducts,
       });
       setStep(5); // summary
@@ -571,6 +585,24 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
           <>
             <DialogHeader><DialogTitle>New Product</DialogTitle></DialogHeader>
             <StepIndicator step={4} total={4} />
+            {activeBaskets.length > 0 && (
+              <>
+                <p className="text-sm text-muted-foreground mb-2">Take green from a basket (optional)</p>
+                <div className="flex flex-wrap gap-1.5 mb-4">
+                  {activeBaskets.map(b => (
+                    <button
+                      key={b.id}
+                      onClick={() => setPBasketId(b.id === pBasketId ? '' : b.id)}
+                      className={cn('inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-sm transition-colors',
+                        pBasketId === b.id ? 'border-primary bg-accent' : 'border-border hover:bg-accent/50')}
+                    >
+                      {b.name}
+                      {pBasketId === b.id && <Check className="h-3.5 w-3.5 text-primary" />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <p className="text-sm text-muted-foreground mb-3">Link a green lot (optional)</p>
             <div className="space-y-1 max-h-[40vh] overflow-y-auto">
               {greenLots.map((lot: any) => (
@@ -593,7 +625,7 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
               ))}
               {greenLots.length === 0 && <p className="text-sm text-muted-foreground py-4 text-center">No lots available</p>}
             </div>
-            <button onClick={() => { setPLotId(''); saveProduct(); }} className="text-xs text-muted-foreground hover:text-foreground mt-3 underline">Skip for now</button>
+            <button onClick={() => { setPLotId(''); setPBasketId(''); saveProduct(); }} className="text-xs text-muted-foreground hover:text-foreground mt-3 underline">Skip for now</button>
             <div className="flex justify-between mt-4">
               <Button variant="ghost" size="sm" onClick={() => setStep(3)}><ArrowLeft className="h-4 w-4 mr-1" /> Back</Button>
               <Button size="sm" onClick={saveProduct} disabled={pSaving}>
@@ -620,7 +652,7 @@ export function QuickCreateWizard({ open, onOpenChange, onOpenNewRoastGroup }: P
                   <span className="font-medium">{pResult.rgName ? `${pResult.rgName} ${pResult.rgCreated ? '(created)' : '(existing)'}` : 'Not linked yet'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Green Lot</span>
+                  <span className="text-muted-foreground">Green</span>
                   <span className="font-medium">{pResult.lotNumber || 'Not linked yet'}</span>
                 </div>
               </div>

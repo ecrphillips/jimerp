@@ -44,7 +44,35 @@ export function CoverageCalendar() {
           )
         `);
       if (error) throw error;
-      return data ?? [];
+
+      // Lots a roast group takes through its baskets (active and lined up),
+      // shaped like link rows. Missing table (pre-migration) = no basket rows.
+      const { data: rgb, error: rgbErr } = await supabase
+        .from('roast_group_baskets')
+        .select(`
+          roast_group,
+          roast_groups (display_name),
+          baskets (
+            basket_lots (
+              lot_id,
+              green_lots (
+                id, lot_number, status, received_date, expected_delivery_date,
+                estimated_days_to_consume, kg_on_hand, bag_size_kg, bags_released,
+                contract_id,
+                green_contracts (name, origin)
+              )
+            )
+          )
+        `);
+      const basketRows = rgbErr ? [] : (rgb ?? []).flatMap(r =>
+        (r.baskets?.basket_lots ?? []).map(m => ({
+          roast_group: r.roast_group,
+          roast_groups: r.roast_groups,
+          lot_id: m.lot_id,
+          green_lots: m.green_lots,
+        })),
+      );
+      return [...(data ?? []), ...basketRows] as NonNullable<typeof data>;
     },
     staleTime: 30000,
   });

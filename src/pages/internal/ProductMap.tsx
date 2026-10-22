@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useBasketMembersQuery, useRoastGroupBasketsQuery } from '@/hooks/useBaskets';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Network, AlertTriangle, Package, Leaf } from 'lucide-react';
@@ -132,6 +133,10 @@ export default function ProductMap() {
     },
   });
 
+  // Baskets: a roast group that uses a basket is fed by the basket's active lots.
+  const { data: rgBasketRows = [] } = useRoastGroupBasketsQuery();
+  const { data: basketMembers = [] } = useBasketMembersQuery();
+
   // ── Derived maps ─────────────────────────────────────────────────────────
 
   const { lotToRGs, rgToLots, rgToProducts, blendComponents, rgNameMap } = useMemo(() => {
@@ -148,8 +153,18 @@ export default function ProductMap() {
       }
     }
 
+    const rgsByBasket = new Map<string, string[]>();
+    for (const r of rgBasketRows) rgsByBasket.set(r.basket_id, [...(rgsByBasket.get(r.basket_id) ?? []), r.roast_group]);
+    const basketRgsByLot = new Map<string, string[]>();
+    for (const m of basketMembers) {
+      if (m.active_pct == null) continue;
+      for (const rg of rgsByBasket.get(m.basket_id) ?? []) {
+        basketRgsByLot.set(m.lot_id, [...(basketRgsByLot.get(m.lot_id) ?? []), rg]);
+      }
+    }
+
     for (const lot of lots ?? []) {
-      const linkedRgs = lot.links.map(l => l.roast_group);
+      const linkedRgs = [...new Set([...lot.links.map(l => l.roast_group), ...(basketRgsByLot.get(lot.id) ?? [])])];
       lotToRGs.set(lot.id, linkedRgs);
       for (const rg of linkedRgs) {
         const arr = rgToLots.get(rg) ?? [];
@@ -166,7 +181,7 @@ export default function ProductMap() {
     }
 
     return { lotToRGs, rgToLots, rgToProducts, blendComponents, rgNameMap };
-  }, [lots, products, roastGroups]);
+  }, [lots, products, roastGroups, rgBasketRows, basketMembers]);
 
   // ── Highlight sets ────────────────────────────────────────────────────────
 
@@ -331,7 +346,7 @@ export default function ProductMap() {
         <p className="text-xs text-muted-foreground mt-0.5">
           {lot.kg_on_hand.toFixed(1)} kg on hand
         </p>
-        {lot.links.length === 0 && (
+        {(lotToRGs.get(lot.id) ?? []).length === 0 && (
           <p className="text-[10px] text-muted-foreground/60 mt-1 italic">
             No roast group linked
           </p>

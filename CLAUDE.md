@@ -156,8 +156,17 @@ As of `supabase/migrations/20261008120000_*.sql`, clients edit orders only throu
 `baskets` + `basket_lots` (migration `20261021120000_*.sql`). `basket_lots.active_pct`: number = active at that %, `NULL` = lined up. Pure logic (grouping, auto-sort, volumes, running-low, shared names) lives in `src/lib/baskets.ts`; data + mutations in `src/hooks/useBaskets.ts`; pages `Baskets.tsx` / `BasketDetail.tsx`.
 - "In store" = status not `EN_ROUTE` or has `received_date`; else `is_placeholder` → Planned; else Contracted.
 - Running low reuses `DEPLETION_THRESHOLD` (10 kg) and the Green Lot Mapping "< 5 days left" rule.
-- Delete guard: `findRoastGroupsUsingBasket` in `src/lib/basketDeleteGuard.ts` returns `[]` until Phase 2 links roast groups to baskets — fill it in then.
+- Delete guard: `findRoastGroupsUsingBasket` (`src/lib/basketDeleteGuard.ts`) lists roast groups using the basket; the DB backs it with `roast_group_baskets.basket_id ON DELETE RESTRICT`.
 - Placeholder lots from samples set `green_lots.source_sample_id` and get a lot number from the normal sequence with `P0000` (no PO consumed).
+
+### Phase 2: roast groups take green from baskets
+
+`roast_group_baskets` (roast_group, basket_id, optional `pct`; migration `20261022120000_*.sql`). A roast group can use baskets **and** directly linked lots (`green_lot_roast_group_links`) together; existing links are never converted automatically.
+- **Green value / pricing**: `src/lib/greenSources.ts` — basket value = active lots weighted by `active_pct`; roast group value = lots + baskets weighted by their % (equal weights when none set, same rule as before). `useRoastGroupGreenValue` returns the line-by-line breakdown; the roast group page shows it as an open sum.
+- **Production**: `src/hooks/roastGroupBasketLots.ts` feeds the roast group drawer (green list, green available, batch lot picker: active lots, then in-store lined-up lots) and `useGreenLotDepletion` (basket lots become synthetic links `basket:<rgb id>:<lot id>`, share = basket % × active %, never swapped — `executeDepletionSwaps` skips them).
+- **Client portal**: `get_client_green_detail` shows a basket's active lots as "current" and its first lined-up lot as "next".
+- Code paths tolerate the table being absent (treat as "no baskets").
+- Known gap (not Phase 2): marking a batch roasted only deducts green when a lot is picked, and deducts roasted kg, not green kg.
 
 ## Migration Discipline
 
