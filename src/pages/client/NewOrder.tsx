@@ -90,6 +90,7 @@ interface Product {
   is_perennial: boolean;
   packaging_type_id: string | null;
   packaging_types: { name: string } | null;
+  case_lot_units: number | null;
 }
 
 // Helper to build display name with packaging info
