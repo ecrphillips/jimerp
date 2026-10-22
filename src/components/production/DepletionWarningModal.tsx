@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import {
   Dialog,
@@ -68,7 +69,8 @@ export function DepletionWarningModal({
     const initial: Record<string, boolean> = {};
     impacts.forEach(i => {
       const ready = i.successor_lot && i.successor_lot.status === 'RECEIVED';
-      initial[i.link_id] = !!ready;
+      // Basket lots are never swapped here; the basket's next lot is promoted on the basket page.
+      initial[i.link_id] = !i.basket && !!ready;
     });
     setSwapToggles(initial);
   }, [open, impacts]);
@@ -106,7 +108,7 @@ export function DepletionWarningModal({
 
   async function handleProceed() {
     const swaps: DepletionSwap[] = impacts
-      .filter(i => swapToggles[i.link_id] && i.successor_lot && i.successor_lot.status === 'RECEIVED')
+      .filter(i => !i.basket && swapToggles[i.link_id] && i.successor_lot && i.successor_lot.status === 'RECEIVED')
       .map(i => ({
         link_id: i.link_id,
         lot_id: i.lot_id,
@@ -193,6 +195,7 @@ interface ImpactCardProps {
 }
 
 function ImpactCard({ impact, swapOn, onToggleSwap, onOpenPicker }: ImpactCardProps) {
+  if (impact.basket) return <BasketImpactCard impact={impact} />;
   const successor = impact.successor_lot;
   const successorReady = successor && successor.status === 'RECEIVED';
   const successorPending = successor && successor.status !== 'RECEIVED';
@@ -269,11 +272,47 @@ function ImpactCard({ impact, swapOn, onToggleSwap, onOpenPicker }: ImpactCardPr
   );
 }
 
+/** A lot reached through a basket: point to the basket's next lot instead of a swap. */
+function BasketImpactCard({ impact }: { impact: DepletionImpact }) {
+  const next = impact.successor_lot;
+  return (
+    <div className="rounded-md border p-3 space-y-2">
+      <div>
+        <div className="text-sm font-medium">{impact.lot_number}</div>
+        <div className="text-xs text-muted-foreground">
+          From basket {impact.basket!.name} · {impact.current_kg_on_hand.toFixed(1)} kg on hand · projected after batch:{' '}
+          <span className={cn(
+            'tabular-nums font-medium',
+            impact.projected_remaining_after_batch < 0 ? 'text-destructive' : 'text-amber-700 dark:text-amber-400',
+          )}>
+            {impact.projected_remaining_after_batch.toFixed(1)} kg
+          </span>
+        </div>
+      </div>
+      <div className={cn(
+        'rounded border px-3 py-2 text-xs space-y-1',
+        next ? 'bg-green-50 dark:bg-green-950/30 border-green-300 dark:border-green-800' : 'bg-destructive/10 border-destructive/30 text-destructive',
+      )}>
+        <p>
+          {next
+            ? <>Next up in the basket: <strong>{next.lot_number}</strong>{next.status === 'RECEIVED' ? ` (${next.kg_on_hand.toFixed(1)} kg in store)` : ' (not received yet)'}.</>
+            : 'Nothing is lined up in this basket.'}
+        </p>
+        <Link to={`/sourcing/baskets/${impact.basket!.id}`} className="underline" target="_blank" rel="noreferrer">
+          Open the {impact.basket!.name} basket to promote a lot
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Helper: execute approved successor swaps. Inserts new link rows for the successor
  * lots (inheriting pct), then deletes the depleted links. No ledger writes.
  */
 export async function executeDepletionSwaps(swaps: DepletionSwap[]) {
+  // Basket lots have synthetic link ids and are never swapped.
+  swaps = swaps.filter(s => !String(s.link_id).startsWith('basket:'));
   if (swaps.length === 0) return;
 
   // Insert successor link rows

@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { GreenCoffeeAlerts } from '@/components/sourcing/GreenCoffeeAlerts';
-import { useBasketData, useBasketMutations } from '@/hooks/useBaskets';
+import { useBasketData, useBasketMutations, useBasketUsedBy } from '@/hooks/useBaskets';
 import {
   computeVolumes,
   defaultPromotePct,
@@ -35,6 +35,7 @@ type Filter = 'ACTIVE' | 'INACTIVE' | 'ALL';
 export default function Baskets() {
   const navigate = useNavigate();
   const data = useBasketData();
+  const usedBy = useBasketUsedBy();
   const m = useBasketMutations();
   const [filter, setFilter] = useState<Filter>('ACTIVE');
   const [formOpen, setFormOpen] = useState(false);
@@ -117,6 +118,7 @@ export default function Baskets() {
               <BasketCard
                 key={view.basket.id}
                 view={view}
+                usedBy={(usedBy.get(view.basket.id) ?? []).map(u => u.name)}
                 lotLabel={(id) => { const l = data.lotsById.get(id); return l ? data.lotLabel(l) : null; }}
                 onOpen={() => navigate(`/sourcing/baskets/${view.basket.id}`)}
                 onEdit={() => { setEditing(view.basket); setFormOpen(true); }}
@@ -157,9 +159,10 @@ export default function Baskets() {
 }
 
 function BasketCard({
-  view, lotLabel, onOpen, onEdit, onToggleActive, onDelete, onPromote, busy,
+  view, usedBy, lotLabel, onOpen, onEdit, onToggleActive, onDelete, onPromote, busy,
 }: {
   view: BasketView;
+  usedBy: string[];
   lotLabel: (lotId: string) => string | null;
   onOpen: () => void;
   onEdit: () => void;
@@ -181,6 +184,9 @@ function BasketCard({
             </div>
             <p className="text-sm mt-1">
               {formatKg(view.volumes.kgInStore)} in store · {formatKg(view.volumes.kgContracted)} contracted, not received
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {usedBy.length > 0 ? `Used by ${usedBy.join(', ')}` : 'Not used by any roast group yet'}
             </p>
           </button>
           <DropdownMenu>

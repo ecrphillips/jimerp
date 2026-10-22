@@ -4,7 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, AlertTriangle, ArrowUp, ArrowDown, ArrowUpDown, Table2 } from 'lucide-react';
+import { Plus, AlertTriangle, ArrowUp, ArrowDown, ArrowUpDown, Table2, ShoppingBasket } from 'lucide-react';
+import { useBasketData, useRoastGroupBasketsQuery } from '@/hooks/useBaskets';
+import type { BasketView } from '@/lib/baskets';
 import { useAuth } from '@/contexts/AuthContext';
 import { BulkEditGrid } from '@/components/bulk-edit/BulkEditGrid';
 import { useRoastGroupsBulkEdit } from '@/components/bulk-edit/configs/roastGroups';
@@ -128,6 +130,23 @@ export default function RoastGroups() {
     [rawGroups, productCountMap]
   );
 
+  // Baskets each roast group takes green from (Baskets phase 2).
+  const { data: rgBasketRows = [] } = useRoastGroupBasketsQuery();
+  const basketData = useBasketData();
+  const basketsFor = (rg: { roast_group: string }): BasketView[] =>
+    rgBasketRows
+      .filter(r => r.roast_group === rg.roast_group)
+      .map(r => basketData.viewById.get(r.basket_id))
+      .filter((v): v is BasketView => !!v);
+  /** A basket problem worth flagging: no active lot, or running low with nothing lined up. */
+  const basketIssue = (rg: { roast_group: string }): string | null => {
+    for (const v of basketsFor(rg)) {
+      if (v.active.length === 0) return `${v.basket.name} basket has no active lot`;
+      if (v.lowActive.length > 0 && !v.nextUp) return `${v.basket.name} basket running low — nothing lined up`;
+    }
+    return null;
+  };
+
   const getLowCoverageLots = (rg: any) => {
     const today = new Date();
     return (rg.green_lot_roast_group_links ?? []).filter((link: any) => {
@@ -151,8 +170,9 @@ export default function RoastGroups() {
     const activeLots = (rg.green_lot_roast_group_links ?? []).filter(
       (link: any) => link.green_lots && link.green_lots.status !== 'EXHAUSTED'
     );
-    if (activeLots.length === 0) return true;
+    if (activeLots.length === 0 && basketsFor(rg).length === 0) return true;
     if (getLowCoverageLots(rg).length > 0) return true;
+    if (basketIssue(rg)) return true;
     return false;
   };
 
@@ -160,7 +180,7 @@ export default function RoastGroups() {
     const activeLots = (rg.green_lot_roast_group_links ?? []).filter(
       (link: any) => link.green_lots && link.green_lots.status !== 'EXHAUSTED'
     );
-    if (activeLots.length === 0) return 'Needs Attention — no green lot linked';
+    if (activeLots.length === 0 && basketsFor(rg).length === 0) return 'Needs Attention — no green lot linked';
     const low = getLowCoverageLots(rg);
     if (low.length > 0) {
       const lot = low[0].green_lots;
@@ -170,6 +190,8 @@ export default function RoastGroups() {
       const daysLeft = Math.max(0, Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
       return `Running low — ${daysLeft} day${daysLeft !== 1 ? 's' : ''} coverage remaining on ${lot.lot_number}`;
     }
+    const bi = basketIssue(rg);
+    if (bi) return bi;
     return 'Needs Attention';
   };
 
@@ -182,7 +204,8 @@ export default function RoastGroups() {
       if (filter === 'INACTIVE') return rg.is_active === false;
       return true;
     });
-  }, [roastGroups, filter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- needsAttention reads the basket data below
+  }, [roastGroups, filter, rgBasketRows, basketData.viewById]);
 
   // Sorted view (used by list)
   const sorted = useMemo(() => {
@@ -349,10 +372,16 @@ export default function RoastGroups() {
                   rg.is_blend ? 'border-l-blue-500' : 'border-l-green-500'
                 )}
               >
-                {attention && activeLots.length === 0 && (
+                {attention && activeLots.length === 0 && basketsFor(rg).length === 0 && (
                   <div className="flex items-center gap-1.5 mb-2 text-xs font-medium text-amber-600 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 rounded px-2 py-1">
                     <AlertTriangle className="h-3 w-3" />
                     Needs Attention — no green lot linked
+                  </div>
+                )}
+                {basketIssue(rg) && (
+                  <div className="flex items-center gap-1.5 mb-2 text-xs font-medium text-amber-600 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 rounded px-2 py-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    {basketIssue(rg)}
                   </div>
                 )}
                 {getLowCoverageLots(rg).map((link: any) => {
@@ -415,7 +444,13 @@ export default function RoastGroups() {
 
                 <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
                   <span>{productCount} product{productCount !== 1 ? 's' : ''}</span>
-                  {activeLots.length > 0 ? (
+                  {basketsFor(rg).length > 0 ? (
+                    <span className="flex items-center gap-1 truncate">
+                      <ShoppingBasket className="h-3 w-3 text-violet-600 dark:text-violet-400 shrink-0" />
+                      {basketsFor(rg).map(v => v.basket.name).join(', ')}
+                      {activeLots.length > 0 && ` + ${activeLots.length} lot${activeLots.length === 1 ? '' : 's'}`}
+                    </span>
+                  ) : activeLots.length > 0 ? (
                     <span className="flex items-center gap-1">
                       <span className="h-2 w-2 rounded-full bg-green-500" />
                       {activeLots[0].green_lots.lot_number}
@@ -508,6 +543,12 @@ export default function RoastGroups() {
                       <TableCell className="text-sm">{formatRoaster(rg.default_roaster)}</TableCell>
                       <TableCell className="text-right text-sm">{productCount}</TableCell>
                       <TableCell>
+                        {basketsFor(rg).length > 0 && (
+                          <span className="flex items-center gap-1 text-sm">
+                            <ShoppingBasket className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
+                            <span className="truncate">{basketsFor(rg).map(v => `${v.basket.name} basket`).join(', ')}</span>
+                          </span>
+                        )}
                         {activeLots.length > 0 ? (
                           <span className="inline-flex items-center gap-1.5 text-sm">
                             <span className={cn(
@@ -518,7 +559,7 @@ export default function RoastGroups() {
                               {activeLots.map((l: any) => l.green_lots.lot_number).join(', ')}
                             </span>
                           </span>
-                        ) : (
+                        ) : basketsFor(rg).length > 0 ? null : (
                           <span className="text-xs text-amber-600 dark:text-amber-400">— no lot</span>
                         )}
                       </TableCell>

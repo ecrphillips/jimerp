@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { GreenLotPickerModal } from './GreenLotPickerModal';
 import { getDisplayName } from '@/lib/roastGroupUtils';
 import { executeDepletionSwaps } from '@/components/production/DepletionWarningModal';
+import { RoastGroupBasketSources } from './RoastGroupBasketSources';
 
 interface Props {
   roastGroupKey: string;
@@ -84,6 +85,7 @@ export function GreenLotMappingSection({ roastGroupKey, roastGroupDisplayName }:
     onSuccess: () => {
       toast.success('Lot unlinked');
       queryClient.invalidateQueries({ queryKey: ['roast-group-lot-links', roastGroupKey] });
+      queryClient.invalidateQueries({ queryKey: ['roast-group-green-value', roastGroupKey] });
     },
     onError: (err: any) => toast.error(err.message || 'Failed to unlink'),
   });
@@ -98,6 +100,7 @@ export function GreenLotMappingSection({ roastGroupKey, roastGroupDisplayName }:
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roast-group-lot-links', roastGroupKey] });
+      queryClient.invalidateQueries({ queryKey: ['roast-group-green-value', roastGroupKey] });
     },
   });
 
@@ -111,8 +114,11 @@ export function GreenLotMappingSection({ roastGroupKey, roastGroupDisplayName }:
 
   return (
     <Card>
-      <CardHeader><CardTitle className="text-base">Green Lot Mapping</CardTitle></CardHeader>
+      <CardHeader><CardTitle className="text-base">Green sources</CardTitle></CardHeader>
       <CardContent className="space-y-3">
+        <RoastGroupBasketSources roastGroupKey={roastGroupKey} linkPcts={links.map(l => l.pct_of_lot ?? null)} />
+
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground pt-2">Specific lots</p>
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : links.length === 0 ? (
@@ -194,7 +200,7 @@ export function GreenLotMappingSection({ roastGroupKey, roastGroupDisplayName }:
                       <Input
                         type="number"
                         className="w-20 h-8 text-xs"
-                        placeholder="% lot"
+                        placeholder="%"
                         defaultValue={link.pct_of_lot ?? ''}
                         onBlur={e => {
                           const val = e.target.value ? Number(e.target.value) : null;

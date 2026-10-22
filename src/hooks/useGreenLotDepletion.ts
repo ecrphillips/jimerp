@@ -2,6 +2,8 @@ import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllRows } from '@/lib/fetchAllRows';
+import { isLotReceived } from '@/lib/baskets';
+import { basketLotShareOfRoastGroup, fetchRoastGroupBasketLots, type RoastGroupBasketLots } from '@/hooks/roastGroupBasketLots';
 
 export interface DepletionLink {
   link_id: string;
@@ -16,6 +18,8 @@ export interface DepletionLink {
     status: string;
     kg_on_hand: number;
   } | null;
+  /** Set when the lot comes through a basket rather than a direct link. */
+  basket?: { id: string; name: string } | null;
 }
 
 export interface DepletionProjection {
@@ -34,6 +38,8 @@ export interface DepletionImpact {
   already_depleted: boolean;
   successor_lot_id: string | null;
   successor_lot: DepletionLink['successor_lot'];
+  /** Set when the lot comes through a basket: its next lot is promoted on the basket page, not swapped here. */
+  basket?: { id: string; name: string } | null;
 }
 
 const DEPLETION_THRESHOLD_KG = 10;
@@ -96,7 +102,8 @@ export function useGreenLotDepletion(
         `)
         .eq('roast_group', roastGroupKey!);
       if (error) throw error;
-      return (data ?? []).map((row: any): DepletionLink => ({
+      const basketLinks = basketDepletionLinks(await fetchRoastGroupBasketLots([roastGroupKey!]));
+      return [...(data ?? []).map((row: any): DepletionLink => ({
         link_id: row.id,
         lot_id: row.lot_id,
         lot_number: row.green_lots?.lot_number ?? '—',
@@ -111,7 +118,7 @@ export function useGreenLotDepletion(
               kg_on_hand: Number(row.successor.kg_on_hand ?? 0),
             }
           : null,
-      }));
+      })), ...basketLinks];
     },
   });
 
@@ -220,7 +227,42 @@ function buildImpact(
     already_depleted: alreadyDepleted,
     successor_lot_id: link.successor_lot_id,
     successor_lot: link.successor_lot,
+    basket: link.basket ?? null,
   };
+}
+
+/**
+ * Active basket lots as depletion "links". Their share is the basket's share
+ * of the roast group × the lot's share of the basket; the basket's next
+ * lined-up lot stands in as the successor. link_id is synthetic
+ * ("basket:<roast_group_baskets.id>:<lot id>") — never a real link row.
+ */
+export function basketDepletionLinks(baskets: RoastGroupBasketLots[]): (DepletionLink & { roast_group: string })[] {
+  const out: (DepletionLink & { roast_group: string })[] = [];
+  for (const b of baskets) {
+    const next = b.linedUp[0] ?? null;
+    for (const a of b.active) {
+      out.push({
+        roast_group: b.roastGroup,
+        link_id: `basket:${b.rgbId}:${a.lot.id}`,
+        lot_id: a.lot.id,
+        lot_number: a.lot.lot_number,
+        pct_of_lot: basketLotShareOfRoastGroup(b.rgPct, a.activePct),
+        current_kg_on_hand: Number(a.lot.kg_on_hand ?? 0),
+        successor_lot_id: next?.id ?? null,
+        successor_lot: next
+          ? {
+              id: next.id,
+              lot_number: next.lot_number,
+              status: isLotReceived(next) ? 'RECEIVED' : next.status,
+              kg_on_hand: Number(next.kg_on_hand ?? 0),
+            }
+          : null,
+        basket: b.basket,
+      });
+    }
+  }
+  return out;
 }
 
 export const DEPLETION_THRESHOLD = DEPLETION_THRESHOLD_KG;
@@ -274,6 +316,7 @@ export async function evaluateMultiRoastGroupImpacts(
     ]);
   if (rgErr) throw rgErr;
   if (linkErr) throw linkErr;
+  const basketLinks = basketDepletionLinks(await fetchRoastGroupBasketLots(rgKeys));
 
   const yieldByRg = new Map<string, number>();
   (rgConfigs ?? []).forEach((r: any) => {
@@ -332,6 +375,19 @@ export async function evaluateMultiRoastGroupImpacts(
         : null,
       roast_group: rg,
     });
+  });
+
+  // Lots reached through baskets (no swap — promoted on the basket page).
+  basketLinks.forEach(link => {
+    const rg = link.roast_group;
+    const greenFactor = 1 + (yieldByRg.get(rg) ?? 16) / 100;
+    const pending = pendingByRg.get(rg) ?? 0;
+    const newOut = newByRg.get(rg) ?? 0;
+    const projectedAfter = link.current_kg_on_hand - (pending + newOut) * greenFactor * (link.pct_of_lot / 100);
+    const alreadyDepleted = link.current_kg_on_hand <= 0;
+    const willDeplete = projectedAfter < DEPLETION_THRESHOLD_KG;
+    if (!willDeplete && !alreadyDepleted) return;
+    impacts.push({ ...buildImpact(link, projectedAfter, alreadyDepleted, willDeplete), roast_group: rg });
   });
 
   return { impacts, pctByLinkId };

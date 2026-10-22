@@ -1,5 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { roastGroupGreenValue } from '@/lib/greenSources';
+import {
+  LINK_PRICED_SELECT,
+  ROAST_GROUP_BASKET_PRICED_SELECT,
+  toLinkPriced,
+  toRoastGroupBasketPriced,
+  type RawLink,
+  type RawRoastGroupBasket,
+} from '@/lib/greenSourceQueries';
 
 /**
  * Green price reference points, for sanity-checking a benchmark before setting it.
@@ -19,49 +28,14 @@ export interface GreenReference {
   bookPerKg: number | null;
 }
 
-interface LinkRow {
-  roast_group: string;
-  pct_of_lot: number | null;
-  green_lots: {
-    id: string;
-    book_value_per_kg: number | null;
-    market_value_per_kg: number | null;
-  } | null;
-}
-
-/** Weighted by pct_of_lot when present, equal weights otherwise. */
-function weightedValue(rows: LinkRow[], pick: (l: NonNullable<LinkRow['green_lots']>) => number | null) {
-  const usable = rows.filter((r) => {
-    if (!r.green_lots) return false;
-    const v = pick(r.green_lots);
-    return v != null && Number(v) > 0;
-  });
-  if (usable.length === 0) return null;
-
-  const totalPct = usable.reduce((a, r) => a + (Number(r.pct_of_lot) || 0), 0);
-  const equal = totalPct <= 0;
-
-  let acc = 0;
-  for (const r of usable) {
-    const w = equal ? 1 / usable.length : (Number(r.pct_of_lot) || 0) / totalPct;
-    acc += w * Number(pick(r.green_lots!));
-  }
-  return acc;
-}
-
 export function useGreenReferences() {
   return useQuery({
     queryKey: ['green-references'],
     staleTime: 30_000,
     queryFn: async (): Promise<GreenReference[]> => {
-      const [linksResp, lotsResp, groupsResp] = await Promise.all([
-        supabase.from('green_lot_roast_group_links').select(`
-          roast_group,
-          pct_of_lot,
-          green_lots!green_lot_roast_group_links_lot_id_fkey (
-            id, book_value_per_kg, market_value_per_kg
-          )
-        `),
+      const [linksResp, basketsResp, lotsResp, groupsResp] = await Promise.all([
+        supabase.from('green_lot_roast_group_links').select(LINK_PRICED_SELECT),
+        supabase.from('roast_group_baskets').select(ROAST_GROUP_BASKET_PRICED_SELECT),
         supabase
           .from('green_lots')
           .select('id, lot_number, lot_identifier, book_value_per_kg, market_value_per_kg, kg_on_hand, status')
@@ -76,28 +50,27 @@ export function useGreenReferences() {
       if (lotsResp.error) throw lotsResp.error;
       if (groupsResp.error) throw groupsResp.error;
 
-      const links = (linksResp.data ?? []) as unknown as LinkRow[];
-      const byGroup = new Map<string, LinkRow[]>();
-      for (const l of links) {
-        if (!byGroup.has(l.roast_group)) byGroup.set(l.roast_group, []);
-        byGroup.get(l.roast_group)!.push(l);
-      }
+      const links = ((linksResp.data ?? []) as unknown as RawLink[]).map(toLinkPriced);
+      // Before the baskets migration is live this table is missing; treat as "no baskets".
+      const rgBaskets = (basketsResp.error ? [] : ((basketsResp.data ?? []) as unknown as RawRoastGroupBasket[]))
+        .map(toRoastGroupBasketPriced);
 
       const groups: GreenReference[] = (groupsResp.data ?? [])
         .map((g) => {
-          const rows = byGroup.get(g.roast_group) ?? [];
-          const market = weightedValue(rows, (l) => l.market_value_per_kg ?? l.book_value_per_kg);
-          const book = weightedValue(rows, (l) => l.book_value_per_kg ?? l.market_value_per_kg);
+          const myLinks = links.filter(l => l.roast_group === g.roast_group);
+          const myBaskets = rgBaskets.filter(b => b.roast_group === g.roast_group);
+          const v = roastGroupGreenValue(myLinks, myBaskets);
+          const parts: string[] = [];
+          for (const b of myBaskets) if (b.basket) parts.push(`${b.basket.name} basket`);
+          const lotN = myLinks.filter(l => l.lot).length;
+          if (lotN > 0) parts.push(`${lotN} lot${lotN === 1 ? '' : 's'}`);
           return {
             kind: 'ROAST_GROUP' as const,
             id: g.roast_group,
             label: g.display_name || g.roast_group,
-            sublabel:
-              rows.length === 0
-                ? 'No linked lots'
-                : `${rows.length} lot${rows.length === 1 ? '' : 's'}, weighted`,
-            marketPerKg: market,
-            bookPerKg: book,
+            sublabel: parts.length === 0 ? 'No green sources' : `${parts.join(' + ')}, weighted`,
+            marketPerKg: v.marketPerKg,
+            bookPerKg: v.bookPerKg,
           };
         })
         // A group with no priced lots is not a reference point.

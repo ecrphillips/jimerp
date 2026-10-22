@@ -7,6 +7,8 @@ import { CalendarDays, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { differenceInDays } from 'date-fns';
 import { parseDateOnly } from '@/lib/dateOnly';
+import { fetchRoastGroupBasketLots } from '@/hooks/roastGroupBasketLots';
+import { isLotRunningLow, lotDaysRemaining } from '@/lib/baskets';
 
 export function GreenCoffeeTab({ enabled }: { enabled: boolean }) {
   const navigate = useNavigate();
@@ -75,6 +77,23 @@ export function GreenCoffeeTab({ enabled }: { enabled: boolean }) {
         }
       }
 
+      // Baskets: an active lot running low with nothing lined up behind it.
+      const { data: rgRows } = await supabase.from('roast_groups').select('roast_group, display_name, is_seasonal');
+      const rgNames = new Map<string, string>((rgRows ?? []).map(r => [r.roast_group, r.display_name || r.roast_group]));
+      const seasonal = new Set((rgRows ?? []).filter(r => r.is_seasonal).map(r => r.roast_group));
+      for (const b of await fetchRoastGroupBasketLots()) {
+        if (seasonal.has(b.roastGroup) || b.linedUp.length > 0) continue;
+        for (const a of b.active) {
+          if (!isLotRunningLow(a.lot, today)) continue;
+          alerts.push({
+            roastGroup: b.roastGroup,
+            displayName: `${rgNames.get(b.roastGroup) ?? b.roastGroup} (${b.basket.name} basket)`,
+            lotNumber: a.lot.lot_number,
+            daysRemaining: lotDaysRemaining(a.lot, today) ?? 0,
+          });
+        }
+      }
+
       return alerts;
     },
   });
@@ -102,6 +121,8 @@ export function GreenCoffeeTab({ enabled }: { enabled: boolean }) {
       if (lErr) throw lErr;
 
       const linkedSet = new Set((links || []).map((l: any) => l.roast_group));
+      // A roast group taking green from a basket is mapped too.
+      for (const b of await fetchRoastGroupBasketLots()) linkedSet.add(b.roastGroup);
       return eligible.filter((g: any) => !linkedSet.has(g.roast_group));
     },
   });

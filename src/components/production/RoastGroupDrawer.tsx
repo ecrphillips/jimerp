@@ -8,6 +8,8 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
+import { useRoastGroupBasketLots, pickableBasketLots } from '@/hooks/roastGroupBasketLots';
+import { isLotReceived } from '@/lib/baskets';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import {
@@ -183,6 +185,30 @@ export function RoastGroupDrawer({
     },
     staleTime: 30000,
   });
+
+  // Lots this roast group reaches through its baskets: active ones, then
+  // lined-up lots already in store. Shaped like link rows so the green list,
+  // green-available total and batch lot picker treat them the same way.
+  const { data: basketLotGroups = [] } = useRoastGroupBasketLots(roastGroup);
+  const greenLots = useMemo(() => {
+    const linkedIds = new Set<string>(linkedLots.map(l => l.lot_id));
+    const fromBaskets = pickableBasketLots(basketLotGroups, linkedIds).map(p => ({
+      id: `basket:${p.lot.id}`,
+      roast_group: roastGroup,
+      lot_id: p.lot.id,
+      via_basket: p.basketName,
+      green_lots: {
+        id: p.lot.id,
+        lot_number: p.lot.lot_number,
+        kg_on_hand: p.lot.kg_on_hand,
+        // In store by the basket rule (incl. still being costed) reads as RECEIVED here.
+        status: isLotReceived(p.lot) ? 'RECEIVED' : p.lot.status,
+        contract_id: null,
+        green_contracts: null,
+      },
+    }));
+    return [...linkedLots, ...fromBaskets];
+  }, [linkedLots, basketLotGroups, roastGroup]);
 
   // For blends: fetch component batches that are linked to this blend
   const { data: componentBatches } = useQuery({
@@ -367,12 +393,12 @@ export function RoastGroupDrawer({
     : plannedExpectedOutput;
 
   const totalAvailableGreenKg = useMemo(() => {
-    return linkedLots.reduce((sum: number, link: any) => {
+    return greenLots.reduce((sum: number, link: any) => {
       const lot = link.green_lots;
       if (!lot || lot.status !== 'RECEIVED') return sum;
       return sum + Number(lot.kg_on_hand ?? 0);
     }, 0);
-  }, [linkedLots]);
+  }, [greenLots]);
 
   const plannedGreenKgNeeded = useMemo(() => {
     return batches
@@ -381,9 +407,9 @@ export function RoastGroupDrawer({
   }, [batches]);
 
   const greenShortfallKg = useMemo(() => {
-    if (linkedLots.length === 0) return 0;
+    if (greenLots.length === 0) return 0;
     return Math.max(0, plannedGreenKgNeeded - totalAvailableGreenKg);
-  }, [linkedLots, plannedGreenKgNeeded, totalAvailableGreenKg]);
+  }, [greenLots, plannedGreenKgNeeded, totalAvailableGreenKg]);
 
   // Sort batches helper function - STATIC ORDER by created_at only
   // No resorting by status - preserve user's "work down the list" flow
@@ -1014,14 +1040,14 @@ export function RoastGroupDrawer({
               </div>
 
               {/* Green Lot Inventory */}
-              {linkedLots.length === 0 ? (
+              {greenLots.length === 0 ? (
                 <p className="text-xs text-amber-600">⚠ No green lot assigned</p>
               ) : (
                 <div className="space-y-0.5">
-                  {linkedLots.map((link: any) => {
+                  {greenLots.map((link: any) => {
                     const lot = link.green_lots;
                     if (!lot) return null;
-                    const contractName = lot.green_contracts?.name || '—';
+                    const contractName = link.via_basket ? `${link.via_basket} basket` : lot.green_contracts?.name || '—';
                     const isWarning = lot.kg_on_hand === 0 || lot.status !== 'RECEIVED';
                     return (
                       <p key={link.id} className={`text-xs ${isWarning ? 'text-amber-600' : 'text-muted-foreground'}`}>
@@ -1032,11 +1058,11 @@ export function RoastGroupDrawer({
                 </div>
               )}
 
-              {greenShortfallKg > 0 && linkedLots.length > 0 && (
+              {greenShortfallKg > 0 && greenLots.length > 0 && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-800 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-200">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                   <span>
-                    Planned batches need {plannedGreenKgNeeded.toFixed(1)} kg green — only {totalAvailableGreenKg.toFixed(1)} kg available across linked lots. Assign a new lot in Sourcing or adjust your batch plan.
+                    Planned batches need {plannedGreenKgNeeded.toFixed(1)} kg green — only {totalAvailableGreenKg.toFixed(1)} kg available across linked and basket lots. Assign a new lot in Sourcing or adjust your batch plan.
                   </span>
                 </div>
               )}
@@ -1138,7 +1164,7 @@ export function RoastGroupDrawer({
                                   onInputChange={handleInputChange}
                                   isUpdating={updateBatchMutation.isPending}
                                   getRoasterBadgeColor={getRoasterBadgeColor}
-                                  linkedLots={linkedLots}
+                                  linkedLots={greenLots}
                                   selectedLotId={batchLotSelections[batch.id] ?? ''}
                                   onLotChange={(val) => setBatchLotSelections(prev => ({ ...prev, [batch.id]: val }))}
                                 />
@@ -1194,7 +1220,7 @@ export function RoastGroupDrawer({
                         onInputChange={handleInputChange}
                         isUpdating={updateBatchMutation.isPending}
                         getRoasterBadgeColor={getRoasterBadgeColor}
-                        linkedLots={linkedLots}
+                        linkedLots={greenLots}
                         selectedLotId={batchLotSelections[batch.id] ?? ''}
                         onLotChange={(val) => setBatchLotSelections(prev => ({ ...prev, [batch.id]: val }))}
                       />

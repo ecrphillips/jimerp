@@ -20,17 +20,30 @@ export const BASKET_QUERY_KEYS = {
   members: ['basket-lots'] as const,
   lots: ['basket-green-lots'] as const,
   labels: ['basket-lot-labels'] as const,
+  roastGroupBaskets: ['roast-group-baskets'] as const,
 };
+
+/** A roast group's use of a basket (roast_group_baskets). */
+export interface RoastGroupBasketRow {
+  id: string;
+  roast_group: string;
+  basket_id: string;
+  pct: number | null;
+  display_order: number;
+  created_at: string;
+}
 
 /** Lot as loaded for baskets: basket fields plus what we need to label it. */
 export interface BasketGreenLot extends BasketLotInfo {
   contract_id: string | null;
   lot_identifier: string | null;
   source_sample_id: string | null;
+  book_value_per_kg: number | null;
+  market_value_per_kg: number | null;
 }
 
 const LOT_COLUMNS =
-  'id, lot_number, status, received_date, expected_delivery_date, is_placeholder, kg_on_hand, bags_released, bag_size_kg, estimated_days_to_consume, created_at, contract_id, lot_identifier, source_sample_id';
+  'id, lot_number, status, received_date, expected_delivery_date, is_placeholder, kg_on_hand, bags_released, bag_size_kg, estimated_days_to_consume, created_at, contract_id, lot_identifier, source_sample_id, book_value_per_kg, market_value_per_kg';
 
 // ─── Queries ─────────────────────────────────────────────────────────────
 
@@ -60,6 +73,46 @@ export function useBasketMembersQuery() {
           .range(from, to),
       )) as BasketLotRow[],
   });
+}
+
+/** Every roast group → basket row. Small table; loaded whole. */
+export function useRoastGroupBasketsQuery() {
+  return useQuery({
+    queryKey: BASKET_QUERY_KEYS.roastGroupBaskets,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('roast_group_baskets')
+        .select('id, roast_group, basket_id, pct, display_order, created_at')
+        .order('display_order')
+        .order('created_at');
+      if (error) throw error;
+      return (data ?? []) as RoastGroupBasketRow[];
+    },
+  });
+}
+
+/** basket id → display names of the roast groups that use it. */
+export function useBasketUsedBy() {
+  const { data: rows = [] } = useRoastGroupBasketsQuery();
+  const { data: names = {} } = useQuery({
+    queryKey: ['roast-group-display-names'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('roast_groups').select('roast_group, display_name');
+      if (error) throw error;
+      return Object.fromEntries((data ?? []).map(r => [r.roast_group, r.display_name || r.roast_group])) as Record<string, string>;
+    },
+    staleTime: 300_000,
+  });
+  return useMemo(() => {
+    const m = new Map<string, { roastGroup: string; name: string }[]>();
+    for (const r of rows) {
+      const list = m.get(r.basket_id) ?? [];
+      list.push({ roastGroup: r.roast_group, name: names[r.roast_group] ?? r.roast_group });
+      m.set(r.basket_id, list);
+    }
+    for (const list of m.values()) list.sort((a, b) => a.name.localeCompare(b.name));
+    return m;
+  }, [rows, names]);
 }
 
 /**
@@ -176,9 +229,17 @@ export function useBasketMutations() {
   const queryClient = useQueryClient();
   const { authUser } = useAuth();
 
+  /** Basket changes also move what roast groups using the basket see (cost, lots, alerts). */
+  const invalidateBasketConsumers = () => {
+    for (const key of ['roast-group-green-value', 'green-references', 'roast-group-basket-lots', 'depletion-links', 'coverage-calendar-lots', 'dashboard-coverage-alerts']) {
+      queryClient.invalidateQueries({ queryKey: [key] });
+    }
+  };
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: BASKET_QUERY_KEYS.baskets });
     queryClient.invalidateQueries({ queryKey: BASKET_QUERY_KEYS.members });
+    invalidateBasketConsumers();
   };
 
   const createBasket = useMutation({
@@ -216,7 +277,10 @@ export function useBasketMutations() {
         throw new Error(`Used by roast group${users.length === 1 ? '' : 's'}: ${users.join(', ')}. Deactivate it instead.`);
       }
       const { error } = await supabase.from('baskets').delete().eq('id', id);
-      if (error) throw error;
+      if (error) {
+        if (asDbError(error).code === '23503') throw new Error('A roast group uses this basket. Remove it there first, or deactivate the basket instead.');
+        throw error;
+      }
     },
     onSuccess: () => { toast.success('Basket deleted — its lots are untouched'); invalidate(); },
     onError: (err: unknown) => toast.error(asDbError(err).message || 'Failed to delete basket'),
@@ -317,5 +381,47 @@ export function useBasketMutations() {
     onError: (err: unknown) => toast.error(asDbError(err).message || 'Failed to create placeholder lot'),
   });
 
-  return { createBasket, updateBasket, deleteBasket, addLots, setActivePct, removeMember, addFromSample };
+  const invalidateRoastGroupBaskets = () => {
+    queryClient.invalidateQueries({ queryKey: BASKET_QUERY_KEYS.roastGroupBaskets });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-unmapped-roast-groups'] });
+    invalidateBasketConsumers();
+  };
+
+  /** Roast group starts taking green from a basket. */
+  const addRoastGroupBasket = useMutation({
+    mutationFn: async (input: { roastGroup: string; basketId: string; pct?: number | null }) => {
+      const { error } = await supabase.from('roast_group_baskets').insert({
+        roast_group: input.roastGroup,
+        basket_id: input.basketId,
+        pct: input.pct ?? null,
+        created_by: authUser?.id ?? null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success('Basket added as a green source'); invalidateRoastGroupBaskets(); },
+    onError: (err: unknown) => toast.error(asDbError(err).code === '23505' ? 'This roast group already uses that basket.' : errMessage(err, 'Failed to add basket')),
+  });
+
+  const setRoastGroupBasketPct = useMutation({
+    mutationFn: async (input: { id: string; pct: number | null }) => {
+      const { error } = await supabase.from('roast_group_baskets').update({ pct: input.pct }).eq('id', input.id);
+      if (error) throw error;
+    },
+    onSuccess: () => invalidateRoastGroupBaskets(),
+    onError: (err: unknown) => toast.error(errMessage(err, 'Failed to save %')),
+  });
+
+  const removeRoastGroupBasket = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('roast_group_baskets').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success('Basket removed from this roast group'); invalidateRoastGroupBaskets(); },
+    onError: (err: unknown) => toast.error(errMessage(err, 'Failed to remove basket')),
+  });
+
+  return {
+    createBasket, updateBasket, deleteBasket, addLots, setActivePct, removeMember, addFromSample,
+    addRoastGroupBasket, setRoastGroupBasketPct, removeRoastGroupBasket,
+  };
 }
