@@ -4793,6 +4793,8 @@ export type Database = {
           adjustment_per_unit: number | null
           allied_type: Database["public"]["Enums"]["allied_type_option"] | null
           bag_size_g: number
+          case_lot_product_id: string | null
+          case_lot_units: number | null
           client_id: string | null
           created_at: string
           format: Database["public"]["Enums"]["product_format"]
@@ -4830,6 +4832,8 @@ export type Database = {
           adjustment_per_unit?: number | null
           allied_type?: Database["public"]["Enums"]["allied_type_option"] | null
           bag_size_g: number
+          case_lot_product_id?: string | null
+          case_lot_units?: number | null
           client_id?: string | null
           created_at?: string
           format?: Database["public"]["Enums"]["product_format"]
@@ -4867,6 +4871,8 @@ export type Database = {
           adjustment_per_unit?: number | null
           allied_type?: Database["public"]["Enums"]["allied_type_option"] | null
           bag_size_g?: number
+          case_lot_product_id?: string | null
+          case_lot_units?: number | null
           client_id?: string | null
           created_at?: string
           format?: Database["public"]["Enums"]["product_format"]
@@ -4904,6 +4910,13 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_case_lot_product_id_fkey"
+            columns: ["case_lot_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
           {
