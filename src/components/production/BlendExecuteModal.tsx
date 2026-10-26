@@ -18,6 +18,7 @@ import { Loader2, AlertTriangle, CheckCircle2, Layers, ArrowRight, Beaker } from
 import { BlendHoldsPanel } from './BlendHoldsPanel';
 import { Switch } from '@/components/ui/switch';
 import { useBlendBatchMode } from '@/hooks/useBlendBatchMode';
+import { useRoastGroupComponents } from '@/hooks/useRoastGroupComponents';
 import { canUseBlendAmounts } from '@/lib/blendBatchPlanning';
 
 interface RoastedBatch {
@@ -86,22 +87,9 @@ export function BlendExecuteModal({
     }
   }, [open]);
   
-  // Fetch blend components
-  const { data: blendComponents, isLoading: loadingComponents } = useQuery({
-    queryKey: ['blend-components', blendRoastGroup],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('roast_group_components')
-        .select('component_roast_group, pct, display_order')
-        .eq('parent_roast_group', blendRoastGroup)
-        .order('display_order');
-      
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: open,
-  });
-  
+  const { data: allBlendComponents, isLoading: loadingComponents } = useRoastGroupComponents();
+  const blendComponents = useMemo(() => allBlendComponents?.filter(c => c.parent_roast_group === blendRoastGroup), [allBlendComponents, blendRoastGroup]);
+
   // Fetch roast group configs for display names
   const { data: roastGroupConfigs } = useQuery({
     queryKey: ['blend-execute-display-names'],

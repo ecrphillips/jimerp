@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { useBlendBatchMode } from '@/hooks/useBlendBatchMode';
+import { useRoastGroupComponents } from '@/hooks/useRoastGroupComponents';
 import { planBlendBatches } from '@/lib/blendBatchPlanning';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
@@ -87,24 +88,11 @@ export function PlanBlendBatchesModal({
   } | null>(null);
   const [depletionProceeding, setDepletionProceeding] = useState(false);
   
-  // Fetch blend components
-  const { data: blendComponents, isLoading: loadingComponents } = useQuery({
-    queryKey: ['blend-components', blendRoastGroup],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('roast_group_components')
-        .select('component_roast_group, pct, display_order')
-        .eq('parent_roast_group', blendRoastGroup)
-        .order('display_order');
-      
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: open,
-  });
-  
+  const { data: allBlendComponents, isLoading: loadingComponents } = useRoastGroupComponents();
+  const blendComponents = useMemo(() => allBlendComponents?.filter(c => c.parent_roast_group === blendRoastGroup), [allBlendComponents, blendRoastGroup]);
+
   // Fetch roast group configs for all components
-  const { data: roastGroupConfigs } = useQuery({
+  const { data: roastGroupConfigs, isLoading: loadingConfigs } = useQuery({
     queryKey: ['roast-groups-config-all'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -118,7 +106,7 @@ export function PlanBlendBatchesModal({
   });
   
   // Fetch AUTHORITATIVE WIP from inventory_transactions (not legacy cached table)
-  const { data: authoritativeWip } = useQuery({
+  const { data: authoritativeWip, isLoading: loadingWip } = useQuery({
     queryKey: ['inventory-ledger-wip-for-blend', blendRoastGroup],
     queryFn: async () => {
       if (!blendComponents || blendComponents.length === 0) return {};
@@ -188,7 +176,7 @@ export function PlanBlendBatchesModal({
   
   // Fetch existing batches for components - ONLY batches linked to THIS blend
   // This is the key fix: planned_for_blend_roast_group must match this blend
-  const { data: existingBatches, refetch: refetchBatches } = useQuery({
+  const { data: existingBatches, isLoading: loadingBatches } = useQuery({
     queryKey: ['roasted-batches-for-blend', blendRoastGroup],
     queryFn: async () => {
       if (!blendComponents || blendComponents.length === 0) return [];
@@ -352,7 +340,7 @@ export function PlanBlendBatchesModal({
   
   // Initialize batch plans when components load
   useEffect(() => {
-    if (componentShortfalls.length > 0 && batchPlans.length === 0) {
+    if (!loadingComponents && !loadingConfigs && !loadingWip && !loadingBatches && componentShortfalls.length > 0 && batchPlans.length === 0) {
       setBatchPlans(componentShortfalls.map(sf => ({
         componentRoastGroup: sf.componentRoastGroup,
         batchCount: sf.suggestedBatches,
@@ -360,7 +348,7 @@ export function PlanBlendBatchesModal({
         shortKg: sf.shortKg,
       })));
     }
-  }, [componentShortfalls, batchPlans.length]);
+  }, [componentShortfalls, batchPlans.length, loadingComponents, loadingConfigs, loadingWip, loadingBatches]);
   
   // Reset plans when modal opens
   useEffect(() => {
@@ -540,7 +528,7 @@ export function PlanBlendBatchesModal({
     onNavigateToComponent?.(componentRoastGroup);
   };
   
-  const isLoading = loadingComponents;
+  const isLoading = loadingComponents || loadingConfigs || loadingWip || loadingBatches;
   const hasComponents = enrichedComponents.length > 0;
   
   return (

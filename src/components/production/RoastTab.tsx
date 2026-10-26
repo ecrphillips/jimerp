@@ -928,16 +928,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
 
   // Post-roast blend recipes: blends are never roasted under their own name,
   // so auto-planning must create earmarked component batches instead.
-  const { data: blendComponentRows } = useQuery({
-    queryKey: ['roast-group-components', 'all'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('roast_group_components')
-        .select('parent_roast_group, component_roast_group, pct');
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  const blendComponentRows = roastGroupComponents;
 
   const autoPlanPreview = useMemo(() => {
     const rows: Array<{
