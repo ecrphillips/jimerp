@@ -1,6 +1,6 @@
 # Roadmap
 
-- [ ] Replace inventory availability buttons with Available / All selectors and verify zero-stock filtering.
+- [x] Replace inventory availability buttons with Available / All selectors and verify zero-stock filtering.
 
 - [x] Add shared admin-editable common-client shortcuts and grouped account options to internal order creation; verified save/reload and grouped client selection, four tests pass.
 

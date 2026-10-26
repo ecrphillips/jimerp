@@ -26,6 +26,20 @@ import { fetchAllRows } from '@/lib/fetchAllRows';
 import { useBlendHolds, heldKgByGroup } from '@/hooks/useBlendHolds';
 import { BlendHoldsPanel } from '@/components/production/BlendHoldsPanel';
 import { useOrderCreator } from '@/hooks/useOrderCreator';
+import { availableWipKg } from '@/lib/inventoryAvailability';
+
+function AvailabilityToggle({ availableOnly, onChange }: { availableOnly: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="inline-flex shrink-0 rounded-md border p-0.5" role="group" aria-label="Rows to show">
+      <Button size="sm" className="h-7" variant={availableOnly ? 'default' : 'ghost'} aria-pressed={availableOnly} onClick={() => onChange(true)}>
+        Available
+      </Button>
+      <Button size="sm" className="h-7" variant={!availableOnly ? 'default' : 'ghost'} aria-pressed={!availableOnly} onClick={() => onChange(false)}>
+        All
+      </Button>
+    </div>
+  );
+}
 
 interface LastCount {
   created_at: string;
@@ -374,13 +388,13 @@ export default function Inventory() {
 
   // Roasted-not-packed view: roast groups with positive net WIP awaiting packing.
   const wipAvailableRows = useMemo(
-    () => wipByRoastGroup.filter((r) => r.net_wip_kg > 0),
-    [wipByRoastGroup],
+    () => wipByRoastGroup.filter((r) => availableWipKg(r.net_wip_kg, heldByGroup[r.roast_group] ?? 0) > 0),
+    [wipByRoastGroup, heldByGroup],
   );
   const wipDisplayRows = wipAvailableOnly ? wipAvailableRows : wipByRoastGroup;
   const wipAvailableTotalKg = useMemo(
-    () => wipAvailableRows.reduce((sum, r) => sum + r.net_wip_kg, 0),
-    [wipAvailableRows],
+    () => wipAvailableRows.reduce((sum, r) => sum + availableWipKg(r.net_wip_kg, heldByGroup[r.roast_group] ?? 0), 0),
+    [wipAvailableRows, heldByGroup],
   );
 
   // One row per active product, units sourced from the authoritative FG map.
@@ -462,18 +476,12 @@ export default function Inventory() {
                     For post-roast blends, WIP is created when components are blended, not when components are roasted.
                   </p>
                   <p className="mt-2 text-sm font-medium">
-                    {wipAvailableTotalKg.toFixed(1)} kg roasted awaiting packing across {wipAvailableRows.length}{' '}
+                    {wipAvailableTotalKg.toFixed(1)} kg available to pack across {wipAvailableRows.length}{' '}
                     {wipAvailableRows.length === 1 ? 'group' : 'groups'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Button
-                    variant={wipAvailableOnly ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setWipAvailableOnly((v) => !v)}
-                  >
-                    {wipAvailableOnly ? 'Showing available' : 'Show all'}
-                  </Button>
+                  <AvailabilityToggle availableOnly={wipAvailableOnly} onChange={setWipAvailableOnly} />
                   {isAdminOrOps && (
                     <>
                       <Button
@@ -506,7 +514,7 @@ export default function Inventory() {
                 <div className="py-6">
                   <p className="text-muted-foreground">
                     {wipAvailableOnly && wipByRoastGroup.length > 0
-                      ? 'No roasted coffee is currently awaiting packing. Toggle “Show all” to see fully-consumed groups.'
+                      ? 'No roasted coffee is currently available to pack. Choose “All” to see every group.'
                       : 'No WIP data available. Use “Add WIP for roast group” above to enter an opening balance.'}
                   </p>
                 </div>
@@ -559,7 +567,7 @@ export default function Inventory() {
                           {(heldByGroup[row.roast_group] ?? 0) > 0 ? `${heldByGroup[row.roast_group].toFixed(1)} kg` : ''}
                         </td>
                         <td className="py-3 text-right font-semibold">
-                          {Math.max(0, row.net_wip_kg - (heldByGroup[row.roast_group] ?? 0)).toFixed(1)} kg
+                          {availableWipKg(row.net_wip_kg, heldByGroup[row.roast_group] ?? 0).toFixed(1)} kg
                         </td>
                         <td className="py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -610,20 +618,13 @@ export default function Inventory() {
                     {fgAvailableRows.length} {fgAvailableRows.length === 1 ? 'product' : 'products'}
                   </p>
                 </div>
-                <Button
-                  variant={fgAvailableOnly ? 'default' : 'outline'}
-                  size="sm"
-                  className="shrink-0"
-                  onClick={() => setFgAvailableOnly((v) => !v)}
-                >
-                  {fgAvailableOnly ? 'Showing available' : 'Show all'}
-                </Button>
+                <AvailabilityToggle availableOnly={fgAvailableOnly} onChange={setFgAvailableOnly} />
               </div>
             </CardHeader>
             <CardContent>
               {fgAvailableOnly && fgDisplayRows.length === 0 ? (
                 <p className="text-muted-foreground py-4">
-                  No finished goods are currently awaiting pick. Toggle “Show all” to see every product.
+                  No finished goods are currently awaiting pick. Choose “All” to see every product.
                 </p>
               ) : !fgAvailableOnly && fgRows.length === 0 ? (
                 <p className="text-muted-foreground py-4">No products configured.</p>
