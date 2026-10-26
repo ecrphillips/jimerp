@@ -24,8 +24,8 @@ export function planBlendBatches(components: BlendBatchComponent[], demandKg: nu
   const recipe = wholeBatchRecipe(components);
   const setKg = recipe ? components.reduce((sum, c, i) => sum + recipe[i] * c.outputPerBatchKg, 0) : 0;
   // Include already earmarked batches so completing the recipe doesn't strand them.
-  const sets = recipe && demandKg > 0 ? Math.max(
-    Math.ceil((demandKg - 0.001) / setKg),
+  const sets = recipe ? Math.max(
+    0, Math.ceil((demandKg - 0.001) / setKg),
     ...components.map((c, i) => Math.ceil(c.batchCount / recipe[i])),
   ) : 0;
   const rows = components.map((c, i) => {

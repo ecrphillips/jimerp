@@ -405,14 +405,14 @@ export function RoastGroupDrawer({
   const roastedBlendPlan = planBlendBatches(blendPlanningComponents.map(c => ({ ...c,
     batchCount: (componentBatchesByGroup[c.roastGroup] ?? []).filter(b => b.status === 'ROASTED').length,
     availableKg: (componentBatchesByGroup[c.roastGroup] ?? []).filter(b => b.status === 'ROASTED').reduce((sum, b) => sum + b.actual_output_kg, 0),
-  })), netDemandKg, allowPartial);
+  })), allowPartial ? netDemandKg : wholeBlendPlan.targetKg, allowPartial);
   const effectiveCoverageDelta = isPostRoastBlend
     ? (wholeBlendPlan.covered ? Math.max(0, wholeBlendPlan.targetKg - netDemandKg) : -Math.max(0.01, wholeBlendPlan.rows.reduce((sum, r) => sum + r.shortKg, 0)))
     : coverageDelta;
   const hasPlannedWork = isPostRoastBlend
     ? (componentBatches ?? []).some(batch => batch.status === 'PLANNED')
     : plannedBatches.length > 0;
-  const needsPlanning = netDemandKg > 0.001 && effectiveCoverageDelta < -0.001;
+  const needsPlanning = (netDemandKg > 0.001 || isPostRoastBlend && (componentBatches?.length ?? 0) > 0) && effectiveCoverageDelta < -0.001;
   const hasFinishedProduction = isPostRoastBlend
     ? wipKg + fgKg > 0.001
     : roastedBatches.length > 0;

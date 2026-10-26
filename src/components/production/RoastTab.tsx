@@ -69,6 +69,7 @@ interface RoastBatch {
   created_at?: string;
   updated_at?: string;
   planned_for_blend_roast_group?: string | null;
+  consumed_by_blend_at?: string | null;
 }
 
 interface RoastGroupConfig {
@@ -978,12 +979,11 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       if (!config) continue;
 
       if (config.is_blend && config.blend_type !== 'PRE_ROAST') {
-        if (g.net_demand_kg <= 0) continue;
         const comps = (blendComponentRows ?? []).filter(c => c.parent_roast_group === g.roast_group);
         const blendPlan = planBlendBatches(comps.map(c => {
           const cfg = configByGroup[c.component_roast_group];
           const yieldFactor = 1 - (cfg?.expected_yield_loss_pct ?? 16) / 100;
-          const linked = (batches ?? []).filter(b => b.roast_group === c.component_roast_group && b.planned_for_blend_roast_group === g.roast_group);
+          const linked = (batches ?? []).filter(b => b.roast_group === c.component_roast_group && b.planned_for_blend_roast_group === g.roast_group && !b.consumed_by_blend_at && (b.status === 'PLANNED' || b.status === 'ROASTED'));
           return { roastGroup: c.component_roast_group, pct: Number(c.pct),
             outputPerBatchKg: (cfg?.standard_batch_kg ?? 20) * yieldFactor,
             batchCount: linked.length,

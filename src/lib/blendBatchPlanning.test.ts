@@ -13,6 +13,9 @@ describe('whole-batch blend planning', () => {
   it('covers a whole recipe set with 1/1/2', () => {
     expect(planBlendBatches(components.map((c, i) => i === 2 ? { ...c, batchCount: 2, availableKg: 13.44 } : c), 10).covered).toBe(true);
   });
+  it('still balances earmarked batches when current demand is already covered', () => {
+    expect(planBlendBatches(components, 0).rows.map(r => r.additionalBatches)).toEqual([0, 0, 1]);
+  });
   it('allows demand-only coverage at 1/1/1 only with the partial exception', () => {
     const plan = planBlendBatches(components, 10, true);
     expect(plan.covered).toBe(true);
