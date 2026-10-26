@@ -10,6 +10,9 @@ import { Plus, Minus, Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { PackagingBadge, type PackagingVariant } from '@/components/PackagingBadge';
 import { useAuthoritativeFg } from '@/hooks/useAuthoritativeInventory';
+import { fetchAllRows } from '@/lib/fetchAllRows';
+import { fgFloorCountDelta } from '@/lib/fgFloorCount';
+import { FGCountInput } from './FGCountInput';
 
 interface FGRow {
   product_id: string;
@@ -91,11 +94,20 @@ export function FGInventoryTab() {
     }, 1200);
   }, []);
 
-  // A change writes ONE balancing ADJUSTMENT row to inventory_transactions
-  // (quantity_units = counted − current ledger balance). Stamped with the user;
-  // created_at provides the timestamp. No writes to the retired fg_inventory.
+  // Read the current SIGNED ledger before balancing a physical count. The
+  // displayed available value is clamped to zero and cannot be used as a baseline.
   const adjustMutation = useMutation({
-    mutationFn: async ({ productId, unitsDelta, newUnits }: { productId: string; unitsDelta: number; newUnits: number }) => {
+    mutationFn: async ({ productId, newUnits }: { productId: string; newUnits: number }) => {
+      const transactions = await fetchAllRows((from, to) =>
+        supabase.from('inventory_transactions')
+          .select('quantity_units')
+          .eq('product_id', productId)
+          .in('transaction_type', ['PACK_PRODUCE_FG', 'SHIP_CONSUME_FG', 'ADJUSTMENT'])
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+      const signedBalance = transactions.reduce((sum, tx) => sum + Number(tx.quantity_units ?? 0), 0);
+      const unitsDelta = fgFloorCountDelta(newUnits, signedBalance);
       if (!unitsDelta) return null;
       const { data, error } = await supabase
         .from('inventory_transactions')
@@ -112,8 +124,8 @@ export function FGInventoryTab() {
       if (error) throw error;
       return { productId, newUnits, createdAt: data.created_at };
     },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['authoritative-fg-ledger'] });
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ['authoritative-fg-ledger'] });
       if (!result) return;
       const by = authUser?.profile?.name ?? authUser?.email ?? 'Unknown';
       setLastCounted((prev) => ({
@@ -129,18 +141,18 @@ export function FGInventoryTab() {
   });
 
   const handleQuantityChange = (row: FGRow, delta: number) => {
+    if (adjustMutation.isPending) return;
     const newUnits = Math.max(0, row.units_on_hand + delta);
     setEditingRowId(row.product_id);
     freezeSort();
-    adjustMutation.mutate({ productId: row.product_id, unitsDelta: newUnits - row.units_on_hand, newUnits });
+    adjustMutation.mutate({ productId: row.product_id, newUnits });
   };
 
-  const handleInputChange = (row: FGRow, value: string) => {
-    const numValue = value.replace(/[^0-9]/g, '');
-    const newUnits = numValue === '' ? 0 : parseInt(numValue, 10);
+  const handleCount = (row: FGRow, newUnits: number) => {
+    if (adjustMutation.isPending) return;
     setEditingRowId(row.product_id);
     freezeSort();
-    adjustMutation.mutate({ productId: row.product_id, unitsDelta: Math.max(0, newUnits) - row.units_on_hand, newUnits: Math.max(0, newUnits) });
+    adjustMutation.mutate({ productId: row.product_id, newUnits });
   };
 
   return (
@@ -210,26 +222,24 @@ export function FGInventoryTab() {
                           variant="outline"
                           className="h-7 w-7"
                           onClick={() => handleQuantityChange(row, -1)}
-                          disabled={row.units_on_hand <= 0}
+                          aria-label={`Decrease on hand for ${row.product_name}`}
+                          disabled={adjustMutation.isPending || row.units_on_hand <= 0}
                         >
                           <Minus className="h-3 w-3" />
                         </Button>
-                        <Input
-                          type="text"
-                          inputMode="numeric"
-                          className="w-16 h-7 text-center text-sm px-1"
-                          value={row.units_on_hand}
-                          onChange={(e) => handleInputChange(row, e.target.value)}
-                          onFocus={() => {
-                            setEditingRowId(row.product_id);
-                            freezeSort();
-                          }}
+                        <FGCountInput
+                          units={row.units_on_hand}
+                          productName={row.product_name}
+                          disabled={adjustMutation.isPending}
+                          onCount={(units) => handleCount(row, units)}
                         />
                         <Button
                           size="icon"
                           variant="outline"
                           className="h-7 w-7"
                           onClick={() => handleQuantityChange(row, 1)}
+                          aria-label={`Increase on hand for ${row.product_name}`}
+                          disabled={adjustMutation.isPending}
                         >
                           <Plus className="h-3 w-3" />
                         </Button>

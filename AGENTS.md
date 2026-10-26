@@ -1,5 +1,7 @@
 # Architecture Rules
 
+- Commit Products FG floor counts only on blur/Enter and balance against a freshly read signed inventory ledger, not zero-clamped availability; disable controls until ledger refresh completes to prevent digit-by-digit writes and stale-count adjustments.
+
 - Share whole-batch recipe targets across blend planning, auto-plan and drawer coverage; retain per-blend partial exceptions in session state and require opt-in before editing blend consumption amounts, because demand-only coverage must not silently authorize split batches.
 
 - Derive Inventory's available WIP filter and total with `availableWipKg`, subtracting blend holds and excluding sub-display-precision remainders, because row inclusion must match the visible Available column without modifying ledger balances.
