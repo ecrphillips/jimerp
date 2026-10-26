@@ -1,5 +1,7 @@
 # Roadmap
 
+- [x] Default post-roast blend planning and coverage to recipe-balanced whole batches; allow explicit partial-batch exceptions. Verified both planning modes against Love Hospital without creating batches; 19 tests passed.
+
 - [x] Replace inventory availability buttons with Available / All selectors and verify zero-stock filtering.
 
 - [x] Add shared admin-editable common-client shortcuts and grouped account options to internal order creation; verified save/reload and grouped client selection, four tests pass.

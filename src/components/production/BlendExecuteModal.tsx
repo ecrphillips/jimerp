@@ -16,6 +16,10 @@ import { fetchAllRows } from '@/lib/fetchAllRows';
 import { toast } from 'sonner';
 import { Loader2, AlertTriangle, CheckCircle2, Layers, ArrowRight, Beaker } from 'lucide-react';
 import { BlendHoldsPanel } from './BlendHoldsPanel';
+import { Switch } from '@/components/ui/switch';
+import { useBlendBatchMode } from '@/hooks/useBlendBatchMode';
+import { useRoastGroupComponents } from '@/hooks/useRoastGroupComponents';
+import { canUseBlendAmounts } from '@/lib/blendBatchPlanning';
 
 interface RoastedBatch {
   id: string;
@@ -63,6 +67,10 @@ export function BlendExecuteModal({
   today,
 }: BlendExecuteModalProps) {
   const queryClient = useQueryClient();
+  const [allowPartial, setAllowPartial] = useBlendBatchMode(blendRoastGroup);
+  React.useEffect(() => {
+    if (!allowPartial) setSelectedBatches(prev => Object.fromEntries(Object.entries(prev).map(([id, s]) => [id, { ...s, consumeKg: s.availableKg }])));
+  }, [allowPartial]);
   
   const [selectedBatches, setSelectedBatches] = useState<Record<string, SelectedBatch>>({});
   const [showSuccess, setShowSuccess] = useState(false);
@@ -79,25 +87,12 @@ export function BlendExecuteModal({
     }
   }, [open]);
   
-  // Fetch blend components
-  const { data: blendComponents, isLoading: loadingComponents } = useQuery({
-    queryKey: ['blend-components', blendRoastGroup],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('roast_group_components')
-        .select('component_roast_group, pct, display_order')
-        .eq('parent_roast_group', blendRoastGroup)
-        .order('display_order');
-      
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: open,
-  });
-  
+  const { data: allBlendComponents, isLoading: loadingComponents } = useRoastGroupComponents();
+  const blendComponents = useMemo(() => allBlendComponents?.filter(c => c.parent_roast_group === blendRoastGroup), [allBlendComponents, blendRoastGroup]);
+
   // Fetch roast group configs for display names
   const { data: roastGroupConfigs } = useQuery({
-    queryKey: ['roast-groups-config-all'],
+    queryKey: ['blend-execute-display-names'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roast_groups')
@@ -358,7 +353,7 @@ export function BlendExecuteModal({
   }, []);
   
   // Check if we can blend
-  const canBlend = totalBlendOutput > 0 && proportionCheck.valid && recipeValid;
+  const canBlend = totalBlendOutput > 0 && proportionCheck.valid && recipeValid && canUseBlendAmounts(Object.values(selectedBatches), allowPartial);
 
   // Leftover detection: any selected batch where the roaster is using less than
   // the full available kg. That leftover stays in the component group's WIP
@@ -510,6 +505,10 @@ export function BlendExecuteModal({
               </div>
             </div>
             
+            <label className="flex items-center gap-2 text-sm">
+              <Switch checked={allowPartial} onCheckedChange={setAllowPartial} aria-label="Allow partial batches" />
+              Allow partial batches · exception
+            </label>
             {/* Component batch selection */}
             <div className="space-y-4">
               {enrichedComponents.map(comp => {
@@ -573,6 +572,8 @@ export function BlendExecuteModal({
                                   <Label className="text-xs">Use:</Label>
                                   <Input
                                     type="number"
+                                    disabled={!allowPartial}
+                                    aria-label={`Use kg from batch ${batch.id.slice(0, 8)}`}
                                     step="0.1"
                                     min="0"
                                     max={selection.availableKg}

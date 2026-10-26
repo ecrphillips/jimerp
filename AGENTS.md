@@ -1,5 +1,7 @@
 # Architecture Rules
 
+- Share whole-batch recipe targets across blend planning, auto-plan and drawer coverage; retain per-blend partial exceptions in session state and require opt-in before editing blend consumption amounts, because demand-only coverage must not silently authorize split batches.
+
 - Derive Inventory's available WIP filter and total with `availableWipKg`, subtracting blend holds and excluding sub-display-precision remainders, because row inclusion must match the visible Available column without modifying ledger balances.
 
 - Store internal-order common-client shortcuts in app_settings under order_common_client_shortcuts using existing admin-write RLS; group account options from programs and account/location production weekdays, because shared shortcuts and account classification must use canonical saved data.

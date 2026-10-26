@@ -3,6 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { useBlendBatchMode } from '@/hooks/useBlendBatchMode';
+import { useRoastGroupComponents } from '@/hooks/useRoastGroupComponents';
+import { planBlendBatches } from '@/lib/blendBatchPlanning';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllRows } from '@/lib/fetchAllRows';
@@ -72,6 +76,7 @@ export function PlanBlendBatchesModal({
   onNavigateToComponent,
 }: PlanBlendBatchesModalProps) {
   const { user } = useAuth();
+  const [allowPartial, setAllowPartial] = useBlendBatchMode(blendRoastGroup);
   const queryClient = useQueryClient();
   
   const [showSuccess, setShowSuccess] = useState(false);
@@ -83,24 +88,11 @@ export function PlanBlendBatchesModal({
   } | null>(null);
   const [depletionProceeding, setDepletionProceeding] = useState(false);
   
-  // Fetch blend components
-  const { data: blendComponents, isLoading: loadingComponents } = useQuery({
-    queryKey: ['blend-components', blendRoastGroup],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('roast_group_components')
-        .select('component_roast_group, pct, display_order')
-        .eq('parent_roast_group', blendRoastGroup)
-        .order('display_order');
-      
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: open,
-  });
-  
+  const { data: allBlendComponents, isLoading: loadingComponents } = useRoastGroupComponents();
+  const blendComponents = useMemo(() => allBlendComponents?.filter(c => c.parent_roast_group === blendRoastGroup), [allBlendComponents, blendRoastGroup]);
+
   // Fetch roast group configs for all components
-  const { data: roastGroupConfigs } = useQuery({
+  const { data: roastGroupConfigs, isLoading: loadingConfigs } = useQuery({
     queryKey: ['roast-groups-config-all'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -114,7 +106,7 @@ export function PlanBlendBatchesModal({
   });
   
   // Fetch AUTHORITATIVE WIP from inventory_transactions (not legacy cached table)
-  const { data: authoritativeWip } = useQuery({
+  const { data: authoritativeWip, isLoading: loadingWip } = useQuery({
     queryKey: ['inventory-ledger-wip-for-blend', blendRoastGroup],
     queryFn: async () => {
       if (!blendComponents || blendComponents.length === 0) return {};
@@ -184,7 +176,7 @@ export function PlanBlendBatchesModal({
   
   // Fetch existing batches for components - ONLY batches linked to THIS blend
   // This is the key fix: planned_for_blend_roast_group must match this blend
-  const { data: existingBatches, refetch: refetchBatches } = useQuery({
+  const { data: existingBatches, isLoading: loadingBatches } = useQuery({
     queryKey: ['roasted-batches-for-blend', blendRoastGroup],
     queryFn: async () => {
       if (!blendComponents || blendComponents.length === 0) return [];
@@ -197,9 +189,10 @@ export function PlanBlendBatchesModal({
       return fetchAllRows((from, to) =>
         supabase
           .from('roasted_batches')
-          .select('id, roast_group, status, planned_output_kg, actual_output_kg, planned_for_blend_roast_group, notes')
+          .select('id, roast_group, status, planned_output_kg, actual_output_kg, planned_for_blend_roast_group, notes, consumed_by_blend_at')
           .in('roast_group', componentGroups)
           .in('status', ['PLANNED', 'ROASTED'])
+          .is('consumed_by_blend_at', null)
           .order('id', { ascending: true })
           .range(from, to),
       );
@@ -329,36 +322,25 @@ export function PlanBlendBatchesModal({
   );
   const recipeValid = Math.abs(recipeTotalPct - 100) <= 1;
   
-  // Calculate component shortfalls based on blend demand
-  // For blends, we use available WIP from component groups, not the output linked to this blend
-  const componentShortfalls = useMemo(() => {
-    return enrichedComponents.map(comp => {
-      const componentDemandKg = blendNetDemandKg * (comp.pct / 100);
-      // Available = current WIP in that component group + planned batches for this blend + roasted batches for this blend
-      const availableKg = comp.wipKg + comp.plannedExpectedOutputKg + comp.roastedOutputKg;
-      const shortKg = Math.max(0, componentDemandKg - availableKg);
-      
-      // Calculate suggested batches
-      const expectedOutputPerBatch = comp.standardBatchKg * (1 - comp.expectedYieldLossPct / 100);
-      const suggestedBatches = shortKg > 0 ? Math.ceil(shortKg / expectedOutputPerBatch) : 0;
-      
-      return {
-        componentRoastGroup: comp.componentRoastGroup,
-        componentDemandKg,
-        availableKg,
-        shortKg,
-        suggestedBatches,
-        expectedOutputPerBatch,
-      };
-    });
-  }, [enrichedComponents, blendNetDemandKg]);
-  
+  const blendPlan = useMemo(() => planBlendBatches(enrichedComponents.map(comp => ({
+    roastGroup: comp.componentRoastGroup,
+    pct: comp.pct,
+    outputPerBatchKg: comp.standardBatchKg * (1 - comp.expectedYieldLossPct / 100),
+    availableKg: comp.wipKg + comp.plannedExpectedOutputKg,
+    batchCount: comp.plannedBatchCount + comp.roastedBatchCount,
+  })), blendNetDemandKg, allowPartial), [enrichedComponents, blendNetDemandKg, allowPartial]);
+  const componentShortfalls = blendPlan.rows.map(row => ({
+    componentRoastGroup: row.roastGroup,
+    shortKg: row.shortKg,
+    suggestedBatches: row.additionalBatches,
+  }));
+
   // User-editable batch counts
   const [batchPlans, setBatchPlans] = useState<ComponentBatchPlan[]>([]);
   
   // Initialize batch plans when components load
   useEffect(() => {
-    if (componentShortfalls.length > 0 && batchPlans.length === 0) {
+    if (!loadingComponents && !loadingConfigs && !loadingWip && !loadingBatches && componentShortfalls.length > 0 && batchPlans.length === 0) {
       setBatchPlans(componentShortfalls.map(sf => ({
         componentRoastGroup: sf.componentRoastGroup,
         batchCount: sf.suggestedBatches,
@@ -366,7 +348,7 @@ export function PlanBlendBatchesModal({
         shortKg: sf.shortKg,
       })));
     }
-  }, [componentShortfalls, batchPlans.length]);
+  }, [componentShortfalls, batchPlans.length, loadingComponents, loadingConfigs, loadingWip, loadingBatches]);
   
   // Reset plans when modal opens
   useEffect(() => {
@@ -375,7 +357,7 @@ export function PlanBlendBatchesModal({
       setShowSuccess(false);
       setCreatedSummary([]);
     }
-  }, [open]);
+  }, [open, allowPartial]);
   
   // Batch count adjustment handlers
   const adjustBatchCount = useCallback((componentRoastGroup: string, delta: number) => {
@@ -394,8 +376,10 @@ export function PlanBlendBatchesModal({
       const expectedOutputPerBatch = comp.standardBatchKg * (1 - comp.expectedYieldLossPct / 100);
       const additionalOutput = plannedBatches * expectedOutputPerBatch;
       
-      const componentDemandKg = blendNetDemandKg * (comp.pct / 100);
-      const currentCoverage = comp.wipKg + comp.plannedExpectedOutputKg + comp.roastedOutputKg;
+      const componentDemandKg = blendPlan.rows.find(r => r.roastGroup === comp.componentRoastGroup)?.requiredKg ?? 0;
+      const currentCoverage = allowPartial
+        ? comp.wipKg + comp.plannedExpectedOutputKg
+        : (comp.plannedBatchCount + comp.roastedBatchCount) * expectedOutputPerBatch;
       const projectedTotal = currentCoverage + additionalOutput;
       const projectedDelta = projectedTotal - componentDemandKg;
       
@@ -408,7 +392,7 @@ export function PlanBlendBatchesModal({
         isCovered: projectedDelta >= 0,
       };
     });
-  }, [enrichedComponents, batchPlans, blendNetDemandKg]);
+  }, [enrichedComponents, batchPlans, blendPlan, allowPartial]);
   
   const allComponentsCovered = projectedCoverage.every(c => c.isCovered);
   const totalBatchesToCreate = batchPlans.reduce((sum, p) => sum + p.batchCount, 0);
@@ -544,7 +528,7 @@ export function PlanBlendBatchesModal({
     onNavigateToComponent?.(componentRoastGroup);
   };
   
-  const isLoading = loadingComponents;
+  const isLoading = loadingComponents || loadingConfigs || loadingWip || loadingBatches;
   const hasComponents = enrichedComponents.length > 0;
   
   return (
@@ -633,6 +617,14 @@ export function PlanBlendBatchesModal({
               </p>
             </div>
             
+            <div className="flex items-center justify-between gap-3 border-b pb-3">
+              <span className="text-sm font-medium">{allowPartial ? 'Partial batches allowed · exception' : `Whole-batch target: ${blendPlan.targetKg.toFixed(1)} kg`}</span>
+              <label className="flex items-center gap-2 text-sm">
+                <Switch checked={allowPartial} onCheckedChange={setAllowPartial} aria-label="Allow partial batches" />
+                Allow partial batches
+              </label>
+            </div>
+            {!allowPartial && !blendPlan.recipe && <Alert><AlertDescription>No practical whole-batch recipe set found. Adjust batch sizes or explicitly allow partial batches.</AlertDescription></Alert>}
             {/* Component rows */}
             <div className="space-y-3">
               {enrichedComponents.map((comp, idx) => {
@@ -640,7 +632,7 @@ export function PlanBlendBatchesModal({
                 const plan = batchPlans.find(p => p.componentRoastGroup === comp.componentRoastGroup);
                 const projected = projectedCoverage.find(p => p.componentRoastGroup === comp.componentRoastGroup);
                 
-                const componentDemandKg = blendNetDemandKg * (comp.pct / 100);
+                const componentDemandKg = blendPlan.rows.find(r => r.roastGroup === comp.componentRoastGroup)?.requiredKg ?? 0;
                 const expectedOutputPerBatch = comp.standardBatchKg * (1 - comp.expectedYieldLossPct / 100);
                 
                 return (
@@ -657,13 +649,13 @@ export function PlanBlendBatchesModal({
                           : 'bg-amber-100 text-amber-800 border-amber-300'
                         }
                       >
-                        {projected?.isCovered ? 'Covered' : `Short ${Math.abs(projected?.projectedDelta ?? 0).toFixed(1)} kg`}
+                        {projected?.isCovered ? ((plan?.batchCount ?? 0) > 0 ? 'Covered after planning' : 'Covered') : `Short ${Math.abs(projected?.projectedDelta ?? 0).toFixed(1)} kg`}
                       </Badge>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground">
                       <div>
-                        <div>Component demand: {componentDemandKg.toFixed(1)} kg</div>
+                        <div>{allowPartial ? 'Component demand' : 'Whole-batch target'}: {componentDemandKg.toFixed(1)} kg</div>
                         <div>WIP available: {comp.wipKg.toFixed(1)} kg</div>
                         <div className="flex items-center gap-1">
                           <span>Planned for this blend:</span>
@@ -748,7 +740,7 @@ export function PlanBlendBatchesModal({
               </Button>
               <Button
                 onClick={handleCreateBatches}
-                disabled={totalBatchesToCreate === 0 || createBatchesMutation.isPending || depletionProceeding}
+                disabled={totalBatchesToCreate === 0 || (!allowPartial && !blendPlan.recipe) || createBatchesMutation.isPending || depletionProceeding}
               >
                 {createBatchesMutation.isPending || depletionProceeding ? (
                   <>
