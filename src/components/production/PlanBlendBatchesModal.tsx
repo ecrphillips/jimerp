@@ -649,7 +649,7 @@ export function PlanBlendBatchesModal({
                           : 'bg-amber-100 text-amber-800 border-amber-300'
                         }
                       >
-                        {projected?.isCovered ? 'Covered' : `Short ${Math.abs(projected?.projectedDelta ?? 0).toFixed(1)} kg`}
+                        {projected?.isCovered ? ((plan?.batchCount ?? 0) > 0 ? 'Covered after planning' : 'Covered') : `Short ${Math.abs(projected?.projectedDelta ?? 0).toFixed(1)} kg`}
                       </Badge>
                     </div>
                     

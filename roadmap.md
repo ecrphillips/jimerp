@@ -1,6 +1,6 @@
 # Roadmap
 
-- [ ] Default post-roast blend planning and coverage to recipe-balanced whole batches; allow explicit partial-batch exceptions and verify both paths.
+- [x] Default post-roast blend planning and coverage to recipe-balanced whole batches; allow explicit partial-batch exceptions. Verified both planning modes against Love Hospital without creating batches; 19 tests passed.
 
 - [x] Replace inventory availability buttons with Available / All selectors and verify zero-stock filtering.
 
