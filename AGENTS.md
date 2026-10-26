@@ -1,5 +1,7 @@
 # Architecture Rules
 
+- Derive Inventory's available WIP filter and total with `availableWipKg`, subtracting blend holds and excluding sub-display-precision remainders, because row inclusion must match the visible Available column without modifying ledger balances.
+
 - Store internal-order common-client shortcuts in app_settings under order_common_client_shortcuts using existing admin-write RLS; group account options from programs and account/location production weekdays, because shared shortcuts and account classification must use canonical saved data.
 
 - Keep per-account variant access in account_product_access; use the authorized customer-products RPC for catalog/order selectors and database triggers for all customer writes, because staff preview must match customer eligibility and direct API calls must not bypass restrictions.
