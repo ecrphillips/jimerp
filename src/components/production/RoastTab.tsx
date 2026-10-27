@@ -1,3 +1,5 @@
+import { classifyWorkAhead, expectedOutputKg } from '@/lib/workAhead';
+import { CloseDayPanel } from './CloseDayPanel';
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -538,6 +540,36 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     return grouped;
   }, [batches]);
 
+  // Work ahead: planned batches whose whole output is surplus to the filtered
+  // period's net demand. Only meaningful for Today/Tomorrow views.
+  const workAheadByGroup = useMemo(() => {
+    const out: Record<string, Set<string>> = {};
+    if (dateFilterConfig.mode === 'all') return out;
+    for (const g of demandByRoastGroup) {
+      const loss = configByGroup[g.roast_group]?.expected_yield_loss_pct ?? 16;
+      const planned = [...(batchesByGroup[g.roast_group] ?? [])]
+        .filter(b => b.status === 'PLANNED')
+        .sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''));
+      out[g.roast_group] = classifyWorkAhead(
+        planned.map(b => ({ id: b.id, expectedOutputKg: expectedOutputKg(b.planned_output_kg, loss) })),
+        g.net_demand_kg,
+      );
+    }
+    return out;
+  }, [dateFilterConfig.mode, demandByRoastGroup, configByGroup, batchesByGroup]);
+
+  // Planned batches still needed for today (not work ahead), for Close today.
+  const remainingNeededToday = useMemo(() => {
+    if (dateFilterConfig.mode !== 'today') return [];
+    const rows: { label: string; count: number }[] = [];
+    for (const g of demandByRoastGroup) {
+      const ahead = workAheadByGroup[g.roast_group] ?? new Set<string>();
+      const count = (batchesByGroup[g.roast_group] ?? []).filter(b => b.status === 'PLANNED' && !ahead.has(b.id)).length;
+      if (count > 0) rows.push({ label: configByGroup[g.roast_group]?.display_name?.trim() || g.roast_group.replace(/_/g, ' '), count });
+    }
+    return rows;
+  }, [dateFilterConfig.mode, demandByRoastGroup, workAheadByGroup, batchesByGroup, configByGroup]);
+
   // Helper to check if a roast group matches the roaster filter
   const groupMatchesRoasterFilter = (roastGroup: string): boolean => {
     if (roasterFilter === 'ALL') return true;
@@ -1064,6 +1096,9 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
               </p>
             </div>
             <div className="flex items-center gap-4 flex-wrap">
+              {dateFilterConfig.mode === 'today' && (
+                <CloseDayPanel kind="ROAST" today={today} remainingNeeded={remainingNeededToday} />
+              )}
               {/* Show completed toggle */}
               <div className="flex items-center gap-2">
                 <Checkbox 
@@ -1263,6 +1298,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                             })}
                             components={roastGroupComponents ?? []}
                             roastGroupsLookupMap={roastGroupsLookupMap}
+                            workAheadBatchIds={workAheadByGroup[group.roast_group]}
                           />
                           
                           {/* Quick batch suggestion row (shown below collapsed row if there's demand and no batches visible) */}

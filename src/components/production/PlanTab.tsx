@@ -1,3 +1,4 @@
+import { CloseDayPanel } from './CloseDayPanel';
 import React, { useMemo, useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -752,6 +753,11 @@ export function PlanTab({ dateFilterConfig, today }: PlanTabProps) {
 
   return (
     <div className="space-y-4">
+      {filterMode === 'today' && (
+        <div className="flex justify-end">
+          <CloseDayPanel kind="SHIP" today={today} />
+        </div>
+      )}
       {/* TOP SUMMARY — today's demand vs coverage */}
       <div className="rounded-md border bg-card px-4 py-3">
         {planLoading || !buckets ? (
