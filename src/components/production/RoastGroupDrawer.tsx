@@ -127,6 +127,8 @@ interface RoastGroupDrawerProps {
   onBlendBatches?: () => void;
   components: RoastGroupComponent[];
   roastGroupsLookupMap: Map<string, { display_name: string | null; origin: string | null; expected_yield_loss_pct?: number | null; standard_batch_kg?: number | null }>;
+  /** Planned batch IDs whose whole output is surplus to the filtered period's demand. */
+  workAheadBatchIds?: Set<string>;
 }
 
 export function RoastGroupDrawer({
@@ -157,6 +159,7 @@ export function RoastGroupDrawer({
   onBlendBatches,
   components,
   roastGroupsLookupMap,
+  workAheadBatchIds,
 }: RoastGroupDrawerProps) {
   const { user } = useAuth();
   const [allowPartial, setAllowPartial] = useBlendBatchMode(roastGroup);
@@ -539,9 +542,14 @@ export function RoastGroupDrawer({
   }, [batches, wipKg, fgKg]);
 
   const displayedBatches = useMemo(() => {
-    if (showAllCompleted) return sortedBatches;
-    return sortedBatches.filter(b => b.status !== 'ROASTED' || visibleBatchIds.has(b.id));
-  }, [sortedBatches, showAllCompleted, visibleBatchIds]);
+    const base = showAllCompleted
+      ? sortedBatches
+      : sortedBatches.filter(b => b.status !== 'ROASTED' || visibleBatchIds.has(b.id));
+    if (!workAheadBatchIds || workAheadBatchIds.size === 0) return base;
+    // Work-ahead batches sink below the "Work ahead" divider.
+    return [...base.filter(b => !workAheadBatchIds.has(b.id)), ...base.filter(b => workAheadBatchIds.has(b.id))];
+  }, [sortedBatches, showAllCompleted, visibleBatchIds, workAheadBatchIds]);
+  const firstWorkAheadId = displayedBatches.find(b => workAheadBatchIds?.has(b.id))?.id;
 
   // Refresh frozen batches (called after Mark Roasted to reflect new positions)
   const refreshFrozenBatches = useCallback(() => {
@@ -1241,8 +1249,16 @@ export function RoastGroupDrawer({
                 ) : (
                   <div className="space-y-2">
                     {displayedBatches.map((batch) => (
+                      <React.Fragment key={batch.id}>
+                      {batch.id === firstWorkAheadId && (
+                        <div className="flex items-center gap-2 pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          <div className="h-px flex-1 bg-border" />
+                          Work ahead · not needed for this day
+                          <div className="h-px flex-1 bg-border" />
+                        </div>
+                      )}
+                      <div className={workAheadBatchIds?.has(batch.id) ? 'opacity-70' : undefined}>
                       <BatchRow
-                        key={batch.id}
                         batch={batch}
                         expectedYieldLossPct={yieldLossPct}
                         onMarkRoasted={(id, actual, inbound) => markRoastedMutation.mutate({ 
