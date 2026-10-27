@@ -1296,6 +1296,8 @@ export function RoastGroupDrawer({
                           return copy;
                         })}
                       />
+                      </div>
+                      </React.Fragment>
                     ))}
                     {(hiddenCompletedCount > 0 || showAllCompleted) && (
                       <Button
