@@ -127,6 +127,13 @@
       "when": 1792705573312,
       "tag": "0017_fast_staff_product_visibility",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793119761722,
+      "tag": "0018_production_day_closes",
+      "breakpoints": true
     }
   ]
 }

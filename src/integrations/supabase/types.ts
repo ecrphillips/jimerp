@@ -4763,6 +4763,45 @@ export type Database = {
           },
         ]
       }
+      production_day_closes: {
+        Row: {
+          closed_at: string
+          closed_by: string | null
+          forced: boolean
+          id: string
+          kind: string
+          notes: string | null
+          reopened_at: string | null
+          reopened_by: string | null
+          snapshot: Json
+          work_date: string
+        }
+        Insert: {
+          closed_at?: string
+          closed_by?: string | null
+          forced?: boolean
+          id?: string
+          kind: string
+          notes?: string | null
+          reopened_at?: string | null
+          reopened_by?: string | null
+          snapshot?: Json
+          work_date: string
+        }
+        Update: {
+          closed_at?: string
+          closed_by?: string | null
+          forced?: boolean
+          id?: string
+          kind?: string
+          notes?: string | null
+          reopened_at?: string | null
+          reopened_by?: string | null
+          snapshot?: Json
+          work_date?: string
+        }
+        Relationships: []
+      }
       production_plan_items: {
         Row: {
           client_id: string
