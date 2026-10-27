@@ -50,8 +50,8 @@ function Section({ title, blocking, count, ack, onAck, children }: {
 }
 
 export function CloseDayPanel({ kind, today, remainingNeeded = [] }: Props) {
-  const { user, role } = useAuth();
-  const isAdmin = role === 'ADMIN';
+  const { user, authUser } = useAuth();
+  const isAdmin = authUser?.role === 'ADMIN';
   const { data: closed } = useDayClose(today, kind);
   const closeDay = useCloseDay();
   const reopen = useReopenDay();
