@@ -26,19 +26,30 @@ import { fetchAllRows } from '@/lib/fetchAllRows';
 import { useBlendHolds, heldKgByGroup } from '@/hooks/useBlendHolds';
 import { BlendHoldsPanel } from '@/components/production/BlendHoldsPanel';
 import { useOrderCreator } from '@/hooks/useOrderCreator';
-import { availableWipKg } from '@/lib/inventoryAvailability';
+import { availableWipKg, isNegativeBalance, type AvailabilityMode } from '@/lib/inventoryAvailability';
 import { fgFloorCountDelta } from '@/lib/fgFloorCount';
 import { FGCountInput } from '@/components/products/FGCountInput';
 
-function AvailabilityToggle({ availableOnly, onChange }: { availableOnly: boolean; onChange: (v: boolean) => void }) {
+function AvailabilityToggle({ mode, onChange, negativeCount }: { mode: AvailabilityMode; onChange: (v: AvailabilityMode) => void; negativeCount: number }) {
+  const opts: { v: AvailabilityMode; label: string }[] = [
+    { v: 'available', label: 'Available' },
+    { v: 'negative', label: negativeCount > 0 ? `Negative · ${negativeCount}` : 'Negative' },
+    { v: 'all', label: 'All' },
+  ];
   return (
     <div className="inline-flex shrink-0 rounded-md border p-0.5" role="group" aria-label="Rows to show">
-      <Button size="sm" className="h-7" variant={availableOnly ? 'default' : 'ghost'} aria-pressed={availableOnly} onClick={() => onChange(true)}>
-        Available
-      </Button>
-      <Button size="sm" className="h-7" variant={!availableOnly ? 'default' : 'ghost'} aria-pressed={!availableOnly} onClick={() => onChange(false)}>
-        All
-      </Button>
+      {opts.map((o) => (
+        <Button
+          key={o.v}
+          size="sm"
+          className={`h-7 ${o.v === 'negative' && negativeCount > 0 && mode !== 'negative' ? 'text-destructive' : ''}`}
+          variant={mode === o.v ? 'default' : 'ghost'}
+          aria-pressed={mode === o.v}
+          onClick={() => onChange(o.v)}
+        >
+          {o.label}
+        </Button>
+      ))}
     </div>
   );
 }
@@ -128,8 +139,10 @@ export default function Inventory() {
   const [floorCountOpen, setFloorCountOpen] = useState(false);
 
   // "Available only" view filters: roasted-not-packed (WIP) and finished-not-picked (FG)
-  const [wipAvailableOnly, setWipAvailableOnly] = useState(true);
-  const [fgAvailableOnly, setFgAvailableOnly] = useState(true);
+  const [wipMode, setWipMode] = useState<AvailabilityMode>('available');
+  const wipAvailableOnly = wipMode === 'available';
+  const [fgMode, setFgMode] = useState<AvailabilityMode>('available');
+  const fgAvailableOnly = fgMode === 'available';
 
   // ===== WIP Tab Queries =====
   
@@ -402,7 +415,8 @@ export default function Inventory() {
     () => wipByRoastGroup.filter((r) => availableWipKg(r.net_wip_kg, heldByGroup[r.roast_group] ?? 0) > 0),
     [wipByRoastGroup, heldByGroup],
   );
-  const wipDisplayRows = wipAvailableOnly ? wipAvailableRows : wipByRoastGroup;
+  const wipNegativeRows = useMemo(() => wipByRoastGroup.filter((r) => isNegativeBalance(r.net_wip_kg)), [wipByRoastGroup]);
+  const wipDisplayRows = wipMode === 'available' ? wipAvailableRows : wipMode === 'negative' ? wipNegativeRows : wipByRoastGroup;
   const wipAvailableTotalKg = useMemo(
     () => wipAvailableRows.reduce((sum, r) => sum + availableWipKg(r.net_wip_kg, heldByGroup[r.roast_group] ?? 0), 0),
     [wipAvailableRows, heldByGroup],
@@ -432,7 +446,11 @@ export default function Inventory() {
     () => fgRows.filter((r) => r.units_on_hand > 0),
     [fgRows],
   );
-  const fgDisplayRows = fgAvailableOnly ? fgAvailableRows : fgRows;
+  const fgNegativeRows = useMemo(
+    () => fgRows.filter((r) => isNegativeBalance(authoritativeFg?.[r.product_id]?.fg_signed_units ?? 0, 1)),
+    [fgRows, authoritativeFg],
+  );
+  const fgDisplayRows = fgMode === 'available' ? fgAvailableRows : fgMode === 'negative' ? fgNegativeRows : fgRows;
   const fgAvailableUnits = useMemo(
     () => fgAvailableRows.reduce((sum, r) => sum + r.units_on_hand, 0),
     [fgAvailableRows],
@@ -492,7 +510,7 @@ export default function Inventory() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <AvailabilityToggle availableOnly={wipAvailableOnly} onChange={setWipAvailableOnly} />
+                  <AvailabilityToggle mode={wipMode} onChange={setWipMode} negativeCount={wipNegativeRows.length} />
                   {isAdminOrOps && (
                     <>
                       <Button
@@ -524,7 +542,9 @@ export default function Inventory() {
               {wipDisplayRows.length === 0 ? (
                 <div className="py-6">
                   <p className="text-muted-foreground">
-                    {wipAvailableOnly && wipByRoastGroup.length > 0
+                    {wipMode === 'negative' && wipByRoastGroup.length > 0
+                      ? 'No negative balances.'
+                      : wipAvailableOnly && wipByRoastGroup.length > 0
                       ? 'No roasted coffee is currently available to pack. Choose “All” to see every group.'
                       : 'No WIP data available. Use “Add WIP for roast group” above to enter an opening balance.'}
                   </p>
@@ -629,15 +649,17 @@ export default function Inventory() {
                     {fgAvailableRows.length} {fgAvailableRows.length === 1 ? 'product' : 'products'}
                   </p>
                 </div>
-                <AvailabilityToggle availableOnly={fgAvailableOnly} onChange={setFgAvailableOnly} />
+                <AvailabilityToggle mode={fgMode} onChange={setFgMode} negativeCount={fgNegativeRows.length} />
               </div>
             </CardHeader>
             <CardContent>
-              {fgAvailableOnly && fgDisplayRows.length === 0 ? (
+              {fgMode === 'negative' && fgDisplayRows.length === 0 ? (
+                <p className="text-muted-foreground py-4">No negative balances.</p>
+              ) : fgAvailableOnly && fgDisplayRows.length === 0 ? (
                 <p className="text-muted-foreground py-4">
                   No finished goods are currently awaiting pick. Choose “All” to see every product.
                 </p>
-              ) : !fgAvailableOnly && fgRows.length === 0 ? (
+              ) : fgMode === 'all' && fgRows.length === 0 ? (
                 <p className="text-muted-foreground py-4">No products configured.</p>
               ) : (
                 <table className="w-full text-sm">
