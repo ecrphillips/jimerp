@@ -85,6 +85,7 @@ export function MarkRoastedPanel({
   const [splits, setSplits] = useState<LotSplit[]>([]);
   const [recordLoss, setRecordLoss] = useState(false);
   const [lossNote, setLossNote] = useState('');
+  const [printLabelOnSave, setPrintLabelOnSave] = useState(true);
   const [saving, setSaving] = useState(false);
   const [splitsTouched, setSplitsTouched] = useState(false);
 
@@ -95,7 +96,8 @@ export function MarkRoastedPanel({
     setGreenKg(String(g));
     setRoastedKg('');
     setRecordLoss(false);
-    setLossNote('');
+    setLossNote(false as unknown as never) as unknown as void;
+    setPrintLabelOnSave(true);
     setSaving(false);
     setSplitsTouched(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
