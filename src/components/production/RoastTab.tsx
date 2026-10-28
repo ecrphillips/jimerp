@@ -1,3 +1,5 @@
+import { classifyWorkAhead, expectedOutputKg } from '@/lib/workAhead';
+import { CloseDayPanel } from './CloseDayPanel';
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +32,8 @@ import { WipFgAdjustModal } from './WipFgAdjustModal';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { createOrReuseRoastGroup } from '@/lib/roastGroupCreation';
 import { computeRoastCoverage } from '@/lib/roastCoverage';
+import { planBlendBatches } from '@/lib/blendBatchPlanning';
+import { useBlendBatchModes } from '@/hooks/useBlendBatchMode';
 import { PlanBlendBatchesModal } from './PlanBlendBatchesModal';
 import { BlendExecuteModal } from './BlendExecuteModal';
 import { DepletionWarningModal, executeDepletionSwaps, type DepletionSwap } from './DepletionWarningModal';
@@ -67,6 +71,7 @@ interface RoastBatch {
   created_at?: string;
   updated_at?: string;
   planned_for_blend_roast_group?: string | null;
+  consumed_by_blend_at?: string | null;
 }
 
 interface RoastGroupConfig {
@@ -97,6 +102,7 @@ interface DemandByRoastGroup {
 
 export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
   const { user } = useAuth();
+  const partialBlendModes = useBlendBatchModes();
   const queryClient = useQueryClient();
   
   // Roaster filter
@@ -534,6 +540,36 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     return grouped;
   }, [batches]);
 
+  // Work ahead: planned batches whose whole output is surplus to the filtered
+  // period's net demand. Only meaningful for Today/Tomorrow views.
+  const workAheadByGroup = useMemo(() => {
+    const out: Record<string, Set<string>> = {};
+    if (dateFilterConfig.mode === 'all') return out;
+    for (const g of demandByRoastGroup) {
+      const loss = configByGroup[g.roast_group]?.expected_yield_loss_pct ?? 16;
+      const planned = [...(batchesByGroup[g.roast_group] ?? [])]
+        .filter(b => b.status === 'PLANNED')
+        .sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''));
+      out[g.roast_group] = classifyWorkAhead(
+        planned.map(b => ({ id: b.id, expectedOutputKg: expectedOutputKg(b.planned_output_kg, loss) })),
+        g.net_demand_kg,
+      );
+    }
+    return out;
+  }, [dateFilterConfig.mode, demandByRoastGroup, configByGroup, batchesByGroup]);
+
+  // Planned batches still needed for today (not work ahead), for Close today.
+  const remainingNeededToday = useMemo(() => {
+    if (dateFilterConfig.mode !== 'today') return [];
+    const rows: { label: string; count: number }[] = [];
+    for (const g of demandByRoastGroup) {
+      const ahead = workAheadByGroup[g.roast_group] ?? new Set<string>();
+      const count = (batchesByGroup[g.roast_group] ?? []).filter(b => b.status === 'PLANNED' && !ahead.has(b.id)).length;
+      if (count > 0) rows.push({ label: configByGroup[g.roast_group]?.display_name?.trim() || g.roast_group.replace(/_/g, ' '), count });
+    }
+    return rows;
+  }, [dateFilterConfig.mode, demandByRoastGroup, workAheadByGroup, batchesByGroup, configByGroup]);
+
   // Helper to check if a roast group matches the roaster filter
   const groupMatchesRoasterFilter = (roastGroup: string): boolean => {
     if (roasterFilter === 'ALL') return true;
@@ -913,6 +949,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
     onSuccess: (_, rows) => {
       const groupCount = new Set(rows.map((r) => r.roast_group)).size;
       toast.success(`Auto-planned ${rows.length} batches across ${groupCount} roast group${groupCount === 1 ? '' : 's'}`);
+      queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
     },
     onError: (err) => {
@@ -923,16 +960,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
 
   // Post-roast blend recipes: blends are never roasted under their own name,
   // so auto-planning must create earmarked component batches instead.
-  const { data: blendComponentRows } = useQuery({
-    queryKey: ['roast-group-components', 'all'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('roast_group_components')
-        .select('parent_roast_group, component_roast_group, pct');
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  const blendComponentRows = roastGroupComponents;
 
   const autoPlanPreview = useMemo(() => {
     const rows: Array<{
@@ -974,22 +1002,18 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       if (!config) continue;
 
       if (config.is_blend && config.blend_type !== 'PRE_ROAST') {
-        if (g.net_demand_kg <= 0) continue;
         const comps = (blendComponentRows ?? []).filter(c => c.parent_roast_group === g.roast_group);
-        for (const c of comps) {
-          const compCfg = configByGroup[c.component_roast_group];
-          const yl = compCfg?.expected_yield_loss_pct ?? 16;
-          const std = compCfg?.standard_batch_kg ?? 20;
-          const need = g.net_demand_kg * (Number(c.pct) / 100);
-          const plannedExpected = (batches ?? [])
-            .filter(b => b.status === 'PLANNED'
-              && b.roast_group === c.component_roast_group
-              && b.planned_for_blend_roast_group === g.roast_group)
-            .reduce((s, b) => s + (b.planned_output_kg ?? 0) * (1 - yl / 100), 0);
-          const remaining = need - plannedExpected;
-          if (remaining <= 0.001) continue;
-          const count = Math.ceil(remaining / (std * (1 - yl / 100)));
-          if (count > 0) pushRows(c.component_roast_group, count, g.roast_group);
+        const blendPlan = planBlendBatches(comps.map(c => {
+          const cfg = configByGroup[c.component_roast_group];
+          const yieldFactor = 1 - (cfg?.expected_yield_loss_pct ?? 16) / 100;
+          const linked = (batches ?? []).filter(b => b.roast_group === c.component_roast_group && b.planned_for_blend_roast_group === g.roast_group && !b.consumed_by_blend_at && (b.status === 'PLANNED' || b.status === 'ROASTED'));
+          return { roastGroup: c.component_roast_group, pct: Number(c.pct),
+            outputPerBatchKg: (cfg?.standard_batch_kg ?? 20) * yieldFactor,
+            batchCount: linked.length,
+            availableKg: linked.reduce((sum, b) => sum + (b.status === 'ROASTED' ? b.actual_output_kg : (b.planned_output_kg ?? 0) * yieldFactor), 0) };
+        }), g.net_demand_kg, partialBlendModes[g.roast_group] === true);
+        if (blendPlan.recipe || partialBlendModes[g.roast_group]) {
+          for (const row of blendPlan.rows) if (row.additionalBatches > 0) pushRows(row.roastGroup, row.additionalBatches, g.roast_group);
         }
         continue;
       }
@@ -1011,7 +1035,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
       pushRows(g.roast_group, count);
     }
     return { rows, summary };
-  }, [sortedGroups, configByGroup, batchesByGroup, batches, blendComponentRows, today, user?.id]);
+  }, [sortedGroups, configByGroup, batchesByGroup, batches, blendComponentRows, today, user?.id, partialBlendModes]);
 
   const [showAutoPlanConfirm, setShowAutoPlanConfirm] = useState(false);
 
@@ -1072,6 +1096,9 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
               </p>
             </div>
             <div className="flex items-center gap-4 flex-wrap">
+              {dateFilterConfig.mode === 'today' && (
+                <CloseDayPanel kind="ROAST" today={today} remainingNeeded={remainingNeededToday} />
+              )}
               {/* Show completed toggle */}
               <div className="flex items-center gap-2">
                 <Checkbox 
@@ -1271,6 +1298,7 @@ export function RoastTab({ dateFilterConfig, today }: RoastTabProps) {
                             })}
                             components={roastGroupComponents ?? []}
                             roastGroupsLookupMap={roastGroupsLookupMap}
+                            workAheadBatchIds={workAheadByGroup[group.roast_group]}
                           />
                           
                           {/* Quick batch suggestion row (shown below collapsed row if there's demand and no batches visible) */}

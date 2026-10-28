@@ -52,6 +52,9 @@ import { evaluateMultiRoastGroupImpacts, type MultiRgImpact } from '@/hooks/useG
 import { type RoastGroupComponent, getComponentBreakdown, type ComponentDisplay } from '@/hooks/useRoastGroupComponents';
 import { useBlendReadiness } from '@/hooks/useBlendReadiness';
 import { computeRoastCoverage } from '@/lib/roastCoverage';
+import { planBlendBatches } from '@/lib/blendBatchPlanning';
+import { useBlendBatchMode } from '@/hooks/useBlendBatchMode';
+import { Switch } from '@/components/ui/switch';
 import { getVancouverDateString } from '@/lib/productionScheduling';
 
 /** Best available completion time for a batch (true stamp, else last touch). */
@@ -128,6 +131,8 @@ interface RoastGroupDrawerProps {
   onBlendBatches?: () => void;
   components: RoastGroupComponent[];
   roastGroupsLookupMap: Map<string, { display_name: string | null; origin: string | null; expected_yield_loss_pct?: number | null; standard_batch_kg?: number | null }>;
+  /** Planned batch IDs whose whole output is surplus to the filtered period's demand. */
+  workAheadBatchIds?: Set<string>;
 }
 
 export function RoastGroupDrawer({
@@ -158,8 +163,10 @@ export function RoastGroupDrawer({
   onBlendBatches,
   components,
   roastGroupsLookupMap,
+  workAheadBatchIds,
 }: RoastGroupDrawerProps) {
   const { user } = useAuth();
+  const [allowPartial, setAllowPartial] = useBlendBatchMode(roastGroup);
   const queryClient = useQueryClient();
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -395,28 +402,26 @@ export function RoastGroupDrawer({
   // output from planned component batches. The previous badge only considered
   // finished blend WIP/FG, so a fully planned Technicolour drawer still read
   // as short until the blend itself had been executed.
-  const plannedBlendPossibleKg = useMemo(() => {
-    if (!isPostRoastBlend || blendComponentsWithNames.length === 0) return 0;
-
-    return Math.min(...blendComponentsWithNames.map((component) => {
-      const ratio = component.pct / 100;
-      if (ratio <= 0) return 0;
-      const availableComponentKg = (componentBatchesByGroup[component.roastGroup] ?? []).reduce((sum, batch) => {
-        if (batch.status === 'ROASTED') return sum + batch.actual_output_kg;
-        const componentYieldLoss = roastGroupsLookupMap.get(component.roastGroup)?.expected_yield_loss_pct ?? 16;
-        return sum + (batch.planned_output_kg ?? 0) * (1 - componentYieldLoss / 100);
-      }, 0);
-      return availableComponentKg / ratio;
-    }));
-  }, [isPostRoastBlend, blendComponentsWithNames, componentBatchesByGroup, roastGroupsLookupMap]);
-
+  const blendPlanningComponents = useMemo(() => blendComponentsWithNames.filter(c => c.pct > 0).map(c => {
+    const info = roastGroupsLookupMap.get(c.roastGroup);
+    const outputPerBatchKg = (info?.standard_batch_kg ?? 20) * (1 - (info?.expected_yield_loss_pct ?? 16) / 100);
+    const linked = componentBatchesByGroup[c.roastGroup] ?? [];
+    return { roastGroup: c.roastGroup, pct: c.pct, outputPerBatchKg,
+      availableKg: linked.reduce((sum, b) => sum + (b.status === 'ROASTED' ? b.actual_output_kg : (b.planned_output_kg ?? 0) * (1 - (info?.expected_yield_loss_pct ?? 16) / 100)), 0),
+      batchCount: linked.length };
+  }), [blendComponentsWithNames, roastGroupsLookupMap, componentBatchesByGroup]);
+  const wholeBlendPlan = planBlendBatches(blendPlanningComponents, netDemandKg, allowPartial);
+  const roastedBlendPlan = planBlendBatches(blendPlanningComponents.map(c => ({ ...c,
+    batchCount: (componentBatchesByGroup[c.roastGroup] ?? []).filter(b => b.status === 'ROASTED').length,
+    availableKg: (componentBatchesByGroup[c.roastGroup] ?? []).filter(b => b.status === 'ROASTED').reduce((sum, b) => sum + b.actual_output_kg, 0),
+  })), allowPartial ? netDemandKg : wholeBlendPlan.targetKg, allowPartial);
   const effectiveCoverageDelta = isPostRoastBlend
-    ? plannedBlendPossibleKg - netDemandKg
+    ? (wholeBlendPlan.covered ? Math.max(0, wholeBlendPlan.targetKg - netDemandKg) : -Math.max(0.01, wholeBlendPlan.rows.reduce((sum, r) => sum + r.shortKg, 0)))
     : coverageDelta;
   const hasPlannedWork = isPostRoastBlend
     ? (componentBatches ?? []).some(batch => batch.status === 'PLANNED')
     : plannedBatches.length > 0;
-  const needsPlanning = netDemandKg > 0.001 && effectiveCoverageDelta < -0.001;
+  const needsPlanning = (netDemandKg > 0.001 || isPostRoastBlend && (componentBatches?.length ?? 0) > 0) && effectiveCoverageDelta < -0.001;
   const hasFinishedProduction = isPostRoastBlend
     ? wipKg + fgKg > 0.001
     : roastedBatches.length > 0;
@@ -426,7 +431,7 @@ export function RoastGroupDrawer({
   // planned batches — reflects component inventory ready for blending. Pre-roast
   // blends fall through to their own planned-batch expected output.
   const displayExpectedOutput = isPostRoastBlend && blendReadiness
-    ? blendReadiness.stagedForBlendKg
+    ? (allowPartial || roastedBlendPlan.covered ? blendReadiness.stagedForBlendKg : 0)
     : plannedExpectedOutput;
 
   const totalAvailableGreenKg = useMemo(() => {
@@ -543,9 +548,14 @@ export function RoastGroupDrawer({
   }, [batches, wipKg, fgKg]);
 
   const displayedBatches = useMemo(() => {
-    if (showAllCompleted) return sortedBatches;
-    return sortedBatches.filter(b => b.status !== 'ROASTED' || visibleBatchIds.has(b.id));
-  }, [sortedBatches, showAllCompleted, visibleBatchIds]);
+    const base = showAllCompleted
+      ? sortedBatches
+      : sortedBatches.filter(b => b.status !== 'ROASTED' || visibleBatchIds.has(b.id));
+    if (!workAheadBatchIds || workAheadBatchIds.size === 0) return base;
+    // Work-ahead batches sink below the "Work ahead" divider.
+    return [...base.filter(b => !workAheadBatchIds.has(b.id)), ...base.filter(b => workAheadBatchIds.has(b.id))];
+  }, [sortedBatches, showAllCompleted, visibleBatchIds, workAheadBatchIds]);
+  const firstWorkAheadId = displayedBatches.find(b => workAheadBatchIds?.has(b.id))?.id;
 
   // Refresh frozen batches (called after Mark Roasted to reflect new positions)
   const refreshFrozenBatches = useCallback(() => {
@@ -893,7 +903,7 @@ export function RoastGroupDrawer({
           ) : needsPlanning ? (
             <div className="flex items-center justify-end gap-2">
               <Badge variant="secondary" className="bg-warning/15 text-foreground border-warning/40">
-                Short {Math.abs(effectiveCoverageDelta).toFixed(1)} kg
+                {isPostRoastBlend && !allowPartial ? 'Whole batches needed' : `Short ${Math.abs(effectiveCoverageDelta).toFixed(1)} kg`}
               </Badge>
               <Button
                 size="sm"
@@ -1051,10 +1061,15 @@ export function RoastGroupDrawer({
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Component batches below will be combined via "Blend batches" to create {config?.display_name?.trim() || roastGroup.replace(/_/g, ' ')} WIP.
+                      {allowPartial ? 'Partial-batch exception' : `Whole-batch target: ${wholeBlendPlan.targetKg.toFixed(1)} kg`}
+
                     </p>
                   </div>
                   
+                  <label className="flex items-center gap-2 text-sm">
+                    <Switch checked={allowPartial} onCheckedChange={setAllowPartial} aria-label="Allow partial batches" />
+                    Allow partial batches · exception
+                  </label>
                   {/* Component roast group sections */}
                   {blendComponentsWithNames.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-2">
@@ -1071,7 +1086,7 @@ export function RoastGroupDrawer({
                       const roastedKg = compBatches
                         .filter(b => b.status === 'ROASTED')
                         .reduce((sum, b) => sum + b.actual_output_kg, 0);
-                      const componentDemandKg = netDemandKg * (comp.pct / 100);
+                      const componentDemandKg = wholeBlendPlan.rows.find(r => r.roastGroup === comp.roastGroup)?.requiredKg ?? 0;
                       
                       return (
                         <div key={comp.roastGroup} className="border rounded-lg overflow-hidden">
@@ -1083,7 +1098,7 @@ export function RoastGroupDrawer({
                               <Badge variant="outline" className="text-xs">{comp.pct}%</Badge>
                             </div>
                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <span>Need: {componentDemandKg.toFixed(1)} kg</span>
+                              <span>{allowPartial ? 'Need' : 'Whole-batch target'}: {componentDemandKg.toFixed(1)} kg</span>
                               {plannedKg > 0 && (
                                 <Badge variant="secondary" className="text-xs">
                                   {plannedKg.toFixed(1)} kg planned
@@ -1141,7 +1156,7 @@ export function RoastGroupDrawer({
                   {/* Show message if component batches exist but need blending */}
                   {componentBatches && componentBatches.filter(b => b.status === 'ROASTED').length > 0 && (
                     <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm">
-                      <p className="text-primary font-medium">Ready to blend!</p>
+                      <p className="text-primary font-medium">{roastedBlendPlan.covered ? (allowPartial ? 'Ready to blend · partial batches allowed' : 'Whole batches ready to blend') : 'More component batches needed'}</p>
                       <p className="text-muted-foreground text-xs mt-1">
                         You have roasted component batches. Use "Blend batches" above to combine them into {config?.display_name?.trim() || roastGroup.replace(/_/g, ' ')} WIP.
                       </p>
@@ -1155,8 +1170,16 @@ export function RoastGroupDrawer({
                 ) : (
                   <div className="space-y-2">
                     {displayedBatches.map((batch) => (
+                      <React.Fragment key={batch.id}>
+                      {batch.id === firstWorkAheadId && (
+                        <div className="flex items-center gap-2 pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          <div className="h-px flex-1 bg-border" />
+                          Work ahead · not needed for this day
+                          <div className="h-px flex-1 bg-border" />
+                        </div>
+                      )}
+                      <div className={workAheadBatchIds?.has(batch.id) ? 'opacity-70' : undefined}>
                       <BatchRow
-                        key={batch.id}
                         batch={batch}
                         expectedYieldLossPct={yieldLossPct}
                         onOpenMarkRoasted={() => setMarkRoastedTarget({ batch, yieldLossPct: yieldLossPct, standardKg: standardBatch })}
@@ -1180,6 +1203,8 @@ export function RoastGroupDrawer({
                           return copy;
                         })}
                       />
+                      </div>
+                      </React.Fragment>
                     ))}
                     {(hiddenCompletedCount > 0 || showAllCompleted) && (
                       <Button

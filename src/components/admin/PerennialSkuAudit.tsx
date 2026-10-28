@@ -39,7 +39,7 @@ export function PerennialSkuAudit() {
     queryFn: async (): Promise<AuditRow[]> => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, roast_group, updated_at, account_id, account:accounts(account_name)')
+        .select('id, product_name, sku, roast_group, updated_at, account_id, account:accounts!products_account_id_fkey(account_name)')
         .eq('is_perennial', true)
         .not('sku', 'is', null)
         .order('product_name');

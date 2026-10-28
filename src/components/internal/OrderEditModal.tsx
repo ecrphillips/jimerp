@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { Plus, Trash2, Edit, Truck } from 'lucide-react';
 import { CreatedByBadge } from '@/components/orders/CreatedByBadge';
 import type { Database } from '@/integrations/supabase/types';
+import { confirmCaseOnlyOrder } from '@/lib/confirmCaseOnlyOrder';
 
 type DeliveryMethod = Database['public']['Enums']['delivery_method'];
 type GrindOption = Database['public']['Enums']['grind_option'];
@@ -167,6 +168,9 @@ export function OrderEditModal({
 
   const updateOrderMutation = useMutation({
     mutationFn: async () => {
+      const changedLines = editedLineItems.filter(li => !li.isDeleted && (li.isNew || initialLineItems.find(old => old.id === li.id)?.quantity_units !== li.quantity_units));
+      const confirmedLooseIds = await confirmCaseOnlyOrder(order.account_id, changedLines.map(li => li.product_id));
+      if (confirmedLooseIds === null) throw new Error('Individual-unit order not confirmed');
       // 1. Save shipments first so we can resolve tmp ids before writing lines.
       //    Order: deletes → updates → inserts (so number conflicts settle).
       for (const s of editedShipments) {
@@ -247,6 +251,7 @@ export function OrderEditModal({
           const { error } = await supabase.from('order_line_items').insert({
             order_id: order.id,
             product_id: li.product_id,
+            case_only_override_confirmed: confirmedLooseIds.includes(li.product_id),
             quantity_units: li.quantity_units,
             grind: null,
             unit_price_locked: li.unit_price_locked,
@@ -258,6 +263,7 @@ export function OrderEditModal({
             .from('order_line_items')
             .update({
               quantity_units: li.quantity_units,
+              case_only_override_confirmed: confirmedLooseIds.includes(li.product_id),
               shipment_id: resolveShipmentId(li.shipment_id),
             })
             .eq('id', li.id);
@@ -289,7 +295,7 @@ export function OrderEditModal({
     },
     onError: (err) => {
       console.error(err);
-      toast.error('Failed to update order');
+      toast.error(err instanceof Error ? err.message : 'Failed to update order');
     },
   });
 

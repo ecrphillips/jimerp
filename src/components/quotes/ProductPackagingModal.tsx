@@ -83,7 +83,7 @@ export function ProductPackagingModal({
     queryFn: async () => {
       let q = supabase
         .from('products')
-        .select('id, product_name, sku, packaging_variant, bag_size_g, account_id, accounts(account_name)')
+        .select('id, product_name, sku, packaging_variant, bag_size_g, account_id, accounts!products_account_id_fkey(account_name)')
         .eq('is_active', true)
         .order('product_name');
       if (accountIdFilter) q = q.eq('account_id', accountIdFilter);

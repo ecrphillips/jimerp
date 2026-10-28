@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { AlertCircle, Package, Plus, X } from 'lucide-react';
+import { isCaseLotType } from '@/lib/caseLots';
 
 interface PackagingType {
   id: string;
@@ -64,7 +65,7 @@ export function PackagingVariantsSection({
 
   // Only show active types for selection
   const activeTypes = useMemo(
-    () => packagingTypes?.filter((t) => t.is_active) ?? [],
+    () => packagingTypes?.filter((t) => t.is_active && !isCaseLotType(t.name)) ?? [],
     [packagingTypes]
   );
 
@@ -211,6 +212,7 @@ export function PackagingVariantsSection({
   return (
     <div className="space-y-4">
       <Label>{stepNumber}. Packaging Variants</Label>
+      <p className="text-xs text-muted-foreground">Case Lots are added to an existing product with + Variant.</p>
       <p className="text-xs text-muted-foreground -mt-2">
         Select packaging types and add sizes. Multiple sizes per type are supported.
       </p>

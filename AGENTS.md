@@ -1,5 +1,20 @@
 # Architecture Rules
 
+- Commit Products FG floor counts only on blur/Enter and balance against a freshly read signed inventory ledger, not zero-clamped availability; disable controls until ledger refresh completes to prevent digit-by-digit writes and stale-count adjustments.
+
+- Share whole-batch recipe targets across blend planning, auto-plan and drawer coverage; retain per-blend partial exceptions in session state and require opt-in before editing blend consumption amounts, because demand-only coverage must not silently authorize split batches.
+
+- Derive Inventory's available WIP filter and total with `availableWipKg`, subtracting blend holds and excluding sub-display-precision remainders, because row inclusion must match the visible Available column without modifying ledger balances.
+
+- Store internal-order common-client shortcuts in app_settings under order_common_client_shortcuts using existing admin-write RLS; group account options from programs and account/location production weekdays, because shared shortcuts and account classification must use canonical saved data.
+
+- Keep per-account variant access in account_product_access; use the authorized customer-products RPC for catalog/order selectors and database triggers for all customer writes, because staff preview must match customer eligibility and direct API calls must not bypass restrictions.
+- Case-only settings belong to the account's case variant and restrict its contained loose variant; record explicit staff confirmation on order lines without moving packing allocations, because internal exceptions must not change customer access or inventory identity.
+
+- Keep case packing allocations on the case product's order lines, not its constituent product; expand composition only for bag-count display so loose-bag inventory and progress remain independent.
+
+- Store phase-one case composition on products as a contained variant reference and integer count, with a validating trigger deriving case weight; create cases only through the existing-family Add Variant workflow to prevent free-weight cases without contents.
+
 - Configure invite email functions with Deno automatic npm dependency resolution, because managed email imports must resolve during validation and deployment without frontend dependencies.
 
 - Persist packing allocations per order line and update product inventory atomically by the allocation delta, because whole-bean and grind rows need independent progress without duplicating FG or WIP consumption.
@@ -12,6 +27,8 @@
 - Keep packing controls directly on product rows without expandable product drawers, because each row must be fully actionable at a glance on the production floor.
 - Partition completed packing lines after unfinished lines inside both drawer views while retaining their side rails, because finished work must stay visible for reference.
 - Render weight totals through the shared kg/lb weight-unit setting rather than a hardcoded unit, because the reader's unit choice must carry across the app.
-- Resolve an order's location from `orders.location_id`, never `account_location_id`, because the legacy column is no longer written and reading only it silently misfiles every order under the account's first location.- Derive a product's size fields (bag_size_g, grams_per_unit, packaging_variant) through the `normalize_product_packaging` products trigger and keep size/type out of new product names, because products created from different screens must look identical everywhere sizes are shown.
+- Resolve an order's location from `orders.location_id`, never `account_location_id`, because the legacy column is no longer written and reading only it silently misfiles every order under the account's first location.
+- Derive a product's size fields (bag_size_g, grams_per_unit, packaging_variant) through the `normalize_product_packaging` products trigger on creation and size edits; synchronize either edited weight field and recompute the legacy badge, because every workflow must display the same current size. Keep size/type out of new product names.
 - Reject roasted_batches rows on post-roast blend roast groups via the `block_batches_on_post_roast_blends` trigger, because such blends are only made from component batches and direct batches become unroastable orphans.
 - Shopify orders omitted on the fetch review page are stored in `shopify_skipped_orders` and deduped alongside bundled orders in every pull mode (manual, review, cron), because an omitted order must never return on its own.
+- Record run-sheet day closes as append-only rows in production_day_closes (reopen stamps reopened_at, never deletes), and classify work-ahead batches with `classifyWorkAhead` against net demand, because the close history doubles as the daily finish-time record.

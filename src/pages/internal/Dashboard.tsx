@@ -8,6 +8,7 @@ import { ProductionFlowTab } from '@/components/dashboard/ProductionFlowTab';
 import { GreenCoffeeTab } from '@/components/dashboard/GreenCoffeeTab';
 import { CoRoastingTab } from '@/components/dashboard/CoRoastingTab';
 import { AccountsTab } from '@/components/dashboard/AccountsTab';
+import { RoasterFinishTimesCard } from '@/components/dashboard/RoasterFinishTimesCard';
 import { FinanceTab } from '@/components/dashboard/FinanceTab';
 
 type DashboardTab = 'production' | 'green' | 'coroast' | 'accounts' | 'finance';
@@ -56,6 +57,7 @@ export default function Dashboard() {
 
         <TabsContent value="production">
           <ProductionFlowTab />
+          {authUser?.role === 'ADMIN' && <RoasterFinishTimesCard />}
         </TabsContent>
 
         <TabsContent value="green">

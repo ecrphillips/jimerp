@@ -22,6 +22,7 @@ import { OrderContextBanner } from '@/components/orders/OrderContextBanner';
 import { CaseQuantityInput } from '@/components/orders/CaseQuantityInput';
 import { useClientOrderingConstraints, validateCaseQuantity } from '@/hooks/useClientOrderingConstraints';
 import { usePricingVisibility } from '@/hooks/usePricingVisibility';
+import { useClientOrderableProducts } from '@/hooks/useClientOrderableProducts';
 import { blockNonIntegerKeys } from '@/lib/numericInput';
 import { DatePicker } from '@/components/ui/date-picker';
 import { computeDefaultWorkDeadline } from '@/lib/productionScheduling';
@@ -36,6 +37,7 @@ interface LineItem {
   price: number | null;
   packagingTypeName: string | null;
   gramsPerUnit: number | null;
+  caseLotUnits: number | null;
   shipmentLocalId?: string;
 }
 
@@ -84,10 +86,11 @@ interface Product {
   sku: string | null;
   bag_size_g: number;
   grams_per_unit: number | null;
-  format: string;
+  format: string | null;
   is_perennial: boolean;
   packaging_type_id: string | null;
   packaging_types: { name: string } | null;
+  case_lot_units: number | null;
 }
 
 // Helper to build display name with packaging info
@@ -97,6 +100,16 @@ function buildDisplayName(productName: string, packagingTypeName: string | null,
   }
   const sizeLabel = formatGramsLabel(gramsPerUnit);
   return `${productName} — ${packagingTypeName} (${sizeLabel})`;
+}
+
+/**
+ * Case-lot composition, e.g. "12 × 300g bags" — the constituent bag size is
+ * derived from the case weight divided by the bags-per-case count.
+ */
+function caseLotContentsLabel(caseLotUnits: number | null | undefined, caseTotalGrams: number | null | undefined): string | null {
+  if (!caseLotUnits || caseLotUnits <= 0 || !caseTotalGrams || caseTotalGrams <= 0) return null;
+  const bagGrams = Math.round(caseTotalGrams / caseLotUnits);
+  return `${caseLotUnits} × ${formatGramsLabel(bagGrams)} bags`;
 }
 
 export default function NewOrder() {
@@ -154,29 +167,7 @@ export default function NewOrder() {
     enabled: !!productAccountId,
   });
 
-  // Fetch allowed products with packaging type join
-  const { data: products, isLoading: productsLoading } = useQuery({
-    queryKey: ['client-products', productAccountId, constraints.allowedProductIds],
-    queryFn: async () => {
-      let query = supabase
-        .from('products')
-        .select('id, product_name, sku, bag_size_g, grams_per_unit, format, is_perennial, packaging_type_id, packaging_types(name)')
-        .eq('is_active', true)
-        .order('product_name', { ascending: true });
-
-      if (constraints.allowedProductIds && constraints.allowedProductIds.length > 0) {
-        query = query.in('id', constraints.allowedProductIds);
-      } else {
-        // Unrestricted accounts still only see their own products.
-        query = query.eq('account_id', productAccountId!);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data ?? []) as Product[];
-    },
-    enabled: !constraintsLoading && !!productAccountId,
-  });
+  const { data: products, isLoading: productsLoading } = useClientOrderableProducts(productAccountId);
 
   const { data: prices } = useQuery({
     queryKey: ['client-prices', authUser?.accountId],
@@ -237,6 +228,7 @@ export default function NewOrder() {
       price: prices?.[product.id] ?? null,
       packagingTypeName,
       gramsPerUnit,
+      caseLotUnits: product.case_lot_units ?? null,
     };
   };
 
@@ -436,6 +428,7 @@ export default function NewOrder() {
 
   const submitOrder = async () => {
     if (!authUser?.accountId) return;
+    if (isPreviewMode) { toast.error('Orders cannot be submitted in preview mode'); return; }
 
     // The work deadline is derived from the account's production schedule. If
     // that query hasn't resolved yet, the deadline would silently default to
@@ -447,6 +440,9 @@ export default function NewOrder() {
 
     setSubmitting(true);
     try {
+      const { data: eligible, error: eligibilityError } = await supabase.rpc('validate_customer_products', { p_account_id: authUser.accountId, p_product_ids: lineItems.map(li => li.productId) });
+      if (eligibilityError) throw eligibilityError;
+      if (!eligible) throw new Error('One or more products are no longer available to order. Refresh your product list.');
       const { data: validationResult, error: validationError } = await supabase.functions.invoke(
         'validate-order-constraints',
         {
@@ -666,6 +662,11 @@ export default function NewOrder() {
                   <span className="text-sm font-medium">
                     {gramsPerUnit ? formatGramsLabel(gramsPerUnit) : `${variant.bag_size_g}g`}
                   </span>
+                  {variant.case_lot_units ? (
+                    <span className="text-xs text-muted-foreground">
+                      {caseLotContentsLabel(variant.case_lot_units, gramsPerUnit ?? variant.bag_size_g)}
+                    </span>
+                  ) : null}
                   {packagingTypeName && (
                     <span className="text-xs text-muted-foreground">{packagingTypeName}</span>
                   )}
@@ -835,6 +836,11 @@ export default function NewOrder() {
                           <span className="text-sm font-medium">
                             {li.gramsPerUnit ? formatGramsLabel(li.gramsPerUnit) : ''}
                           </span>
+                          {li.caseLotUnits ? (
+                            <span className="text-xs text-muted-foreground">
+                              {caseLotContentsLabel(li.caseLotUnits, li.gramsPerUnit)}
+                            </span>
+                          ) : null}
                           {li.packagingTypeName && (
                             <span className="text-xs text-muted-foreground">{li.packagingTypeName}</span>
                           )}

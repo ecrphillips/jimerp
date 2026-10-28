@@ -54,7 +54,7 @@ export function useProductsBulkEdit(enabled = true) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, is_active, account_id, client_id, packaging_variant, roast_group, internal_packaging_notes, created_at, account:accounts(account_name), client:clients(name)')
+        .select('id, product_name, sku, format, bag_size_g, is_active, account_id, client_id, packaging_variant, roast_group, internal_packaging_notes, created_at, account:accounts!products_account_id_fkey(account_name), client:clients(name)')
         .order('product_name');
       if (error) throw error;
       return (data ?? []) as unknown as ProductRow[];

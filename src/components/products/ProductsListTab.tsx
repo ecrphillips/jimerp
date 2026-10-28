@@ -28,6 +28,9 @@ import { useProductsBulkEdit } from '@/components/bulk-edit/configs/products';
 import { useBulkEditLogoutCleanup } from '@/components/bulk-edit/useChangeHighlights';
 import { useRoastGroupGreenValue } from '@/hooks/useRoastGroupGreenValue';
 import { deriveVariantSku } from '@/lib/skuGenerator';
+import { sortVariantsByVolume } from '@/lib/productVariantOrder';
+import { isCaseLotType, caseLotChoices, caseLotGrams } from '@/lib/caseLots';
+import { CaseOnlyToggle } from './CaseOnlyToggle';
 
 
 interface Product {
@@ -44,6 +47,8 @@ interface Product {
   account_id: string | null;
   packaging_variant: PackagingVariant | null;
   grams_per_unit: number | null;
+  case_lot_product_id: string | null;
+  case_lot_units: number | null;
   packaging_type: { name: string } | null;
   roast_group: string | null;
   requires_production: boolean;
@@ -154,6 +159,8 @@ export function ProductsListTab() {
   const productsBulk = useProductsBulkEdit(bulkEditOpen);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editCaseContentId, setEditCaseContentId] = useState('');
+  const [editCaseUnits, setEditCaseUnits] = useState('');
   const [pricingOverridesOpen, setPricingOverridesOpen] = useState(false);
   const editingGreenValue = useRoastGroupGreenValue(editingProduct?.roast_group ?? null);
   const editingGreenMarketPerKg = editingGreenValue.data?.marketValuePerKg && editingGreenValue.data.marketValuePerKg > 0
@@ -184,6 +191,8 @@ export function ProductsListTab() {
     currentRoastGroup: string | null;
     newRoastGroup: string | null;
     fullPayload: {
+      case_lot_product_id?: string;
+      case_lot_units?: number;
       product_name: string;
       sku: string | null;
       format: ProductFormat;
@@ -209,6 +218,9 @@ export function ProductsListTab() {
   const [variantSizeChoice, setVariantSizeChoice] = useState<string>('');
   const [variantCustomGrams, setVariantCustomGrams] = useState<string>('');
   const [variantPrice, setVariantPrice] = useState('');
+  const [caseContentId, setCaseContentId] = useState('');
+  const [caseUnits, setCaseUnits] = useState('');
+  const [caseStep, setCaseStep] = useState(false);
 
   // Form state (for editing only now)
   const [productName, setProductName] = useState('');
@@ -245,7 +257,7 @@ export function ProductsListTab() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, grams_per_unit, grind_options, is_active, is_perennial, is_placeholder, client_id, account_id, packaging_variant, packaging_type:packaging_types(name), roast_group, requires_production, packaging_material_override, packaging_labour_override, client:clients(name), account:accounts(account_name)')
+        .select('id, product_name, sku, format, bag_size_g, grams_per_unit, case_lot_product_id, case_lot_units, grind_options, is_active, is_perennial, is_placeholder, client_id, account_id, packaging_variant, packaging_type:packaging_types(name), roast_group, requires_production, packaging_material_override, packaging_labour_override, client:clients(name), account:accounts!products_account_id_fkey(account_name)')
         .order('product_name');
 
       if (error) throw error;
@@ -502,7 +514,7 @@ export function ProductsListTab() {
         accountName,
         roastGroupName,
         origin,
-        variants: matchingVariants,
+        variants: sortVariantsByVolume(matchingVariants),
         activeCount,
         lastOrderDate: familyLastOrder,
       });
@@ -527,8 +539,18 @@ export function ProductsListTab() {
 
   // ========== Mutations (unchanged) ==========
 
+  const editingCase = !!editingProduct?.case_lot_product_id;
+  const editCaseChoices = editingProduct ? caseLotChoices(editingProduct, products ?? []) : [];
+  const savedCaseContent = products?.find(p => p.id === editingProduct?.case_lot_product_id);
+  if (savedCaseContent && !editCaseChoices.some(p => p.id === savedCaseContent.id)) editCaseChoices.push(savedCaseContent);
+  const editCaseContent = editCaseChoices.find(p => p.id === editCaseContentId);
+  const editCaseCount = Number(editCaseUnits);
+  const editCaseGrams = editCaseContent ? caseLotGrams(editCaseContent.grams_per_unit ?? editCaseContent.bag_size_g, editCaseCount) : 0;
+
   const executeSaveMutation = useMutation({
     mutationFn: async (payload: {
+      case_lot_product_id?: string;
+      case_lot_units?: number;
       product_name: string;
       sku: string | null;
       format: ProductFormat;
@@ -573,6 +595,8 @@ export function ProductsListTab() {
       queryClient.invalidateQueries({ queryKey: ['production-orders'] });
       queryClient.invalidateQueries({ queryKey: ['roast-demand'] });
       queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['pack-demand-all'] });
+      queryClient.invalidateQueries({ queryKey: ['all-products-for-pack'] });
       closeDialog();
       setShowRerouteModal(false);
       setPendingRerouteData(null);
@@ -581,11 +605,16 @@ export function ProductsListTab() {
   });
 
   const handleSave = useCallback(() => {
+    if (editingCase && !editCaseGrams) {
+      toast.error('Select a variant and enter a positive whole-number quantity per case');
+      return;
+    }
     const trimmedMat = packagingMaterialOverride.trim();
     const matValue = trimmedMat === '' ? null : Number(trimmedMat);
     const trimmedLab = packagingLabourOverride.trim();
     const labValue = trimmedLab === '' ? null : Number(trimmedLab);
     const payload = {
+      ...(editingCase ? { case_lot_product_id: editCaseContentId, case_lot_units: editCaseCount } : {}),
       product_name: productName, sku: sku || null, format: formatState, bag_size_g: bagSize,
       grind_options: grindOptions, client_id: editingProduct?.client_id ?? null,
       account_id: clientId || null, is_active: isActive, is_perennial: isPerennial,
@@ -604,7 +633,7 @@ export function ProductsListTab() {
       }
     }
     executeSaveMutation.mutate(payload);
-  }, [editingProduct, productName, sku, formatState, bagSize, grindOptions, clientId, isActive, isPerennial, packagingVariant, roastGroup, requiresProduction, packagingMaterialOverride, packagingLabourOverride, executeSaveMutation]);
+  }, [editingCase, editCaseGrams, editCaseContentId, editCaseCount, editingProduct, productName, sku, formatState, bagSize, grindOptions, clientId, isActive, isPerennial, packagingVariant, roastGroup, requiresProduction, packagingMaterialOverride, packagingLabourOverride, executeSaveMutation]);
 
   const handleConfirmReroute = useCallback(() => {
     if (pendingRerouteData) executeSaveMutation.mutate(pendingRerouteData.fullPayload);
@@ -659,15 +688,22 @@ export function ProductsListTab() {
 
   const variantBaseName = variantSource ? stripPackagingSuffix(variantSource.product_name) : '';
   const variantTypeName = activePackagingTypes.find((t) => t.id === variantTypeId)?.name ?? '';
+  const isCaseLot = isCaseLotType(variantTypeName);
+  const caseChoices = variantSource ? caseLotChoices(variantSource, products ?? []) : [];
+  const caseContent = caseChoices.find(p => p.id === caseContentId);
+  const caseCount = Number(caseUnits);
   const variantGrams = useMemo(() => {
+    if (isCaseLot) return caseContent ? caseLotGrams(caseContent.grams_per_unit ?? caseContent.bag_size_g, caseCount) : 0;
     if (variantSizeChoice === '__custom__') {
       const parsed = parseInt(variantCustomGrams, 10);
       return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
     }
     const parsed = parseInt(variantSizeChoice, 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-  }, [variantSizeChoice, variantCustomGrams]);
-  const variantIsDuplicate = variantGrams > 0 && takenSizes.has(variantGrams);
+  }, [variantSizeChoice, variantCustomGrams, isCaseLot, caseContent, caseCount]);
+  const variantIsDuplicate = isCaseLot
+    ? caseChoices.length > 0 && (products ?? []).some(p => p.case_lot_product_id === caseContentId && p.case_lot_units === caseCount)
+    : variantGrams > 0 && takenSizes.has(variantGrams);
   // Product names hold only the coffee name; size/type live in the packaging
   // fields (and the size badge), same as every other creation screen.
   const variantNewName = variantTypeName && variantGrams > 0 ? variantBaseName : '';
@@ -675,6 +711,7 @@ export function ProductsListTab() {
   const addVariantMutation = useMutation({
     mutationFn: async () => {
       if (!variantSource || !variantTypeId || variantGrams <= 0) throw new Error('Missing data');
+      if (isCaseLot && !caseContent) throw new Error('Choose a variant for this case.');
       if (variantIsDuplicate) throw new Error('That packaging type and size already exists for this product.');
       const bagSizeG = variantGrams;
 
@@ -712,6 +749,8 @@ export function ProductsListTab() {
         account_id: variantSource.account_id, product_name: variantNewName, roast_group: variantSource.roast_group,
         packaging_type_id: variantTypeId,
         grams_per_unit: variantGrams,
+        case_lot_product_id: isCaseLot ? caseContentId : null,
+        case_lot_units: isCaseLot ? caseCount : null,
         // Legacy enum kept in step where the combination has one, so existing
         // badges keep rendering; new combinations simply have none.
         packaging_variant: legacyVariantFor(variantTypeName, variantGrams),
@@ -733,8 +772,9 @@ export function ProductsListTab() {
       queryClient.invalidateQueries({ queryKey: ['packaging-variant-usage'] });
       setVariantDialogOpen(false); setVariantSource(null); setVariantTypeId('');
       setVariantSizeChoice(''); setVariantCustomGrams(''); setVariantPrice('');
+      setCaseContentId(''); setCaseUnits(''); setCaseStep(false);
     },
-    onError: (err) => { console.error(err); toast.error('Failed to add variant'); },
+    onError: (err) => { console.error(err); toast.error(err instanceof Error ? err.message : 'Failed to add variant'); },
   });
 
   // ========== Callbacks ==========
@@ -747,6 +787,8 @@ export function ProductsListTab() {
   const handleChooseGeneric = (lifecycle: 'perennial' | 'seasonal') => { setTypeChoiceOpen(false); setPendingLifecycle(lifecycle); setSingleOriginCategory('generic'); setSingleOriginModalOpen(true); };
 
   const openEdit = async (p: Product) => {
+    setEditCaseContentId(p.case_lot_product_id ?? '');
+    setEditCaseUnits(p.case_lot_units == null ? '' : String(p.case_lot_units));
     setEditingProduct(p); setProductName(p.product_name); setSku(p.sku ?? '');
     setFormatState(p.format); setBagSize(p.bag_size_g); setGrindOptions(p.grind_options ?? []);
     setClientId(p.account_id ?? p.client_id ?? ''); setIsActive(p.is_active);
@@ -773,6 +815,7 @@ export function ProductsListTab() {
     setDialogOpen(false); setEditingProduct(null);
     setVariantSource(p); setVariantTypeId(''); setVariantSizeChoice('');
     setVariantCustomGrams(''); setVariantPrice('');
+    setCaseContentId(''); setCaseUnits(''); setCaseStep(false);
     setVariantDialogOpen(true);
   };
 
@@ -780,6 +823,10 @@ export function ProductsListTab() {
 
   // Auto-open product edit when ?edit=<id> is present in the URL (e.g. from admin audit)
   const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const account = searchParams.get('account');
+    if (account) setFilterAccount(account);
+  }, [searchParams]);
   useEffect(() => {
     const editId = searchParams.get('edit');
     const section = searchParams.get('section');
@@ -983,6 +1030,13 @@ export function ProductsListTab() {
                                     ) : (
                                       <span className="text-muted-foreground text-xs">{p.product_name}</span>
                                     )}
+                                    {p.case_lot_product_id && (
+                                      <span className="block mt-1 text-xs text-muted-foreground">
+                                        {p.case_lot_units} × {formatSizeCompact(products?.find(c => c.id === p.case_lot_product_id)?.bag_size_g ?? 0)}{' '}
+                                        {products?.find(c => c.id === p.case_lot_product_id)?.packaging_type?.name}
+                                      </span>
+                                    )}
+                                    {p.case_lot_product_id && p.account_id && <CaseOnlyToggle accountId={p.account_id} productId={p.id} />}
                                   </td>
                                   <td className="py-1.5 px-2 font-mono text-xs">{p.sku || '—'}</td>
                                   <td className="py-1.5 px-2">
@@ -1025,9 +1079,26 @@ export function ProductsListTab() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90vh] flex flex-col p-0 gap-0">
           <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b">
-            <DialogTitle>{editingProduct ? 'Edit Product' : 'New Product'}</DialogTitle>
+            <DialogTitle>{editingCase ? 'Edit Case Lot' : editingProduct ? 'Edit Product' : 'New Product'}</DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+            {editingCase && <div className="space-y-4 border-b pb-4">
+              <div>
+                <Label htmlFor="editCaseContent">Variant in each case</Label>
+                <Select value={editCaseContentId} onValueChange={setEditCaseContentId}>
+                  <SelectTrigger id="editCaseContent"><SelectValue placeholder="Select variant" /></SelectTrigger>
+                  <SelectContent>
+                    {editCaseChoices.map(p => <SelectItem key={p.id} value={p.id}>{formatSizeCompact(p.grams_per_unit ?? p.bag_size_g)} {p.packaging_type?.name ?? 'bag'} · {p.sku ?? p.product_name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="editCaseUnits">Bags / units per case</Label>
+                <Input id="editCaseUnits" type="number" min={1} step={1} value={editCaseUnits} onChange={e => setEditCaseUnits(e.target.value)} />
+                {!editCaseGrams && <p className="text-xs text-destructive mt-1">Choose a variant and enter a positive whole number.</p>}
+              </div>
+              {editCaseGrams > 0 && editCaseContent && <p className="text-sm font-medium">{editCaseCount} × {formatSizeCompact(editCaseContent.grams_per_unit ?? editCaseContent.bag_size_g)} = {formatSizeCompact(editCaseGrams)} per case</p>}
+            </div>}
             <div>
               <Label htmlFor="client">Account</Label>
               <Select value={clientId} onValueChange={setClientId}>
@@ -1056,8 +1127,8 @@ export function ProductsListTab() {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="bagSize">Bag Size (g)</Label>
-                <Input id="bagSize" type="number" value={bagSize} onChange={(e) => setBagSize(parseInt(e.target.value) || 0)} />
+                <Label htmlFor="bagSize">{editingCase ? 'Case weight (g)' : 'Bag Size (g)'}</Label>
+                <Input id="bagSize" type="number" value={editingCase ? editCaseGrams : bagSize} disabled={editingCase} onChange={(e) => setBagSize(parseInt(e.target.value) || 0)} />
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1099,7 +1170,7 @@ export function ProductsListTab() {
             <div>
               <Label htmlFor="packaging">Packaging Variant</Label>
               <Select value={packagingVariant ?? ''} onValueChange={(v) => setPackagingVariant(v as PackagingVariant)}>
-                <SelectTrigger id="packaging"><SelectValue placeholder="Select packaging" /></SelectTrigger>
+                <SelectTrigger id="packaging" disabled={!!editingProduct?.case_lot_product_id}><SelectValue placeholder="Select packaging" /></SelectTrigger>
                 <SelectContent>
                   {PACKAGING_OPTIONS.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
                 </SelectContent>
@@ -1192,7 +1263,7 @@ export function ProductsListTab() {
             ) : <div />}
             <div className="flex gap-2">
               <Button variant="outline" onClick={closeDialog}>Cancel</Button>
-              <Button onClick={handleSave} disabled={executeSaveMutation.isPending || !productName || !clientId}>
+              <Button onClick={handleSave} disabled={executeSaveMutation.isPending || !productName || !clientId || (editingCase && !editCaseGrams)}>
                 {executeSaveMutation.isPending ? 'Saving…' : 'Save'}
               </Button>
             </div>
@@ -1203,7 +1274,7 @@ export function ProductsListTab() {
       {/* Add Variant Dialog */}
       <Dialog open={variantDialogOpen} onOpenChange={setVariantDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Add Variant</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{caseStep ? 'Case Lot — Contents' : 'Add Variant'}</DialogTitle></DialogHeader>
           {variantSource && (
             <div className="space-y-4">
               <div className="rounded-md border p-3 bg-muted/50 text-sm space-y-1">
@@ -1217,11 +1288,11 @@ export function ProductsListTab() {
                   <span className="text-muted-foreground"> — {formatSizeCompact(variantGrams)} {variantTypeName}</span>
                 </div>
               )}
-              <div>
+              {!caseStep && <div>
                 <Label>Packaging type</Label>
                 <Select
                   value={variantTypeId}
-                  onValueChange={(v) => { setVariantTypeId(v); setVariantSizeChoice(''); setVariantCustomGrams(''); }}
+                  onValueChange={(v) => { setVariantTypeId(v); setVariantSizeChoice(''); setVariantCustomGrams(''); setCaseContentId(''); setCaseUnits(''); setCaseStep(false); }}
                 >
                   <SelectTrigger><SelectValue placeholder="Select packaging type" /></SelectTrigger>
                   <SelectContent>
@@ -1233,9 +1304,9 @@ export function ProductsListTab() {
                 <p className="text-xs text-muted-foreground mt-1">
                   Types are managed in Admin Tools → Packaging Types.
                 </p>
-              </div>
+              </div>}
 
-              <div>
+              {!isCaseLot && <div>
                 <Label>Size</Label>
                 <Select
                   value={variantSizeChoice}
@@ -1287,19 +1358,42 @@ export function ProductsListTab() {
                     This product already has a {variantTypeName} at {formatSizeCompact(variantGrams)}.
                   </p>
                 )}
-              </div>
-              <div>
-                <Label htmlFor="variantPrice">Unit Price (CAD, optional)</Label>
+              </div>}
+              {isCaseLot && caseStep && (
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="caseContent">Variant in each case</Label>
+                    <Select value={caseContentId} onValueChange={setCaseContentId}>
+                      <SelectTrigger id="caseContent"><SelectValue placeholder="Select variant" /></SelectTrigger>
+                      <SelectContent>
+                        {caseChoices.map(p => <SelectItem key={p.id} value={p.id}>{formatSizeCompact(p.grams_per_unit ?? p.bag_size_g)} {p.packaging_type?.name ?? 'bag'} · {p.sku ?? p.product_name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    {caseChoices.length === 0 && <p className="mt-1 text-sm text-destructive">No active variants available in this product group.</p>}
+                  </div>
+                  <div>
+                    <Label htmlFor="caseUnits">Bags / units per case</Label>
+                    <Input id="caseUnits" type="number" min={1} step={1} value={caseUnits} onChange={e => setCaseUnits(e.target.value)} placeholder="e.g. 12" />
+                    {caseUnits && !caseLotGrams(1, caseCount) && <p className="text-xs text-destructive mt-1">Enter a positive whole number.</p>}
+                  </div>
+                  {variantGrams > 0 && caseContent && <p className="text-sm font-medium">{caseCount} × {formatSizeCompact(caseContent.grams_per_unit ?? caseContent.bag_size_g)} = {formatSizeCompact(variantGrams)} per case</p>}
+                  {variantIsDuplicate && <p className="text-sm text-destructive">A case with this variant and quantity already exists.</p>}
+                </div>
+              )}
+              {(!isCaseLot || caseStep) && <div>
+                <Label htmlFor="variantPrice">{isCaseLot ? 'Price per case' : 'Unit Price'} (CAD, optional)</Label>
                 <Input id="variantPrice" type="number" step="0.01" min="0" placeholder="e.g. 12.50" value={variantPrice} onChange={(e) => setVariantPrice(e.target.value)} />
-              </div>
+              </div>}
               <div className="flex justify-end gap-2 pt-2">
+                {caseStep && <Button variant="outline" onClick={() => setCaseStep(false)}>Back</Button>}
                 <Button variant="outline" onClick={() => setVariantDialogOpen(false)}>Cancel</Button>
+                {isCaseLot && !caseStep ? <Button onClick={() => setCaseStep(true)}>Next: Case contents</Button> :
                 <Button
                   onClick={() => addVariantMutation.mutate()}
                   disabled={addVariantMutation.isPending || !variantTypeId || variantGrams <= 0 || variantIsDuplicate}
                 >
                   {addVariantMutation.isPending ? 'Saving…' : 'Save'}
-                </Button>
+                </Button>}
               </div>
             </div>
           )}

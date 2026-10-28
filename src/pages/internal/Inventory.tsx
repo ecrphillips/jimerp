@@ -26,6 +26,22 @@ import { fetchAllRows } from '@/lib/fetchAllRows';
 import { useBlendHolds, heldKgByGroup } from '@/hooks/useBlendHolds';
 import { BlendHoldsPanel } from '@/components/production/BlendHoldsPanel';
 import { useOrderCreator } from '@/hooks/useOrderCreator';
+import { availableWipKg } from '@/lib/inventoryAvailability';
+import { fgFloorCountDelta } from '@/lib/fgFloorCount';
+import { FGCountInput } from '@/components/products/FGCountInput';
+
+function AvailabilityToggle({ availableOnly, onChange }: { availableOnly: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="inline-flex shrink-0 rounded-md border p-0.5" role="group" aria-label="Rows to show">
+      <Button size="sm" className="h-7" variant={availableOnly ? 'default' : 'ghost'} aria-pressed={availableOnly} onClick={() => onChange(true)}>
+        Available
+      </Button>
+      <Button size="sm" className="h-7" variant={!availableOnly ? 'default' : 'ghost'} aria-pressed={!availableOnly} onClick={() => onChange(false)}>
+        All
+      </Button>
+    </div>
+  );
+}
 
 interface LastCount {
   created_at: string;
@@ -311,11 +327,20 @@ export default function Inventory() {
   // current ledger balance). No writes to the retired fg_inventory /
   // fg_inventory_log tables. Stamped with the logged-in user and now().
   const upsertFgInventory = useMutation({
-    mutationFn: async ({ productId, unitsDelta, newUnits }: {
+    mutationFn: async ({ productId, newUnits }: {
       productId: string;
-      unitsDelta: number;
       newUnits: number;
     }) => {
+      const transactions = await fetchAllRows((from, to) =>
+        supabase.from('inventory_transactions')
+          .select('quantity_units')
+          .eq('product_id', productId)
+          .in('transaction_type', ['PACK_PRODUCE_FG', 'SHIP_CONSUME_FG', 'ADJUSTMENT'])
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+      const signedBalance = transactions.reduce((sum, tx) => sum + Number(tx.quantity_units ?? 0), 0);
+      const unitsDelta = fgFloorCountDelta(newUnits, signedBalance);
       if (!unitsDelta) return;
       const { error } = await supabase
         .from('inventory_transactions')
@@ -330,9 +355,11 @@ export default function Inventory() {
       if (error) throw error;
       return newUnits;
     },
-    onSuccess: (newUnits) => {
-      queryClient.invalidateQueries({ queryKey: ['authoritative-fg-ledger'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-last-counts'] });
+    onSuccess: async (newUnits) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['authoritative-fg-ledger'] }),
+        queryClient.invalidateQueries({ queryKey: ['inventory-last-counts'] }),
+      ]);
       if (newUnits != null) toast.success(`Counted ${newUnits} units.`);
     },
     onError: (err) => {
@@ -342,16 +369,14 @@ export default function Inventory() {
   });
 
   const handleFgAdjust = (productId: string, currentUnits: number, delta: number) => {
+    if (upsertFgInventory.isPending) return;
     const newUnits = Math.max(0, currentUnits + delta);
-    // Balancing delta against the current ledger balance (clamped at 0).
-    upsertFgInventory.mutate({ productId, unitsDelta: newUnits - currentUnits, newUnits });
+    upsertFgInventory.mutate({ productId, newUnits });
   };
 
-  const handleFgSet = (productId: string, currentUnits: number, newValue: string) => {
-    const newUnits = parseInt(newValue, 10);
-    if (isNaN(newUnits) || newUnits < 0) return;
-    const delta = newUnits - currentUnits;
-    upsertFgInventory.mutate({ productId, unitsDelta: delta, newUnits });
+  const handleFgSet = (productId: string, newUnits: number) => {
+    if (upsertFgInventory.isPending) return;
+    upsertFgInventory.mutate({ productId, newUnits });
   };
 
   const openAdjustDialog = (roastGroup: string) => {
@@ -374,13 +399,13 @@ export default function Inventory() {
 
   // Roasted-not-packed view: roast groups with positive net WIP awaiting packing.
   const wipAvailableRows = useMemo(
-    () => wipByRoastGroup.filter((r) => r.net_wip_kg > 0),
-    [wipByRoastGroup],
+    () => wipByRoastGroup.filter((r) => availableWipKg(r.net_wip_kg, heldByGroup[r.roast_group] ?? 0) > 0),
+    [wipByRoastGroup, heldByGroup],
   );
   const wipDisplayRows = wipAvailableOnly ? wipAvailableRows : wipByRoastGroup;
   const wipAvailableTotalKg = useMemo(
-    () => wipAvailableRows.reduce((sum, r) => sum + r.net_wip_kg, 0),
-    [wipAvailableRows],
+    () => wipAvailableRows.reduce((sum, r) => sum + availableWipKg(r.net_wip_kg, heldByGroup[r.roast_group] ?? 0), 0),
+    [wipAvailableRows, heldByGroup],
   );
 
   // One row per active product, units sourced from the authoritative FG map.
@@ -462,18 +487,12 @@ export default function Inventory() {
                     For post-roast blends, WIP is created when components are blended, not when components are roasted.
                   </p>
                   <p className="mt-2 text-sm font-medium">
-                    {wipAvailableTotalKg.toFixed(1)} kg roasted awaiting packing across {wipAvailableRows.length}{' '}
+                    {wipAvailableTotalKg.toFixed(1)} kg available to pack across {wipAvailableRows.length}{' '}
                     {wipAvailableRows.length === 1 ? 'group' : 'groups'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Button
-                    variant={wipAvailableOnly ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setWipAvailableOnly((v) => !v)}
-                  >
-                    {wipAvailableOnly ? 'Showing available' : 'Show all'}
-                  </Button>
+                  <AvailabilityToggle availableOnly={wipAvailableOnly} onChange={setWipAvailableOnly} />
                   {isAdminOrOps && (
                     <>
                       <Button
@@ -506,7 +525,7 @@ export default function Inventory() {
                 <div className="py-6">
                   <p className="text-muted-foreground">
                     {wipAvailableOnly && wipByRoastGroup.length > 0
-                      ? 'No roasted coffee is currently awaiting packing. Toggle “Show all” to see fully-consumed groups.'
+                      ? 'No roasted coffee is currently available to pack. Choose “All” to see every group.'
                       : 'No WIP data available. Use “Add WIP for roast group” above to enter an opening balance.'}
                   </p>
                 </div>
@@ -559,7 +578,7 @@ export default function Inventory() {
                           {(heldByGroup[row.roast_group] ?? 0) > 0 ? `${heldByGroup[row.roast_group].toFixed(1)} kg` : ''}
                         </td>
                         <td className="py-3 text-right font-semibold">
-                          {Math.max(0, row.net_wip_kg - (heldByGroup[row.roast_group] ?? 0)).toFixed(1)} kg
+                          {availableWipKg(row.net_wip_kg, heldByGroup[row.roast_group] ?? 0).toFixed(1)} kg
                         </td>
                         <td className="py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -610,20 +629,13 @@ export default function Inventory() {
                     {fgAvailableRows.length} {fgAvailableRows.length === 1 ? 'product' : 'products'}
                   </p>
                 </div>
-                <Button
-                  variant={fgAvailableOnly ? 'default' : 'outline'}
-                  size="sm"
-                  className="shrink-0"
-                  onClick={() => setFgAvailableOnly((v) => !v)}
-                >
-                  {fgAvailableOnly ? 'Showing available' : 'Show all'}
-                </Button>
+                <AvailabilityToggle availableOnly={fgAvailableOnly} onChange={setFgAvailableOnly} />
               </div>
             </CardHeader>
             <CardContent>
               {fgAvailableOnly && fgDisplayRows.length === 0 ? (
                 <p className="text-muted-foreground py-4">
-                  No finished goods are currently awaiting pick. Toggle “Show all” to see every product.
+                  No finished goods are currently awaiting pick. Choose “All” to see every product.
                 </p>
               ) : !fgAvailableOnly && fgRows.length === 0 ? (
                 <p className="text-muted-foreground py-4">No products configured.</p>
@@ -645,7 +657,8 @@ export default function Inventory() {
                         row={row}
                         lastCount={lastCounts?.byProduct[row.product_id]}
                         onAdjust={(delta) => handleFgAdjust(row.product_id, row.units_on_hand, delta)}
-                        onSet={(value) => handleFgSet(row.product_id, row.units_on_hand, value)}
+                        onSet={(value) => handleFgSet(row.product_id, value)}
+                        disabled={upsertFgInventory.isPending}
                       />
                     ))}
                   </tbody>
@@ -831,26 +844,15 @@ function FgInventoryRow({
   row,
   lastCount,
   onAdjust,
-  onSet
+  onSet,
+  disabled,
 }: {
   row: FgInventoryRow;
   lastCount?: LastCount;
   onAdjust: (delta: number) => void;
-  onSet: (value: string) => void;
+  onSet: (value: number) => void;
+  disabled: boolean;
 }) {
-  const [localValue, setLocalValue] = useState(row.units_on_hand.toString());
-  
-  // Sync local value when row changes
-  React.useEffect(() => {
-    setLocalValue(row.units_on_hand.toString());
-  }, [row.units_on_hand]);
-
-  const handleBlur = () => {
-    if (localValue !== row.units_on_hand.toString()) {
-      onSet(localValue);
-    }
-  };
-
   return (
     <tr className="border-b">
       <td className="py-3 font-medium">
@@ -874,23 +876,24 @@ function FgInventoryRow({
             variant="outline"
             className="h-7 w-7 p-0"
             onClick={() => onAdjust(-1)}
-            disabled={row.units_on_hand <= 0}
+            aria-label={`Decrease on hand for ${row.product.product_name}`}
+            disabled={disabled || row.units_on_hand <= 0}
           >
             <Minus className="h-3 w-3" />
           </Button>
-          <Input
-            type="number"
-            className="w-16 h-7 text-center text-sm"
-            value={localValue}
-            onChange={(e) => setLocalValue(e.target.value)}
-            onBlur={handleBlur}
-            min={0}
+          <FGCountInput
+            units={row.units_on_hand}
+            productName={row.product.product_name}
+            disabled={disabled}
+            onCount={onSet}
           />
           <Button
             size="sm"
             variant="outline"
             className="h-7 w-7 p-0"
             onClick={() => onAdjust(1)}
+            aria-label={`Increase on hand for ${row.product.product_name}`}
+            disabled={disabled}
           >
             <Plus className="h-3 w-3" />
           </Button>
