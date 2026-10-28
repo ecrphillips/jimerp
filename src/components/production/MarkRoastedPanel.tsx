@@ -96,7 +96,7 @@ export function MarkRoastedPanel({
     setGreenKg(String(g));
     setRoastedKg('');
     setRecordLoss(false);
-    setLossNote(false as unknown as never) as unknown as void;
+    setLossNote('');
     setPrintLabelOnSave(true);
     setSaving(false);
     setSplitsTouched(false);
