@@ -227,7 +227,12 @@ export function MarkRoastedPanel({
                 inputMode="decimal"
                 className="h-14 text-2xl font-semibold text-center"
                 value={greenKg}
-                onChange={(e) => setGreenKg(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setGreenKg(v);
+                  // Keep the roasted estimate in step with the green weight until the roaster overrides it.
+                  if (!roastedTouched) setRoastedKg(expectedRoastedFrom(v, expectedYieldLossPct));
+                }}
               />
             </label>
             <label className="space-y-2">
@@ -239,7 +244,10 @@ export function MarkRoastedPanel({
                 placeholder="Required"
                 className={cn('h-14 text-2xl font-semibold text-center', !roastedOk && 'border-primary')}
                 value={roastedKg}
-                onChange={(e) => setRoastedKg(e.target.value)}
+                onChange={(e) => {
+                  setRoastedTouched(true);
+                  setRoastedKg(e.target.value);
+                }}
               />
             </label>
           </div>
