@@ -86,6 +86,7 @@ export function MarkRoastedPanel({
   const [recordLoss, setRecordLoss] = useState(false);
   const [lossNote, setLossNote] = useState('');
   const [printLabelOnSave, setPrintLabelOnSave] = useState(true);
+  const [roastedTouched, setRoastedTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [splitsTouched, setSplitsTouched] = useState(false);
 
@@ -94,7 +95,8 @@ export function MarkRoastedPanel({
     setMachine(batch.assigned_roaster);
     const g = batch.planned_output_kg && batch.planned_output_kg > 0 ? batch.planned_output_kg : standardBatchKg;
     setGreenKg(String(g));
-    setRoastedKg('');
+    setRoastedKg(expectedRoastedFrom(String(g), expectedYieldLossPct));
+    setRoastedTouched(false);
     setRecordLoss(false);
     setLossNote('');
     setPrintLabelOnSave(true);
