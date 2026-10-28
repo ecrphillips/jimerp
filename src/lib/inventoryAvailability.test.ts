@@ -14,3 +14,13 @@ describe('availableWipKg', () => {
     expect(availableWipKg(10, 4)).toBe(6);
   });
 });
+import { isNegativeBalance } from './inventoryAvailability';
+import { describe as d2, it as i2, expect as e2 } from 'vitest';
+d2('isNegativeBalance', () => {
+  i2('flags real negatives, ignores rounding residue', () => {
+    e2(isNegativeBalance(-8.4)).toBe(true);
+    e2(isNegativeBalance(-0.0000001)).toBe(false);
+    e2(isNegativeBalance(0)).toBe(false);
+    e2(isNegativeBalance(-1, 1)).toBe(true);
+  });
+});
