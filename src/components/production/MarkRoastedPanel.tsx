@@ -85,6 +85,7 @@ export function MarkRoastedPanel({
   const [splits, setSplits] = useState<LotSplit[]>([]);
   const [recordLoss, setRecordLoss] = useState(false);
   const [lossNote, setLossNote] = useState('');
+  const [printLabelOnSave, setPrintLabelOnSave] = useState(true);
   const [saving, setSaving] = useState(false);
   const [splitsTouched, setSplitsTouched] = useState(false);
 
@@ -96,6 +97,7 @@ export function MarkRoastedPanel({
     setRoastedKg('');
     setRecordLoss(false);
     setLossNote('');
+    setPrintLabelOnSave(true);
     setSaving(false);
     setSplitsTouched(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -164,10 +166,12 @@ export function MarkRoastedPanel({
       toast.success(`Roasted ${roasted.toFixed(1)} kg — batch ${result.batch_number}`);
       onSaved(result.batch_number ?? null);
       onOpenChange(false);
-      try {
-        await printBatchLabel(batch.id);
-      } catch (e) {
-        toast.error(`Saved, but the label didn't print: ${(e as Error).message}. Use Reprint.`);
+      if (printLabelOnSave) {
+        try {
+          await printBatchLabel(batch.id);
+        } catch (e) {
+          toast.error(`Saved, but the label didn't print: ${(e as Error).message}. Use Reprint.`);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -330,9 +334,14 @@ export function MarkRoastedPanel({
             </p>
           )}
 
+          <label className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Checkbox checked={printLabelOnSave} onCheckedChange={(v) => setPrintLabelOnSave(v === true)} />
+            Print the bin label when saving
+          </label>
+
           <Button className="h-16 w-full text-xl font-bold gap-2" disabled={!canSave} onClick={save}>
             {saving ? <Loader2 className="h-6 w-6 animate-spin" /> : <Printer className="h-6 w-6" />}
-            Save &amp; print label
+            {printLabelOnSave ? 'Save &amp; print label' : 'Save without printing'}
           </Button>
         </div>
       </DialogContent>
