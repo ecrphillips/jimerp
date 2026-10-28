@@ -17,6 +17,13 @@ import { toast } from 'sonner';
 
 type Machine = 'LORING' | 'SAMIAC';
 
+/** Roasted-out estimate from a green weight and the roast group's yield-loss %. */
+function expectedRoastedFrom(greenStr: string, lossPct: number): string {
+  const g = parseFloat(greenStr);
+  if (!Number.isFinite(g) || g <= 0) return '';
+  return String(+(g * (1 - lossPct / 100)).toFixed(2));
+}
+
 export interface MarkRoastedBatch {
   id: string;
   roast_group: string;
@@ -86,6 +93,7 @@ export function MarkRoastedPanel({
   const [recordLoss, setRecordLoss] = useState(false);
   const [lossNote, setLossNote] = useState('');
   const [printLabelOnSave, setPrintLabelOnSave] = useState(true);
+  const [roastedTouched, setRoastedTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [splitsTouched, setSplitsTouched] = useState(false);
 
@@ -94,7 +102,8 @@ export function MarkRoastedPanel({
     setMachine(batch.assigned_roaster);
     const g = batch.planned_output_kg && batch.planned_output_kg > 0 ? batch.planned_output_kg : standardBatchKg;
     setGreenKg(String(g));
-    setRoastedKg('');
+    setRoastedKg(expectedRoastedFrom(String(g), expectedYieldLossPct));
+    setRoastedTouched(false);
     setRecordLoss(false);
     setLossNote('');
     setPrintLabelOnSave(true);
@@ -218,7 +227,12 @@ export function MarkRoastedPanel({
                 inputMode="decimal"
                 className="h-14 text-2xl font-semibold text-center"
                 value={greenKg}
-                onChange={(e) => setGreenKg(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setGreenKg(v);
+                  // Keep the roasted estimate in step with the green weight until the roaster overrides it.
+                  if (!roastedTouched) setRoastedKg(expectedRoastedFrom(v, expectedYieldLossPct));
+                }}
               />
             </label>
             <label className="space-y-2">
@@ -230,7 +244,10 @@ export function MarkRoastedPanel({
                 placeholder="Required"
                 className={cn('h-14 text-2xl font-semibold text-center', !roastedOk && 'border-primary')}
                 value={roastedKg}
-                onChange={(e) => setRoastedKg(e.target.value)}
+                onChange={(e) => {
+                  setRoastedTouched(true);
+                  setRoastedKg(e.target.value);
+                }}
               />
             </label>
           </div>
