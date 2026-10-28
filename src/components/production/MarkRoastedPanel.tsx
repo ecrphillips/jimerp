@@ -17,6 +17,13 @@ import { toast } from 'sonner';
 
 type Machine = 'LORING' | 'SAMIAC';
 
+/** Roasted-out estimate from a green weight and the roast group's yield-loss %. */
+function expectedRoastedFrom(greenStr: string, lossPct: number): string {
+  const g = parseFloat(greenStr);
+  if (!Number.isFinite(g) || g <= 0) return '';
+  return String(+(g * (1 - lossPct / 100)).toFixed(2));
+}
+
 export interface MarkRoastedBatch {
   id: string;
   roast_group: string;
