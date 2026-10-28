@@ -41,6 +41,7 @@ export interface AuthoritativeFg {
   fg_created_units: number;      // sum(units_packed) from packing_runs
   fg_allocated_units: number;    // sum(units_picked) from ship_picks for OPEN orders
   fg_available_units: number;    // fg_created_units - fg_allocated_units
+  fg_signed_units?: number;      // unclamped ledger balance (may be negative)
 }
 
 export interface AuthoritativeDemand {
@@ -510,6 +511,7 @@ export function computeAuthoritativeFg(
       fg_created_units: created,
       fg_allocated_units: -shipNet,            // total units consumed (picked/shipped), positive
       fg_available_units: Math.max(0, created + shipNet + adjust),
+      fg_signed_units: created + shipNet + adjust,
     };
   }
 

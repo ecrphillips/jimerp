@@ -6,3 +6,9 @@ export function availableWipKg(netKg: number, heldKg = 0): number {
   const available = netKg - heldKg;
   return available >= MIN_VISIBLE_KG ? available : 0;
 }
+export type AvailabilityMode = 'available' | 'negative' | 'all';
+
+/** True when a signed balance is below zero beyond display rounding. */
+export function isNegativeBalance(net: number, tolerance = MIN_VISIBLE_KG): boolean {
+  return net <= -tolerance;
+}
