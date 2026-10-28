@@ -334,9 +334,14 @@ export function MarkRoastedPanel({
             </p>
           )}
 
+          <label className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Checkbox checked={printLabelOnSave} onCheckedChange={(v) => setPrintLabelOnSave(v === true)} />
+            Print the bin label when saving
+          </label>
+
           <Button className="h-16 w-full text-xl font-bold gap-2" disabled={!canSave} onClick={save}>
             {saving ? <Loader2 className="h-6 w-6 animate-spin" /> : <Printer className="h-6 w-6" />}
-            Save &amp; print label
+            {printLabelOnSave ? 'Save &amp; print label' : 'Save without printing'}
           </Button>
         </div>
       </DialogContent>
