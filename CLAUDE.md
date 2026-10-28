@@ -176,6 +176,16 @@ As of `supabase/migrations/20261022150000_*.sql`, `mark_batch_roasted` takes **g
 - Depletion warnings treat planned batch kg as green (no yield factor).
 - Not covered: `OhShitModal` inserts roasted batches directly (no green taken). `green_lot_consumption_log.lot_id` has no ON DELETE, so a lot with consumption rows can't be deleted.
 
+## Production: Batch Numbers, WIP Labels, Batch History
+
+As of `supabase/migrations/20261028180000_*.sql`:
+- **Batch numbers** `L15-MMDD-NN` (Loring), `S30-…` (Samiac), `BL-…` (post-roast blends), `XX-…` (no machine). Assigned by trigger `trg_roasted_batches_numbering` the moment a batch becomes ROASTED (any path), counted per machine per Vancouver day via `batch_number_counters` (`_next_batch_number`, row-locked upsert). A number stays with its batch through undo/re-roast; only `edit_roasted_batch` (ADMIN) can change it. `batch_date` keeps the year.
+- **Mark roasted**: `MarkRoastedPanel` → `mark_batch_roasted(..., p_machine)` returns `{ok, batch_id, batch_number}`; stores green kg in (`planned_output_kg`), `green_lot_splits`, `roasted_by`. Green comes off only when the `green_deduction` switch is on (`green_deducted` flags it) and may go negative. Roasted rows are read-only on the Roast tab; admins edit in Batch History (`edit_roasted_batch` adjusts WIP by the difference and re-takes green).
+- **Roasted batches can't be deleted** (`trg_roasted_batches_block_delete`); undo first. `dev_reset_test_day` sets `jim.allow_batch_delete`. `dev_purge_ghost_production_rows` no longer touches batches.
+- **Blends**: `execute_blend` returns `{total_kg, blend_run_id, batch_number}` and records `blend_runs` + `blend_run_components`.
+- **Labels**: `src/lib/batchLabel.ts` (6×4 in, pure black, printed from a hidden iframe), data in `src/lib/batchLabelData.ts`. Roast group name biggest, then date; no roaster name on the label.
+- **Batch History** page `/production/batches` (ADMIN only).
+
 ## Migration Discipline
 
 - Filenames: `YYYYMMDDHHMMSS_<uuid>.sql` in `supabase/migrations/`

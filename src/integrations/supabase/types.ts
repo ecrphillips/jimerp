@@ -407,6 +407,24 @@ export type Database = {
           },
         ]
       }
+      batch_number_counters: {
+        Row: {
+          batch_date: string
+          last_seq: number
+          machine_code: string
+        }
+        Insert: {
+          batch_date: string
+          last_seq?: number
+          machine_code: string
+        }
+        Update: {
+          batch_date?: string
+          last_seq?: number
+          machine_code?: string
+        }
+        Relationships: []
+      }
       baskets: {
         Row: {
           created_at: string
@@ -434,6 +452,81 @@ export type Database = {
           name?: string
           notes?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      blend_run_components: {
+        Row: {
+          blend_run_id: string
+          id: string
+          kg_used: number
+          roasted_batch_id: string
+        }
+        Insert: {
+          blend_run_id: string
+          id?: string
+          kg_used: number
+          roasted_batch_id: string
+        }
+        Update: {
+          blend_run_id?: string
+          id?: string
+          kg_used?: number
+          roasted_batch_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blend_run_components_blend_run_id_fkey"
+            columns: ["blend_run_id"]
+            isOneToOne: false
+            referencedRelation: "blend_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blend_run_components_roasted_batch_id_fkey"
+            columns: ["roasted_batch_id"]
+            isOneToOne: false
+            referencedRelation: "roasted_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      blend_runs: {
+        Row: {
+          batch_date: string
+          batch_number: string
+          batch_seq: number | null
+          blend_roast_group: string
+          created_at: string
+          id: string
+          made_at: string
+          made_by: string | null
+          notes: string | null
+          total_kg: number
+        }
+        Insert: {
+          batch_date: string
+          batch_number: string
+          batch_seq?: number | null
+          blend_roast_group: string
+          created_at?: string
+          id?: string
+          made_at?: string
+          made_by?: string | null
+          notes?: string | null
+          total_kg: number
+        }
+        Update: {
+          batch_date?: string
+          batch_number?: string
+          batch_seq?: number | null
+          blend_roast_group?: string
+          created_at?: string
+          id?: string
+          made_at?: string
+          made_by?: string | null
+          notes?: string | null
+          total_kg?: number
         }
         Relationships: []
       }
@@ -4928,6 +5021,7 @@ export type Database = {
           email: string
           id: string
           is_active: boolean
+          label_name: string | null
           name: string
           updated_at: string
           user_id: string
@@ -4937,6 +5031,7 @@ export type Database = {
           email: string
           id?: string
           is_active?: boolean
+          label_name?: string | null
           name: string
           updated_at?: string
           user_id: string
@@ -4946,6 +5041,7 @@ export type Database = {
           email?: string
           id?: string
           is_active?: boolean
+          label_name?: string | null
           name?: string
           updated_at?: string
           user_id?: string
@@ -5564,16 +5660,22 @@ export type Database = {
           assigned_roaster:
             | Database["public"]["Enums"]["roaster_machine"]
             | null
+          batch_date: string | null
+          batch_number: string | null
+          batch_seq: number | null
           consumed_by_blend_at: string | null
           created_at: string
           created_by: string | null
           cropster_batch_id: string | null
+          green_deducted: boolean
+          green_lot_splits: Json | null
           id: string
           notes: string | null
           planned_for_blend_roast_group: string | null
           planned_output_kg: number | null
           roast_group: string
           roasted_at: string | null
+          roasted_by: string | null
           status: Database["public"]["Enums"]["roasted_batch_status"]
           target_date: string
           updated_at: string
@@ -5583,16 +5685,22 @@ export type Database = {
           assigned_roaster?:
             | Database["public"]["Enums"]["roaster_machine"]
             | null
+          batch_date?: string | null
+          batch_number?: string | null
+          batch_seq?: number | null
           consumed_by_blend_at?: string | null
           created_at?: string
           created_by?: string | null
           cropster_batch_id?: string | null
+          green_deducted?: boolean
+          green_lot_splits?: Json | null
           id?: string
           notes?: string | null
           planned_for_blend_roast_group?: string | null
           planned_output_kg?: number | null
           roast_group: string
           roasted_at?: string | null
+          roasted_by?: string | null
           status?: Database["public"]["Enums"]["roasted_batch_status"]
           target_date: string
           updated_at?: string
@@ -5602,16 +5710,22 @@ export type Database = {
           assigned_roaster?:
             | Database["public"]["Enums"]["roaster_machine"]
             | null
+          batch_date?: string | null
+          batch_number?: string | null
+          batch_seq?: number | null
           consumed_by_blend_at?: string | null
           created_at?: string
           created_by?: string | null
           cropster_batch_id?: string | null
+          green_deducted?: boolean
+          green_lot_splits?: Json | null
           id?: string
           notes?: string | null
           planned_for_blend_roast_group?: string | null
           planned_output_kg?: number | null
           roast_group?: string
           roasted_at?: string | null
+          roasted_by?: string | null
           status?: Database["public"]["Enums"]["roasted_batch_status"]
           target_date?: string
           updated_at?: string
@@ -6690,6 +6804,22 @@ export type Database = {
       dev_reset_test_day: { Args: never; Returns: Json }
       dev_test_reset: { Args: never; Returns: Json }
       dev_test_seed_minimal: { Args: never; Returns: undefined }
+      edit_roasted_batch: {
+        Args: {
+          p_actual_output_kg: number
+          p_batch_date: string | null
+          p_batch_id: string
+          p_batch_number: string
+          p_cropster_batch_id: string | null
+          p_green_kg: number
+          p_lot_splits: Json | null
+          p_machine: string | null
+          p_notes: string | null
+          p_roasted_at: string | null
+          p_roasted_by: string | null
+        }
+        Returns: boolean
+      }
       execute_blend: {
         Args: {
           p_batch_ids: string[]
@@ -6697,7 +6827,7 @@ export type Database = {
           p_blend_roast_group: string
           p_consume_kgs: number[]
         }
-        Returns: number
+        Returns: Json
       }
       get_client_delete_preflight: {
         Args: { p_client_id: string }
@@ -6797,8 +6927,9 @@ export type Database = {
           p_loss_note?: string
           p_lot_id?: string
           p_lot_splits?: Json
+          p_machine?: string
         }
-        Returns: boolean
+        Returns: Json
       }
       mark_quote_accepted: { Args: { p_quote_id: string }; Returns: Json }
       mark_quote_sent: { Args: { p_quote_id: string }; Returns: undefined }

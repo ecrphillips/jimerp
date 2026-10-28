@@ -55,6 +55,7 @@ import BulkProducts from "@/pages/internal/BulkProducts";
 import Inventory from "@/pages/internal/Inventory";
 import InventoryLedger from "@/pages/internal/InventoryLedger";
 import AdminTools from "@/pages/internal/AdminTools";
+import BatchHistory from "@/pages/internal/BatchHistory";
 import NotificationPreferences from "@/pages/internal/NotificationPreferences";
 import MarketPriceAudit from "@/pages/internal/MarketPriceAudit";
 import MarketPricingAnalysis from "@/pages/shared/MarketPricingAnalysis";
@@ -307,6 +308,11 @@ const App = () => (
             <Route path="/co-roasting/loring-schedule" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'OPS']}>
                 <InternalLayout><CoRoastLoringSchedule /></InternalLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/production/batches" element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <InternalLayout><BatchHistory /></InternalLayout>
               </ProtectedRoute>
             } />
             <Route path="/admin-tools" element={

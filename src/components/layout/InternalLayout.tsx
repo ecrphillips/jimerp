@@ -38,6 +38,7 @@ import {
   Truck,
   LineChart,
   Network,
+  History,
   Bell,
   
 } from 'lucide-react';
@@ -217,6 +218,9 @@ export function InternalLayout({ children }: InternalLayoutProps) {
                 <NavItem to="/orders" icon={ShoppingCart} label="Orders" onClick={closeSidebar} />
                 
                 <NavItem to="/production" icon={Flame} label="Run Sheet" onClick={closeSidebar} end />
+                {authUser?.role === 'ADMIN' && (
+                  <NavItem to="/production/batches" icon={History} label="Batch History" onClick={closeSidebar} />
+                )}
                 <NavItem to="/inventory" icon={Warehouse} label="Inventory Levels" onClick={closeSidebar} end />
                 <NavItem to="/products" icon={Package} label="Products" onClick={closeSidebar} />
                 <NavItem to="/roast-groups" icon={Coffee} label="Roast Groups" onClick={closeSidebar} />

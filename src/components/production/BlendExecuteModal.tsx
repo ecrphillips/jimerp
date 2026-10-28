@@ -14,8 +14,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllRows } from '@/lib/fetchAllRows';
 import { toast } from 'sonner';
-import { Loader2, AlertTriangle, CheckCircle2, Layers, ArrowRight, Beaker } from 'lucide-react';
+import { Loader2, AlertTriangle, CheckCircle2, Layers, ArrowRight, Beaker, Printer } from 'lucide-react';
 import { BlendHoldsPanel } from './BlendHoldsPanel';
+import { printBlendLabel } from '@/lib/batchLabelData';
 
 interface RoastedBatch {
   id: string;
@@ -27,6 +28,7 @@ interface RoastedBatch {
   notes: string | null;
   target_date: string;
   created_at: string;
+  batch_number: string | null;
 }
 
 interface BlendComponent {
@@ -67,6 +69,7 @@ export function BlendExecuteModal({
   const [selectedBatches, setSelectedBatches] = useState<Record<string, SelectedBatch>>({});
   const [showSuccess, setShowSuccess] = useState(false);
   const [blendedAmount, setBlendedAmount] = useState<number>(0);
+  const [blendRun, setBlendRun] = useState<{ id: string; batchNumber: string } | null>(null);
   const [confirmReleaseOpen, setConfirmReleaseOpen] = useState(false);
 
   // Reset state when modal opens
@@ -75,6 +78,7 @@ export function BlendExecuteModal({
       setSelectedBatches({});
       setShowSuccess(false);
       setBlendedAmount(0);
+      setBlendRun(null);
       setConfirmReleaseOpen(false);
     }
   }, [open]);
@@ -123,7 +127,7 @@ export function BlendExecuteModal({
       const data = await fetchAllRows((from, to) =>
         supabase
           .from('roasted_batches')
-          .select('id, roast_group, actual_output_kg, status, planned_for_blend_roast_group, consumed_by_blend_at, notes, target_date, created_at')
+          .select('id, roast_group, actual_output_kg, status, planned_for_blend_roast_group, consumed_by_blend_at, notes, target_date, created_at, batch_number')
           .in('roast_group', componentGroups)
           .eq('status', 'ROASTED')
           .is('consumed_by_blend_at', null)  // Only unconsumed batches
@@ -403,10 +407,21 @@ export function BlendExecuteModal({
       });
 
       if (error) throw error;
-      return Number(data ?? totalBlendOutput);
+      const result = (data ?? {}) as { total_kg?: number; blend_run_id?: string; batch_number?: string };
+      return {
+        amount: Number(result.total_kg ?? totalBlendOutput),
+        runId: result.blend_run_id ?? null,
+        batchNumber: result.batch_number ?? null,
+      };
     },
-    onSuccess: (amount) => {
-      toast.success(`Blended ${amount.toFixed(1)} kg of ${blendDisplayName}`);
+    onSuccess: ({ amount, runId, batchNumber }) => {
+      toast.success(`Blended ${amount.toFixed(1)} kg of ${blendDisplayName}${batchNumber ? ` — ${batchNumber}` : ''}`);
+      if (runId && batchNumber) {
+        setBlendRun({ id: runId, batchNumber });
+        printBlendLabel(runId).catch((e) => {
+          toast.error(`Blend saved, but the label didn't print: ${(e as Error).message}. Use Reprint.`);
+        });
+      }
       // Invalidate all inventory-related queries for immediate UI update
       queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
@@ -471,8 +486,22 @@ export function BlendExecuteModal({
 
               <AlertDescription className="text-green-800 dark:text-green-200">
                 Successfully created {blendedAmount.toFixed(1)} kg of {blendDisplayName} WIP!
+                {blendRun && <> Blend batch <strong className="font-mono">{blendRun.batchNumber}</strong>.</>}
               </AlertDescription>
             </Alert>
+            {blendRun && (
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => {
+                  printBlendLabel(blendRun.id).catch((e) => {
+                    toast.error((e as Error).message || 'Could not print label');
+                  });
+                }}
+              >
+                <Printer className="h-4 w-4" /> Reprint label
+              </Button>
+            )}
             
             <p className="text-sm text-muted-foreground">
               The blend WIP is now available for packing in the Pack station.
@@ -556,7 +585,7 @@ export function BlendExecuteModal({
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 text-sm">
                                   <span className="font-mono text-xs text-muted-foreground">
-                                    {batch.id.slice(0, 8)}
+                                    {batch.batch_number ?? batch.id.slice(0, 8)}
                                   </span>
                                   {batch.linkedToThisBlend && (
                                     <Badge variant="secondary" className="text-xs">
@@ -647,7 +676,7 @@ export function BlendExecuteModal({
                     Blending...
                   </>
                 ) : (
-                  `Create ${totalBlendOutput > 0 ? totalBlendOutput.toFixed(1) + ' kg ' : ''}Blend`
+                  `Create ${totalBlendOutput > 0 ? totalBlendOutput.toFixed(1) + ' kg ' : ''}Blend & print label`
                 )}
               </Button>
             </DialogFooter>

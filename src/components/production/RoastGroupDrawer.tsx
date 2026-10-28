@@ -32,6 +32,7 @@ import {
   Package,
   Layers,
   Leaf,
+  Printer,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -44,6 +45,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { OhShitModal } from './OhShitModal';
+import { MarkRoastedPanel } from './MarkRoastedPanel';
+import { printBatchLabel } from '@/lib/batchLabelData';
 import { DepletionWarningModal, executeDepletionSwaps, type DepletionSwap } from './DepletionWarningModal';
 import { evaluateMultiRoastGroupImpacts, type MultiRgImpact } from '@/hooks/useGreenLotDepletion';
 import { type RoastGroupComponent, getComponentBreakdown, type ComponentDisplay } from '@/hooks/useRoastGroupComponents';
@@ -83,6 +86,7 @@ interface RoastBatch {
   created_at?: string;
   updated_at?: string;
   roasted_at?: string | null;
+  batch_number?: string | null;
 }
 
 interface RoastGroupConfig {
@@ -162,6 +166,8 @@ export function RoastGroupDrawer({
   const [undoConfirmBatchId, setUndoConfirmBatchId] = useState<string | null>(null);
   const [deleteConfirmBatchId, setDeleteConfirmBatchId] = useState<string | null>(null);
   const [ohShitBatch, setOhShitBatch] = useState<RoastBatch | null>(null);
+  // Batch whose "Mark Roasted" panel is open (with its roast loss %).
+  const [markRoastedTarget, setMarkRoastedTarget] = useState<{ batch: RoastBatch; yieldLossPct: number; standardKg: number } | null>(null);
   // Per-batch green split edited by the roaster (absent = use the roast group's default split).
   const [batchSplitOverrides, setBatchSplitOverrides] = useState<Record<string, LotSplit[]>>({});
   const greenDeductionOn = useGreenDeductionEnabled();
@@ -599,57 +605,28 @@ export function RoastGroupDrawer({
     },
   });
 
-  const markRoastedMutation = useMutation({
-    mutationFn: async ({ id, actual_output_kg, roast_group, target_date, green_kg }: { 
-      id: string; 
-      actual_output_kg: number;
-      green_kg?: number;
-      roast_group: string;
-      target_date: string;
-    }) => {
-      // Atomic RPC: flips PLANNED → ROASTED, writes the ROAST_OUTPUT ledger row,
-      // and (when green deduction is switched on) takes the batch's inbound green
-      // off the split's lots — all in one transaction. Returns false if the batch
-      // was already roasted (no-op).
-      const { data: transitioned, error } = await supabase.rpc('mark_batch_roasted', {
-        p_batch_id: id,
-        p_actual_output_kg: actual_output_kg,
-        p_lot_splits: splitsFor(id).map(s => ({ lot_id: s.lot_id, pct: s.pct })),
-        p_green_kg: green_kg && green_kg > 0 ? green_kg : null,
-      });
-      if (error) throw error;
+  // After the Mark Roasted panel saves (label already printing).
+  const handleMarkRoastedSaved = () => {
+    queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
+    queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
+    queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
+    queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
+    queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
+    queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
+    queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
+    queryClient.invalidateQueries({ queryKey: ['roast-group-lot-links', roastGroup] });
+    queryClient.invalidateQueries({ queryKey: ['green-lots'] });
+    queryClient.invalidateQueries({ queryKey: ['batch-history'] });
+    refreshFrozenBatches();
+  };
 
-      if (!transitioned) {
-        return { alreadyRoasted: true, actual_output_kg: 0 };
-      }
-      return { alreadyRoasted: false, actual_output_kg };
-    },
-    onSuccess: (result) => {
-      if (result.alreadyRoasted) {
-        toast.info('Batch already roasted');
-        return;
-      }
-      
-      toast.success(`Added ${result.actual_output_kg.toFixed(2)} kg to WIP`);
-      
-      // Invalidate all relevant queries for immediate UI update
-      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
-      queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
-      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
-      queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
-      queryClient.invalidateQueries({ queryKey: ['roast-group-lot-links', roastGroup] });
-      queryClient.invalidateQueries({ queryKey: ['green-lots'] });
-      // Refresh frozen batch order to reflect new status positions
-      refreshFrozenBatches();
-    },
-    onError: (err) => {
-      console.error(err);
-      toast.error('Failed to mark batch as roasted');
-    },
-  });
+  const handleReprint = async (batchId: string) => {
+    try {
+      await printBatchLabel(batchId);
+    } catch (e) {
+      toast.error((e as Error).message || 'Could not print label');
+    }
+  };
 
   const revertToPlannedMutation = useMutation({
     mutationFn: async ({ id, actual_output_kg, roast_group, target_date, planned_output_kg, cropster_batch_id }: { 
@@ -696,48 +673,6 @@ export function RoastGroupDrawer({
     onError: (err) => {
       console.error(err);
       toast.error('Failed to revert batch');
-    },
-  });
-
-  // Mutation to mark roasted with an additional LOSS transaction
-  const markRoastedWithLossMutation = useMutation({
-    mutationFn: async ({ id, actual_output_kg, roast_group, target_date, loss_kg, loss_note, green_kg }: { 
-      id: string; 
-      actual_output_kg: number;
-      green_kg?: number;
-      roast_group: string;
-      target_date: string;
-      loss_kg: number;
-      loss_note: string;
-    }) => {
-      // Atomic RPC: status flip + ROAST_OUTPUT + LOSS (+ green deduction when
-      // switched on — the green went into the roaster either way) in one transaction.
-      const { data: transitioned, error } = await supabase.rpc('mark_batch_roasted', {
-        p_batch_id: id,
-        p_actual_output_kg: actual_output_kg,
-        p_loss_kg: loss_kg,
-        p_loss_note: loss_note,
-        p_lot_splits: splitsFor(id).map(s => ({ lot_id: s.lot_id, pct: s.pct })),
-        p_green_kg: green_kg && green_kg > 0 ? green_kg : null,
-      });
-      if (error) throw error;
-      if (!transitioned) throw new Error('Batch already roasted');
-    },
-    onSuccess: () => {
-      toast.success('Batch marked as roasted with loss recorded');
-      // Invalidate all relevant queries for immediate UI update
-      queryClient.invalidateQueries({ queryKey: ['roasted-batches'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-ledger-wip'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['component-batches-for-blend'] });
-      queryClient.invalidateQueries({ queryKey: ['authoritative-roasted-batches'] });
-      queryClient.invalidateQueries({ queryKey: ['authoritative-wip-ledger'] });
-      queryClient.invalidateQueries({ queryKey: ['roasted-batches-for-blending'] });
-      refreshFrozenBatches();
-    },
-    onError: (err) => {
-      console.error(err);
-      toast.error('Failed to mark batch as roasted');
     },
   });
 
@@ -1174,22 +1109,8 @@ export function RoastGroupDrawer({
                                   key={batch.id}
                                   batch={batch}
                                   expectedYieldLossPct={compYieldLossPct}
-                                  onMarkRoasted={(id, actual, inbound) => markRoastedMutation.mutate({ 
-                                    id, 
-                                    actual_output_kg: actual,
-                                    green_kg: inbound,
-                                    roast_group: batch.roast_group,
-                                    target_date: batch.target_date,
-                                  })}
-                                  onMarkRoastedWithLoss={(id, actual, lossKg, lossNote, inbound) => markRoastedWithLossMutation.mutate({
-                                    id,
-                                    actual_output_kg: actual,
-                                    green_kg: inbound,
-                                    roast_group: batch.roast_group,
-                                    target_date: batch.target_date,
-                                    loss_kg: lossKg,
-                                    loss_note: lossNote,
-                                  })}
+                                  onOpenMarkRoasted={() => setMarkRoastedTarget({ batch, yieldLossPct: compYieldLossPct, standardKg: compInfo?.standard_batch_kg ?? standardBatch })}
+                                  onReprint={handleReprint}
                                   onUndo={(id) => setUndoConfirmBatchId(id)}
                                   onDelete={(id) => setDeleteConfirmBatchId(id)}
                                   onOhShit={(batch) => setOhShitBatch(batch)}
@@ -1238,22 +1159,8 @@ export function RoastGroupDrawer({
                         key={batch.id}
                         batch={batch}
                         expectedYieldLossPct={yieldLossPct}
-                        onMarkRoasted={(id, actual, inbound) => markRoastedMutation.mutate({ 
-                          id, 
-                          actual_output_kg: actual,
-                          green_kg: inbound,
-                          roast_group: batch.roast_group,
-                          target_date: batch.target_date,
-                        })}
-                        onMarkRoastedWithLoss={(id, actual, lossKg, lossNote, inbound) => markRoastedWithLossMutation.mutate({
-                          id,
-                          actual_output_kg: actual,
-                          green_kg: inbound,
-                          roast_group: batch.roast_group,
-                          target_date: batch.target_date,
-                          loss_kg: lossKg,
-                          loss_note: lossNote,
-                        })}
+                        onOpenMarkRoasted={() => setMarkRoastedTarget({ batch, yieldLossPct: yieldLossPct, standardKg: standardBatch })}
+                        onReprint={handleReprint}
                         onUndo={(id) => setUndoConfirmBatchId(id)}
                         onDelete={(id) => setDeleteConfirmBatchId(id)}
                         onOhShit={(batch) => setOhShitBatch(batch)}
@@ -1338,6 +1245,23 @@ export function RoastGroupDrawer({
         </AlertDialogContent>
       </AlertDialog>
 
+      <MarkRoastedPanel
+        open={!!markRoastedTarget}
+        onOpenChange={(o) => { if (!o) setMarkRoastedTarget(null); }}
+        batch={markRoastedTarget?.batch ?? null}
+        roastGroupName={
+          markRoastedTarget
+            ? (roastGroupsLookupMap.get(markRoastedTarget.batch.roast_group)?.display_name?.trim()
+                || (markRoastedTarget.batch.roast_group === roastGroup ? config?.display_name?.trim() : null)
+                || markRoastedTarget.batch.roast_group.replace(/_/g, ' '))
+            : ''
+        }
+        standardBatchKg={markRoastedTarget?.standardKg ?? standardBatch}
+        expectedYieldLossPct={markRoastedTarget?.yieldLossPct ?? yieldLossPct}
+        initialSplits={markRoastedTarget && batchSplitOverrides[markRoastedTarget.batch.id] ? batchSplitOverrides[markRoastedTarget.batch.id] : null}
+        onSaved={handleMarkRoastedSaved}
+      />
+
       {/* Oh Shit Modal */}
       {ohShitBatch && (
         <OhShitModal
@@ -1378,8 +1302,8 @@ export function RoastGroupDrawer({
 interface BatchRowProps {
   batch: RoastBatch;
   expectedYieldLossPct: number;
-  onMarkRoasted: (id: string, actualKg: number, inboundKg: number) => void;
-  onMarkRoastedWithLoss: (id: string, actualKg: number, lossKg: number, lossNote: string, inboundKg: number) => void;
+  onOpenMarkRoasted: () => void;
+  onReprint: (id: string) => void;
   onUndo: (id: string) => void;
   onDelete: (id: string) => void;
   onOhShit: (batch: RoastBatch) => void;
@@ -1409,15 +1333,14 @@ interface RoastBatch {
   created_at?: string;
   updated_at?: string;
   roasted_at?: string | null;
+  batch_number?: string | null;
 }
-
-type YieldWarningChoice = 'edit_inbound' | 'edit_output' | 'record_loss';
 
 function BatchRow({
   batch,
   expectedYieldLossPct,
-  onMarkRoasted,
-  onMarkRoastedWithLoss,
+  onOpenMarkRoasted,
+  onReprint,
   onUndo,
   onDelete,
   onOhShit,
@@ -1444,10 +1367,6 @@ function BatchRow({
   );
   const [cropsterId, setCropsterId] = useState(batch.cropster_batch_id ?? '');
   const [notes, setNotes] = useState(batch.notes ?? '');
-  const [showYieldWarning, setShowYieldWarning] = useState(false);
-  const [yieldWarningChoice, setYieldWarningChoice] = useState<YieldWarningChoice>('edit_inbound');
-  const [lossNote, setLossNote] = useState('');
-  const [pendingMarkRoasted, setPendingMarkRoasted] = useState<{ id: string; actualKg: number; inboundKg: number } | null>(null);
   
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   // Track if user is currently editing to prevent parent sync from overwriting input
@@ -1542,62 +1461,6 @@ function BatchRow({
   const impliedLossPct = inboundKg > 0 && outputKg > 0 ? (1 - outputKg / inboundKg) * 100 : null;
   const isImpliedLossUnusual = impliedLossPct !== null && (impliedLossPct < 10 || impliedLossPct > 20);
 
-  const handleMarkRoasted = () => {
-    const actualValue = outputKg || expectedOutputKg;
-    
-    // Calculate implied loss for sanity check
-    const checkInbound = inboundKg;
-    const checkOutput = actualValue;
-    const checkLoss = checkInbound > 0 ? (1 - checkOutput / checkInbound) * 100 : expectedYieldLossPct;
-    
-    // If implied loss is outside 10-20%, show warning with options
-    if (checkInbound > 0 && (checkLoss < 10 || checkLoss > 20)) {
-      setPendingMarkRoasted({ id: batch.id, actualKg: actualValue, inboundKg: checkInbound });
-      setYieldWarningChoice('edit_inbound');
-      setLossNote('');
-      setShowYieldWarning(true);
-    } else {
-      onMarkRoasted(batch.id, actualValue, inboundKg);
-    }
-  };
-
-  const handleYieldWarningAction = () => {
-    if (!pendingMarkRoasted) return;
-    
-    if (yieldWarningChoice === 'edit_inbound' || yieldWarningChoice === 'edit_output') {
-      // User wants to edit - just close the modal
-      setShowYieldWarning(false);
-      setPendingMarkRoasted(null);
-      // Focus the appropriate input
-      return;
-    }
-    
-    if (yieldWarningChoice === 'record_loss' && lossNote.trim()) {
-      // Calculate expected output vs actual to determine loss amount
-      const expectedOutput = pendingMarkRoasted.inboundKg * (1 - expectedYieldLossPct / 100);
-      const lossKg = expectedOutput - pendingMarkRoasted.actualKg;
-      
-      onMarkRoastedWithLoss(
-        pendingMarkRoasted.id, 
-        pendingMarkRoasted.actualKg, 
-        Math.max(0, lossKg), 
-        lossNote.trim(),
-        pendingMarkRoasted.inboundKg,
-      );
-      setShowYieldWarning(false);
-      setPendingMarkRoasted(null);
-      setLossNote('');
-    }
-  };
-
-  const handleConfirmMarkRoasted = () => {
-    if (pendingMarkRoasted) {
-      onMarkRoasted(pendingMarkRoasted.id, pendingMarkRoasted.actualKg, pendingMarkRoasted.inboundKg);
-    }
-    setShowYieldWarning(false);
-    setPendingMarkRoasted(null);
-  };
-
   const isPlanned = batch.status === 'PLANNED';
   const isRoasted = batch.status === 'ROASTED';
 
@@ -1627,6 +1490,9 @@ function BatchRow({
               {formatCompletedAt(batchCompletedAtIso(batch))}
             </span>
           )}
+          {batch.batch_number && (
+            <span className="font-mono text-xs font-semibold whitespace-nowrap">{batch.batch_number}</span>
+          )}
 
 
           {/* Inbound Green kg */}
@@ -1641,7 +1507,7 @@ function BatchRow({
               onChange={handlePlannedKgChange}
               onFocus={handleLocalInputFocus}
               onBlur={handleLocalInputBlur}
-              disabled={isUpdating}
+              disabled={isUpdating || isRoasted}
             />
             <span className="text-xs text-muted-foreground">kg</span>
           </div>
@@ -1661,7 +1527,7 @@ function BatchRow({
                 onInputChange();
                 scheduleUpdate('actual_output_kg', parseFloat(newVal));
               }}
-              disabled={isUpdating}
+              disabled={isUpdating || isRoasted}
             >
               <Minus className="h-3 w-3" />
             </Button>
@@ -1674,7 +1540,7 @@ function BatchRow({
               onChange={handleActualKgChange}
               onFocus={handleLocalInputFocus}
               onBlur={handleLocalInputBlur}
-              disabled={isUpdating}
+              disabled={isUpdating || isRoasted}
             />
             <Button
               type="button"
@@ -1688,7 +1554,7 @@ function BatchRow({
                 onInputChange();
                 scheduleUpdate('actual_output_kg', parseFloat(newVal));
               }}
-              disabled={isUpdating}
+              disabled={isUpdating || isRoasted}
             >
               <Plus className="h-3 w-3" />
             </Button>
@@ -1699,6 +1565,7 @@ function BatchRow({
           <Select
             value={batch.assigned_roaster ?? 'UNASSIGNED'}
             onValueChange={handleRoasterChange}
+            disabled={isRoasted}
           >
             <SelectTrigger 
               className={`h-7 w-24 text-xs ${getRoasterBadgeColor(batch.assigned_roaster)}`}
@@ -1776,7 +1643,7 @@ function BatchRow({
                   size="sm" 
                   variant="default"
                   className="h-7 text-xs"
-                  onClick={handleMarkRoasted}
+                  onClick={onOpenMarkRoasted}
                 >
                   <Flame className="h-3 w-3 mr-1" />
                   Mark Roasted
@@ -1790,6 +1657,18 @@ function BatchRow({
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </>
+            )}
+            {isRoasted && batch.batch_number && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => onReprint(batch.id)}
+                title="Print the bin label again"
+              >
+                <Printer className="h-3 w-3 mr-1" />
+                Reprint label
+              </Button>
             )}
             {isRoasted && (
               <Button 
@@ -1823,99 +1702,6 @@ function BatchRow({
         </div>
       </div>
 
-      {/* Yield Warning Dialog with Options */}
-      <AlertDialog open={showYieldWarning} onOpenChange={(open) => {
-        if (!open) {
-          setPendingMarkRoasted(null);
-          setLossNote('');
-        }
-        setShowYieldWarning(open);
-      }}>
-        <AlertDialogContent className="max-w-md">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
-              Unusual Yield Loss
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-3">
-                <p>
-                  The implied yield loss for this batch is{' '}
-                  <strong>
-                    {pendingMarkRoasted && pendingMarkRoasted.inboundKg > 0 
-                      ? ((1 - pendingMarkRoasted.actualKg / pendingMarkRoasted.inboundKg) * 100).toFixed(1)
-                      : '—'}%
-                  </strong>
-                  , which is outside the typical 10–20% range.
-                </p>
-                
-                <RadioGroup 
-                  value={yieldWarningChoice} 
-                  onValueChange={(val) => setYieldWarningChoice(val as YieldWarningChoice)}
-                  className="space-y-2"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="edit_inbound" id="edit_inbound" />
-                    <Label htmlFor="edit_inbound" className="text-sm font-normal cursor-pointer">
-                      Correct inbound (green) weight
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="edit_output" id="edit_output" />
-                    <Label htmlFor="edit_output" className="text-sm font-normal cursor-pointer">
-                      Correct output (roasted) weight
-                    </Label>
-                  </div>
-                  <div className="flex items-start space-x-2">
-                    <RadioGroupItem value="record_loss" id="record_loss" className="mt-1" />
-                    <div className="flex-1 space-y-2">
-                      <Label htmlFor="record_loss" className="text-sm font-normal cursor-pointer">
-                        Record as loss (requires note)
-                      </Label>
-                      {yieldWarningChoice === 'record_loss' && (
-                        <div className="space-y-1">
-                          <Textarea
-                            placeholder="Describe what happened (e.g., destoner spill, contamination)..."
-                            value={lossNote}
-                            onChange={(e) => setLossNote(e.target.value)}
-                            className="min-h-[60px] text-sm"
-                          />
-                          {pendingMarkRoasted && (
-                            <p className="text-xs text-muted-foreground">
-                              Loss amount: {((pendingMarkRoasted.inboundKg * (1 - expectedYieldLossPct / 100)) - pendingMarkRoasted.actualKg).toFixed(2)} kg
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </RadioGroup>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-            <AlertDialogCancel onClick={() => setPendingMarkRoasted(null)}>
-              Cancel
-            </AlertDialogCancel>
-            {yieldWarningChoice === 'record_loss' ? (
-              <Button 
-                onClick={handleYieldWarningAction}
-                disabled={!lossNote.trim()}
-              >
-                Record Loss & Mark Roasted
-              </Button>
-            ) : yieldWarningChoice === 'edit_inbound' || yieldWarningChoice === 'edit_output' ? (
-              <Button onClick={handleYieldWarningAction}>
-                Go Back to Edit
-              </Button>
-            ) : (
-              <AlertDialogAction onClick={handleConfirmMarkRoasted}>
-                Confirm Anyway
-              </AlertDialogAction>
-            )}
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }
