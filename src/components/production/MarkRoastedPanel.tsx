@@ -166,10 +166,12 @@ export function MarkRoastedPanel({
       toast.success(`Roasted ${roasted.toFixed(1)} kg — batch ${result.batch_number}`);
       onSaved(result.batch_number ?? null);
       onOpenChange(false);
-      try {
-        await printBatchLabel(batch.id);
-      } catch (e) {
-        toast.error(`Saved, but the label didn't print: ${(e as Error).message}. Use Reprint.`);
+      if (printLabelOnSave) {
+        try {
+          await printBatchLabel(batch.id);
+        } catch (e) {
+          toast.error(`Saved, but the label didn't print: ${(e as Error).message}. Use Reprint.`);
+        }
       }
     } catch (e) {
       console.error(e);
