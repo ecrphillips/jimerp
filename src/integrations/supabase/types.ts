@@ -449,24 +449,6 @@ export type Database = {
           },
         ]
       }
-      batch_number_counters: {
-        Row: {
-          batch_date: string
-          last_seq: number
-          machine_code: string
-        }
-        Insert: {
-          batch_date: string
-          last_seq?: number
-          machine_code: string
-        }
-        Update: {
-          batch_date?: string
-          last_seq?: number
-          machine_code?: string
-        }
-        Relationships: []
-      }
       baskets: {
         Row: {
           created_at: string
@@ -494,6 +476,24 @@ export type Database = {
           name?: string
           notes?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      batch_number_counters: {
+        Row: {
+          batch_date: string
+          last_seq: number
+          machine_code: string
+        }
+        Insert: {
+          batch_date: string
+          last_seq?: number
+          machine_code: string
+        }
+        Update: {
+          batch_date?: string
+          last_seq?: number
+          machine_code?: string
         }
         Relationships: []
       }
@@ -6754,6 +6754,7 @@ export type Database = {
       }
     }
     Functions: {
+      _apply_batch_green: { Args: { p_batch_id: string }; Returns: undefined }
       _apply_order_changes: {
         Args: { p_changes: Json; p_order_id: string }
         Returns: undefined
@@ -6800,7 +6801,12 @@ export type Database = {
         Returns: string
       }
       _is_account_owner: { Args: { _account_id: string }; Returns: boolean }
+      _next_batch_number: {
+        Args: { p_code: string; p_date: string }
+        Returns: Record<string, unknown>
+      }
       _order_change_snapshot: { Args: { p_order_id: string }; Returns: Json }
+      _restore_batch_green: { Args: { p_batch_id: string }; Returns: undefined }
       account_id_for_account_user: {
         Args: { _account_user_id: string }
         Returns: string
@@ -6813,6 +6819,7 @@ export type Database = {
         Args: { _count?: number; _key: string }
         Returns: number
       }
+      batch_machine_code: { Args: { p_machine: string }; Returns: string }
       can_access_client: {
         Args: { _client_id: string; _user_id: string }
         Returns: boolean
@@ -6912,16 +6919,16 @@ export type Database = {
       edit_roasted_batch: {
         Args: {
           p_actual_output_kg: number
-          p_batch_date: string | null
+          p_batch_date: string
           p_batch_id: string
           p_batch_number: string
-          p_cropster_batch_id: string | null
+          p_cropster_batch_id: string
           p_green_kg: number
-          p_lot_splits: Json | null
-          p_machine: string | null
-          p_notes: string | null
-          p_roasted_at: string | null
-          p_roasted_by: string | null
+          p_lot_splits: Json
+          p_machine: string
+          p_notes: string
+          p_roasted_at: string
+          p_roasted_by: string
         }
         Returns: boolean
       }
@@ -6933,6 +6940,10 @@ export type Database = {
           p_consume_kgs: number[]
         }
         Returns: Json
+      }
+      format_batch_number: {
+        Args: { p_code: string; p_date: string; p_seq: number }
+        Returns: string
       }
       get_client_delete_preflight: {
         Args: { p_client_id: string }
