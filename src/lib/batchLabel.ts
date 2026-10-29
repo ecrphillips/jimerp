@@ -1,5 +1,5 @@
 /**
- * WIP bin labels — 6 × 4 in landscape, for the Phomemo PM-241-BT thermal printer.
+ * WIP bin labels — 4 × 6 in portrait, for the Phomemo PM-241-BT thermal printer.
  *
  * Pure black on white, heavy sans-serif, no grey or hairlines (thermal smudges them).
  * Readable across the room: the roast group name (biggest), then the date ("OCT 28").
@@ -21,6 +21,10 @@ export interface LabelData {
   components?: string[];
   /** Single-origin / regular roast groups: green lot text (dropped if it doesn't fit). */
   lotText?: string | null;
+  /** Products this WIP feeds: family name + customer code. */
+  products?: { name: string; accountCode: string | null }[];
+  /** Post-roast blends: the component batches that went in. */
+  componentDetails?: { roastGroupName: string; batchNumber: string }[];
 }
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -54,40 +58,36 @@ const esc = (s: unknown) =>
 const kg = (n: number | null | undefined) => (n == null ? '—' : `${Number(n).toFixed(1)} kg`);
 
 export function labelHtml(data: LabelData): string {
-  const details = [
-    `<div class="row top"><span class="num">${esc(data.batchNumber)}</span><span>${esc(data.machineName)}</span></div>`,
-    `<div class="row"><span>IN ${esc(kg(data.greenKg))}</span><span>OUT ${esc(kg(data.roastedKg))}</span></div>`,
-  ];
-  if (data.components && data.components.length > 0) {
-    details.push(`<div class="comps">${data.components.map((c) => `<span class="nw">${esc(c)}</span>`).join(' ')}</div>`);
-  }
-  if (data.lotText) {
-    details.push(`<div class="lot" id="lot">${esc(data.lotText)}</div>`);
-  }
+  const products = data.products ?? [];
+  const comps = data.componentDetails ?? [];
+  const productHtml = products.length
+    ? `<ul class="list" id="products">${products.map((p) => `<li><span class="pn">${esc(p.name)}</span>${p.accountCode ? `<span class="ac">${esc(p.accountCode)}</span>` : ''}</li>`).join('')}</ul>`
+    : '';
+  const compHtml = comps.length
+    ? `<ul class="list comps" id="comps">${comps.map((c) => `<li><span class="pn">${esc(c.roastGroupName)}</span><span class="ac">${esc(c.batchNumber)}</span></li>`).join('')}</ul>`
+    : '';
 
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>${esc(data.batchNumber)}</title>
 <style>
-  @page { size: 6in 4in; margin: 0; }
+  @page { size: 4in 6in; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width: 6in; height: 4in; background: #fff; color: #000; }
-  body {
-    font-family: "Arial Black", "Helvetica Neue", Arial, Helvetica, sans-serif;
-    font-weight: 900;
-    -webkit-print-color-adjust: exact; print-color-adjust: exact;
-  }
-  .label { width: 6in; height: 4in; padding: 0.18in 0.22in; display: flex; flex-direction: column; overflow: hidden; }
-  .name { height: 1.75in; flex: none; display: flex; align-items: center; overflow: hidden; }
-  .date { margin-top: 0.04in; font-size: 0.6in; line-height: 0.95; letter-spacing: -0.01in; white-space: nowrap; flex: none; }
+  html, body { width: 4in; height: 6in; background: #fff; color: #000; }
+  body { font-family: "Arial Black", "Helvetica Neue", Arial, Helvetica, sans-serif; font-weight: 900;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .label { width: 4in; height: 6in; padding: 0.2in 0.2in 0.14in; display: flex; flex-direction: column; overflow: hidden; }
+  .name { height: 2.3in; flex: none; display: flex; align-items: flex-end; overflow: hidden; }
   .name span { display: block; line-height: 1.0; overflow-wrap: normal; word-break: normal; }
-  .rule { border-top: 0.05in solid #000; margin: 0.06in 0 0.05in; flex: none; }
-  .details { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-start; gap: 0.02in; overflow: hidden; }
-  .num { font-size: 0.34in; line-height: 1.0; }
-  .row.top { align-items: baseline; }
-  .row { display: flex; justify-content: space-between; font-size: 0.2in; line-height: 1.1; }
-  .comps { font-size: 16px; line-height: 1.15; }
-  .nw { white-space: nowrap; margin-right: 0.08in; }
-  .lot { font-size: 0.16in; line-height: 1.15; white-space: nowrap; overflow: hidden; }
+  .date { margin-top: 0.06in; font-size: 0.85in; line-height: 0.95; white-space: nowrap; flex: none; }
+  .rule { border-top: 0.05in solid #000; margin: 0.1in 0 0.08in; flex: none; }
+  .details { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 0.08in; }
+  .list { list-style: none; font-size: 18px; line-height: 1.2; }
+  .list li { display: flex; justify-content: space-between; gap: 0.1in; }
+  .pn { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .ac { flex: none; }
+  .comps { border-top: 0.03in solid #000; padding-top: 0.06in; }
+  .more { font-size: 14px; }
+  .foot { flex: none; font-size: 0.16in; text-align: right; padding-top: 0.04in; }
   @media screen { body { outline: 1px solid #000; } }
 </style></head>
 <body>
@@ -95,32 +95,30 @@ export function labelHtml(data: LabelData): string {
     <div class="name" id="nameBox"><span id="name">${esc(data.roastGroupName)}</span></div>
     <div class="date">${esc(labelDate(data.batchDate))}</div>
     <div class="rule"></div>
-    <div class="details" id="details">${details.join('')}</div>
+    <div class="details" id="details">${productHtml}${compHtml}</div>
+    <div class="foot">${esc(data.batchNumber)}</div>
   </div>
 <script>
   (function () {
-    // Roast group name: as big as possible, two lines max.
     var box = document.getElementById('nameBox');
     var el = document.getElementById('name');
-    var size = 150;
-    function lines() { return Math.round(el.offsetHeight / (size * 1.0)); }
+    var size = 130;
+    function lines() { return Math.round(el.offsetHeight / size); }
     el.style.fontSize = size + 'px';
-    while (size > 18 && (lines() > 2 || el.scrollWidth > box.clientWidth || el.offsetHeight > box.clientHeight)) {
-      size -= 2;
-      el.style.fontSize = size + 'px';
+    while (size > 18 && (lines() > 3 || el.scrollWidth > box.clientWidth || el.offsetHeight > box.clientHeight)) {
+      size -= 2; el.style.fontSize = size + 'px';
     }
     var details = document.getElementById('details');
     function overflows() { return details.scrollHeight > details.clientHeight + 1; }
-    // Blend components: always shown; shrink until they fit.
-    var comps = document.querySelector('.comps');
-    if (comps) {
-      var cs = 16;
-      while (cs > 8 && overflows()) { cs -= 1; comps.style.fontSize = cs + 'px'; }
-    }
-    // Green lot: only if it fits without crowding.
-    var lot = document.getElementById('lot');
-    if (lot && (lot.scrollWidth > lot.clientWidth + 1 || overflows())) {
-      lot.parentNode.removeChild(lot);
+    var lists = details.querySelectorAll('.list');
+    var fs = 18;
+    while (fs > 11 && overflows()) { fs -= 1; for (var i = 0; i < lists.length; i++) lists[i].style.fontSize = fs + 'px'; }
+    // Still too long: trim the product list and say how many were left off.
+    var prod = document.getElementById('products');
+    if (prod && overflows()) {
+      var hidden = 0;
+      var more = document.createElement('li'); more.className = 'more'; prod.appendChild(more);
+      while (overflows() && prod.children.length > 2) { prod.removeChild(prod.children[prod.children.length - 2]); hidden++; more.textContent = '+ ' + hidden + ' more'; }
     }
     setTimeout(function () { window.focus(); window.print(); }, 150);
   })();
@@ -139,7 +137,7 @@ export function printLabel(data: LabelData): void {
   const frame = document.createElement('iframe');
   frame.id = 'jim-label-frame';
   frame.setAttribute('aria-hidden', 'true');
-  Object.assign(frame.style, { position: 'fixed', left: '-10000px', top: '0', width: '6in', height: '4in', border: '0' });
+  Object.assign(frame.style, { position: 'fixed', left: '-10000px', top: '0', width: '4in', height: '6in', border: '0' });
   document.body.appendChild(frame);
   const doc = frame.contentDocument;
   if (!doc) throw new Error('Could not prepare the label');
