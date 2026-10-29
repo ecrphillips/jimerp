@@ -75,9 +75,9 @@ export function labelHtml(data: LabelData): string {
   html, body { width: 4in; height: 6in; background: #fff; color: #000; overflow: hidden; }
   body { font-family: "Arial Black", "Helvetica Neue", Arial, Helvetica, sans-serif; font-weight: 900;
     -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .label { width: 4in; height: 5.98in; padding: 0.18in 0.2in 0.16in; page-break-after: avoid; break-after: avoid; display: flex; flex-direction: column; overflow: hidden; }
-  .name { height: 2.3in; flex: none; display: flex; align-items: flex-start; overflow: hidden; }
-  .name span { display: block; line-height: 1.0; overflow-wrap: normal; word-break: normal; }
+  .label { width: 4in; height: 5.98in; padding: 0.32in 0.2in 0.16in; page-break-after: avoid; break-after: avoid; display: flex; flex-direction: column; overflow: hidden; }
+  .name { height: 2.2in; flex: none; display: flex; align-items: flex-start; overflow: hidden; }
+  .name span { display: block; line-height: 1.1; padding-top: 0.04em; overflow-wrap: normal; word-break: normal; }
   .date { margin-top: 0.06in; font-size: 0.85in; line-height: 0.95; white-space: nowrap; flex: none; }
   .rule { border-top: 0.05in solid #000; margin: 0.1in 0 0.08in; flex: none; }
   .details { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-start; gap: 0.08in; }
@@ -103,7 +103,7 @@ export function labelHtml(data: LabelData): string {
     var box = document.getElementById('nameBox');
     var el = document.getElementById('name');
     var size = 130;
-    function lines() { return Math.round(el.offsetHeight / size); }
+    function lines() { return Math.round(el.offsetHeight / (size * 1.1)); }
     el.style.fontSize = size + 'px';
     while (size > 18 && (lines() > 3 || el.scrollWidth > box.clientWidth || el.offsetHeight > box.clientHeight)) {
       size -= 2; el.style.fontSize = size + 'px';
