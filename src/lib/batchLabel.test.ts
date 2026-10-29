@@ -20,7 +20,7 @@ describe('batch label helpers', () => {
     expect(machineName(null)).toBe('—');
   });
 
-  it('builds a 6x4 label with escaped text and blend components', () => {
+  it('builds a 4x6 portrait label with escaped text and blend components', () => {
     const html = labelHtml({
       batchDate: '2026-10-28',
       roastGroupName: 'Love <Hospital>',
@@ -29,11 +29,14 @@ describe('batch label helpers', () => {
       greenKg: 53.76,
       roastedKg: 53.76,
       components: ['S30-1028-01', 'S30-1028-02'],
+      componentDetails: [{ roastGroupName: 'Ethiopia', batchNumber: 'S30-1028-02' }],
+      products: [{ name: 'Love Hospital', accountCode: 'LHO' }],
     });
-    expect(html).toContain('size: 6in 4in');
+    expect(html).toContain('size: 4in 6in');
     expect(html).toContain('OCT 28');
     expect(html).toContain('Love &lt;Hospital&gt;');
     expect(html).toContain('S30-1028-02');
-    expect(html).not.toContain('id="lot"');
+    expect(html).toContain('LHO');
+    expect(html).not.toContain('53.8 kg');
   });
 });
