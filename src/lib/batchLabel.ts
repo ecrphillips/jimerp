@@ -72,22 +72,23 @@ export function labelHtml(data: LabelData): string {
 <style>
   @page { size: 4in 6in; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width: 4in; height: 6in; background: #fff; color: #000; }
+  html, body { width: 4in; height: 6in; background: #fff; color: #000; overflow: hidden; }
+  .label { position: absolute; top: 0; left: 0; }
   body { font-family: "Arial Black", "Helvetica Neue", Arial, Helvetica, sans-serif; font-weight: 900;
     -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .label { width: 4in; height: 6in; padding: 0.2in 0.2in 0.14in; display: flex; flex-direction: column; overflow: hidden; }
-  .name { height: 2.3in; flex: none; display: flex; align-items: flex-end; overflow: hidden; }
+  .name { height: 2.3in; flex: none; display: flex; align-items: flex-start; overflow: hidden; }
   .name span { display: block; line-height: 1.0; overflow-wrap: normal; word-break: normal; }
   .date { margin-top: 0.06in; font-size: 0.85in; line-height: 0.95; white-space: nowrap; flex: none; }
   .rule { border-top: 0.05in solid #000; margin: 0.1in 0 0.08in; flex: none; }
-  .details { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 0.08in; }
+  .details { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-start; gap: 0.08in; }
   .list { list-style: none; font-size: 18px; line-height: 1.2; }
   .list li { display: flex; justify-content: space-between; gap: 0.1in; }
   .pn { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .ac { flex: none; }
   .comps { border-top: 0.03in solid #000; padding-top: 0.06in; }
   .more { font-size: 14px; }
-  .foot { flex: none; font-size: 0.16in; text-align: right; padding-top: 0.04in; }
+  .foot { flex: none; margin-top: auto; font-size: 0.16in; text-align: right; padding-top: 0.04in; }
   @media screen { body { outline: 1px solid #000; } }
 </style></head>
 <body>
