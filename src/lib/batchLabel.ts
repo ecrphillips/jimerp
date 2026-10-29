@@ -73,10 +73,9 @@ export function labelHtml(data: LabelData): string {
   @page { size: 4in 6in; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: 4in; height: 6in; background: #fff; color: #000; overflow: hidden; }
-  .label { position: absolute; top: 0; left: 0; }
   body { font-family: "Arial Black", "Helvetica Neue", Arial, Helvetica, sans-serif; font-weight: 900;
     -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .label { width: 4in; height: 6in; padding: 0.2in 0.2in 0.14in; display: flex; flex-direction: column; overflow: hidden; }
+  .label { width: 4in; height: 5.98in; padding: 0.18in 0.2in 0.16in; page-break-after: avoid; break-after: avoid; display: flex; flex-direction: column; overflow: hidden; }
   .name { height: 2.3in; flex: none; display: flex; align-items: flex-start; overflow: hidden; }
   .name span { display: block; line-height: 1.0; overflow-wrap: normal; word-break: normal; }
   .date { margin-top: 0.06in; font-size: 0.85in; line-height: 0.95; white-space: nowrap; flex: none; }
