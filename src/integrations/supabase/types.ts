@@ -205,6 +205,7 @@ export type Database = {
           coroast_certified: boolean
           coroast_certified_by: string | null
           coroast_certified_date: string | null
+          coroast_color_index: number | null
           coroast_custom_allow_recurring_bookings: boolean | null
           coroast_custom_base_fee: number | null
           coroast_custom_booking_horizon_days: number | null
@@ -250,6 +251,7 @@ export type Database = {
           coroast_certified?: boolean
           coroast_certified_by?: string | null
           coroast_certified_date?: string | null
+          coroast_color_index?: number | null
           coroast_custom_allow_recurring_bookings?: boolean | null
           coroast_custom_base_fee?: number | null
           coroast_custom_booking_horizon_days?: number | null
@@ -295,6 +297,7 @@ export type Database = {
           coroast_certified?: boolean
           coroast_certified_by?: string | null
           coroast_certified_date?: string | null
+          coroast_color_index?: number | null
           coroast_custom_allow_recurring_bookings?: boolean | null
           coroast_custom_base_fee?: number | null
           coroast_custom_booking_horizon_days?: number | null

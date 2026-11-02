@@ -145,7 +145,7 @@ export function BookingWeekView({
       if (CANCELLED_STATUSES.includes(bk.status)) continue;
       const isNoShow = bk.status === 'NO_SHOW';
       const isCompleted = bk.status === 'COMPLETED';
-      const baseColor = getMemberColor(bk.account_id ?? '', allMemberIds);
+      const baseColor = getMemberColor(bk.account_id ?? '', members);
       const color = isNoShow
         ? { bg: NO_SHOW_BG, text: '#fff' }
         : isCompleted
@@ -190,7 +190,7 @@ export function BookingWeekView({
 
     for (const bk of facilityBookings) {
       if (bk.status !== 'CONFIRMED') continue;
-      const color = getMemberColor(bk.account_id, allMemberIds);
+      const color = getMemberColor(bk.account_id, members);
       const name = bk.accounts?.account_name ?? 'Member';
       result.push({
         id: `fbk-${bk.id}`,
@@ -208,7 +208,7 @@ export function BookingWeekView({
     }
 
     return result.filter(e => visibleLayers.includes(e.layer));
-  }, [blocks, bookings, allMemberIds, bookingOverageSet, facilityBlocks, facilityBookings, visibleLayers]);
+  }, [blocks, bookings, members, bookingOverageSet, facilityBlocks, facilityBookings, visibleLayers]);
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
@@ -399,7 +399,7 @@ export function BookingWeekView({
           <span>Unavailable</span>
         </div>
         {members.filter(m => m.is_active).map(m => {
-          const color = getMemberColor(m.id, allMemberIds);
+          const color = getMemberColor(m.id, members);
           return (
             <div key={m.id} className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded" style={{ backgroundColor: color.bg }} />
