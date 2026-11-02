@@ -27,7 +27,8 @@ function getMonthBookings(bookings: BookingRow[], memberId: string, month: strin
 export function MemberSummaryPanel({ members, bookings, currentMonth }: MemberSummaryPanelProps) {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { role } = useAuth();
+  const { authUser } = useAuth();
+  const role = authUser?.role;
   const canEditColor = role === 'ADMIN' || role === 'OPS';
   const setColor = async (accountId: string, idx: number) => {
     const { error } = await supabase.from('accounts').update({ coroast_color_index: idx }).eq('id', accountId);
