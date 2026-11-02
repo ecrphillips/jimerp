@@ -49,7 +49,7 @@ export function MemberSummaryPanel({ members, bookings, currentMonth }: MemberSu
           const hoursRemaining = Math.max(0, rates.includedHours - totalHours);
           const overageHours = Math.max(0, totalHours - rates.includedHours);
           const overageCharge = overageHours * rates.overageRate;
-          const color = getMemberColor(member.id, allMemberIds);
+          const color = getMemberColor(member.id, members);
 
           return (
             <button

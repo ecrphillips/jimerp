@@ -11,6 +11,8 @@ export interface MemberRow {
   business_name: string;
   tier: CoroastTier;
   is_active: boolean;
+  /** Persistent calendar colour slot (accounts.coroast_color_index). */
+  color_index?: number | null;
 }
 
 export interface BookingRow {
@@ -46,7 +48,7 @@ export interface AvailabilityWindow {
 }
 
 // Distinct member colors — using HSL-compatible classes
-const MEMBER_COLORS = [
+export const MEMBER_COLORS = [
   { bg: 'hsl(210 70% 50%)', text: '#fff', class: 'bg-[hsl(210_70%_50%)]' },
   { bg: 'hsl(145 50% 40%)', text: '#fff', class: 'bg-[hsl(145_50%_40%)]' },
   { bg: 'hsl(280 50% 50%)', text: '#fff', class: 'bg-[hsl(280_50%_50%)]' },
@@ -57,10 +59,11 @@ const MEMBER_COLORS = [
   { bg: 'hsl(320 50% 50%)', text: '#fff', class: 'bg-[hsl(320_50%_50%)]' },
 ];
 
-export function getMemberColor(memberId: string, allMemberIds: string[]) {
-  const idx = allMemberIds.indexOf(memberId);
-  if (idx < 0) return MEMBER_COLORS[0];
-  return MEMBER_COLORS[idx % MEMBER_COLORS.length];
+/** Colour is the account's saved slot, so adding accounts never reshuffles it. */
+export function getMemberColor(memberId: string, members: Pick<MemberRow, 'id' | 'color_index'>[]) {
+  const m = members.find(x => x.id === memberId);
+  const idx = m?.color_index ?? 0;
+  return MEMBER_COLORS[((idx % MEMBER_COLORS.length) + MEMBER_COLORS.length) % MEMBER_COLORS.length];
 }
 
 export function timeToMinutes(t: string): number {

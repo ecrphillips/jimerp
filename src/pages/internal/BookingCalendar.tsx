@@ -32,7 +32,7 @@ export default function BookingCalendar() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('accounts')
-        .select('id, account_name, coroast_tier, is_active')
+        .select('id, account_name, coroast_tier, is_active, coroast_color_index')
         .contains('programs', ['COROASTING'])
         .eq('is_active', true)
         .order('account_name');
@@ -42,6 +42,7 @@ export default function BookingCalendar() {
         business_name: a.account_name,
         tier: (a.coroast_tier ?? 'MEMBER') as any,
         is_active: a.is_active,
+        color_index: a.coroast_color_index,
       })) as MemberRow[];
     },
   });
