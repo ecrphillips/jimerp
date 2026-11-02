@@ -208,7 +208,7 @@ export function BookingWeekView({
     }
 
     return result.filter(e => visibleLayers.includes(e.layer));
-  }, [blocks, bookings, allMemberIds, bookingOverageSet, facilityBlocks, facilityBookings, visibleLayers]);
+  }, [blocks, bookings, members, bookingOverageSet, facilityBlocks, facilityBookings, visibleLayers]);
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
