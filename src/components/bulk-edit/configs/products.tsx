@@ -250,6 +250,9 @@ export function useProductsBulkEdit(enabled = true) {
       if (error) return { success: false, errorMessage: error.message };
       await queryClient.invalidateQueries({ queryKey: ['bulk-edit-products'] });
       await queryClient.invalidateQueries({ queryKey: ['all-products'] });
+      // Other screens that show sizes/packaging pick up the edit without a reload.
+      queryClient.invalidateQueries({ queryKey: ['packaging-variant-usage'] });
+      queryClient.invalidateQueries({ queryKey: ['client-products-admin'] });
       return { success: true };
     } catch (e) {
       return { success: false, errorMessage: e instanceof Error ? e.message : 'Save failed' };
