@@ -32,3 +32,4 @@
 - Reject roasted_batches rows on post-roast blend roast groups via the `block_batches_on_post_roast_blends` trigger, because such blends are only made from component batches and direct batches become unroastable orphans.
 - Shopify orders omitted on the fetch review page are stored in `shopify_skipped_orders` and deduped alongside bundled orders in every pull mode (manual, review, cron), because an omitted order must never return on its own.
 - Record run-sheet day closes as append-only rows in production_day_closes (reopen stamps reopened_at, never deletes), and classify work-ahead batches with `classifyWorkAhead` against net demand, because the close history doubles as the daily finish-time record.
+- Edit a product's packaging through `packaging_type_id` (bulk editor included), never the legacy `packaging_variant` enum directly, because size badges read the packaging type and the trigger derives the enum from it.

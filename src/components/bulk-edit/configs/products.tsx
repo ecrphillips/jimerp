@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format as formatDate } from 'date-fns';
-import { PACKAGING_OPTIONS, type PackagingVariant } from '@/components/PackagingBadge';
+import { type PackagingVariant } from '@/components/PackagingBadge';
 import type { ProductFormat } from '@/types/database';
 import type { ColumnDef, SaveResult } from '../types';
 
@@ -16,6 +16,8 @@ interface ProductRow {
   account_id: string | null;
   client_id: string | null;
   packaging_variant: PackagingVariant | null;
+  packaging_type_id: string | null;
+  case_lot_product_id: string | null;
   roast_group: string | null;
   internal_packaging_notes: string | null;
   created_at: string;
@@ -35,8 +37,6 @@ const STATUS_OPTIONS = [
   { value: 'false', label: 'Inactive' },
 ];
 
-const PACKAGING_SELECT_OPTIONS = PACKAGING_OPTIONS.map((p) => ({ value: p.value, label: p.label }));
-
 function getTodayVancouver(): string {
   const now = new Date();
   const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -54,7 +54,7 @@ export function useProductsBulkEdit(enabled = true) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, product_name, sku, format, bag_size_g, is_active, account_id, client_id, packaging_variant, roast_group, internal_packaging_notes, created_at, account:accounts!products_account_id_fkey(account_name), client:clients(name)')
+        .select('id, product_name, sku, format, bag_size_g, is_active, account_id, client_id, packaging_variant, packaging_type_id, case_lot_product_id, roast_group, internal_packaging_notes, created_at, account:accounts!products_account_id_fkey(account_name), client:clients(name)')
         .order('product_name');
       if (error) throw error;
       return (data ?? []) as unknown as ProductRow[];
@@ -96,6 +96,34 @@ export function useProductsBulkEdit(enabled = true) {
     return map;
   }, [prices]);
 
+  // Packaging type is what size badges read everywhere (orders, client portal,
+  // Products). The legacy packaging_variant enum is derived from type + grams by
+  // the normalize_product_packaging trigger, so it is not edited here.
+  const { data: packagingTypes } = useQuery({
+    queryKey: ['bulk-edit-packaging-types'],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('packaging_types')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const packagingTypeOptions = useMemo(
+    () => (packagingTypes ?? []).map((t) => ({ value: t.id, label: t.name })),
+    [packagingTypes],
+  );
+
+  const packagingTypeNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const t of packagingTypes ?? []) map[t.id] = t.name;
+    return map;
+  }, [packagingTypes]);
+
   const roastGroupOptions = useMemo(
     () => (roastGroups ?? []).map((r) => ({ value: r.roast_group, label: r.roast_group })),
     [roastGroups],
@@ -119,9 +147,10 @@ export function useProductsBulkEdit(enabled = true) {
       getValue: (r) => r.sku ?? '',
     },
     {
-      key: 'packaging_variant', header: 'Packaging', type: 'select', width: '160px',
-      options: PACKAGING_SELECT_OPTIONS, allowEmpty: true,
-      getValue: (r) => r.packaging_variant,
+      key: 'packaging_type_id', header: 'Packaging', type: 'select', width: '160px',
+      options: packagingTypeOptions, allowEmpty: true,
+      getValue: (r) => r.packaging_type_id,
+      format: (v) => (v ? packagingTypeNames[String(v)] ?? '—' : '—'),
     },
     {
       key: 'bag_size_g', header: 'Bag (g)', type: 'number', width: '90px',
@@ -155,7 +184,7 @@ export function useProductsBulkEdit(enabled = true) {
       getValue: (r) => r.created_at,
       format: (v) => (v ? formatDate(new Date(String(v)), 'yyyy-MM-dd') : ''),
     },
-  ], [roastGroupOptions, currentPrices]);
+  ], [roastGroupOptions, currentPrices, packagingTypeOptions, packagingTypeNames]);
 
   const onCellSave = async (
     row: ProductRow,
@@ -181,7 +210,25 @@ export function useProductsBulkEdit(enabled = true) {
       }
 
       const updatePayload: Record<string, unknown> = {};
-      if (column.key === 'is_active') {
+      if (column.key === 'packaging_type_id') {
+        const raw = newValue === '' || newValue === null || newValue === undefined ? null : String(newValue);
+        let typeId: string | null = raw;
+        if (raw !== null && !packagingTypeOptions.some((o) => o.value === raw)) {
+          // Pasted/CSV values may be the type's name rather than its id.
+          const byName = packagingTypeOptions.find((o) => o.label.toLowerCase() === raw.trim().toLowerCase());
+          if (!byName) return { success: false, errorMessage: `Unknown packaging type: "${raw}"` };
+          typeId = byName.value;
+        }
+        // Cases are created and edited only through Add Variant / Edit Case Lot.
+        const isCaseType = typeId !== null && (packagingTypeNames[typeId] ?? '').toLowerCase().includes('case');
+        if (row.case_lot_product_id && !isCaseType) {
+          return { success: false, errorMessage: 'Case Lot packaging is edited from the product drawer (Edit Case Lot)' };
+        }
+        if (!row.case_lot_product_id && isCaseType) {
+          return { success: false, errorMessage: 'Create Case Lots with Add Variant on the Products page' };
+        }
+        updatePayload.packaging_type_id = typeId;
+      } else if (column.key === 'is_active') {
         const s = typeof newValue === 'string' ? newValue.trim().toLowerCase() : newValue;
         if (s === true || s === 'true' || s === '1' || s === 'yes' || s === 'active') {
           updatePayload.is_active = true;

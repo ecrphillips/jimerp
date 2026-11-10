@@ -17,8 +17,11 @@ export function formatGramsLabel(grams: number): string {
   // Common lb conversions for display
   const lbConversions: Record<number, string> = {
     454: '1 lb',
+    907: '2 lb',
     908: '2 lb',
+    2268: '5 lb',
     2270: '5 lb',
+    4536: '10 lb',
     4540: '10 lb',
   };
   
@@ -59,9 +62,11 @@ export const GramPackagingBadge: React.FC<GramPackagingBadgeProps> = ({
   className = '',
   showTypeName = true,
 }) => {
-  if (!packagingTypeName || !gramsPerUnit) return null;
+  if (!gramsPerUnit) return null;
 
-  const IconComponent = getPackagingIcon(packagingTypeName);
+  // Still show the size when a product has no packaging type, so a missing
+  // type never leaves a variant unlabelled.
+  const IconComponent = packagingTypeName ? getPackagingIcon(packagingTypeName) : Package;
   const sizeLabel = formatGramsLabel(gramsPerUnit);
 
   return (
@@ -70,7 +75,7 @@ export const GramPackagingBadge: React.FC<GramPackagingBadgeProps> = ({
     >
       <IconComponent className="w-3 h-3" />
       <span>{sizeLabel}</span>
-      {showTypeName && (
+      {showTypeName && packagingTypeName && (
         <span className="text-muted-foreground">{packagingTypeName}</span>
       )}
     </span>
