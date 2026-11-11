@@ -612,7 +612,7 @@ export function PackTab({ dateFilterConfig, today }: PackTabProps) {
   const updateLinePacking = async (lineIds: string[], units: number) => {
     const { error } = await supabase.rpc('update_pack_line_units', { p_line_ids: lineIds, p_new_units: units });
     if (error) { toast.error(error.message); throw error; }
-    await Promise.all(['pack-line-allocations', 'packing-runs', 'authoritative-packing-runs', 'authoritative-wip-ledger', 'authoritative-fg-ledger', 'inventory-ledger-wip', 'inventory-ledger-fg'].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
+    await Promise.all(['pack-line-allocations', 'order-pack-holds', 'order-pack-lines', 'packing-runs', 'authoritative-packing-runs', 'authoritative-wip-ledger', 'authoritative-fg-ledger', 'inventory-ledger-wip', 'inventory-ledger-fg'].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
   };
 
   interface RawLeaf {

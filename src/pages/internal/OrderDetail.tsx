@@ -17,6 +17,7 @@ import { printPackingSlips } from '@/components/orders/printPackingSlips';
 import { LocationBadge } from '@/components/orders/LocationSelect';
 import { OrderShipmentsCard } from '@/components/orders/OrderShipmentsCard';
 import { OrderChangeRequestCard } from '@/components/orders/OrderChangeRequestCard';
+import { OrderPackingCard } from '@/components/orders/OrderPackingCard';
 import { CreatedByBadge } from '@/components/orders/CreatedByBadge';
 import { formatGramsLabel } from '@/components/GramPackagingBadge';
 import { toast } from 'sonner';
@@ -207,6 +208,22 @@ export default function OrderDetail() {
     enabled: !!order?.requested_ship_date,
   });
 
+  const isActiveForPacking = !!order && ['SUBMITTED', 'CONFIRMED', 'IN_PRODUCTION', 'READY'].includes(order.status);
+  const { data: packAllocations } = useQuery({
+    queryKey: ['pack-line-allocations'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_pack_line_allocations');
+      if (error) throw error;
+      return data ?? [];
+    },
+    refetchInterval: 10000,
+    enabled: isActiveForPacking,
+  });
+  const packAllocByLine = useMemo(
+    () => new Map<string, number>(isActiveForPacking ? (packAllocations ?? []).map((a) => [a.order_line_item_id, a.packed_units]) : []),
+    [packAllocations, isActiveForPacking],
+  );
+
   // Map packing runs by product_id
   const packingByProduct = useMemo(() => {
     const map: Record<string, number> = {};
@@ -223,11 +240,14 @@ export default function OrderDetail() {
     // Packing is tracked per product, but one product can be split across
     // several lines (e.g. whole bean + ground). Hand out the product's packed
     // units line by line so the same bags are never credited to two lines.
+    // Prefer the per-line allocations the Pack tab uses so both screens agree;
+    // fall back to the legacy per-product pool for orders outside the active set.
     const remaining: Record<string, number> = { ...packingByProduct };
     return (lineItems ?? []).map((li) => {
       const pool = remaining[li.product_id] ?? 0;
-      const packedUnits = Math.min(pool, li.quantity_units);
-      remaining[li.product_id] = pool - packedUnits;
+      const allocated = packAllocByLine.get(li.id);
+      const packedUnits = allocated !== undefined ? Math.min(allocated, li.quantity_units) : Math.min(pool, li.quantity_units);
+      if (allocated === undefined) remaining[li.product_id] = pool - packedUnits;
       const isPackedComplete =
         li.product?.requires_production === false || packedUnits >= li.quantity_units;
       return {
@@ -236,7 +256,7 @@ export default function OrderDetail() {
         isPackedComplete,
       };
     });
-  }, [lineItems, packingByProduct]);
+  }, [lineItems, packingByProduct, packAllocByLine]);
 
   // Derived pack complete for order: all line items have packed >= demanded
   const isDerivedPackComplete = useMemo(() => {
@@ -1092,6 +1112,8 @@ export default function OrderDetail() {
       </div>
 
       <OrderChangeRequestCard orderId={order.id} orderStatus={order.status} />
+
+      <OrderPackingCard orderId={order.id} orderStatus={order.status} />
 
       <Card className="mt-6">
         <CardHeader><CardTitle>Line Items</CardTitle></CardHeader>

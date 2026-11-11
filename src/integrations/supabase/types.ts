@@ -6993,6 +6993,16 @@ export type Database = {
         Args: { p_order_id: string }
         Returns: Json
       }
+      get_order_pack_holds: {
+        Args: never
+        Returns: {
+          held_units: number
+          order_id: string
+          order_line_item_id: string
+          order_number: string
+          product_id: string
+        }[]
+      }
       get_pack_line_allocations: {
         Args: never
         Returns: {

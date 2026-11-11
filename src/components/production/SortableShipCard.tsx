@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ShipPickInput } from './ShipPickInput';
+import { heldForOthers, picksIntoHeldStock, type PackHold } from '@/lib/orderPacking';
 import { NudgeScheduleButtons } from './NudgeScheduleButtons';
 import { DueBadge, getDueBucket } from './OverdueBadge';
 import { format, parseISO } from 'date-fns';
@@ -167,6 +168,8 @@ export function SortableShipCard({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ship-picks', order.order_id] });
       queryClient.invalidateQueries({ queryKey: ['ship-picks-gating'] });
+      queryClient.invalidateQueries({ queryKey: ['order-pack-holds'] });
+      queryClient.invalidateQueries({ queryKey: ['pack-line-allocations'] });
       queryClient.invalidateQueries({ queryKey: ['authoritative-ship-picks'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-ledger-fg'] });
       // The Ship tab renders FG Avail from useAuthoritativeFg (['authoritative-fg-ledger']).
@@ -180,10 +183,29 @@ export function SortableShipCard({
     },
   });
 
+  // Bags packed for other orders (e.g. a big order packed ahead) are held for
+  // them. Warn before a pick here would take from that held stock.
+  const { data: packHolds = [] } = useQuery({
+    queryKey: ['order-pack-holds'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_order_pack_holds');
+      if (error) throw error;
+      return (data ?? []) as PackHold[];
+    },
+    staleTime: 10000,
+  });
+
   const handlePickChange = useCallback((li: LineItem, newValue: number, available: number) => {
     const previousPicked = picksByLineItem[li.id] ?? 0;
     // Clamp to 0-available
     const clamped = Math.max(0, Math.min(newValue, available));
+    const others = heldForOthers(packHolds, li.product_id, li.id);
+    const heldTotal = others.reduce((s, h) => s + h.held_units, 0);
+    const intoHeld = picksIntoHeldStock(clamped - previousPicked, available - previousPicked, heldTotal);
+    if (intoHeld > 0) {
+      const names = [...new Set(others.map(h => h.order_number))].join(', ');
+      if (!window.confirm(`${intoHeld} of these bags are held for ${names}. Pick them for this order anyway?`)) return;
+    }
     upsertPickMutation.mutate({
       lineItemId: li.id,
       unitsPicked: clamped,
@@ -191,7 +213,7 @@ export function SortableShipCard({
       productId: li.product_id,
       requiresProduction: li.requires_production !== false,
     });
-  }, [upsertPickMutation, picksByLineItem]);
+  }, [upsertPickMutation, picksByLineItem, packHolds]);
 
   const [isPickingAll, setIsPickingAll] = useState(false);
 
